@@ -1,0 +1,46 @@
+{
+  "name": "MzDocs Pro",
+  "short_name": "MzDocs",
+  "description": "Serviços digitais que substituem papelarias em Moçambique",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0D47A1",
+  "theme_color": "#1565C0",
+  "orientation": "portrait-primary",
+  "lang": "pt",
+  "scope": "/",
+  "categories": ["productivity", "utilities", "business"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Trabalho Escolar",
+      "url": "/index.html#escolar",
+      "description": "Solicitar trabalho escolar"
+    },
+    {
+      "name": "Currículo (CV)",
+      "url": "/index.html#cv",
+      "description": "Criar currículo profissional"
+    },
+    {
+      "name": "Impressão",
+      "url": "/index.html#impressao",
+      "description": "Pedir impressão de documentos"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}

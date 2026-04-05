@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="theme-color" content="#1565C0" />
+  <meta name="description" content="MzDocs Pro – Serviços digitais que substituem papelarias em Moçambique." />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="MzDocs Pro" />
+  <title>MzDocs Pro</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ===== CSS VARIABLES ===== */
+    :root {
+      --blue-dark:   #0D47A1;
+      --blue:        #1565C0;
+      --blue-mid:    #1976D2;
+      --blue-light:  #42A5F5;
+      --blue-pale:   #E3F2FD;
+      --green:       #2E7D32;
+      --green-mid:   #388E3C;
+      --green-light: #66BB6A;
+      --green-pale:  #E8F5E9;
+      --white:       #FFFFFF;
+      --off-white:   #F8FAFF;
+      --gray-100:    #F1F5F9;
+      --gray-200:    #E2E8F0;
+      --gray-400:    #94A3B8;
+      --gray-600:    #475569;
+      --gray-800:    #1E293B;
+      --shadow-sm:   0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+      --shadow-md:   0 4px 16px rgba(21,101,192,.13);
+      --shadow-lg:   0 10px 30px rgba(21,101,192,.18);
+      --radius:      16px;
+      --radius-sm:   10px;
+      --transition:  all .25s cubic-bezier(.4,0,.2,1);
+      --whatsapp: #25D366;
+    }
+
+    /* ===== RESET ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--off-white);
+      color: var(--gray-800);
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ===== HEADER ===== */
+    .app-header {
+      background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue-mid) 60%, var(--blue-light) 100%);
+      padding: 20px 20px 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .app-header::before {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 180px; height: 180px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.07);
+    }
+    .app-header::after {
+      content: '';
+      position: absolute;
+      bottom: -30px; left: 30px;
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.05);
+    }
+    .header-inner {
+      position: relative; z-index: 1;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .logo-badge {
+      width: 52px; height: 52px;
+      background: rgba(255,255,255,.18);
+      border: 2px solid rgba(255,255,255,.35);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+      flex-shrink: 0;
+      backdrop-filter: blur(4px);
+    }
+    .header-text h1 {
+      font-family: 'Sora', sans-serif;
+      font-size: 22px; font-weight: 700;
+      color: var(--white);
+      letter-spacing: -.3px;
+    }
+    .header-text p {
+      font-size: 12.5px; color: rgba(255,255,255,.78);
+      margin-top: 2px;
+    }
+    .tagline {
+      margin-top: 16px;
+      font-size: 13px; color: rgba(255,255,255,.85);
+      background: rgba(255,255,255,.12);
+      border-radius: 8px; padding: 8px 12px;
+      border-left: 3px solid var(--green-light);
+    }
+
+    /* ===== MAIN CONTENT ===== */
+    .main-content {
+      padding: 20px 16px 100px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      font-size: 13px; font-weight: 700;
+      color: var(--gray-400);
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      margin-bottom: 14px;
+    }
+
+    /* ===== SERVICE GRID ===== */
+    .service-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .service-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 18px 14px;
+      display: flex; flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      box-shadow: var(--shadow-sm);
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+      -webkit-user-select: none; user-select: none;
+    }
+    .service-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--accent-start, var(--blue-pale)), var(--accent-end, var(--white)));
+      opacity: 0;
+      transition: opacity .25s;
+    }
+    .service-card:active,
+    .service-card:hover { 
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--card-accent, var(--blue-light));
+    }
+    .service-card:active::before,
+    .service-card:hover::before { opacity: 1; }
+    .service-card > * { position: relative; z-index: 1; }
+
+    .card-icon {
+      width: 46px; height: 46px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+    .card-label {
+      font-size: 13.5px; font-weight: 700;
+      color: var(--gray-800);
+      line-height: 1.3;
+    }
+    .card-sub {
+      font-size: 11px; color: var(--gray-400);
+      margin-top: -6px;
+    }
+
+    /* Card color variants */
+    .card-blue   { --card-accent: var(--blue-light);   } .card-blue   .card-icon { background: var(--blue-pale); }
+    .card-green  { --card-accent: var(--green-light);  } .card-green  .card-icon { background: var(--green-pale); }
+    .card-orange { --card-accent: #FFAB40;             } .card-orange .card-icon { background: #FFF3E0; }
+    .card-purple { --card-accent: #CE93D8;             } .card-purple .card-icon { background: #F3E5F5; }
+    .card-teal   { --card-accent: #4DD0E1;             } .card-teal   .card-icon { background: #E0F7FA; }
+    .card-red    { --card-accent: #EF9A9A;             } .card-red    .card-icon { background: #FFEBEE; }
+    .card-indigo { --card-accent: #9FA8DA;             } .card-indigo .card-icon { background: #E8EAF6; }
+
+    /* ===== MODAL OVERLAY ===== */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(13,71,161,.45);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-overlay.active { display: flex; animation: fadeIn .2s ease; }
+
+    @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
+
+    .modal-sheet {
+      background: var(--white);
+      border-radius: 24px 24px 0 0;
+      width: 100%; max-width: 520px;
+      max-height: 92vh;
+      overflow-y: auto;
+      padding: 0 0 32px;
+      animation: slideUp .3s cubic-bezier(.4,0,.2,1);
+    }
+
+    .modal-handle {
+      width: 40px; height: 4px;
+      background: var(--gray-200);
+      border-radius: 2px;
+      margin: 12px auto 0;
+    }
+
+    .modal-header {
+      padding: 20px 20px 16px;
+      display: flex; align-items: center; gap: 12px;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .modal-icon {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+    .modal-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 18px; font-weight: 700;
+      color: var(--gray-800);
+    }
+    .modal-sub {
+      font-size: 12px; color: var(--gray-400);
+    }
+    .btn-close {
+      margin-left: auto;
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      background: var(--gray-100);
+      border: none; cursor: pointer;
+      font-size: 18px; color: var(--gray-600);
+      display: flex; align-items: center; justify-content: center;
+      transition: var(--transition);
+    }
+    .btn-close:hover { background: var(--gray-200); }
+
+    /* ===== FORM ===== */
+    .modal-form {
+      padding: 20px;
+      display: flex; flex-direction: column;
+      gap: 14px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-label {
+      font-size: 12.5px; font-weight: 700;
+      color: var(--gray-600);
+      text-transform: uppercase; letter-spacing: .6px;
+    }
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 13px 16px;
+      border: 2px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 15px; color: var(--gray-800);
+      background: var(--white);
+      outline: none;
+      transition: var(--transition);
+      -webkit-appearance: none;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      border-color: var(--blue-mid);
+      box-shadow: 0 0 0 3px rgba(25,118,210,.12);
+    }
+    .form-textarea { resize: vertical; min-height: 90px; }
+    .form-select { cursor: pointer; }
+
+    /* Upload simulado */
+    .upload-box {
+      border: 2px dashed var(--gray-200);
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .upload-box:hover { border-color: var(--blue-mid); background: var(--blue-pale); }
+    .upload-box .upload-icon { font-size: 28px; margin-bottom: 6px; }
+    .upload-box p { font-size: 13px; color: var(--gray-400); }
+    .upload-box strong { font-size: 14px; color: var(--blue-mid); }
+
+    /* ===== BOTÃO WHATSAPP / ENVIAR ===== */
+    .btn-whatsapp {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #25D366, #128C7E);
+      color: var(--white);
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: 'Sora', sans-serif;
+      font-size: 16px; font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      gap: 10px;
+      box-shadow: 0 4px 16px rgba(37,211,102,.35);
+      transition: var(--transition);
+      margin-top: 6px;
+    }
+    .btn-whatsapp:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(37,211,102,.45); }
+    .btn-whatsapp:active { transform: scale(.98); }
+    .btn-whatsapp .wa-icon { font-size: 22px; }
+
+    /* ===== BOTÃO FLUTUANTE WHATSAPP ===== */
+    .fab-whatsapp {
+      position: fixed;
+      bottom: 24px; right: 20px;
+      width: 58px; height: 58px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #25D366, #128C7E);
+      color: var(--white);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px;
+      box-shadow: 0 4px 20px rgba(37,211,102,.5);
+      cursor: pointer;
+      z-index: 99;
+      text-decoration: none;
+      transition: var(--transition);
+    }
+    .fab-whatsapp:hover { transform: scale(1.1); box-shadow: 0 6px 28px rgba(37,211,102,.6); }
+
+    .fab-label {
+      position: fixed;
+      bottom: 36px; right: 90px;
+      background: var(--gray-800);
+      color: var(--white);
+      font-size: 12px; font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s;
+      white-space: nowrap;
+    }
+    .fab-whatsapp:hover ~ .fab-label { opacity: 1; }
+
+    /* ===== FOOTER ===== */
+    .app-footer {
+      background: var(--gray-100);
+      text-align: center;
+      padding: 16px;
+      font-size: 12px; color: var(--gray-400);
+      border-top: 1px solid var(--gray-200);
+    }
+
+    /* ===== TOAST ===== */
+    .toast {
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+      background: var(--gray-800); color: var(--white);
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-size: 14px; font-weight: 600;
+      z-index: 200;
+      opacity: 0; pointer-events: none;
+      transition: opacity .3s;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+
+    /* ===== INFO BANNER ===== */
+    .info-banner {
+      background: linear-gradient(135deg, var(--green-pale), #F1F8E9);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex; gap: 12px; align-items: flex-start;
+      margin-bottom: 20px;
+      border: 1px solid #C8E6C9;
+    }
+    .info-banner .info-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+    .info-banner p { font-size: 13px; color: var(--green); font-weight: 500; line-height: 1.5; }
+
+    /* Scrollbar personalizado */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<header class="app-header">
+  <div class="header-inner">
+    <div class="logo-badge">📄</div>
+    <div class="header-text">
+      <h1>MzDocs Pro</h1>
+      <p>Serviços digitais • Moçambique 🇲🇿</p>
+    </div>
+  </div>
+  <div class="tagline">
+    ✅ Rápido, sem fila, directo pelo WhatsApp
+  </div>
+</header>
+
+<!-- ===== CONTEÚDO PRINCIPAL ===== -->
+<main class="main-content">
+
+  <!-- Banner informativo -->
+  <div class="info-banner">
+    <div class="info-icon">💡</div>
+    <p>Escolha o serviço desejado, preencha o formulário e envie pelo WhatsApp. Simples assim!</p>
+  </div>
+
+  <p class="section-title">Nossos Serviços</p>
+
+  <!-- GRID DE SERVIÇOS -->
+  <div class="service-grid">
+
+    <div class="service-card card-blue" onclick="openModal('escolar')">
+      <div class="card-icon">📚</div>
+      <div>
+        <div class="card-label">Trabalhos Escolares</div>
+        <div class="card-sub">Redacções e tarefas</div>
+      </div>
+    </div>
+
+    <div class="service-card card-green" onclick="openModal('cv')">
+      <div class="card-icon">📋</div>
+      <div>
+        <div class="card-label">Currículo (CV)</div>
+        <div class="card-sub">Profissional e moderno</div>
+      </div>
+    </div>
+
+    <div class="service-card card-orange" onclick="openModal('carta')">
+      <div class="card-icon">✉️</div>
+      <div>
+        <div class="card-label">Cartas Formais</div>
+        <div class="card-sub">Emprego, pedidos e mais</div>
+      </div>
+    </div>
+
+    <div class="service-card card-purple" onclick="openModal('impressao')">
+      <div class="card-icon">🖨️</div>
+      <div>
+        <div class="card-label">Impressão</div>
+        <div class="card-sub">P&B ou colorido</div>
+      </div>
+    </div>
+
+    <div class="service-card card-teal" onclick="openModal('foto')">
+      <div class="card-icon">📷</div>
+      <div>
+        <div class="card-label">Foto p/ Documentos</div>
+        <div class="card-sub">Formato oficial</div>
+      </div>
+    </div>
+
+    <div class="service-card card-red" onclick="openModal('conversao')">
+      <div class="card-icon">🔄</div>
+      <div>
+        <div class="card-label">Conversão de Arquivos</div>
+        <div class="card-sub">PDF, Word e mais</div>
+      </div>
+    </div>
+
+    <div class="service-card card-indigo" onclick="openModal('orcamento')" style="grid-column: span 2;">
+      <div class="card-icon">🏗️</div>
+      <div>
+        <div class="card-label">Orçamento de Construção</div>
+        <div class="card-sub">Estimativa rápida para a sua obra</div>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- ===== BOTÃO FLUTUANTE WHATSAPP ===== -->
+<a class="fab-whatsapp" href="https://wa.me/258840000000?text=Olá%20MzDocs%20Pro!%20Quero%20saber%20mais%20sobre%20os%20vossos%20serviços." target="_blank" title="Falar connosco">
+  💬
+</a>
+<span class="fab-label">Falar connosco</span>
+
+<!-- ===== TOAST ===== -->
+<div class="toast" id="toast"></div>
+
+<!-- ===== MODAL ÚNICO (conteúdo dinâmico) ===== -->
+<div class="modal-overlay" id="modalOverlay" onclick="handleOverlayClick(event)">
+  <div class="modal-sheet" id="modalSheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-icon" id="modalIcon"></div>
+      <div>
+        <div class="modal-title" id="modalTitle"></div>
+        <div class="modal-sub" id="modalSub"></div>
+      </div>
+      <button class="btn-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-form" id="modalForm"></div>
+  </div>
+</div>
+
+<!-- ===== SERVICE WORKER ===== -->
+<script>
+  // ============================================================
+  // CONFIGURAÇÃO
+  // ============================================================
+  const WHATSAPP_NUMBER = '258840000000'; // ← Altere para o seu número
+
+  // ============================================================
+  // DEFINIÇÃO DOS SERVIÇOS
+  // ============================================================
+  const services = {
+
+    escolar: {
+      icon: '📚',
+      iconBg: '#E3F2FD',
+      title: 'Trabalhos Escolares',
+      sub: 'Preencha os dados do trabalho',
+      fields: `
+        <div class="form-group">
+          <label class="form-label">Nome completo</label>
+          <input class="form-input" id="f_nome" type="text" placeholder="Ex: João Maputo" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tema do trabalho</label>
+          <input class="form-input" id="f_tema" type="text" placeholder="Ex: O clima em Moçambique" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nível de ensino</label>
+          <select class="form-select" id="f_nivel">
+            <option value="">Seleccione...</option>
+            <option>Escola Primária</option>
+            <option>Escola Secundária</option>
+            <option>Pré-Universitário</option>
+            <option>Universidade / Licenciatura</option>
+            <option>Mestrado / Doutoramento</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prazo de entrega</label>
+          <input class="form-input" id="f_prazo" type="date" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição / Instruções</label>
+          <textarea class="form-textarea" id="f_descricao" placeholder="Cole aqui o enunciado ou descreva o que precisa..."></textarea>
+        </div>
+      `,
+      build: () => {
+        const nome = v('f_nome'), tema = v('f_tema'), nivel = v('f_nivel'), prazo = v('f_prazo'), desc = v('f_descricao');
+        if (!nome || !tema || !nivel) return null;
+        return `🎓 *TRABALHO ESCOLAR – MzDocs Pro*\n\n👤 Nome: ${nome}\n📖 Tema: ${tema}\n🏫 Nível: ${nivel}\n📅 Prazo: ${prazo || 'A combinar'}\n📝 Descrição:\n${desc || 'Sem descrição adicional'}\n\n✅ _Aguardo confirmação e orçamento. Obrigado!_`;
+      }
+    },
+
+    cv: {
+      icon: '📋',
+      iconBg: '#E8F5E9',
+      title: 'Currículo (CV)',
+      sub: 'Dados para elaborar o seu CV',
+      fields: `
+        <div class="form-group">
+          <label class="form-label">Nome completo</label>
+          <input class="form-input" id="f_nome" type="text" placeholder="Ex: Ana Silva Machava" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Idade</label>
+          <input class="form-input" id="f_idade" type="number" placeholder="Ex: 25" min="15" max="80" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Telefone / Contacto</label>
+          <input class="form-input" id="f_tel" type="tel" placeholder="Ex: +258 84 000 0000" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Última formação académica</label>
+          <input class="form-input" id="f_formacao" type="text" placeholder="Ex: Licenciatura em Gestão – UEM 2022" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Experiência profissional</label>
+          <textarea class="form-textarea" id="f_experiencia" placeholder="Descreva as suas experiências profissionais..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Habilidades</label>
+          <textarea class="form-textarea" id="f_habilidades" placeholder="Ex: Excel, Word, Inglês, Gestão de equipes..." style="min-height:70px"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Modelo de CV desejado</label>
+          <select class="form-select" id="f_modelo">
+            <option value="">Seleccione...</option>
+            <option>Simples / Clássico</option>
+            <option>Moderno / Colorido</option>
+            <option>Executivo</option>
+            <option>Criativo</option>
+          </select>
+        </div>
+      `,
+      build: () => {
+        const nome = v('f_nome'), idade = v('f_idade'), tel = v('f_tel'), form = v('f_formacao'), exp = v('f_experiencia'), hab = v('f_habilidades'), modelo = v('f_modelo');
+        if (!nome || !form) return null;
+        return `📋 *CURRÍCULO (CV) – MzDocs Pro*\n\n👤 Nome: ${nome}\n🎂 Idade: ${idade || '-'}\n📞 Contacto: ${tel || '-'}\n🎓 Formação: ${form}\n💼 Experiência:\n${exp || '-'}\n🛠 Habilidades: ${hab || '-'}\n🎨 Modelo: ${modelo || 'A definir'}\n\n✅ _Aguardo confirmação e orçamento. Obrigado!_`;
+      }
+    },
+
+    carta: {
+      icon: '✉️',
+      iconBg: '#FFF3E0',
+      title: 'Carta Formal',
+      sub: 'Redacção de cartas profissionais',
+      fields: `
+        <div class="form-group">
+          <label class="form-label">Tipo de carta</label>
+          <select class="form-select" id="f_tipo">
+            <option value="">Seleccione o tipo...</option>
+            <option>Carta de Candidatura a Emprego</option>
+            <option>Carta de Pedido / Solicitação</option>
+            <option>Carta de Recomendação</option>
+            <option>Carta de Apresentação</option>
+            <option>Carta de Reclamação</option>
+            <option>Carta de Agradecimento</option>
+            <option>Outro tipo</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">O seu nome</label>
+          <input class="form-input" id="f_nome" type="text" placeholder="Ex: Carlos Bila" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Destinatário (a quem é endereçada)</label>
+          <input class="form-input" id="f_dest" type="text" placeholder="Ex: Director de Recursos Humanos – BCI" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Conteúdo / Objectivo da carta</label>
+          <textarea class="form-textarea" id="f_conteudo" placeholder="Descreva o que pretende comunicar na carta..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Formato final</label>
+          <select class="form-select" id="f_formato">
+            <option value="">Seleccione...</option>
+            <option>PDF</option>
+            <option>Word (.docx)</option>
+            <option>Impresso (retirar na loja)</option>
+          </select>
+        </div>
+      `,
+      build: () => {
+        const tipo = v('f_tipo'), nome = v('f_nome'), dest = v('f_dest'), conteudo = v('f_conteudo'), formato = v('f_formato');
+        if (!tipo || !nome || !dest) return null;
+        return `✉️ *CARTA FORMAL – MzDocs Pro*\n\n📌 Tipo: ${tipo}\n👤 Remetente: ${nome}\n🏢 Destinatário: ${dest}\n📝 Conteúdo:\n${conteudo || 'A detalhar'}\n📎 Formato: ${formato || 'A definir'}\n\n✅ _Aguardo confirmação e orçamento. Obrigado!_`;
+      }
+    },
+
+    impressao: {
+      icon: '🖨️',
+      iconBg: '#F3E5F5',
+      title: 'Impressão de Documentos',
+      sub: 'Preto/Branco ou Colorido',
+      fields: `
+        <div class="form-group">
+          <label class="form-label">O seu nome</label>
+          <input class="form-input" id="f_nome" type="text" placeholder="Ex: Maria Nhantumbo" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de impressão</label>
+          <select class="form-select" id="f_tipo">
+            <option value="">Seleccione...</option>
+            <option>Preto e Branco</option>
+            <option>Colorido</option>
+            <option>Frente e Verso (P&B)</option>
+            <option>Frente e Verso (Colorido)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Número de páginas</label>
+          <input class="form-input" id="f_paginas" type="number" placeholder="Ex: 10" min="1" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Número de cópias</label>
+          <input class="form-input" id="f_copias" type="number" placeholder="Ex: 2" min="1" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tamanho do papel</label>
+          <select class="form-select" id="f_papel">
+            <option value="">Seleccione...</option>
+            <option>A4 (padrão)</option>
+            <option>A3</option>
+            <option>A5</option>
+            <option>Carta</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">📎 Envio do ficheiro</label>
+          <div class="upload-box" onclick="showToast('Envie o ficheiro pelo WhatsApp após submeter o pedido.')">
+            <div class="upload-icon">☁️</div>
+            <strong>Enviar pelo WhatsApp</strong>
+            <p>Após confirmar o pedido, envie o ficheiro na conversa do WhatsApp</p>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Observações</label>
+          <input class="form-input" id="f_obs" type="text" placeholder="Ex: Urgente, encadernar, plastificar..." />
+        </div>
+      `,
+      build: () => {
+        const nome = v('f_nome'), tipo = v('f_tipo'), pag = v('f_paginas'), cop = v('f_copias'), papel = v('f_papel'), obs = v('f_obs');
+        if (!nome || !tipo) return null;
+        return `🖨️ *IMPRESSÃO – MzDocs Pro*\n\n👤 Nome: ${nome}\n🎨 Tipo: ${tipo}\n📄 Páginas: ${pag || '-'} | Cópias: ${cop || '1'}\n📐 Papel: ${papel || 'A4'}\n📌 Observações: ${obs || 'Nenhuma'}\n\n✅ _Irei enviar o ficheiro nesta conversa. Obrigado!_`;
+      }
+    },
+
+    foto: {
+      icon: '📷',
+      iconBg: '#E0F7FA',
+      title: 'Foto para Documentos',
+      sub: 'Formato para BI, passaporte e mais',
+      fields: `
+        <div class="form-group">
+          <label class="form-label">O seu nome</label>
+          <input class="form-input" id="f_nome" type="text" placeholder="Ex: Pedro Cossa" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Finalidade da foto</label>
+          <select class="form-select" id="f_finalidade">
+            <option value="">Seleccione...</option>
+            <option>BI / Cartão de Identidade</option>
+            <option>Passaporte</option>
+            <option>Visto</option>
+            <option>Currículo (CV)</option>
+            <option>Matrícula escolar</option>
+            <option>Outro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Quantidade de fotos (impressas)</label>
+          <input class="form-input" id="f_qtd" type="number" placeholder="Ex: 6" min="1" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">📷 Envio da foto</label>
+          <div class="upload-box" onclick="showToast('Envie a sua foto pelo WhatsApp após submeter o pedido.')">
+            <div class="upload-icon">📸</div>
+            <strong>Enviar foto pelo WhatsApp</strong>
+            <p>Envie a sua foto na conversa do WhatsApp. Vamos redimensionar para o formato correcto.</p>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fundo preferido</label>
+          <select class="form-select" id="f_fundo">
+            <option value="">Seleccione...</option>
+            <option>Branco (padrão)</option>
+            <option>Azul claro</option>
+            <option>Cinzento</option>
+          </select>
+        </div>
+      `,
+      build: () => {
+        const nome = v('f_nome'), fin = v('f_finalidade'), qtd = v('f_qtd'), fundo = v('f_fundo');
+        if (!nome || !fin) return null;
+        return `📷 *FOTO PARA DOCUMENTOS – MzDocs Pro*\n\n👤 Nome: ${nome}\n🎯 Finalidade: ${fin}\n🖼 Quantidade: ${qtd || '6'} fotos\n🎨 Fundo: ${fundo || 'Branco'}\n\n✅ _Irei enviar a minha foto nesta conversa. Obrigado!_`;
+      }
+    },
+
+    conversao: {
+      icon: '🔄',
+      iconBg: '#FFEBEE',
+      title: 'Conversão de Arquivos',
+      sub: 'PDF, Word, Excel e mais',
+      fields: `
+        <div class="form-group">
+          <label class="form-label">O seu nome</label>
+          <input class="form-input" id="f_nome" type="text" placeholder="Ex: Fátima Cuna" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de conversão</label>
+          <select class="form-select" id="f_conversao">
+            <option value="">Seleccione...</option>
+            <option>PDF → Word (.docx)</option>
+            <option>Word → PDF</option>
+            <option>PDF → Excel</option>
+            <option>Excel → PDF</option>
+            <option>Imagem → PDF</option>
+            <option>PDF → Imagem (JPG/PNG)</option>
+            <option>PowerPoint → PDF</option>
+            <option>Outro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Número de ficheiros</label>
+          <input class="form-input" id="f_ficheiros" type="number" placeholder="Ex: 3" min="1" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">📎 Envio do ficheiro</label>
+          <div class="upload-box" onclick="showToast('Envie o ficheiro pelo WhatsApp após submeter.')">
+            <div class="upload-icon">📂</div>
+            <strong>Enviar pelo WhatsApp</strong>
+            <p>Envie o ficheiro original na conversa do WhatsApp. Devolveremos convertido.</p>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Urgência</label>
+          <select class="form-select" id="f_urgencia">
+            <option value="">Seleccione...</option>
+            <option>Normal (até 2h)</option>
+            <option>Urgente (até 30 min) +taxa</option>
+            <option>Muito urgente (imediato) +taxa</option>
+          </select>
+        </div>
+      `,
+      build: () => {
+        const nome = v('f_nome'), conv = v('f_conversao'), fich = v('f_ficheiros'), urg = v('f_urgencia');
+        if (!nome || !conv) return null;
+        return `🔄 *CONVERSÃO DE ARQUIVOS – MzDocs Pro*\n\n👤 Nome: ${nome}\n↔️ Conversão: ${conv}\n📂 Ficheiros: ${fich || '1'}\n⚡ Urgência: ${urg || 'Normal'}\n\n✅ _Irei enviar o ficheiro nesta conversa. Obrigado!_`;
+      }
+    },
+
+    orcamento: {
+      icon: '🏗️',
+      iconBg: '#E8EAF6',
+      title: 'Orçamento de Construção',
+      sub: 'Estimativa simples e rápida',
+      fields: `
+        <div class="form-group">
+          <label class="form-label">O seu nome</label>
+          <input class="form-input" id="f_nome" type="text" placeholder="Ex: António Mondlane" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de obra</label>
+          <select class="form-select" id="f_obra">
+            <option value="">Seleccione...</option>
+            <option>Casa residencial (T1)</option>
+            <option>Casa residencial (T2)</option>
+            <option>Casa residencial (T3+)</option>
+            <option>Escritório / Loja</option>
+            <option>Vedação / Muro</option>
+            <option>Piscina</option>
+            <option>Renovação / Remodelação</option>
+            <option>Outro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Área aproximada (m²)</label>
+          <input class="form-input" id="f_area" type="number" placeholder="Ex: 80" min="1" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Localização</label>
+          <input class="form-input" id="f_local" type="text" placeholder="Ex: Maputo, Matola, Beira..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fase do projecto</label>
+          <select class="form-select" id="f_fase">
+            <option value="">Seleccione...</option>
+            <option>Ainda a planear</option>
+            <option>Já tenho projecto / planta</option>
+            <option>Em construção (falta material)</option>
+            <option>Quero reformar</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Orçamento disponível (MZN)</label>
+          <input class="form-input" id="f_budget" type="text" placeholder="Ex: 500.000 MZN ou Não definido" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Detalhes adicionais</label>
+          <textarea class="form-textarea" id="f_detalhes" placeholder="Materiais pretendidos, número de divisões, acabamentos..."></textarea>
+        </div>
+      `,
+      build: () => {
+        const nome = v('f_nome'), obra = v('f_obra'), area = v('f_area'), local = v('f_local'), fase = v('f_fase'), budget = v('f_budget'), det = v('f_detalhes');
+        if (!nome || !obra || !local) return null;
+        return `🏗️ *ORÇAMENTO DE CONSTRUÇÃO – MzDocs Pro*\n\n👤 Nome: ${nome}\n🏠 Tipo de obra: ${obra}\n📐 Área: ${area ? area + ' m²' : 'A definir'}\n📍 Localização: ${local}\n🔨 Fase: ${fase || '-'}\n💰 Orçamento: ${budget || 'Não definido'}\n📝 Detalhes:\n${det || 'Sem detalhes adicionais'}\n\n✅ _Aguardo análise e contacto. Obrigado!_`;
+      }
+    }
+
+  };
+
+  // ============================================================
+  // UTILITÁRIOS
+  // ============================================================
+  const v = id => {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  };
+
+  let currentService = null;
+
+  // ============================================================
+  // ABRIR MODAL
+  // ============================================================
+  function openModal(key) {
+    const s = services[key];
+    if (!s) return;
+    currentService = key;
+
+    document.getElementById('modalIcon').textContent = s.icon;
+    document.getElementById('modalIcon').style.background = s.iconBg;
+    document.getElementById('modalTitle').textContent = s.title;
+    document.getElementById('modalSub').textContent = s.sub;
+
+    // Montar formulário + botão WhatsApp
+    document.getElementById('modalForm').innerHTML = `
+      ${s.fields}
+      <button class="btn-whatsapp" onclick="sendWhatsApp('${key}')">
+        <span class="wa-icon">💬</span>
+        Enviar pelo WhatsApp
+      </button>
+    `;
+
+    document.getElementById('modalOverlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  // ============================================================
+  // FECHAR MODAL
+  // ============================================================
+  function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('active');
+    document.body.style.overflow = '';
+    currentService = null;
+  }
+
+  // Fechar ao clicar fora
+  function handleOverlayClick(e) {
+    if (e.target === document.getElementById('modalOverlay')) closeModal();
+  }
+
+  // ============================================================
+  // ENVIAR WHATSAPP
+  // ============================================================
+  function sendWhatsApp(key) {
+    const s = services[key];
+    if (!s) return;
+
+    const msg = s.build();
+    if (!msg) {
+      showToast('⚠️ Preencha os campos obrigatórios!');
+      return;
+    }
+
+    const encoded = encodeURIComponent(msg);
+    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}`;
+    window.open(url, '_blank');
+    closeModal();
+    showToast('✅ A redirecionar para o WhatsApp...');
+  }
+
+  // ============================================================
+  // TOAST
+  // ============================================================
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  // ============================================================
+  // SERVICE WORKER (PWA)
+  // ============================================================
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(() => console.log('MzDocs Pro SW registado ✅'))
+        .catch(err => console.log('SW erro:', err));
+    });
+  }
+</script>
+
+</body>
+</html>
