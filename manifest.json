@@ -1,46 +1,25 @@
 {
   "name": "MzDocs Pro",
   "short_name": "MzDocs",
-  "description": "Serviços digitais que substituem papelarias em Moçambique",
-  "start_url": "/index.html",
+  "description": "Documentos profissionais com IA para Moçambique. CV, cartas, trabalhos, orçamentos.",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0D47A1",
-  "theme_color": "#1565C0",
+  "background_color": "#060D1F",
+  "theme_color": "#060D1F",
   "orientation": "portrait-primary",
   "lang": "pt",
-  "scope": "/",
   "categories": ["productivity", "utilities", "business"],
   "icons": [
-    {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "icon.svg", "sizes": "any",     "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "shortcuts": [
-    {
-      "name": "Trabalho Escolar",
-      "url": "/index.html#escolar",
-      "description": "Solicitar trabalho escolar"
-    },
-    {
-      "name": "Currículo (CV)",
-      "url": "/index.html#cv",
-      "description": "Criar currículo profissional"
-    },
-    {
-      "name": "Impressão",
-      "url": "/index.html#impressao",
-      "description": "Pedir impressão de documentos"
-    }
+    { "name": "Novo CV",           "url": "/?s=cv",       "description": "Criar currículo com IA" },
+    { "name": "Nova Carta",        "url": "/?s=carta",    "description": "Redigir carta formal" },
+    { "name": "Trabalho Escolar",  "url": "/?s=trabalho", "description": "Trabalho académico com IA" },
+    { "name": "Orçamento de Obra", "url": "/?s=orcamento","description": "Orçamento de construção" }
   ],
-  "screenshots": [],
   "prefer_related_applications": false
 }

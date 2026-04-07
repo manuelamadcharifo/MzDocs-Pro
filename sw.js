@@ -1,71 +1,40 @@
-// ============================================================
-// MzDocs Pro – Service Worker
-// Cache estratégico para funcionamento offline
-// ============================================================
+// ════════════════════════════
+// sw.js — Service Worker PWA
+// ════════════════════════════
 
-const CACHE_NAME = 'mzdocs-pro-v1';
-const CACHE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@300;400;600;700&display=swap'
-];
+const CACHE = 'mzdocs-v2-r1';
+const PRECACHE = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.json'];
 
-// ──────────────────────────────────────────────
-// INSTALL – guarda os recursos essenciais
-// ──────────────────────────────────────────────
-self.addEventListener('install', event => {
-  console.log('[SW] Install');
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(CACHE_URLS).catch(err => {
-        console.warn('[SW] Alguns recursos não foram cacheados:', err);
-      });
-    })
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(PRECACHE).catch(() => {}))
   );
   self.skipWaiting();
 });
 
-// ──────────────────────────────────────────────
-// ACTIVATE – limpa caches antigos
-// ──────────────────────────────────────────────
-self.addEventListener('activate', event => {
-  console.log('[SW] Activate');
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-      )
-    )
-  );
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+  ));
   self.clients.claim();
 });
 
-// ──────────────────────────────────────────────
-// FETCH – Cache First para recursos locais,
-//         Network First para recursos externos
-// ──────────────────────────────────────────────
-self.addEventListener('fetch', event => {
-  // Ignora requisições não-GET e pedidos ao WhatsApp
-  if (event.request.method !== 'GET') return;
-  if (event.request.url.includes('wa.me')) return;
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+  // Nunca interceptar chamadas API
+  if (e.request.url.includes('api.anthropic.com')) return;
+  if (e.request.url.includes('/.netlify/functions/')) return;
+  if (e.request.url.includes('wa.me')) return;
 
-  event.respondWith(
-    caches.match(event.request).then(cached => {
+  e.respondWith(
+    caches.match(e.request).then(cached => {
       if (cached) return cached;
-
-      return fetch(event.request).then(response => {
-        // Cache apenas respostas válidas
-        if (!response || response.status !== 200 || response.type === 'opaque') {
-          return response;
+      return fetch(e.request).then(r => {
+        if (r && r.status === 200 && r.type !== 'opaque') {
+          caches.open(CACHE).then(c => c.put(e.request, r.clone()));
         }
-        const cloned = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, cloned));
-        return response;
-      }).catch(() => {
-        // Fallback offline – retorna a página principal
-        return caches.match('/index.html');
-      });
+        return r;
+      }).catch(() => caches.match('/index.html'));
     })
   );
 });
