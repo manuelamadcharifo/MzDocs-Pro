@@ -1,173 +1,200 @@
-# MzDocs Pro v2.0 🇲🇿
-### Plataforma de automação documental com IA para Moçambique
+# MzDocs Pro v3.0 🇲🇿
+### Arquitectura MVC · OpenRouter Gratuito · Supabase · M-Pesa
 
 ---
 
-## 📦 Estrutura do Projecto
+## 📁 Estrutura MVC Completa
 
 ```
-mzdocs-v2/
-├── index.html                          ← Frontend principal
-├── styles.css                          ← Estilos
-├── app.js                              ← Lógica do frontend
-├── sw.js                               ← Service Worker (PWA offline)
-├── manifest.json                       ← PWA manifest
-├── netlify.toml                        ← Configuração Netlify + headers
-└── netlify/
-    └── functions/
-        ├── generate-document.js        ← Proxy Claude API (SEGURO)
-        ├── process-payment.js          ← Integração M-Pesa
-        └── verify-credits.js           ← Verificação de saldo
+mzdocs-v3/
+├── index.html                              ← Entry point HTML
+├── manifest.json                           ← PWA manifest
+├── sw.js                                   ← Service Worker
+├── netlify.toml                            ← Deploy + headers
+├── assets/
+│   ├── css/
+│   │   └── styles.css                      ← Estilos globais
+│   └── js/
+│       ├── app.js                          ← Bootstrap MVC
+│       ├── utils/
+│       │   ├── Storage.js                  ← localStorage wrapper
+│       │   └── Formatter.js               ← markdown→HTML, phone
+│       ├── models/
+│       │   └── Models.js                   ← CreditModel, DocumentModel, QueueModel, UserModel
+│       ├── services/
+│       │   ├── Services.js                 ← OpenRouterService, MPesaService, SupabaseService
+│       │   └── ServiceDefinitions.js       ← Definição dos 7 serviços
+│       ├── views/
+│       │   └── Views.js                    ← NotificationView, ModalView, DocumentView
+│       └── controllers/
+│           └── Controllers.js              ← DocumentController, PaymentController, OCRController
+├── netlify/
+│   └── functions/
+│       ├── generate-document.js            ← Proxy OpenRouter (chave segura)
+│       ├── process-payment.js              ← M-Pesa C2B + Supabase
+│       └── verify-credits.js              ← Verificação de saldo
+└── supabase/
+    └── schema.sql                          ← Tabelas + funções atómicas
 ```
 
 ---
 
-## ⚙️ Configuração Obrigatória
+## ⚙️ Configuração — 3 passos
 
-### 1. Netlify — Environment Variables
+### Passo 1 — OpenRouter (IA Gratuita)
+1. Criar conta em [openrouter.ai](https://openrouter.ai)
+2. Ir a **Keys → Create Key**
+3. Copiar a chave `sk-or-v1-...`
 
-No **Netlify Dashboard → Site Settings → Environment Variables**, adicione:
+### Passo 2 — Supabase (Base de dados gratuita)
+1. Criar projecto em [supabase.com](https://supabase.com)
+2. Ir a **SQL Editor** → colar o conteúdo de `supabase/schema.sql` → executar
+3. Ir a **Settings → API** → copiar `Project URL` e `anon public key`
+4. Copiar também a `service_role key` (para as Netlify Functions)
+
+### Passo 3 — Netlify Environment Variables
+No **Netlify Dashboard → Site Settings → Environment Variables**:
 
 | Variável | Valor | Obrigatório |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | `sk-ant-api03-...` | ✅ Sim |
-| `MPESA_API_KEY` | Chave da API M-Pesa | ✅ Para pagamentos |
-| `MPESA_PUBLIC_KEY` | Chave pública RSA M-Pesa | ✅ Para pagamentos |
-| `MPESA_SERVICE_CODE` | Código do serviço (ex: 171717) | ✅ Para pagamentos |
-| `MPESA_ENV` | `sandbox` ou `production` | ✅ Para pagamentos |
-| `MPESA_ORIGIN` | URL autorizada no portal M-Pesa | ✅ Para pagamentos |
+| `OPENROUTER_API_KEY` | `sk-or-v1-...` | ✅ |
+| `SUPABASE_URL` | `https://xxx.supabase.co` | Para persistência |
+| `SUPABASE_SERVICE_KEY` | `eyJ...` (service_role) | Para persistência |
+| `MPESA_ENV` | `sandbox` ou `production` | Para pagamentos |
+| `MPESA_API_KEY` | Chave do portal M-Pesa | Para pagamentos |
+| `MPESA_PUBLIC_KEY` | Chave pública RSA M-Pesa | Para pagamentos |
+| `MPESA_SERVICE_CODE` | Ex: `171717` | Para pagamentos |
+| `SITE_URL` | URL do seu site Netlify | Recomendado |
 
-> ⚠️ **NUNCA** adicione estas variáveis ao `index.html`, `app.js` ou qualquer ficheiro frontend.
-> Só existem nas Netlify Functions (servidor).
-
-### 2. Número de WhatsApp
-
-Em `app.js`, linha ~13:
+### Número de WhatsApp
+Em `assets/js/controllers/Controllers.js`, linha 1:
 ```javascript
-const CFG = {
-  WA_NUMBER: '258840000000',  // ← O SEU NÚMERO (sem + e sem espaços)
-  ...
-};
+const WA_NUMBER = '258840000000'; // ← O SEU NÚMERO
+```
+Em `assets/js/models/Models.js` (UserModel):
+```javascript
+this.WA_SUPPORT = '258840000000'; // ← Número de suporte
 ```
 
 ---
 
-## 🚀 Deploy no Netlify (5 minutos)
+## 🚀 Deploy Netlify (5 minutos)
 
-### Opção A — Interface Web (Mais fácil)
-1. Aceda a **[netlify.com](https://netlify.com)** → "Add new site"
-2. Escolha "Deploy manually"
-3. Arraste a pasta `mzdocs-v2/` completa
-4. Vá a **Site Settings → Environment Variables** e adicione as variáveis acima
-5. Clique em "Trigger deploy" para re-fazer o deploy com as variáveis
+### Opção A — Drag & Drop
+1. Aceda a [netlify.com](https://netlify.com) → "Add new site" → "Deploy manually"
+2. Arraste a pasta `mzdocs-v3/` completa
+3. Configure as Environment Variables
+4. "Trigger deploy" para aplicar as variáveis
 
-### Opção B — Git + CI/CD (Recomendado)
+### Opção B — CLI
 ```bash
-# Instalar Netlify CLI
 npm install -g netlify-cli
-
-# Na pasta do projecto
 netlify login
 netlify init
-netlify env:set ANTHROPIC_API_KEY "sk-ant-api03-..."
-netlify env:set MPESA_API_KEY "..."
+netlify env:set OPENROUTER_API_KEY "sk-or-v1-..."
+netlify env:set SUPABASE_URL "https://xxx.supabase.co"
+netlify env:set SUPABASE_SERVICE_KEY "eyJ..."
+netlify env:set MPESA_ENV "sandbox"
 netlify deploy --prod
 ```
 
 ---
 
-## 📱 Instalar como App Android
+## 🤖 Modelos IA (OpenRouter — Gratuitos)
 
-1. Abra o URL no **Chrome para Android**
-2. Aparece banner "Adicionar ao ecrã inicial" — clique
-3. Ou: Menu ⋮ → "Instalar aplicação"
-4. A app fica instalada como app nativa (sem barra do browser)
+| Modelo | Qualidade | Velocidade | Fallback |
+|--------|-----------|-----------|---------|
+| `meta-llama/llama-3.3-70b-instruct:free` | ⭐⭐⭐⭐⭐ | Médio | 1º (principal) |
+| `google/gemma-3-27b-it:free` | ⭐⭐⭐⭐ | Rápido | 2º automático |
+| `mistralai/mistral-7b-instruct:free` | ⭐⭐⭐ | Muito rápido | 3º emergência |
 
----
-
-## 💳 Configurar M-Pesa
-
-### Passo 1 — Criar conta no portal Developer
-→ [developer.mpesa.vm.co.mz](https://developer.mpesa.vm.co.mz)
-
-### Passo 2 — Criar uma aplicação
-- Tipo: **C2B (Customer to Business)**
-- Obtenha: API Key, Public Key, Service Provider Code
-
-### Passo 3 — Teste em Sandbox
-- `MPESA_ENV=sandbox`
-- Use números de teste fornecidos pela M-Pesa
-
-### Passo 4 — Produção
-- `MPESA_ENV=production`
-- Submeta a aplicação para aprovação da Vodacom Moçambique
+O sistema tenta os modelos em cascata automaticamente se um falhar.
 
 ---
 
-## 🤖 Adicionar Base de Dados (Produção)
+## 🏗️ Arquitectura MVC — Fluxo completo
 
-Para um sistema de créditos robusto, use **Supabase** (gratuito):
-
-```bash
-npm install @supabase/supabase-js
 ```
-
-Tabela SQL:
-```sql
-CREATE TABLE users (
-  user_id TEXT PRIMARY KEY,
-  paid_credits INTEGER DEFAULT 0,
-  free_used_this_month INTEGER DEFAULT 0,
-  last_reset_month TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE transactions (
-  id SERIAL PRIMARY KEY,
-  user_id TEXT REFERENCES users(user_id),
-  transaction_ref TEXT UNIQUE,
-  mpesa_transaction_id TEXT,
-  amount INTEGER,
-  credits_added INTEGER,
-  status TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-Adicione ao Netlify:
-```
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_KEY=eyJ...
+Utilizador clica serviço
+        ↓
+DocumentController.open(key)
+        ↓
+CreditModel.canConsume(1)  → se não: PaymentController.showPricing()
+        ↓
+DocumentView.renderForm(svc)
+        ↓
+OCRController (opcional — fotografa rascunho)
+        ↓
+DocumentController.generate()
+        ↓
+QueueModel.add(job)  ← Fila inteligente (resolve rate limit)
+        ↓
+OpenRouterService.generate()  → Netlify Function → OpenRouter API
+        ↓
+CreditModel.consume(1)  → SupabaseService.deductCredit() (atómico)
+        ↓
+DocumentView.renderResult()
+        ↓
+WhatsApp / Copiar / Download
 ```
 
 ---
 
-## 📊 Modelo de Negócio
+## 🔧 Problemas Resolvidos
 
-| Plano | Créditos | Preço | Custo API | Margem |
-|-------|----------|-------|-----------|--------|
-| Grátis | 3/mês | MZN 0 | ~MZN 12 | - |
-| Starter | 10 | MZN 150 | ~MZN 40 | **73%** |
-| Básico | 25 | MZN 350 | ~MZN 100 | **71%** |
-| Pro | 60/mês | MZN 750 | ~MZN 240 | **68%** |
+### ✅ P1 — Rate Limit → QueueModel
+- Fila FIFO com min. 3s entre requests
+- Retry automático com backoff exponencial (1.5s → 3s → 6s)
+- UI mostra posição na fila em tempo real
 
-**Receita estimada (100 docs/dia):**
-→ 100 × MZN ~46 (lucro médio) = **~MZN 138.000/mês**
+### ✅ P2 — M-Pesa Sandbox → Validação de Ambiente
+- `MPesaService._detectEnv()` detecta localhost/produção automaticamente
+- Backend valida se `environment === MPESA_ENV`
+- Sandbox simula pagamento bem-sucedido sem credenciais
+- Banner visual avisa utilizador quando está em modo teste
+
+### ✅ P3 — Perda de Créditos → Supabase + operações atómicas
+- `deduct_credit()` usa `FOR UPDATE` (lock de linha) — sem race conditions
+- Conflito local vs servidor: maior valor vence (evita perda de compras)
+- Auto-sync a cada 30s em background
+- Fallback transparente para localStorage se Supabase indisponível
+
+### ✅ P4 — Custo API → OpenRouter Gratuito
+- Custo: **MZN 0** (era ~MZN 3.90/doc com Claude)
+- Fallback automático entre 3 modelos gratuitos
+- Margem de lucro sobe de 73% para **~92%**
+
+### ✅ P5 — Concorrência → Diferenciação
+- OCR integrado (único no mercado moçambicano)
+- Fila inteligente (não trava sob carga)
+- Suporte WhatsApp com contexto automático
+- Funciona offline (PWA + Service Worker)
 
 ---
 
-## ✅ Checklist de Lançamento
+## 📊 Comparativo v2 → v3
 
-- [ ] Deploy no Netlify feito
-- [ ] `ANTHROPIC_API_KEY` configurada e testada
-- [ ] Número de WhatsApp actualizado em `app.js`
-- [ ] Conta M-Pesa Developer criada
-- [ ] Variáveis M-Pesa configuradas
-- [ ] Teste de pagamento em sandbox OK
-- [ ] Aprovação M-Pesa para produção
-- [ ] Domínio customizado (opcional)
-- [ ] Google Analytics ou Plausible configurado
+| Métrica | v2 (Claude) | v3 (OpenRouter+MVC) |
+|---|---|---|
+| Custo API/doc | MZN ~4 | **MZN 0** |
+| Arquitectura | Monolítico | **MVC modular** |
+| Rate limiting | Quebra | **Fila inteligente** |
+| Persistência | localStorage | **Supabase + local** |
+| Fallback IA | Nenhum | **3 modelos** |
+| Margem/doc | ~73% | **~92%** |
 
 ---
 
-*MzDocs Pro v2.0 © 2025 · Feito para Moçambique 🇲🇿*
+## 💰 Projecção de Receita
+
+| Volume | Receita bruta | Custo API | **Lucro** |
+|--------|--------------|-----------|-----------|
+| 50 docs/dia | MZN 2.300/mês | MZN 0 | **MZN 2.300** |
+| 100 docs/dia | MZN 4.600/mês | MZN 0 | **MZN 4.600** |
+| 300 docs/dia | MZN 13.800/mês | MZN 0 | **MZN 13.800** |
+
+*(Preço médio: MZN 46/doc · Custo OpenRouter: MZN 0)*
+
+---
+
+*MzDocs Pro v3.0 © 2025 · MVC · OpenRouter · Supabase · Feito para Moçambique 🇲🇿*

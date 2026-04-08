@@ -3,321 +3,249 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <meta name="theme-color" content="#060D1F"/>
-  <meta name="description" content="MzDocs Pro — Documentos profissionais com IA para Moçambique"/>
+  <meta name="theme-color" content="#07101F"/>
+  <meta name="description" content="MzDocs Pro v3 — Documentos profissionais com IA gratuita para Moçambique"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-title" content="MzDocs Pro"/>
-  <title>MzDocs Pro v2</title>
+  <title>MzDocs Pro v3</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
-  <!-- Tesseract OCR (carregado sob demanda) -->
-  <script>window.TESSERACT_URL = 'https://unpkg.com/tesseract.js@5.0.2/dist/tesseract.min.js';</script>
-  <link rel="stylesheet" href="styles.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="assets/css/styles.css"/>
 </head>
 <body>
 
-<!-- ══════════ HEADER ══════════ -->
-<header class="hdr" id="hdr">
-  <div class="hdr-left">
-    <div class="logo-mark">
-      <span class="lm-doc">📄</span>
-    </div>
-    <div class="logo-text">
-      <span class="lt-main">MzDocs</span><span class="lt-pro">Pro</span>
-    </div>
-    <div class="hdr-ver">v2.0</div>
+<!-- HEADER -->
+<header class="hdr">
+  <div class="hdr-l">
+    <div class="logo-badge">📄</div>
+    <div class="logo-text"><span class="lt-name">MzDocs</span><span class="lt-pro">Pro</span></div>
+    <span class="ver-tag">v3 MVC</span>
   </div>
-  <div class="hdr-right">
-    <div class="credit-chip" id="creditChip" onclick="APP.showPricing()">
-      <span class="cc-icon">⚡</span>
-      <span class="cc-val" id="creditDisplay">—</span>
-      <span class="cc-lbl">créditos</span>
+  <div class="hdr-r">
+    <div class="credit-pill" id="creditPill">
+      <span>⚡</span><span class="cp-val" id="creditVal">—</span><span class="cp-lbl">cr</span>
     </div>
-    <button class="btn-buy" onclick="APP.showPricing()">+ Comprar</button>
+    <button class="btn-topup" id="btnTopup">+ Comprar</button>
   </div>
 </header>
 
-<!-- ══════════ HERO ══════════ -->
+<!-- HERO -->
 <section class="hero">
-  <div class="hero-bg-mesh"></div>
-  <div class="hero-content">
-    <div class="hero-flag">🇲🇿 <span>Feito para Moçambique</span></div>
-    <h1 class="hero-h1">
-      Documentos<br/>
-      <em>profissionais</em><br/>
-      gerados por IA
-    </h1>
-    <p class="hero-p">Preenche, a IA redige, envias pelo WhatsApp.<br/>Sem fila. Sem papelaria.</p>
-    <div class="hero-stats">
-      <div class="stat"><strong>4</strong><span>serviços com IA</span></div>
-      <div class="stat-div"></div>
-      <div class="stat"><strong>OCR</strong><span>fotografa rascunhos</span></div>
-      <div class="stat-div"></div>
-      <div class="stat"><strong>M-Pesa</strong><span>pagamento local</span></div>
+  <div class="hero-glow"></div>
+  <div class="hero-body">
+    <div class="hero-eye">🇲🇿 &nbsp;OpenRouter · Gratuito · MVC</div>
+    <h1 class="hero-h1">Documentos<br/><em>por IA,</em><br/>sem custo</h1>
+    <p class="hero-p">Preenche → fila inteligente → IA redige → WhatsApp.<br/>OCR, M-Pesa e sincronização Supabase.</p>
+    <div class="chips">
+      <span class="chip gr">✦ IA Gratuita</span>
+      <span class="chip">📷 OCR</span>
+      <span class="chip">🔄 Fila Inteligente</span>
+      <span class="chip">💾 Supabase</span>
     </div>
   </div>
 </section>
 
-<!-- ══════════ CRÉDITOS GRATUITOS BANNER ══════════ -->
-<div class="free-banner" id="freeBanner">
-  <span class="fb-icon">🎁</span>
-  <span>Tem <strong id="freeCreditsLeft">3</strong> créditos gratuitos este mês</span>
-  <button class="fb-close" onclick="this.parentElement.style.display='none'">✕</button>
+<!-- SANDBOX WARNING -->
+<div class="sandbox-bar" id="sandboxBar" style="display:none">
+  ⚠️ <strong>MODO SANDBOX</strong> — Pagamentos M-Pesa não são reais
+  <button onclick="this.parentElement.style.display='none'">✕</button>
 </div>
 
-<!-- ══════════ SERVIÇOS ══════════ -->
-<main class="main-wrap">
+<!-- FREE CREDITS BANNER -->
+<div class="free-bar" id="freeBar">
+  🎁 <strong id="freeLeft">3</strong> créditos gratuitos este mês
+  <button onclick="this.parentElement.remove()">✕</button>
+</div>
 
-  <div class="section-head">
-    <p class="sec-label">SERVIÇOS DISPONÍVEIS</p>
-    <p class="sec-sub">Seleccione o documento que pretende gerar</p>
-  </div>
+<!-- QUEUE STATUS BAR -->
+<div class="queue-bar" id="queueBar" style="display:none">
+  <div class="qb-spin"></div>
+  <span id="queueMsg">A processar…</span>
+  <span id="queuePos" class="qb-pos"></span>
+</div>
 
-  <div class="services-grid" id="servicesGrid">
+<!-- SERVIÇOS -->
+<main class="main">
+  <p class="grid-label">ESCOLHA O SERVIÇO</p>
+  <div class="svc-grid" id="svcGrid">
 
-    <!-- Trabalho Escolar -->
-    <div class="svc-card" data-service="trabalho" onclick="APP.openService('trabalho')">
-      <div class="svc-accent" style="--ac:#3B82F6"></div>
-      <div class="svc-top">
-        <div class="svc-ico" style="background:#EFF6FF">📚</div>
-        <span class="svc-ai-tag">✦ IA</span>
-      </div>
-      <div class="svc-name">Trabalho Escolar</div>
-      <div class="svc-desc">Redacções, pesquisas, TCCs completos com estrutura académica</div>
-      <div class="svc-foot">
-        <span class="svc-cost">1 crédito</span>
-        <span class="svc-arrow">→</span>
-      </div>
+    <div class="sc" data-svc="trabalho">
+      <div class="sc-ai">✦ IA</div>
+      <div class="sc-ico" style="background:#EFF6FF">📚</div>
+      <div class="sc-name">Trabalho Escolar</div>
+      <div class="sc-desc">Redacções, pesquisas e TCCs com estrutura académica</div>
+      <div class="sc-foot"><span class="cost">1 crédito</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#3B82F6"></div>
     </div>
 
-    <!-- CV -->
-    <div class="svc-card" data-service="cv" onclick="APP.openService('cv')">
-      <div class="svc-accent" style="--ac:#10B981"></div>
-      <div class="svc-top">
-        <div class="svc-ico" style="background:#ECFDF5">📋</div>
-        <span class="svc-ai-tag">✦ IA</span>
-      </div>
-      <div class="svc-name">Currículo (CV)</div>
-      <div class="svc-desc">CV profissional formato Europass adaptado ao mercado moçambicano</div>
-      <div class="svc-foot">
-        <span class="svc-cost">1 crédito</span>
-        <span class="svc-arrow">→</span>
-      </div>
+    <div class="sc" data-svc="cv">
+      <div class="sc-ai">✦ IA</div>
+      <div class="sc-ico" style="background:#ECFDF5">📋</div>
+      <div class="sc-name">Currículo (CV)</div>
+      <div class="sc-desc">CV profissional Europass para o mercado moçambicano</div>
+      <div class="sc-foot"><span class="cost">1 crédito</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#10B981"></div>
     </div>
 
-    <!-- Carta -->
-    <div class="svc-card" data-service="carta" onclick="APP.openService('carta')">
-      <div class="svc-accent" style="--ac:#F59E0B"></div>
-      <div class="svc-top">
-        <div class="svc-ico" style="background:#FFFBEB">✉️</div>
-        <span class="svc-ai-tag">✦ IA</span>
-      </div>
-      <div class="svc-name">Carta Formal</div>
-      <div class="svc-desc">Candidatura, pedidos, reclamações — redigidas com tom correcto</div>
-      <div class="svc-foot">
-        <span class="svc-cost">1 crédito</span>
-        <span class="svc-arrow">→</span>
-      </div>
+    <div class="sc" data-svc="carta">
+      <div class="sc-ai">✦ IA</div>
+      <div class="sc-ico" style="background:#FFFBEB">✉️</div>
+      <div class="sc-name">Carta Formal</div>
+      <div class="sc-desc">Candidatura, pedidos, reclamações com tom profissional</div>
+      <div class="sc-foot"><span class="cost">1 crédito</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#F59E0B"></div>
     </div>
 
-    <!-- Orçamento -->
-    <div class="svc-card" data-service="orcamento" onclick="APP.openService('orcamento')">
-      <div class="svc-accent" style="--ac:#8B5CF6"></div>
-      <div class="svc-top">
-        <div class="svc-ico" style="background:#F5F3FF">🏗️</div>
-        <span class="svc-ai-tag">✦ IA</span>
-      </div>
-      <div class="svc-name">Orçamento de Obra</div>
-      <div class="svc-desc">Lista de materiais, mão-de-obra e totais em MZN com tabela detalhada</div>
-      <div class="svc-foot">
-        <span class="svc-cost">1 crédito</span>
-        <span class="svc-arrow">→</span>
-      </div>
+    <div class="sc" data-svc="orcamento">
+      <div class="sc-ai">✦ IA</div>
+      <div class="sc-ico" style="background:#F5F3FF">🏗️</div>
+      <div class="sc-name">Orçamento de Obra</div>
+      <div class="sc-desc">Materiais, mão-de-obra e totais em MZN com tabelas</div>
+      <div class="sc-foot"><span class="cost">1 crédito</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#8B5CF6"></div>
     </div>
 
-    <!-- Impressão -->
-    <div class="svc-card" data-service="impressao" onclick="APP.openService('impressao')">
-      <div class="svc-accent" style="--ac:#EC4899"></div>
-      <div class="svc-top">
-        <div class="svc-ico" style="background:#FDF2F8">🖨️</div>
-      </div>
-      <div class="svc-name">Impressão</div>
-      <div class="svc-desc">Pedido de impressão P&B ou colorido enviado pelo WhatsApp</div>
-      <div class="svc-foot">
-        <span class="svc-cost svc-free">Grátis</span>
-        <span class="svc-arrow">→</span>
-      </div>
+    <div class="sc" data-svc="impressao">
+      <div class="sc-ico" style="background:#FDF2F8">🖨️</div>
+      <div class="sc-name">Impressão</div>
+      <div class="sc-desc">Pedido P&B ou colorido directo pelo WhatsApp</div>
+      <div class="sc-foot"><span class="cost free">Grátis</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#EC4899"></div>
     </div>
 
-    <!-- Foto -->
-    <div class="svc-card" data-service="foto" onclick="APP.openService('foto')">
-      <div class="svc-accent" style="--ac:#06B6D4"></div>
-      <div class="svc-top">
-        <div class="svc-ico" style="background:#ECFEFF">📷</div>
-      </div>
-      <div class="svc-name">Foto para Documentos</div>
-      <div class="svc-desc">BI, passaporte, CV — formato e fundo correcto</div>
-      <div class="svc-foot">
-        <span class="svc-cost svc-free">Grátis</span>
-        <span class="svc-arrow">→</span>
-      </div>
+    <div class="sc" data-svc="foto">
+      <div class="sc-ico" style="background:#ECFEFF">📷</div>
+      <div class="sc-name">Foto Documentos</div>
+      <div class="sc-desc">BI, passaporte, CV — fundo e formato oficial</div>
+      <div class="sc-foot"><span class="cost free">Grátis</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#06B6D4"></div>
     </div>
 
-    <!-- Conversão -->
-    <div class="svc-card svc-wide" data-service="conversao" onclick="APP.openService('conversao')">
-      <div class="svc-accent" style="--ac:#EF4444"></div>
-      <div class="svc-top">
-        <div class="svc-ico" style="background:#FEF2F2">🔄</div>
-      </div>
-      <div class="svc-name">Conversão de Ficheiros</div>
-      <div class="svc-desc">PDF ↔ Word, Excel, Imagem — entrega rápida</div>
-      <div class="svc-foot">
-        <span class="svc-cost svc-free">Grátis</span>
-        <span class="svc-arrow">→</span>
-      </div>
+    <div class="sc wide" data-svc="conversao">
+      <div class="sc-ico" style="background:#FEF2F2">🔄</div>
+      <div class="sc-name">Conversão de Ficheiros</div>
+      <div class="sc-desc">PDF ↔ Word · Excel · Imagem — entrega rápida</div>
+      <div class="sc-foot"><span class="cost free">Grátis</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#EF4444"></div>
     </div>
 
   </div>
 </main>
 
-<!-- ══════════ MODAL FORMULÁRIO ══════════ -->
-<div class="overlay" id="formOverlay" onclick="APP.closeForm(event)">
+<!-- MODAL FORMULÁRIO -->
+<div class="overlay" id="formOverlay">
   <div class="sheet" id="formSheet">
-    <div class="sheet-pill"></div>
-
-    <!-- Cabeçalho do sheet -->
-    <div class="sheet-hdr" id="sheetHdr">
+    <div class="pill"></div>
+    <div class="sheet-hdr" id="formHdr">
       <div class="sh-ico" id="shIco"></div>
-      <div>
-        <div class="sh-title" id="shTitle"></div>
-        <div class="sh-sub" id="shSub"></div>
-      </div>
-      <button class="sh-close" onclick="APP.closeFormBtn()">✕</button>
+      <div><div class="sh-title" id="shTitle"></div><div class="sh-sub" id="shSub"></div></div>
+      <button class="sh-x" id="formClose">✕</button>
     </div>
-
-    <!-- OCR UPLOAD (só para serviços IA) -->
-    <div class="ocr-zone" id="ocrZone" style="display:none">
-      <div class="ocr-head">
+    <div id="ocrZone" style="display:none">
+      <div class="ocr-card">
         <span>📷</span>
-        <div>
-          <strong>Tem um rascunho escrito?</strong>
-          <p>Fotografe e a IA usa o texto como base</p>
-        </div>
+        <div><strong>Tem um rascunho escrito?</strong><p>Fotografe e a IA usa como base</p></div>
       </div>
       <div class="ocr-btns">
-        <button class="btn-ocr-cam" onclick="APP.triggerOCR('cam')">📸 Câmara</button>
-        <button class="btn-ocr-file" onclick="APP.triggerOCR('file')">📁 Ficheiro</button>
+        <button id="btnCam">📸 Câmara</button>
+        <button id="btnFile">📁 Ficheiro</button>
       </div>
-      <input type="file" id="ocrInput" accept="image/*" style="display:none" onchange="APP.handleOCRFile(event)"/>
-      <div class="ocr-progress" id="ocrProgress" style="display:none">
-        <div class="ocr-bar"><div class="ocr-fill" id="ocrFill"></div></div>
-        <span id="ocrStatus">A inicializar OCR…</span>
+      <input type="file" id="ocrInput" accept="image/*" style="display:none"/>
+      <div id="ocrBar" style="display:none">
+        <div class="bar-track"><div class="bar-fill" id="ocrFill"></div></div>
+        <span id="ocrStatusTxt"></span>
       </div>
-      <div class="ocr-result" id="ocrResult" style="display:none">
-        <div class="ocr-result-hdr">
-          <span>Texto reconhecido</span>
-          <span class="ocr-conf" id="ocrConf"></span>
+      <div id="ocrResultBox" style="display:none">
+        <div class="ocr-rhdr">
+          <span>Texto reconhecido</span><span id="ocrConf" class="conf"></span>
         </div>
-        <textarea id="ocrText" rows="4"></textarea>
-        <div class="ocr-result-btns">
-          <button class="btn-use-ocr" onclick="APP.useOCR()">✓ Usar este texto</button>
-          <button class="btn-discard-ocr" onclick="APP.discardOCR()">✕ Descartar</button>
+        <textarea id="ocrTxt" rows="4"></textarea>
+        <div class="ocr-rbtns">
+          <button id="btnUseOcr">✓ Usar texto</button>
+          <button id="btnDiscardOcr">✕ Descartar</button>
         </div>
       </div>
       <div class="ocr-divider"><span>ou preencha manualmente</span></div>
     </div>
-
-    <!-- FORMULÁRIO DINÂMICO -->
     <div class="form-body" id="formBody"></div>
-
-    <!-- BOTÃO GERAR / ENVIAR -->
-    <div class="form-actions" id="formActions"></div>
+    <div class="form-foot" id="formFoot"></div>
   </div>
 </div>
 
-<!-- ══════════ MODAL RESULTADO ══════════ -->
-<div class="overlay" id="resultOverlay" onclick="APP.closeResult(event)">
-  <div class="sheet sheet-tall" id="resultSheet">
-    <div class="sheet-pill"></div>
+<!-- MODAL RESULTADO -->
+<div class="overlay" id="resultOverlay">
+  <div class="sheet tall" id="resultSheet">
+    <div class="pill"></div>
     <div class="result-hdr">
-      <div class="rh-badge">✅ Documento Gerado</div>
-      <button class="sh-close" onclick="APP.closeResultBtn()">✕</button>
+      <span class="res-ok">✅ Documento Gerado</span>
+      <span class="res-model" id="resModel"></span>
+      <button class="sh-x" id="resultClose">✕</button>
     </div>
-    <div class="result-meta" id="resultMeta"></div>
-    <div class="result-preview" id="resultPreview"></div>
-    <div class="result-actions">
-      <button class="btn-act btn-copy" onclick="APP.copyDoc()">📋 Copiar</button>
-      <button class="btn-act btn-dl" onclick="APP.downloadDoc()">⬇️ Download</button>
-      <button class="btn-act btn-wa" onclick="APP.sendWA()">💬 WhatsApp</button>
+    <div class="res-meta" id="resMeta"></div>
+    <div class="res-preview" id="resPreview"></div>
+    <div class="res-actions">
+      <button id="btnCopy">📋 Copiar</button>
+      <button id="btnDl">⬇️ Download</button>
+      <button class="wa-btn" id="btnWaResult">💬 WhatsApp</button>
     </div>
   </div>
 </div>
 
-<!-- ══════════ MODAL PAGAMENTO ══════════ -->
-<div class="overlay" id="pricingOverlay" onclick="APP.closePricing(event)">
-  <div class="sheet" id="pricingSheet">
-    <div class="sheet-pill"></div>
+<!-- MODAL PAGAMENTO -->
+<div class="overlay" id="payOverlay">
+  <div class="sheet" id="paySheet">
+    <div class="pill"></div>
     <div class="sheet-hdr">
-      <div>
-        <div class="sh-title">Comprar Créditos</div>
-        <div class="sh-sub">Pagamento via M-Pesa · Adicionados imediatamente</div>
-      </div>
-      <button class="sh-close" onclick="APP.closePricingBtn()">✕</button>
+      <div><div class="sh-title">Comprar Créditos</div><div class="sh-sub">M-Pesa · Instantâneo</div></div>
+      <button class="sh-x" id="payClose">✕</button>
     </div>
-
-    <div class="pricing-grid" id="pricingGrid">
-      <div class="price-card" data-pkg="starter" onclick="APP.selectPkg(this,'starter')">
-        <div class="pc-name">Starter</div>
-        <div class="pc-price">MZN 150</div>
-        <div class="pc-credits">10 créditos</div>
-        <div class="pc-per">MZN 15 / doc</div>
+    <div class="pkg-grid">
+      <div class="pkg" data-pkg="starter">
+        <div class="pkg-name">Starter</div>
+        <div class="pkg-price">MZN 150</div>
+        <div class="pkg-cr">10 créditos</div>
+        <div class="pkg-per">MZN 15/doc</div>
       </div>
-      <div class="price-card pc-popular" data-pkg="basico" onclick="APP.selectPkg(this,'basico')">
-        <div class="pc-badge">Popular</div>
-        <div class="pc-name">Básico</div>
-        <div class="pc-price">MZN 350</div>
-        <div class="pc-credits">25 créditos</div>
-        <div class="pc-per">MZN 14 / doc</div>
+      <div class="pkg popular" data-pkg="basico">
+        <div class="pkg-badge">Popular</div>
+        <div class="pkg-name">Básico</div>
+        <div class="pkg-price">MZN 350</div>
+        <div class="pkg-cr">25 créditos</div>
+        <div class="pkg-per">MZN 14/doc</div>
       </div>
-      <div class="price-card" data-pkg="pro" onclick="APP.selectPkg(this,'pro')">
-        <div class="pc-name">Pro</div>
-        <div class="pc-price">MZN 750</div>
-        <div class="pc-credits">60 créditos/mês</div>
-        <div class="pc-per">MZN 12.5 / doc</div>
+      <div class="pkg" data-pkg="pro">
+        <div class="pkg-name">Pro</div>
+        <div class="pkg-price">MZN 750</div>
+        <div class="pkg-cr">60/mês</div>
+        <div class="pkg-per">MZN 12.5/doc</div>
       </div>
     </div>
-
-    <div class="mpesa-pay" id="mpesaPay" style="display:none">
-      <div class="mp-head">
-        <span class="mp-logo">M</span>
-        <div><strong>Pagamento M-Pesa</strong><p>Receberá uma confirmação no telemóvel</p></div>
+    <div id="mpesaSection" style="display:none">
+      <div class="mp-hdr">
+        <div class="mp-logo">M</div>
+        <div><strong>Pagamento M-Pesa</strong><p id="mpEnvLabel"></p></div>
       </div>
-      <div class="mp-field">
-        <label>Número M-Pesa</label>
-        <div class="mp-input-wrap">
-          <span class="mp-prefix">+258</span>
-          <input type="tel" id="mpesaPhone" placeholder="84 XXX XXXX" maxlength="9" oninput="APP.validatePhone(this)"/>
-        </div>
+      <label class="field-lbl">Número M-Pesa</label>
+      <div class="phone-wrap">
+        <span>+258</span>
+        <input type="tel" id="phoneInput" placeholder="84 XXX XXXX" maxlength="9"/>
       </div>
-      <div class="mp-summary" id="mpSummary"></div>
-      <button class="btn-pay" id="btnPay" onclick="APP.processPayment()" disabled>
-        Confirmar Pagamento
-      </button>
-      <p class="mp-note">O PIN M-Pesa será pedido no seu telemóvel. Não partilhe com ninguém.</p>
+      <div class="pay-sum" id="paySummary"></div>
+      <button class="btn-pay" id="btnPay" disabled>Confirmar Pagamento</button>
+      <p class="mp-note">Receberá pedido de PIN no telemóvel</p>
     </div>
-
   </div>
 </div>
 
-<!-- ══════════ TOAST ══════════ -->
-<div class="toast" id="toast"></div>
+<!-- NOTIFICAÇÕES -->
+<div class="notif-stack" id="notifStack"></div>
+<!-- FAB -->
+<a class="fab" id="fabWa" href="#" target="_blank">💬</a>
 
-<!-- ══════════ FAB ══════════ -->
-<a class="fab-wa" href="https://wa.me/258840000000" target="_blank" id="fabWa" title="Falar connosco">💬</a>
-
-<script src="app.js"></script>
+<!-- APP ENTRY POINT (ES Modules) -->
+<script type="module" src="assets/js/app.js"></script>
 </body>
 </html>
