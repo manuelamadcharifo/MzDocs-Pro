@@ -9,7 +9,7 @@
 // CONFIGURAÇÃO GLOBAL
 // ════════════════════════════════════
 const CFG = {
-  WA_NUMBER:    '258840000000',        // ← ALTERE PARA O SEU NÚMERO
+  WA_NUMBER:    '258858695506',        // ← ALTERE PARA O SEU NÚMERO
   API_ENDPOINT: '/.netlify/functions/generate-document',
   PAY_ENDPOINT: '/.netlify/functions/process-payment',
   VERIFY_EP:    '/.netlify/functions/verify-credits',
