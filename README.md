@@ -52,20 +52,6 @@ mzdocs-v3/
 3. Ir a **Settings → API** → copiar `Project URL` e `anon public key`
 4. Copiar também a `service_role key` (para as Netlify Functions)
 
-### Passo 3 — Netlify Environment Variables
-No **Netlify Dashboard → Site Settings → Environment Variables**:
-
-| Variável | Valor | Obrigatório |
-|---|---|---|
-| `OPENROUTER_API_KEY` | `sk-or-v1-...` | ✅ |
-| `SUPABASE_URL` | `https://xxx.supabase.co` | Para persistência |
-| `SUPABASE_SERVICE_KEY` | `eyJ...` (service_role) | Para persistência |
-| `MPESA_ENV` | `sandbox` ou `production` | Para pagamentos |
-| `MPESA_API_KEY` | Chave do portal M-Pesa | Para pagamentos |
-| `MPESA_PUBLIC_KEY` | Chave pública RSA M-Pesa | Para pagamentos |
-| `MPESA_SERVICE_CODE` | Ex: `171717` | Para pagamentos |
-| `SITE_URL` | URL do seu site Netlify | Recomendado |
-
 ### Número de WhatsApp
 Em `assets/js/controllers/Controllers.js`, linha 1:
 ```javascript
