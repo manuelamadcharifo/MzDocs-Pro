@@ -1,0 +1,17 @@
+{
+  "name": "mzdocs-pro",
+  "version": "1.0.0",
+  "description": "MzDocs Pro - Document generation for Mozambique",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'No build step'",
+    "start": "echo 'Use Netlify'",
+    "test": "echo 'No tests'"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -8,6 +8,8 @@ export class OpenRouterService {
       emergency: 'mistralai/mistral-7b-instruct:free',
     };
     this.currentModel = this.models.primary;
+    this.timeout = 30000; // 30 seconds
+    this.maxRetries = 2;
   }
 
   async generate(serviceType, formData, ocrText = null) {
@@ -15,26 +17,43 @@ export class OpenRouterService {
     return await this._callBackend(serviceType, prompt);
   }
 
-  async _callBackend(serviceType, prompt) {
+  async _callBackend(serviceType, prompt, retryCount = 0) {
     const userId = localStorage.getItem('mz_uid') || 'anon';
     const credits = JSON.parse(localStorage.getItem('mz_credits') ?? '0') || 0;
 
-    const res = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serviceType, prompt, userId, userCredits: credits }),
-    });
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-    if (res.status === 429) { const e = new Error('RATE_LIMIT'); e.status = 429; throw e; }
-    if (res.status === 402) { const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e; }
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      const e = new Error(data.error || `HTTP ${res.status}`);
-      e.status = res.status;
-      throw e;
+      const res = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceType, prompt, userId, userCredits: credits }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (res.status === 429) { const e = new Error('RATE_LIMIT'); e.status = 429; throw e; }
+      if (res.status === 402) { const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e; }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const e = new Error(data.error || `HTTP ${res.status}`);
+        e.status = res.status;
+        throw e;
+      }
+
+      return await res.json();
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout');
+      }
+      if (retryCount < this.maxRetries && (error.status === 503 || error.status === 429)) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // exponential backoff
+        return this._callBackend(serviceType, prompt, retryCount + 1);
+      }
+      throw error;
     }
-
-    return await res.json();
   }
 
   _buildPrompt(type, data, ocr) {
@@ -91,6 +110,8 @@ export class MPesaService {
   constructor() {
     this.endpoint = '/.netlify/functions/process-payment';
     this.env = this._detectEnv();
+    this.timeout = 30000;
+    this.maxRetries = 1;
   }
 
   _detectEnv() {
@@ -113,7 +134,7 @@ export class MPesaService {
     if (!Validator.phone(raw)) throw new Error('Número inválido. Use formato: 84 XXX XXXX');
   }
 
-  async processPayment(phone, amount, packageId) {
+  async processPayment(phone, amount, packageId, retryCount = 0) {
     this.validatePhone(phone);
     if (!Validator.amount(amount)) throw new Error('Valor inválido para o pacote');
 
@@ -122,23 +143,78 @@ export class MPesaService {
       amount: parseInt(amount),
       packageId,
       environment: this.env,
+      userId: localStorage.getItem('mz_uid') || 'anon',
       timestamp: Date.now(),
     };
 
-    const res = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-    const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.message || 'Erro no pagamento');
-    return data;
+      const res = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        const error = new Error(data.message || data.error || 'Erro no pagamento');
+        error.status = res.status;
+        throw error;
+      }
+      return data;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout');
+      }
+      if (retryCount < this.maxRetries && error.status >= 500) {
+        await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1)));
+        return this.processPayment(phone, amount, packageId, retryCount + 1);
+      }
+      throw error;
+    }
   }
 }
 
-// services/SupabaseService.js — Persistência de créditos
-export class SupabaseService {
+// services/CreditService.js — Verificação e gestão de créditos
+export class CreditService {
+  constructor() {
+    this.endpoint = '/.netlify/functions/verify-credits';
+    this.timeout = 10000;
+  }
+
+  async verifyCredits(userId) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      const res = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+
+      return await res.json();
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout');
+      }
+      throw error;
+    }
+  }
+}
   constructor() {
     this._client = null;
     this._ready = false;

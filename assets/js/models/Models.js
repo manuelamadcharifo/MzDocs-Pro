@@ -177,7 +177,7 @@ export class DocumentModel {
 export class UserModel {
   constructor() {
     this.userId = Storage.getUserId();
-    this.WA_SUPPORT = '258840000000'; // ← altere para o número de suporte
+    this.WA_SUPPORT = '258858695506'; // ← altere para o número de suporte
   }
   openSupport(context = '') {
     const msg = `[MzDocs Pro Suporte]\nID: ${this.userId.slice(0,12)}\n${context}`.trim();
