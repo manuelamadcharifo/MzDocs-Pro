@@ -43,8 +43,8 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .chip.gr{background:var(--green);border-color:var(--green);color:#fff}
 
 /* BARS */
-.sandbox-bar{background:linear-gradient(90deg,#92400E,#B45309);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
-.sandbox-bar button{margin-left:auto;background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;font-size:16px}
+.mode-warning{background:linear-gradient(90deg,#92400E,#B45309);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+.mode-warning button{margin-left:auto;background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;font-size:16px}
 .free-bar{background:linear-gradient(90deg,#065F46,#047857);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
 .free-bar button{margin-left:auto;background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:15px}
 .queue-bar{background:var(--blue-d);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600}

@@ -178,7 +178,6 @@ export class PaymentController {
     this.mpesa       = new MPesaService();
     this.selectedPkg = null;
     this._bindEvents();
-    this.mpesa.showSandboxWarning();
   }
 
   _bindEvents() {
@@ -209,8 +208,7 @@ export class PaymentController {
     this.selectedPkg = key;
     const section = document.getElementById('mpesaSection');
     section.style.display = 'flex';
-    document.getElementById('mpEnvLabel').textContent = this.mpesa.isSandbox()
-      ? '⚠️ Modo sandbox — pagamento não real' : 'Ambiente de produção';
+    document.getElementById('mpEnvLabel').textContent = 'Pagamento M-Pesa';
     document.getElementById('paySummary').innerHTML =
       `<span>Pacote <strong>${key.charAt(0).toUpperCase()+key.slice(1)}</strong></span><strong>MZN ${pkg.amount} → ${pkg.credits} créditos</strong>`;
     this.onPhoneInput(document.getElementById('phoneInput'));

@@ -1,6 +1,6 @@
 // netlify/functions/process-payment.js — M-Pesa C2B com validação de ambiente
 const { createClient } = require('@supabase/supabase-js');
-const { MPESA_CONFIG, PACKAGES, MPESA_ERRORS } = require('../../config/constants');
+const { PACKAGES, MPESA_ERRORS } = require('../../config/constants');
 const ErrorHandler = require('../../utils/ErrorHandler');
 
 exports.handler = async (event) => {
@@ -17,7 +17,7 @@ exports.handler = async (event) => {
     const { phoneNumber, amount, packageId, environment, userId } = body;
 
     // ── Validação 1: Ambiente deve bater ──────────────────────
-    const serverEnv = process.env.MPESA_ENV || 'sandbox';
+    const serverEnv = process.env.MPESA_ENV || 'production';
     if (environment !== serverEnv) {
       return ErrorHandler.createResponse(400, `Ambiente incorreto. Esperado: ${serverEnv}, Recebido: ${environment}`);
     }
@@ -35,14 +35,14 @@ exports.handler = async (event) => {
     // ── Verificar credenciais M-Pesa ──────────────────────────
     if (!process.env.MPESA_API_KEY || !process.env.MPESA_PUBLIC_KEY || !process.env.MPESA_SERVICE_CODE) {
       ErrorHandler.logError('process-payment', new Error('M-Pesa credentials not configured'));
-      // Em sandbox, simular sucesso para testes
-      if (serverEnv === 'sandbox') {
-        console.warn('[M-Pesa] SANDBOX MODE: Simulando pagamento bem-sucedido');
+      const isTestMode = serverEnv !== 'production';
+      if (isTestMode) {
+        console.warn('[M-Pesa] TEST MODE: Simulando pagamento bem-sucedido');
         await addCreditsToUser(userId, pkg.credits);
         return { statusCode: 200, headers, body: JSON.stringify({
-          success: true, transactionId: 'SANDBOX_' + Date.now(),
-          creditsAdded: pkg.credits, sandbox: true,
-          message: `[SANDBOX] ${pkg.credits} créditos adicionados (teste)`
+          success: true, transactionId: 'TESTPAY_' + Date.now(),
+          creditsAdded: pkg.credits, testMode: true,
+          message: `Pagamento simulado: ${pkg.credits} créditos adicionados.`
         })};
       }
       return ErrorHandler.createResponse(503, 'Pagamentos indisponíveis. Configure as credenciais M-Pesa.');
@@ -50,17 +50,17 @@ exports.handler = async (event) => {
 
     // ── Chamada real M-Pesa ───────────────────────────────────
     const transRef = `MZDOCS-${Date.now()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
-    const config = MPESA_CONFIG[serverEnv];
+    const mpesaOrigin = process.env.MPESA_ORIGIN || 'https://api.mpesa.vm.co.mz';
 
     try {
       const encKey = encryptApiKey(process.env.MPESA_API_KEY, process.env.MPESA_PUBLIC_KEY);
 
-      const mpRes = await fetch(`${config.baseUrl}/ipg/v1x/c2bPayment/singleStage/`, {
+      const mpRes = await fetch(`${mpesaOrigin.replace(/\/$/, '')}/ipg/v1x/c2bPayment/singleStage/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${encKey}`,
-          'Origin': process.env.MPESA_ORIGIN || config.origin,
+          'Origin': mpesaOrigin,
         },
         body: JSON.stringify({
           input_TransactionReference: transRef,

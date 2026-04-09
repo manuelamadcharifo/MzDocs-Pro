@@ -77,10 +77,10 @@ this.WA_SUPPORT = '258840000000'; // ← Número de suporte
 npm install -g netlify-cli
 netlify login
 netlify init
-netlify env:set OPENROUTER_API_KEY "sk-or-v1-..."
-netlify env:set SUPABASE_URL "https://xxx.supabase.co"
-netlify env:set SUPABASE_SERVICE_KEY "eyJ..."
-netlify env:set MPESA_ENV "sandbox"
+netlify env:set OPENROUTER_API_KEY "YOUR_OPENROUTER_API_KEY_HERE"
+netlify env:set SUPABASE_URL "YOUR_SUPABASE_URL_HERE"
+netlify env:set SUPABASE_SERVICE_KEY "YOUR_SUPABASE_SERVICE_KEY_HERE"
+netlify env:set MPESA_ENV "YOUR_ENV_HERE"
 netlify deploy --prod
 ```
 
@@ -133,11 +133,10 @@ WhatsApp / Copiar / Download
 - Retry automático com backoff exponencial (1.5s → 3s → 6s)
 - UI mostra posição na fila em tempo real
 
-### ✅ P2 — M-Pesa Sandbox → Validação de Ambiente
-- `MPesaService._detectEnv()` detecta localhost/produção automaticamente
+### ✅ P2 — M-Pesa Test Mode → Validação de Ambiente
 - Backend valida se `environment === MPESA_ENV`
-- Sandbox simula pagamento bem-sucedido sem credenciais
-- Banner visual avisa utilizador quando está em modo teste
+- Modo de teste simula pagamento sem credenciais quando não configurado
+- Banner visual avisa utilizador quando está em modo de teste
 
 ### ✅ P3 — Perda de Créditos → Supabase + operações atómicas
 - `deduct_credit()` usa `FOR UPDATE` (lock de linha) — sem race conditions

@@ -1,15 +1,4 @@
 // config/constants.js
-const MPESA_CONFIG = {
-  sandbox: {
-    baseUrl: 'https://api.sandbox.vm.co.mz',
-    origin: 'https://api.sandbox.vm.co.mz'
-  },
-  production: {
-    baseUrl: 'https://api.mpesa.vm.co.mz',
-    origin: 'https://api.mpesa.vm.co.mz'
-  }
-};
-
 const PACKAGES = {
   starter: { amount: 150, credits: 10 },
   basico: { amount: 350, credits: 25 },
@@ -27,7 +16,6 @@ const MPESA_ERRORS = {
 };
 
 module.exports = {
-  MPESA_CONFIG,
   PACKAGES,
   MPESA_ERRORS
 };

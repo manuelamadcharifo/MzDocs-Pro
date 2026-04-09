@@ -102,32 +102,19 @@ Preços de mercado moçambicano ${new Date().getFullYear()}.`,
   }
 }
 
-// services/MPesaService.js — Integração M-Pesa com detecção de ambiente
+// services/MPesaService.js — Integração M-Pesa usando funções seguras
 import { Validator } from '../utils/Validator.js';
 import { Formatter } from '../utils/Formatter.js';
 
 export class MPesaService {
   constructor() {
     this.endpoint = '/.netlify/functions/process-payment';
-    this.env = this._detectEnv();
     this.timeout = 30000;
     this.maxRetries = 1;
   }
 
-  _detectEnv() {
-    const { hostname } = window.location;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') return 'sandbox';
-    if (hostname.includes('netlify.app') && new URLSearchParams(location.search).has('debug')) return 'sandbox';
-    return 'production';
-  }
-
-  isSandbox() { return this.env === 'sandbox'; }
-
-  showSandboxWarning() {
-    if (this.isSandbox()) {
-      const el = document.getElementById('sandboxBar');
-      if (el) el.style.display = 'flex';
-    }
+  validatePhone(raw) {
+    if (!Validator.phone(raw)) throw new Error('Número inválido. Use formato: 84 XXX XXXX');
   }
 
   validatePhone(raw) {
