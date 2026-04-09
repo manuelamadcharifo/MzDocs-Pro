@@ -65,6 +65,11 @@ async function bootstrap() {
   }
 
   console.log('[MzDocs Pro v3] Iniciado — MVC ✅ | Créditos:', creditModel.value);
+
+  // Failsafe debug para validar cliques
+  document.addEventListener('click', (e) => {
+    console.log('Click detected:', e.target);
+  });
 }
 
 // Aguardar DOM

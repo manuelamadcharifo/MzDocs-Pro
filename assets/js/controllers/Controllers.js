@@ -4,7 +4,7 @@ import { DocumentView } from '../views/Views.js';
 import { ModalView, NotificationView } from '../views/Views.js';
 import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
-import { Validator } from '../assets/utils/Validator.js';
+import { Validator } from '../utils/Validator.js';
 
 const WA_NUMBER = '258858695506'; // ← ALTERE
 
