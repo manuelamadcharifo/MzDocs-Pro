@@ -1,10 +1,10 @@
 // controllers/DocumentController.js
 import { DocumentModel, CreditModel, QueueModel } from '../models/Models.js';
-import { DocumentView } from '../views/Views.js';
-import { ModalView, NotificationView } from '../views/Views.js';
+import { DocumentView, ModalView, NotificationView } from '../views/Views.js';
 import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 import { Validator } from '../utils/Validator.js';
+import { MPesaService } from '../services/Services.js';
 
 const WA_NUMBER = '258858695506'; // ← ALTERE
 
@@ -163,9 +163,6 @@ export class DocumentController {
 }
 
 // controllers/PaymentController.js
-import { MPesaService } from '../services/Services.js';
-import { ModalView, NotificationView } from '../views/Views.js';
-
 const PACKAGES = {
   starter: { amount:150, credits:10 },
   basico:  { amount:350, credits:25 },
