@@ -202,6 +202,9 @@ export class CreditService {
     }
   }
 }
+
+// services/SupabaseService.js — Persistência de créditos
+export class SupabaseService {
   constructor() {
     this._client = null;
     this._ready = false;

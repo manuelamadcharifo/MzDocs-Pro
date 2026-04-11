@@ -1,5 +1,5 @@
 // models/QueueModel.js — Fila inteligente com retry e back-off
-import { NotificationView } from '../views/NotificationView.js';
+import { NotificationView } from '../views/Views.js';
 
 export class QueueModel {
   constructor() {
@@ -73,7 +73,7 @@ export class QueueModel {
 
 // models/CreditModel.js — Créditos com Supabase sync
 import { Storage } from '../utils/Storage.js';
-import { SupabaseService } from '../services/SupabaseService.js';
+import { SupabaseService } from '../services/Services.js';
 
 export class CreditModel {
   constructor() {

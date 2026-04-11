@@ -22,7 +22,8 @@ self.addEventListener('fetch', e => {
     caches.match(e.request).then(cached => cached ||
       fetch(e.request).then(r => {
         if (r && r.status === 200 && r.type !== 'opaque') {
-          caches.open(CACHE).then(c => c.put(e.request, r.clone()));
+          const responseClone = r.clone();
+          caches.open(CACHE).then(c => c.put(e.request, responseClone));
         }
         return r;
       }).catch(() => caches.match('/index.html'))
