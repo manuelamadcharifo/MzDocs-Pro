@@ -162,83 +162,11 @@ export class DocumentController {
   }
 }
 
-// controllers/PaymentController.js
-const PACKAGES = {
-  starter: { amount:150, credits:10 },
-  basico:  { amount:350, credits:25 },
-  pro:     { amount:750, credits:60 },
-};
+// Import PaymentController from dedicated module
+export { PaymentController } from './PaymentController.js';
 
-export class PaymentController {
-  constructor(creditModel) {
-    this.creditModel = creditModel;
-    this.mpesa       = new MPesaService();
-    this.selectedPkg = null;
-    this._bindEvents();
-  }
-
-  _bindEvents() {
-    document.getElementById('btnTopup')?.addEventListener('click', () => this.showPricing());
-    document.getElementById('creditPill')?.addEventListener('click', () => this.showPricing());
-    document.getElementById('payClose')?.addEventListener('click', () => this.close());
-    document.getElementById('payOverlay')?.addEventListener('click', e => { if (e.target.id==='payOverlay') this.close(); });
-    document.querySelectorAll('.pkg').forEach(el => {
-      el.addEventListener('click', () => this.selectPkg(el, el.dataset.pkg));
-    });
-    document.getElementById('phoneInput')?.addEventListener('input', e => this.onPhoneInput(e.target));
-    document.getElementById('btnPay')?.addEventListener('click', () => this.pay());
-  }
-
-  showPricing() { ModalView.open('payOverlay'); }
-  close() {
-    ModalView.close('payOverlay');
-    this.selectedPkg = null;
-    document.getElementById('mpesaSection').style.display = 'none';
-    document.querySelectorAll('.pkg').forEach(el => el.classList.remove('sel'));
-  }
-
-  selectPkg(el, key) {
-    const pkg = PACKAGES[key];
-    if (!pkg) return;
-    document.querySelectorAll('.pkg').forEach(p => p.classList.remove('sel'));
-    el.classList.add('sel');
-    this.selectedPkg = key;
-    const section = document.getElementById('mpesaSection');
-    section.style.display = 'flex';
-    document.getElementById('mpEnvLabel').textContent = 'Pagamento M-Pesa';
-    document.getElementById('paySummary').innerHTML =
-      `<span>Pacote <strong>${key.charAt(0).toUpperCase()+key.slice(1)}</strong></span><strong>MZN ${pkg.amount} → ${pkg.credits} créditos</strong>`;
-    this.onPhoneInput(document.getElementById('phoneInput'));
-  }
-
-  onPhoneInput(input) {
-    const valid = Validator.phone(input?.value || '');
-    const btn = document.getElementById('btnPay');
-    if (btn) btn.disabled = !valid || !this.selectedPkg;
-  }
-
-  async pay() {
-    const phone = document.getElementById('phoneInput').value;
-    const pkg = PACKAGES[this.selectedPkg];
-    if (!pkg) return;
-
-    const btn = document.getElementById('btnPay');
-    btn.disabled = true;
-    btn.textContent = '⏳ A processar…';
-
-    try {
-      const result = await this.mpesa.processPayment(phone, pkg.amount, this.selectedPkg);
-      await this.creditModel.add(pkg.credits);
-      NotificationView.success(`✅ ${pkg.credits} créditos adicionados!`);
-      this.close();
-    } catch (err) {
-      NotificationView.error('❌ ' + (err.message || 'Erro no pagamento'));
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Confirmar Pagamento';
-    }
-  }
-}
+// Import AdminController from dedicated module
+export { AdminController } from './AdminController.js';
 
 // controllers/OCRController.js
 export class OCRController {
