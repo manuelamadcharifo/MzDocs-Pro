@@ -329,7 +329,7 @@ async function initialize() {
 
     // Step 8: Service Worker registration
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js')
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
         .then(() => console.log('[App] Service Worker registered ✅'))
         .catch(e => console.warn('[App] Service Worker error:', e.message));
     }

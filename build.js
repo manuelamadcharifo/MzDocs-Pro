@@ -3,7 +3,7 @@ const path = require('path');
 
 const root = path.resolve(__dirname);
 const distDir = path.join(root, 'dist');
-const safeFiles = ['index.html', 'manifest.json'];
+const safeFiles = ['index.html', 'manifest.json', 'sw.js'];
 const safeDirs = ['assets'];
 function removeDist() {
   if (fs.existsSync(distDir)) {
