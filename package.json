@@ -4,7 +4,7 @@
   "description": "MzDocs Pro - Document generation for Mozambique",
   "main": "index.js",
   "scripts": {
-    "build": "echo 'No build step'",
+    "build": "mkdir -p dist && cp -r * dist/ 2>/dev/null || true",
     "start": "echo 'Use Netlify'",
     "test": "echo 'No tests'"
   },
