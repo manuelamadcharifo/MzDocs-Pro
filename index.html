@@ -2,7 +2,7 @@
 <html lang="pt-MZ">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"/>
   <meta name="theme-color" content="#07101F"/>
   <meta name="description" content="MzDocs Pro v3 — Documentos profissionais com IA gratuita para Moçambique"/>
   <meta name="mobile-web-app-capable" content="yes"/>
@@ -14,6 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="assets/css/styles.css"/>
+  <link rel="stylesheet" href="public/interactivity-fix.css"/>
   <!-- Supabase credentials (injected by backend - NEVER hardcoded) -->
   <meta name="supabase-url" content=""/>
   <meta name="supabase-anon-key" content=""/>
@@ -250,5 +251,37 @@
 
 <!-- APP ENTRY POINT (ES Modules) -->
 <script type="module" src="assets/js/app.js"></script>
+
+<!-- PWA Interactivity System -->
+<script src="public/interactivity-core.js"></script>
+
+<!-- Service Worker Registration -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/public/sw.js', { scope: '/' })
+        .then((registration) => {
+          console.log('[App] Service worker registered:', registration);
+          
+          // Listen for updates
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'activated') {
+                  console.log('[App] New service worker activated');
+                  // Dispatch custom event for app to handle update
+                  window.dispatchEvent(new CustomEvent('service-worker-updated'));
+                }
+              });
+            }
+          });
+        })
+        .catch((error) => {
+          console.warn('[App] Service worker registration failed:', error);
+        });
+    });
+  }
+</script>
 </body>
 </html>

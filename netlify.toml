@@ -1,25 +1,252 @@
-# netlify.toml — MzDocs Pro v3
-[build]
-  functions = "netlify/functions"
-  publish   = "."
+# MzDocs Pro v3 - Netlify Configuration
+# Production-grade deployment configuration
+# Includes SPA routing, cache headers, security headers, and API proxy
 
+[build]
+  command = "npm run build"
+  functions = "netlify/functions"
+  publish = "dist"
+
+[build.environment]
+  # Node version for builds
+  NODE_VERSION = "20"
+  # Deno version if using edge functions
+  DENO_VERSION = "1.40"
+
+# ============================================================================
+# HTTP Headers - Security and Performance
+# ============================================================================
+
+[[headers]]
+  # Apply headers to all responses
+  for = "/*"
+  
+  [headers.values]
+    # Security: Prevent clickjacking
+    X-Frame-Options = "SAMEORIGIN"
+    
+    # Security: Enable XSS protection in older browsers
+    X-XSS-Protection = "1; mode=block"
+    
+    # Security: Prevent MIME type sniffing
+    X-Content-Type-Options = "nosniff"
+    
+    # Security: Referrer Policy
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    
+    # Security: Permissions Policy (Feature Policy)
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+    
+    # Performance: Enable gzip compression
+    Content-Encoding = "gzip"
+    
+    # Performance: Cache control for all content
+    Cache-Control = "public, max-age=3600, stale-while-revalidate=86400"
+
+# ============================================================================
+# Cache Headers - HTML (no caching, always revalidate)
+# ============================================================================
+
+[[headers]]
+  for = "/*.html"
+  
+  [headers.values]
+    Content-Type = "text/html; charset=utf-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
+    # Content Security Policy - customize based on your needs
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:;"
+
+# ============================================================================
+# Cache Headers - JavaScript (long-lived, versioned)
+# ============================================================================
+
+[[headers]]
+  for = "/assets/js/*.js"
+  
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=31536000, immutable"
+    Vary = "Accept-Encoding"
+
+[[headers]]
+  for = "/*.js"
+  
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=3600, stale-while-revalidate=86400"
+
+# ============================================================================
+# Cache Headers - CSS (long-lived, versioned)
+# ============================================================================
+
+[[headers]]
+  for = "/assets/css/*.css"
+  
+  [headers.values]
+    Content-Type = "text/css; charset=utf-8"
+    Cache-Control = "public, max-age=31536000, immutable"
+    Vary = "Accept-Encoding"
+
+[[headers]]
+  for = "/*.css"
+  
+  [headers.values]
+    Content-Type = "text/css; charset=utf-8"
+    Cache-Control = "public, max-age=3600, stale-while-revalidate=86400"
+
+# ============================================================================
+# Cache Headers - Images (long-lived, versioned)
+# ============================================================================
+
+[[headers]]
+  for = "/assets/images/*"
+  
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/img/*"
+  
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.{jpg,jpeg,png,gif,webp,svg,ico}"
+  
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# ============================================================================
+# Cache Headers - Fonts (long-lived, versioned)
+# ============================================================================
+
+[[headers]]
+  for = "/assets/fonts/*"
+  
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/*.{woff,woff2,ttf,otf,eot}"
+  
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Access-Control-Allow-Origin = "*"
+
+# ============================================================================
+# Cache Headers - Manifest and Service Worker
+# ============================================================================
+
+[[headers]]
+  for = "/manifest.json"
+  
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "public, max-age=3600, must-revalidate"
+
+[[headers]]
+  for = "/sw.js"
+  
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+# ============================================================================
+# API Redirects - Proxy backend API calls
+# ============================================================================
+
+# Redirect /api/* to your backend server
 [[redirects]]
   from = "/api/*"
-  to   = "/.netlify/functions/:splat"
+  to = "/.netlify/functions/:splat"
   status = 200
 
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options        = "DENY"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy        = "strict-origin-when-cross-origin"
+# Alternative: Uncomment to proxy to external backend
+# [[redirects]]
+#   from = "/api/*"
+#   to = "https://api.example.com/:splat"
+#   status = 200
+#   force = false
+#   headers = {Authorization = "Bearer ${API_TOKEN}"}
 
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
+# ============================================================================
+# SPA Routing - Fallback for client-side routing
+# ============================================================================
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# ============================================================================
+# Forms Handling
+# ============================================================================
+
+[[redirects]]
+  from = "/submit-form"
+  to = "/.netlify/functions/submit-form"
+  status = 200
+  force = true
+
+# ============================================================================
+# Edge Functions - Deno-based serverless functions
+# ============================================================================
+
+[[edge_functions]]
+  function = "openrouter-proxy"
+  path = "/api/openrouter/*"
+
+[[edge_functions]]
+  function = "cors-handler"
+  path = "/api/*"
+
+# ============================================================================
+# Environment Variables for Deployments
+# ============================================================================
+
+[context.production]
+  environment = { NODE_ENV = "production" }
+
+[context.staging]
+  environment = { NODE_ENV = "staging" }
+
+[context."deploy-preview"]
+  environment = { NODE_ENV = "preview" }
+
+[context.development]
+  environment = { NODE_ENV = "development" }
+
+# ============================================================================
+# Plugins Configuration
+# ============================================================================
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+  optional = true
+
+# ============================================================================
+# Functions Configuration
+# ============================================================================
+
+[functions]
+  # Set Node version for serverless functions
+  node_bundler = "esbuild"
+  
+  # Set timeout for long-running functions (max 26 seconds)
+  timeout = 26
+  
+  # Memory allocation (128 - 3008 MB)
+  memory = 1024
+
+# ============================================================================
+# Dev Configuration
+# ============================================================================
 
 [dev]
-  functions  = "netlify/functions"
-  targetPort = 8888
+  command = "npm run dev"
+  port = 3000
+  publish = "dist"
+  autoLaunch = false
+  framework = "#custom"
