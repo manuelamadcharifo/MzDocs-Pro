@@ -103,7 +103,11 @@ async function addCreditsToUser(userId, credits) {
   try {
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
     await sb.rpc('add_credits', { user_id: userId, amount: credits });
+<<<<<<< HEAD
   } catch (e) { console.error(e); } console.error(e);
+=======
+  } catch (e) {
+>>>>>>> parent of 0a3b775 (SUPER FIX: production ready)
     ErrorHandler.logError('addCreditsToUser', e);
   }
 }
@@ -118,7 +122,11 @@ function encryptApiKey(apiKey, publicKeyB64) {
 function getMpesaError(code) {
   return MPESA_ERRORS[code] || `Erro M-Pesa (${code}). Contacte o suporte.`;
 }
+<<<<<<< HEAD
   } catch (e) { console.error(e); } console.error(e);
+=======
+  } catch (e) {
+>>>>>>> parent of 0a3b775 (SUPER FIX: production ready)
     return { statusCode:200, headers, body: JSON.stringify({ userId, credits:3, source:'fallback' }) };
   }
 };
