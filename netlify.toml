@@ -226,9 +226,6 @@
   # Set Node version for serverless functions
   node_bundler = "esbuild"
   
-  # Set timeout for long-running functions (max 26 seconds)
-  timeout = 26
-  
   # Memory allocation (128 - 3008 MB)
   memory = 1024
 
