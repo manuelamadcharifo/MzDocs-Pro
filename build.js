@@ -33,6 +33,14 @@ function copyDir(source, target) {
   fs.cpSync(source, target, { recursive: true, errorOnExist: false });
 }
 
+function copyPublicAssets() {
+  const publicAssetsSrc = path.join(root, 'public', 'assets');
+  const publicAssetsTarget = path.join(distDir, 'assets');
+  if (fs.existsSync(publicAssetsSrc)) {
+    copyDir(publicAssetsSrc, publicAssetsTarget);
+  }
+}
+
 // -------------------------
 // PNG ICON GENERATOR (PWA SAFE)
 // -------------------------
@@ -148,9 +156,24 @@ function validateJS(filePath) {
   if (!fs.existsSync(filePath)) return;
 
   const content = fs.readFileSync(filePath, 'utf-8');
+  const trimmed = content.trim();
 
-  if (content.trim().startsWith('<!DOCTYPE html>')) {
+  if (trimmed.startsWith('<!DOCTYPE html>') || trimmed.startsWith('<html')) {
     throw new Error(`INVALID JS (HTML detected): ${filePath}`);
+  }
+}
+
+function validateJsFiles(rootPath) {
+  if (!fs.existsSync(rootPath)) return;
+
+  const entries = fs.readdirSync(rootPath, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(rootPath, entry.name);
+    if (entry.isDirectory()) {
+      validateJsFiles(fullPath);
+    } else if (entry.isFile() && fullPath.endsWith('.js')) {
+      validateJS(fullPath);
+    }
   }
 }
 
@@ -199,11 +222,13 @@ function build() {
     }
   });
 
-  // validate critical JS
-  validateJS(path.join(distDir, 'public.js'));
-  validateJS(path.join(distDir, 'sw.js'));
+  // copy any static public assets into the deployed assets tree
+  copyPublicAssets();
 
-  // fix manifest paths
+  // validate critical JS files for HTML fallback responses
+  validateJsFiles(distDir);
+
+  // fix manifest paths so icons always resolve from deployed public root
   fixManifest(distDir);
 
   // final checks
