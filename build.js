@@ -190,7 +190,7 @@ function fixManifest(distDir) {
   if (manifest.icons) {
     manifest.icons = manifest.icons.map(icon => {
       const file = path.basename(icon.src);
-      icon.src = `/assets/icons/${file}`;
+      icon.src = `/dist/assets/icons/${file}`;
       return icon;
     });
   }
