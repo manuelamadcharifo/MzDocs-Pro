@@ -3,21 +3,12 @@
 # Includes SPA routing, cache headers, security headers, and API proxy
 
 [build]
-<<<<<<< HEAD
-  command = "echo 'safe build'"
-  publish = "dist"
-
-=======
-=======
->>>>>>> parent of 0a3b775 (SUPER FIX: production ready)
   command = "npm run build"
-  functions = "netlify/functions"
   publish = "dist"
+  functions = "netlify/functions"
 
 [build.environment]
-  # Node version for builds
   NODE_VERSION = "20"
-  # Deno version if using edge functions
   DENO_VERSION = "1.40"
 
 # ============================================================================
@@ -179,10 +170,6 @@
 # SPA Routing - Fallback for client-side routing
 # ============================================================================
 
-<<<<<<< HEAD
->>>>>>> parent of 0a3b775 (SUPER FIX: production ready)
-=======
->>>>>>> parent of 0a3b775 (SUPER FIX: production ready)
 [[redirects]]
   from = "/*"
   to = "/index.html"
