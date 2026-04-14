@@ -37,9 +37,6 @@
     # Security: Permissions Policy (Feature Policy)
     Permissions-Policy = "geolocation=(), microphone=(), camera=()"
     
-    # Performance: Enable gzip compression
-    Content-Encoding = "gzip"
-    
     # Performance: Cache control for all content
     Cache-Control = "public, max-age=3600, stale-while-revalidate=86400"
 
@@ -225,9 +222,6 @@
 [functions]
   # Set Node version for serverless functions
   node_bundler = "esbuild"
-  
-  # Memory allocation (128 - 3008 MB)
-  memory = 1024
 
 # ============================================================================
 # Dev Configuration
