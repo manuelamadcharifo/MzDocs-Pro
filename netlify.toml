@@ -8,6 +8,8 @@
   publish = "dist"
 
 =======
+=======
+>>>>>>> parent of 0a3b775 (SUPER FIX: production ready)
   command = "npm run build"
   functions = "netlify/functions"
   publish = "dist"
@@ -177,6 +179,9 @@
 # SPA Routing - Fallback for client-side routing
 # ============================================================================
 
+<<<<<<< HEAD
+>>>>>>> parent of 0a3b775 (SUPER FIX: production ready)
+=======
 >>>>>>> parent of 0a3b775 (SUPER FIX: production ready)
 [[redirects]]
   from = "/*"
