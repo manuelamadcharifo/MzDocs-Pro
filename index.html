@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="assets/css/styles.css"/>
-  <link rel="stylesheet" href="public/interactivity-fix.css"/>
+  <link rel="stylesheet" href="assets/css/interactivity-fix.css"/>
   <!-- Supabase credentials (injected by backend - NEVER hardcoded) -->
   <meta name="supabase-url" content=""/>
   <meta name="supabase-anon-key" content=""/>
@@ -253,13 +253,13 @@
 <script type="module" src="assets/js/app.js"></script>
 
 <!-- PWA Interactivity System -->
-<script src="public/interactivity-core.js"></script>
+<script src="assets/js/interactivity-core.js"></script>
 
 <!-- Service Worker Registration -->
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/public/sw.js', { scope: '/' })
+      navigator.serviceWorker.register('/assets/sw.js', { scope: '/' })
         .then((registration) => {
           console.log('[App] Service worker registered:', registration);
           

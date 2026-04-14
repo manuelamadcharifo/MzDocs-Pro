@@ -5,8 +5,6 @@ const root = path.resolve(__dirname);
 const distDir = path.join(root, 'dist');
 const safeFiles = ['index.html', 'manifest.json'];
 const safeDirs = ['assets'];
-const publicFiles = ['interactivity-core.js', 'interactivity-fix.css', 'sw.js'];
-
 function removeDist() {
   if (fs.existsSync(distDir)) {
     fs.rmSync(distDir, { recursive: true, force: true });
@@ -41,19 +39,6 @@ function build() {
     const source = path.join(root, dir);
     if (fs.existsSync(source)) {
       copyDir(source, path.join(distDir, dir));
-    }
-  });
-
-  const publicSrc = path.join(root, 'public');
-  const publicDest = path.join(distDir, 'public');
-  if (!fs.existsSync(publicSrc)) {
-    throw new Error('Missing public directory');
-  }
-
-  publicFiles.forEach((file) => {
-    const source = path.join(publicSrc, file);
-    if (fs.existsSync(source)) {
-      copyFile(source, path.join(publicDest, file));
     }
   });
 
