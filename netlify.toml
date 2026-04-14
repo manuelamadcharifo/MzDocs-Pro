@@ -1,14 +1,6 @@
 [build]
-  command = "npm run build || echo 'no build step'"
+  command = "echo 'safe build'"
   publish = "dist"
-
-[build.environment]
-  NODE_VERSION = "20"
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
 
 [[redirects]]
   from = "/*"
