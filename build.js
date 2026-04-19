@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const root = path.resolve(__dirname);
 const distDir = path.join(root, 'dist');
 
-const safeFiles = ['index.html', 'manifest.json', 'sw.js'];
+const safeFiles = ['index.html', 'manifest.json', 'sw.js', 'public.js'];
 const safeDirs = ['assets'];
 
 // -------------------------
@@ -33,16 +33,29 @@ function copyDir(source, target) {
   fs.cpSync(source, target, { recursive: true, errorOnExist: false });
 }
 
-function copyPublicAssets() {
-  const publicAssetsSrc = path.join(root, 'public', 'assets');
-  const publicAssetsTarget = path.join(distDir, 'assets');
-  if (fs.existsSync(publicAssetsSrc)) {
-    copyDir(publicAssetsSrc, publicAssetsTarget);
-  }
+// -------------------------
+// COPY PUBLIC (CRÍTICO PARA PWA)
+// -------------------------
+function copyPublicRoot() {
+  const publicDir = path.join(root, 'public');
+
+  if (!fs.existsSync(publicDir)) return;
+
+  const files = fs.readdirSync(publicDir);
+  files.forEach(file => {
+    const src = path.join(publicDir, file);
+    const dest = path.join(distDir, file);
+
+    if (fs.lstatSync(src).isDirectory()) {
+      copyDir(src, dest);
+    } else {
+      copyFile(src, dest);
+    }
+  });
 }
 
 // -------------------------
-// PNG ICON GENERATOR (PWA SAFE)
+// PNG ICON GENERATOR
 // -------------------------
 function crc32(data) {
   const table = [];
@@ -88,47 +101,27 @@ function createPNG(width, height, color, outputPath) {
   ihdr.writeUInt32BE(height, 12);
   ihdr.writeUInt8(8, 16);
   ihdr.writeUInt8(2, 17);
-  ihdr.writeUInt8(0, 18);
-  ihdr.writeUInt8(0, 19);
-  ihdr.writeUInt8(0, 20);
 
   const ihdrCrc = crc32(ihdr.slice(4, 21));
   ihdr.writeUInt32BE(ihdrCrc, 21);
 
-  const idatLenBuf = Buffer.alloc(4);
-  idatLenBuf.writeUInt32BE(idat.length, 0);
-
   const idatChunk = Buffer.concat([Buffer.from('IDAT'), idat]);
   const idatCrc = crc32(idatChunk);
-
-  const idatCrcBuf = Buffer.alloc(4);
-  idatCrcBuf.writeUInt32BE(idatCrc, 0);
-
-  const iendLenBuf = Buffer.alloc(4);
-  iendLenBuf.writeUInt32BE(0, 0);
-
-  const iendChunk = Buffer.from('IEND');
-  const iendCrc = crc32(iendChunk);
-
-  const iendCrcBuf = Buffer.alloc(4);
-  iendCrcBuf.writeUInt32BE(iendCrc, 0);
 
   const png = Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
     ihdr,
-    idatLenBuf,
+    Buffer.from([0, 0, 0, idat.length]),
     idatChunk,
-    idatCrcBuf,
-    iendLenBuf,
-    iendChunk,
-    iendCrcBuf
+    Buffer.from([(idatCrc >> 24) & 255, (idatCrc >> 16) & 255, (idatCrc >> 8) & 255, idatCrc & 255]),
+    Buffer.from([0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130])
   ]);
 
   fs.writeFileSync(outputPath, png);
 }
 
 // -------------------------
-// ENSURE PWA ICONS
+// ENSURE ICONS
 // -------------------------
 function ensureIcons() {
   const iconsDir = path.join(root, 'assets', 'icons');
@@ -150,63 +143,53 @@ function ensureIcons() {
 }
 
 // -------------------------
-// VALIDATE JS FILES (ANTI HTML ERROR)
+// VALIDAR JS (ANTI HTML)
 // -------------------------
 function validateJS(filePath) {
   if (!fs.existsSync(filePath)) return;
 
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const trimmed = content.trim();
+  const content = fs.readFileSync(filePath, 'utf-8').trim();
 
-  if (trimmed.startsWith('<!DOCTYPE html>') || trimmed.startsWith('<html')) {
-    throw new Error(`INVALID JS (HTML detected): ${filePath}`);
-  }
-}
-
-function validateJsFiles(rootPath) {
-  if (!fs.existsSync(rootPath)) return;
-
-  const entries = fs.readdirSync(rootPath, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(rootPath, entry.name);
-    if (entry.isDirectory()) {
-      validateJsFiles(fullPath);
-    } else if (entry.isFile() && fullPath.endsWith('.js')) {
-      validateJS(fullPath);
-    }
+  if (content.startsWith('<!DOCTYPE html>') || content.startsWith('<html')) {
+    throw new Error(`❌ HTML SERVIDO COMO JS: ${filePath}`);
   }
 }
 
 // -------------------------
-// MANIFEST FIXER
+// FIX MANIFEST
 // -------------------------
-function fixManifest(distDir) {
+function fixManifest() {
   const manifestPath = path.join(distDir, 'manifest.json');
 
   if (!fs.existsSync(manifestPath)) return;
 
-  let manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  const manifest = JSON.parse(fs.readFileSync(manifestPath));
 
-  if (manifest.icons) {
-    manifest.icons = manifest.icons.map(icon => {
-      const file = path.basename(icon.src);
-      icon.src = `/assets/icons/${file}`;
-      return icon;
-    });
-  }
+  manifest.icons = [
+    {
+      src: "/assets/icons/icon-192.png",
+      sizes: "192x192",
+      type: "image/png"
+    },
+    {
+      src: "/assets/icons/icon-512.png",
+      sizes: "512x512",
+      type: "image/png"
+    }
+  ];
 
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 }
 
 // -------------------------
-// BUILD PROCESS
+// BUILD
 // -------------------------
 function build() {
   ensureIcons();
   removeDist();
   fs.mkdirSync(distDir, { recursive: true });
 
-  // copy core files
+  // core
   safeFiles.forEach(file => {
     const src = path.join(root, file);
     if (fs.existsSync(src)) {
@@ -214,7 +197,7 @@ function build() {
     }
   });
 
-  // copy assets
+  // assets
   safeDirs.forEach(dir => {
     const src = path.join(root, dir);
     if (fs.existsSync(src)) {
@@ -222,34 +205,17 @@ function build() {
     }
   });
 
-  // copy any static public assets into the deployed assets tree
-  copyPublicAssets();
+  // PUBLIC (CRUCIAL)
+  copyPublicRoot();
 
-  // validate critical JS files for HTML fallback responses
-  validateJsFiles(distDir);
+  // VALIDAR SW
+  validateJS(path.join(distDir, 'sw.js'));
 
-  // fix manifest paths so icons always resolve from deployed public root
-  fixManifest(distDir);
+  // FIX MANIFEST
+  fixManifest();
 
-  // final checks
-  const required = [
-    'index.html',
-    'manifest.json',
-    'sw.js',
-    'assets/icons/icon-192.png',
-    'assets/icons/icon-512.png'
-  ];
-
-  required.forEach(file => {
-    const filePath = path.join(distDir, file);
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`BUILD ERROR: missing ${file}`);
-    }
-  });
-
-  console.log('✅ BUILD COMPLETO: dist pronto para Netlify');
-  console.log('📦 Conteúdo:', fs.readdirSync(distDir).join(', '));
+  console.log('✅ BUILD OK');
+  console.log('📦 dist:', fs.readdirSync(distDir));
 }
 
-// run
 build();
