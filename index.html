@@ -1,386 +1,121 @@
 <!DOCTYPE html>
 <html lang="pt-MZ">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"/>
-  <meta name="theme-color" content="#060E1C"/>
-  <meta name="description" content="Cria documentos profissionais em segundos com IA gratuita — CVs, cartas, trabalhos académicos e orçamentos. Para Moçambique."/>
-  <meta name="mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="MzDocs"/>
-  <meta property="og:title" content="MzDocs Pro — Documentos por IA, grátis"/>
-  <meta property="og:description" content="CV, cartas formais, trabalhos académicos e orçamentos gerados por IA em segundos."/>
-  <meta property="og:type" content="website"/>
-  <title>MzDocs Pro — Documentos com IA</title>
-  <link rel="manifest" href="/manifest.json"/>
-  <link rel="apple-touch-icon" href="/assets/icons/icon-192.png"/>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,400&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="/assets/css/styles.css"/>
-  <meta name="supabase-url" content=""/>
-  <meta name="supabase-anon-key" content=""/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0B4BFF" />
+  <title>MzDocs | Cria o teu documento em segundos</title>
+  <meta name="description" content="Cria documentos claros e práticos. CV, cartas, orçamentos e mais, com suporte rápido e seguro." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MzDocs" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/assets/icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/css/styles.css" />
+  <style>
+    .hidden { display: none !important; }
+    .hero { padding: 3.5rem 1.5rem; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.75rem; }
+    .btn-secondary { border-color: rgba(255,255,255,.2); color: #ffffff; background: rgba(255,255,255,.1); }
+    .section-intro { padding: 2rem 1.5rem; max-width: 1040px; margin: 0 auto; }
+    .steps-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 1rem; }
+    .step-card { padding: 1.1rem 1.25rem; border-radius: 1rem; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+    .svc-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); padding: 0 1.5rem 2rem; }
+    .svc-card { min-height: 150px; }
+    .overlay .sheet { max-width: 560px; margin: 2rem auto; }
+  </style>
 </head>
 <body>
-
-<!-- HEADER -->
-<header class="hdr">
-  <div class="hdr-l">
-    <div class="logo-mark">
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-        <rect x="1" y="1" width="7" height="9" rx="1.5" fill="white" opacity=".9"/>
-        <rect x="10" y="1" width="7" height="5" rx="1.5" fill="white" opacity=".5"/>
-        <rect x="10" y="8" width="7" height="9" rx="1.5" fill="white" opacity=".7"/>
-        <rect x="1" y="12" width="7" height="5" rx="1.5" fill="white" opacity=".5"/>
-      </svg>
+  <header class="hdr">
+    <div class="hdr-l">
+      <div class="logo-mark" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <rect x="1" y="1" width="7" height="9" rx="1.5" fill="currentColor" opacity=".9"/>
+          <rect x="10" y="1" width="7" height="5" rx="1.5" fill="currentColor" opacity=".5"/>
+          <rect x="10" y="8" width="7" height="9" rx="1.5" fill="currentColor" opacity=".7"/>
+          <rect x="1" y="12" width="7" height="5" rx="1.5" fill="currentColor" opacity=".5"/>
+        </svg>
+      </div>
+      <span class="logo-name">MzDocs<span class="logo-pro">Pro</span></span>
     </div>
-    <span class="logo-name">MzDocs<span class="logo-pro">Pro</span></span>
-  </div>
-  <div class="hdr-r">
-    <button class="credit-btn" id="creditPill" title="Ver os seus créditos">
-      <span class="credit-icon">⚡</span>
-      <span class="credit-val" id="creditVal">—</span>
-      <span class="credit-lbl">cr</span>
-    </button>
-    <button class="btn-buy" id="btnTopup">+ Créditos</button>
-  </div>
-</header>
-
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-orbs" aria-hidden="true"></div>
-  <div class="hero-content">
-    <div class="hero-badge">🇲🇿 &nbsp;IA gratuita · Para Moçambique</div>
-    <h1 class="hero-title">
-      Documentos<br/>
-      <em>profissionais</em><br/>
-      em segundos
-    </h1>
-    <p class="hero-sub">Preenche, a IA redige, recebes pelo WhatsApp. Grátis para começar.</p>
-    <div class="hero-tags">
-      <span class="tag tag-green">✓ 3 créditos grátis</span>
-      <span class="tag">📷 OCR incluído</span>
-      <span class="tag">⚡ Sem registo</span>
+    <div class="hdr-r">
+      <button class="btn btn-primary" id="startButton">Começar</button>
     </div>
-  </div>
-</section>
+  </header>
 
-<!-- BARRA DE INFO: CRÉDITOS GRATUITOS -->
-<div class="info-bar" id="freeBar" role="status">
-  <span>🎁</span>
-  <span>Tens <strong id="freeLeft">3</strong> créditos gratuitos este mês</span>
-  <button class="info-bar-close" onclick="this.parentElement.remove()" aria-label="Fechar aviso">✕</button>
-</div>
-
-<!-- BARRA DE PROCESSAMENTO -->
-<div class="process-bar" id="queueBar" style="display:none" role="status" aria-live="polite">
-  <div class="process-spinner" aria-hidden="true"></div>
-  <span id="queueMsg">A gerar o teu documento…</span>
-  <span id="queuePos" class="process-pos"></span>
-</div>
-
-<!-- CONTEÚDO PRINCIPAL -->
-<main class="main" id="mainContent">
-
-  <div class="section-intro">
-    <p class="section-label">O QUE QUERES CRIAR?</p>
-  </div>
-
-  <!-- Serviços com IA -->
-  <div class="services-group">
-    <p class="group-label">
-      <span class="group-badge">✦ IA</span>
-      Gerados por Inteligência Artificial
-    </p>
-    <div class="svc-grid">
-
-      <div class="svc-card" data-svc="trabalho" role="button" tabindex="0">
-        <div class="svc-ai-badge">IA</div>
-        <div class="svc-icon" style="--icon-bg:#DBEAFE">📚</div>
-        <div class="svc-body">
-          <div class="svc-name">Trabalho Escolar</div>
-          <div class="svc-desc">Redacções, pesquisas e TCCs com estrutura académica</div>
+  <main class="main">
+    <section class="hero">
+      <div class="hero-content">
+        <div class="hero-badge">Documentos rápidos e fáceis para o teu dia a dia</div>
+        <h1 class="hero-title">Cria o teu documento em segundos</h1>
+        <p class="hero-sub">CV, carta formal, orçamento ou trabalho escolar — pronto para usar.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" id="heroAction">Criar documento</button>
+          <button class="btn btn-secondary" id="heroLearn">Ver opções</button>
         </div>
-        <div class="svc-footer">
-          <span class="svc-cost">1 crédito</span>
-          <span class="svc-arrow" aria-hidden="true">→</span>
-        </div>
-        <div class="svc-accent" style="--accent:#3B82F6"></div>
       </div>
+    </section>
 
-      <div class="svc-card" data-svc="cv" role="button" tabindex="0">
-        <div class="svc-ai-badge">IA</div>
-        <div class="svc-icon" style="--icon-bg:#D1FAE5">📋</div>
-        <div class="svc-body">
-          <div class="svc-name">Currículo (CV)</div>
-          <div class="svc-desc">CV formato Europass para o mercado moçambicano</div>
-        </div>
-        <div class="svc-footer">
-          <span class="svc-cost">1 crédito</span>
-          <span class="svc-arrow" aria-hidden="true">→</span>
-        </div>
-        <div class="svc-accent" style="--accent:#10B981"></div>
+    <section class="section-intro">
+      <p class="section-label">Como funciona</p>
+      <div class="steps-grid">
+        <div class="step-card"><strong>1</strong><p>Escolhe o tipo de documento.</p></div>
+        <div class="step-card"><strong>2</strong><p>Escreve o que precisa em poucas palavras.</p></div>
+        <div class="step-card"><strong>3</strong><p>Recebe o documento pronto para enviar.</p></div>
       </div>
+    </section>
 
-      <div class="svc-card" data-svc="carta" role="button" tabindex="0">
-        <div class="svc-ai-badge">IA</div>
-        <div class="svc-icon" style="--icon-bg:#FEF3C7">✉️</div>
-        <div class="svc-body">
-          <div class="svc-name">Carta Formal</div>
-          <div class="svc-desc">Candidaturas, pedidos e reclamações correctamente redigidas</div>
+    <section class="services-group" id="services">
+      <p class="group-label"><span class="group-badge">Rápido</span> Documentos prontos em minutos</p>
+      <div class="svc-grid">
+        <div class="svc-card" data-svc="cv" role="button" tabindex="0">
+          <div class="svc-icon" aria-hidden="true">📄</div>
+          <div class="svc-body"><div class="svc-name">CV Profissional</div><div class="svc-desc">Currículo completo e direto.</div></div>
         </div>
-        <div class="svc-footer">
-          <span class="svc-cost">1 crédito</span>
-          <span class="svc-arrow" aria-hidden="true">→</span>
+        <div class="svc-card" data-svc="carta" role="button" tabindex="0">
+          <div class="svc-icon" aria-hidden="true">✉️</div>
+          <div class="svc-body"><div class="svc-name">Carta Formal</div><div class="svc-desc">Pedido, candidatura ou reclamação pronta.</div></div>
         </div>
-        <div class="svc-accent" style="--accent:#F59E0B"></div>
+        <div class="svc-card" data-svc="trabalho" role="button" tabindex="0">
+          <div class="svc-icon" aria-hidden="true">📚</div>
+          <div class="svc-body"><div class="svc-name">Trabalho Escolar</div><div class="svc-desc">Texto organizado e fácil de entregar.</div></div>
+        </div>
+        <div class="svc-card" data-svc="orcamento" role="button" tabindex="0">
+          <div class="svc-icon" aria-hidden="true">🧾</div>
+          <div class="svc-body"><div class="svc-name">Orçamento</div><div class="svc-desc">Valores claros para serviços ou obras.</div></div>
+        </div>
       </div>
+    </section>
 
-      <div class="svc-card" data-svc="orcamento" role="button" tabindex="0">
-        <div class="svc-ai-badge">IA</div>
-        <div class="svc-icon" style="--icon-bg:#EDE9FE">🏗️</div>
-        <div class="svc-body">
-          <div class="svc-name">Orçamento de Obra</div>
-          <div class="svc-desc">Tabela detalhada de materiais e preços em MZN</div>
-        </div>
-        <div class="svc-footer">
-          <span class="svc-cost">1 crédito</span>
-          <span class="svc-arrow" aria-hidden="true">→</span>
-        </div>
-        <div class="svc-accent" style="--accent:#8B5CF6"></div>
-      </div>
+    <section class="trust-row">
+      <span>🔒 Privacidade em primeiro lugar</span>
+      <span class="trust-dot" aria-hidden="true">·</span>
+      <span>⚡ Sem registo complicado</span>
+      <span class="trust-dot" aria-hidden="true">·</span>
+      <span>🇲🇿 Feito para Moçambique</span>
+    </section>
+  </main>
 
-    </div>
-  </div>
-
-  <!-- Serviços Gratuitos -->
-  <div class="services-group">
-    <p class="group-label">
-      <span class="group-badge group-badge-free">Grátis</span>
-      Entrega directa pelo WhatsApp
-    </p>
-    <div class="svc-grid svc-grid-3">
-
-      <div class="svc-card svc-free" data-svc="impressao" role="button" tabindex="0">
-        <div class="svc-icon svc-icon-sm" style="--icon-bg:#FCE7F3">🖨️</div>
-        <div class="svc-body">
-          <div class="svc-name">Impressão</div>
-          <div class="svc-desc">P&B ou colorido via WhatsApp</div>
-        </div>
-        <div class="svc-footer">
-          <span class="svc-cost svc-free-tag">Grátis</span>
-          <span class="svc-arrow" aria-hidden="true">→</span>
-        </div>
-        <div class="svc-accent" style="--accent:#EC4899"></div>
-      </div>
-
-      <div class="svc-card svc-free" data-svc="foto" role="button" tabindex="0">
-        <div class="svc-icon svc-icon-sm" style="--icon-bg:#CFFAFE">📷</div>
-        <div class="svc-body">
-          <div class="svc-name">Foto Documentos</div>
-          <div class="svc-desc">BI, passaporte com fundo oficial</div>
-        </div>
-        <div class="svc-footer">
-          <span class="svc-cost svc-free-tag">Grátis</span>
-          <span class="svc-arrow" aria-hidden="true">→</span>
-        </div>
-        <div class="svc-accent" style="--accent:#06B6D4"></div>
-      </div>
-
-      <div class="svc-card svc-free" data-svc="conversao" role="button" tabindex="0">
-        <div class="svc-icon svc-icon-sm" style="--icon-bg:#FEE2E2">🔄</div>
-        <div class="svc-body">
-          <div class="svc-name">Conversão</div>
-          <div class="svc-desc">PDF ↔ Word · Excel · Imagem</div>
-        </div>
-        <div class="svc-footer">
-          <span class="svc-cost svc-free-tag">Grátis</span>
-          <span class="svc-arrow" aria-hidden="true">→</span>
-        </div>
-        <div class="svc-accent" style="--accent:#EF4444"></div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- Trust bar -->
-  <div class="trust-row" aria-label="Garantias de segurança">
-    <span>🔒 Os teus dados ficam no dispositivo</span>
-    <span class="trust-dot" aria-hidden="true">·</span>
-    <span>⚡ Sem registo obrigatório</span>
-    <span class="trust-dot" aria-hidden="true">·</span>
-    <span>🇲🇿 Feito para Moçambique</span>
-  </div>
-
-</main>
-
-<!-- ================================
-     MODAL: FORMULÁRIO DO SERVIÇO
-================================ -->
-<div class="overlay" id="formOverlay" role="dialog" aria-modal="true" aria-labelledby="shTitle">
-  <div class="sheet" id="formSheet">
-    <div class="sheet-pill" aria-hidden="true"></div>
-
-    <div class="sheet-header">
-      <div class="sheet-icon" id="shIco" aria-hidden="true"></div>
-      <div class="sheet-titles">
-        <div class="sheet-title" id="shTitle"></div>
-        <div class="sheet-subtitle" id="shSub"></div>
-      </div>
-      <button class="sheet-close" id="formClose" aria-label="Fechar formulário">✕</button>
-    </div>
-
-    <!-- OCR -->
-    <div id="ocrZone" style="display:none" aria-label="Digitalização de rascunho">
-      <div class="ocr-prompt">
-        <span aria-hidden="true">📷</span>
+  <div class="overlay hidden" id="formOverlay" role="dialog" aria-modal="true" aria-labelledby="formTitle">
+    <div class="sheet">
+      <div class="sheet-header">
         <div>
-          <strong>Tens algo escrito à mão?</strong>
-          <p>Fotografa e a IA usa como base — opcional</p>
+          <div class="sheet-title" id="formTitle">Preparar o teu documento</div>
+          <div class="sheet-subtitle" id="formSubtitle">Escolhe o tipo e segue o passo seguinte.</div>
         </div>
+        <button class="sheet-close" id="formClose" aria-label="Fechar">✕</button>
       </div>
-      <div class="ocr-btns">
-        <button id="btnCam" class="btn-ocr">📸 Câmara</button>
-        <button id="btnFile" class="btn-ocr">📁 Ficheiro</button>
+      <div class="sheet-body">
+        <p id="formMessage">Por favor, escolhe o documento que queres criar.</p>
+        <button class="btn btn-primary" id="formAction">Continuar</button>
       </div>
-      <input type="file" id="ocrInput" accept="image/*" style="display:none" aria-hidden="true"/>
-
-      <div id="ocrBar" style="display:none" class="ocr-bar" role="progressbar" aria-label="Progresso do reconhecimento">
-        <div class="ocr-track"><div class="ocr-fill" id="ocrFill"></div></div>
-        <span id="ocrStatusTxt" class="ocr-status"></span>
-      </div>
-
-      <div id="ocrResultBox" style="display:none" class="ocr-result-box">
-        <div class="ocr-result-header">
-          <span>Texto reconhecido</span>
-          <span id="ocrConf" class="ocr-conf"></span>
-        </div>
-        <textarea id="ocrTxt" rows="4" class="fta" aria-label="Texto extraído da imagem"></textarea>
-        <div class="ocr-result-btns">
-          <button id="btnUseOcr" class="btn-use-ocr">✓ Usar este texto</button>
-          <button id="btnDiscardOcr" class="btn-discard-ocr">Descartar</button>
-        </div>
-      </div>
-      <div class="ocr-sep"><span>ou preenche manualmente</span></div>
-    </div>
-
-    <div class="form-fields" id="formBody"></div>
-    <div class="form-footer" id="formFoot"></div>
-  </div>
-</div>
-
-<!-- ================================
-     MODAL: RESULTADO
-================================ -->
-<div class="overlay" id="resultOverlay" role="dialog" aria-modal="true" aria-label="Documento gerado com sucesso">
-  <div class="sheet sheet-tall">
-    <div class="sheet-pill" aria-hidden="true"></div>
-
-    <div class="result-header">
-      <div class="result-ok">
-        <span aria-hidden="true">✅</span>
-        <span>Documento pronto!</span>
-      </div>
-      <span class="result-model" id="resModel"></span>
-      <button class="sheet-close" id="resultClose" aria-label="Fechar resultado">✕</button>
-    </div>
-
-    <div class="result-meta" id="resMeta" role="status" aria-live="polite"></div>
-    <div class="result-preview" id="resPreview" tabindex="0"></div>
-
-    <div class="result-actions">
-      <button id="btnCopy" class="btn-res btn-res-sec">📋 Copiar</button>
-      <button id="btnDl" class="btn-res btn-res-sec">⬇️ Download</button>
-      <button class="btn-res btn-res-wa" id="btnWaResult">💬 WhatsApp</button>
     </div>
   </div>
-</div>
 
-<!-- ================================
-     MODAL: COMPRAR CRÉDITOS
-================================ -->
-<div class="overlay" id="payOverlay" role="dialog" aria-modal="true" aria-label="Comprar créditos M-Pesa">
-  <div class="sheet">
-    <div class="sheet-pill" aria-hidden="true"></div>
-
-    <div class="sheet-header">
-      <div class="sheet-titles">
-        <div class="sheet-title">Comprar créditos</div>
-        <div class="sheet-subtitle">Pagamento instantâneo via M-Pesa</div>
-      </div>
-      <button class="sheet-close" id="payClose" aria-label="Fechar compra de créditos">✕</button>
-    </div>
-
-    <div class="plans-grid" role="radiogroup" aria-label="Escolha um plano">
-      <div class="plan-card" data-pkg="starter" role="radio" tabindex="0" aria-label="Plano Starter: 10 créditos por MZN 150">
-        <div class="plan-name">Starter</div>
-        <div class="plan-price">MZN 150</div>
-        <div class="plan-credits">10 créditos</div>
-        <div class="plan-unit">MZN 15 por doc</div>
-      </div>
-      <div class="plan-card plan-popular" data-pkg="basico" role="radio" tabindex="0" aria-label="Plano Básico: 25 créditos por MZN 350 — mais popular">
-        <div class="plan-badge">Mais popular</div>
-        <div class="plan-name">Básico</div>
-        <div class="plan-price">MZN 350</div>
-        <div class="plan-credits">25 créditos</div>
-        <div class="plan-unit">MZN 14 por doc</div>
-      </div>
-      <div class="plan-card" data-pkg="pro" role="radio" tabindex="0" aria-label="Plano Pro: 60 créditos por MZN 750">
-        <div class="plan-name">Pro</div>
-        <div class="plan-price">MZN 750</div>
-        <div class="plan-credits">60 créditos</div>
-        <div class="plan-unit">MZN 12,50 por doc</div>
-      </div>
-    </div>
-
-    <div id="mpesaSection" style="display:none" class="mpesa-section">
-      <div class="mpesa-header">
-        <div class="mpesa-logo" aria-hidden="true">M</div>
-        <div>
-          <strong>M-Pesa</strong>
-          <p id="mpEnvLabel"></p>
-        </div>
-      </div>
-
-      <label class="field-label" for="phoneInput">Número de telemóvel</label>
-      <div class="phone-field">
-        <span class="phone-prefix" aria-label="Código do país">+258</span>
-        <input type="tel" id="phoneInput" placeholder="84 XXX XXXX" maxlength="9"
-               inputmode="numeric" autocomplete="tel" aria-label="Número M-Pesa sem código do país"/>
-      </div>
-
-      <div class="pay-summary" id="paySummary" role="status"></div>
-
-      <button class="btn-pay" id="btnPay" disabled aria-label="Confirmar pagamento">
-        Confirmar e pagar
-      </button>
-      <p class="mpesa-note">Vais receber um pedido de PIN no telemóvel para confirmar o pagamento.</p>
-    </div>
-  </div>
-</div>
-
-<!-- TOASTS -->
-<div class="toast-stack" id="notifStack" role="alert" aria-live="assertive" aria-atomic="false"></div>
-
-<!-- FAB WHATSAPP SUPORTE -->
-<a class="fab-wa" id="fabWa" href="#" target="_blank" rel="noopener noreferrer" aria-label="Contactar suporte via WhatsApp">
-  <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-    <path d="M13 2C7.477 2 3 6.477 3 12c0 1.89.527 3.66 1.44 5.17L3 22l4.99-1.41A10 10 0 0013 22c5.523 0 10-4.477 10-10S18.523 2 13 2z" fill="white" opacity=".95"/>
-    <path d="M9.5 8.5c-.2-.5-.5-.5-.7-.5-.2 0-.4 0-.6.01-.2.01-.5.08-.8.38-.3.3-1.1 1.07-1.1 2.6 0 1.54 1.12 3.02 1.28 3.23.16.2 2.2 3.37 5.3 4.72 2.62 1.13 3.16.9 3.73.85.57-.06 1.84-.75 2.1-1.48.27-.73.27-1.35.19-1.48-.08-.14-.3-.21-.62-.37-.33-.16-1.94-.96-2.24-1.07-.3-.11-.51-.16-.73.16-.22.32-.84 1.07-1.03 1.29-.19.22-.38.24-.71.08-.33-.16-1.39-.51-2.65-1.63-.98-.87-1.64-1.95-1.83-2.27-.19-.32-.02-.5.14-.66.15-.15.33-.38.5-.57.16-.2.22-.32.33-.54.11-.22.06-.41-.03-.57-.09-.16-.71-1.73-.97-2.37z" fill="#060E1C"/>
-  </svg>
-</a>
-
-<!-- SCRIPTS -->
-<script type="module" src="/assets/js/app.js"></script>
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        .then(r => console.log('[SW] OK:', r.scope))
-        .catch(e => console.warn('[SW] Erro:', e.message));
-    });
-  }
-</script>
+  <script type="module" src="/public.js"></script>
 </body>
 </html>

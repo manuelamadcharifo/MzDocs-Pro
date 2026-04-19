@@ -1,60 +1,29 @@
 {
   "name": "MzDocs Pro — Documentos com IA",
   "short_name": "MzDocs",
-  "description": "Cria documentos profissionais em segundos com IA gratuita. CVs, cartas, trabalhos académicos e orçamentos para Moçambique.",
+  "description": "Cria documentos profissionais em segundos. CV, cartas e orçamentos com um fluxo simples e rápido.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#060E1C",
-  "theme_color": "#060E1C",
+  "background_color": "#0B4BFF",
+  "theme_color": "#0B4BFF",
   "orientation": "portrait-primary",
   "lang": "pt",
   "dir": "ltr",
   "categories": [
     "productivity",
-    "utilities",
     "business"
   ],
   "icons": [
     {
       "src": "/assets/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/png"
     },
     {
       "src": "/assets/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
-  ],
-  "shortcuts": [
-    {
-      "name": "Criar CV",
-      "short_name": "CV",
-      "url": "/?s=cv",
-      "description": "Criar currículo profissional com IA"
-    },
-    {
-      "name": "Carta Formal",
-      "short_name": "Carta",
-      "url": "/?s=carta",
-      "description": "Redigir carta formal com IA"
-    },
-    {
-      "name": "Trabalho Escolar",
-      "short_name": "Trabalho",
-      "url": "/?s=trabalho",
-      "description": "Gerar trabalho académico com IA"
-    },
-    {
-      "name": "Orçamento de Obra",
-      "short_name": "Orçamento",
-      "url": "/?s=orcamento",
-      "description": "Gerar orçamento de construção com IA"
-    }
-  ],
-  "screenshots": [],
-  "prefer_related_applications": false
+  ]
 }

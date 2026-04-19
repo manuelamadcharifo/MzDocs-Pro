@@ -1,5 +1,3 @@
-# MzDocs Pro v4 — Netlify Configuration
-
 [build]
   command = "npm run build"
   publish = "dist"
@@ -7,8 +5,6 @@
 
 [build.environment]
   NODE_VERSION = "20"
-
-# ── Security + Performance Headers ───────────────────────────
 
 [[headers]]
   for = "/*"
@@ -24,13 +20,20 @@
   [headers.values]
     Content-Type = "text/html; charset=utf-8"
     Cache-Control = "public, max-age=0, must-revalidate"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*; connect-src 'self' https:;"
 
 [[headers]]
-  for = "/assets/js/*"
+  for = "/public.js"
   [headers.values]
     Content-Type = "application/javascript; charset=utf-8"
     Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
+    Service-Worker-Allowed = "/"
 
 [[headers]]
   for = "/assets/css/*"
@@ -49,25 +52,24 @@
     Content-Type = "application/manifest+json"
     Cache-Control = "public, max-age=3600, must-revalidate"
 
-[[headers]]
-  for = "/sw.js"
-  [headers.values]
-    Content-Type = "application/javascript; charset=utf-8"
-    Cache-Control = "public, max-age=0, must-revalidate"
-    Service-Worker-Allowed = "/"
-
-# ── API Redirects ─────────────────────────────────────────────
-
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
 
-# ── SPA Fallback ──────────────────────────────────────────────
-
 [[redirects]]
   from = "/sw.js"
   to = "/sw.js"
+  status = 200
+
+[[redirects]]
+  from = "/manifest.json"
+  to = "/manifest.json"
+  status = 200
+
+[[redirects]]
+  from = "/public.js"
+  to = "/public.js"
   status = 200
 
 [[redirects]]
@@ -80,12 +82,8 @@
   to = "/index.html"
   status = 200
 
-# ── Functions Config ──────────────────────────────────────────
-
 [functions]
   node_bundler = "esbuild"
-
-# ── Environment Contexts ──────────────────────────────────────
 
 [context.production]
   environment = { NODE_ENV = "production", MPESA_ENV = "production" }
@@ -95,8 +93,6 @@
 
 [context."deploy-preview"]
   environment = { NODE_ENV = "preview", MPESA_ENV = "sandbox" }
-
-# ── Dev ───────────────────────────────────────────────────────
 
 [dev]
   command = "npm run dev"

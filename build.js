@@ -38,11 +38,14 @@ function copyDir(source, target) {
 // -------------------------
 function copyPublicRoot() {
   const publicDir = path.join(root, 'public');
+  const ignoredFiles = new Set(['sw.js']);
 
   if (!fs.existsSync(publicDir)) return;
 
   const files = fs.readdirSync(publicDir);
   files.forEach(file => {
+    if (ignoredFiles.has(file)) return;
+
     const src = path.join(publicDir, file);
     const dest = path.join(distDir, file);
 
