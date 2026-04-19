@@ -322,6 +322,22 @@ export const PaymentView = {
   },
 
   /**
+   * Display M-Pesa environment info (sandbox vs production)
+   * @param {string} environment - 'sandbox' or 'production'
+   */
+  showMPesaEnvironment(environment) {
+    const label = document.getElementById('mpEnvLabel');
+    if (!label) return;
+
+    if (environment === 'sandbox') {
+      label.innerHTML = '<em style="color:#FF9800">🧪 Modo teste — dados não reais</em>';
+      label.style.fontSize = '0.85em';
+    } else {
+      label.innerHTML = '<em style="color:#4CAF50">✓ Modo produção</em>';
+    }
+  },
+
+  /**
    * Clear payment form
    */
   clearPaymentForm() {
