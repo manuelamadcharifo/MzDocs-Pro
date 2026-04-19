@@ -89,18 +89,14 @@ exports.handler = async (event) => {
 };
 
 async function callOpenRouter(prompt, model, apiKey) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${apiKey}`,
-    'X-Title': 'MzDocs Pro',
-  };
-  if (process.env.SITE_URL) {
-    headers['HTTP-Referer'] = process.env.SITE_URL;
-  }
-
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': process.env.SITE_URL || 'https://mzdocs-pro.netlify.app',
+      'X-Title': 'MzDocs Pro',
+    },
     body: JSON.stringify({
       model,
       messages: [

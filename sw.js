@@ -1,102 +1,32 @@
-const CACHE_NAME = 'mzdocs-static-v2';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/assets/js/app.js',
-  '/assets/js/utils/Storage.js',
-  '/assets/js/models/Models.js',
-  '/assets/js/views/Views.js',
-  '/assets/js/controllers/Controllers.js',
-  '/assets/css/styles.css',
-  '/assets/icons/icon-192.png',
-  '/assets/icons/icon-512.png'
-];
+// sw.js — MzDocs Pro v3 Service Worker
+const CACHE = 'mzdocs-v3-r1';
+const PRECACHE = ['/', '/index.html', '/assets/css/styles.css', '/assets/js/app.js', '/manifest.json'];
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(STATIC_ASSETS))
-      .then(() => self.skipWaiting())
-      .catch(() => {})
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE).catch(() => {})));
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+  ));
+  self.clients.claim();
+});
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+  if (e.request.url.includes('openrouter.ai')) return;
+  if (e.request.url.includes('/.netlify/')) return;
+  if (e.request.url.includes('supabase.co')) return;
+  if (e.request.url.includes('wa.me')) return;
+  e.respondWith(
+    caches.match(e.request).then(cached => cached ||
+      fetch(e.request).then(r => {
+        if (r && r.status === 200 && r.type !== 'opaque') {
+          const responseClone = r.clone();
+          caches.open(CACHE).then(c => c.put(e.request, responseClone));
+        }
+        return r;
+      }).catch(() => caches.match('/index.html'))
+    )
   );
 });
-
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener('fetch', event => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  if (request.method !== 'GET' || url.origin !== self.location.origin) {
-    return;
-  }
-
-  if (url.pathname === '/sw.js') {
-    return;
-  }
-
-  if (request.mode === 'navigate' || request.destination === 'document') {
-    event.respondWith(networkFirst(request));
-    return;
-  }
-
-  if (
-    request.destination === 'script' ||
-    request.destination === 'style' ||
-    request.destination === 'image' ||
-    request.destination === 'font' ||
-    url.pathname === '/public.js' ||
-    url.pathname.startsWith('/assets/')
-  ) {
-    event.respondWith(cacheFirst(request));
-    return;
-  }
-
-  event.respondWith(networkFirst(request));
-});
-
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
-
-  try {
-    const response = await fetch(request);
-    if (response && response.status === 200) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone()).catch(() => {});
-    }
-    return response;
-  } catch {
-    return offlineResponse();
-  }
-}
-
-async function networkFirst(request) {
-  try {
-    const response = await fetch(request);
-    if (response && response.status === 200) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone()).catch(() => {});
-    }
-    return response;
-  } catch {
-    const cached = await caches.match(request) || await caches.match('/index.html');
-    return cached || offlineResponse();
-  }
-}
-
-function offlineResponse() {
-  return new Response('Offline, por favor verifica a tua ligação.', {
-    status: 503,
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-  });
-}

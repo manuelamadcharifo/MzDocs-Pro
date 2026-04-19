@@ -96,19 +96,16 @@ serve(async (req) => {
     }
 
     const model = body.model || "meta-llama/llama-3.3-70b-instruct:free";
-    const siteUrl = Deno.env.get("SITE_URL");
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "X-Title": "MzDocs Pro",
-    };
-    if (siteUrl) {
-      headers["HTTP-Referer"] = siteUrl;
-    }
+    const siteUrl = Deno.env.get("SITE_URL") || "https://mzdocs-pro.netlify.app";
 
     const openrouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "X-Title": "MzDocs Pro",
+        "HTTP-Referer": siteUrl,
+      },
       body: JSON.stringify({
         model: model,
         messages: [

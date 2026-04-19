@@ -40,7 +40,7 @@ You need to set these in your Supabase project:
 OPENROUTER_API_KEY=sk-or-v1-xxxxx...  # Your OpenRouter API key
 
 # Optional
-SITE_URL=https://your-frontend-url.example  # Your frontend URL for referer
+SITE_URL=https://mzdocs-pro.netlify.app  # Your frontend URL for referer
 ```
 
 ### How to Set Environment Variables in Supabase

@@ -1,7 +1,7 @@
 // services/OpenRouterService.js — IA gratuita com fallback automático
 export class OpenRouterService {
   constructor() {
-    this.endpoint = '/api/generate-document';
+    this.endpoint = '/.netlify/functions/generate-document';
     this.models = {
       primary:   'meta-llama/llama-3.3-70b-instruct:free',
       fallback:  'google/gemma-3-27b-it:free',

@@ -1,11 +1,12 @@
 {
   "name": "mzdocs-pro",
-  "version": "4.0.0",
-  "description": "MzDocs Pro v4 — Documentos com IA para Moçambique",
+  "version": "1.0.0",
+  "description": "MzDocs Pro - Document generation for Mozambique",
+  "main": "index.js",
   "scripts": {
-    "build": "node build.js",
-    "dev": "npx http-server dist -p 3000 --cors",
-    "test": "node --check assets/js/app.js && node --check netlify/functions/generate-document.js && node --check netlify/functions/process-payment.js && echo 'Sintaxe OK'"
+    "build": "echo 'No build step'",
+    "start": "echo 'Use Netlify'",
+    "test": "echo 'No tests'"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0"

@@ -1,82 +1,25 @@
+# netlify.toml — MzDocs Pro v3
 [build]
-  command = "npm run build"
-  publish = "dist"
   functions = "netlify/functions"
+  publish   = "."
 
-[build.environment]
-  NODE_VERSION = "20"
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
 
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "SAMEORIGIN"
-    X-XSS-Protection = "1; mode=block"
+    X-Frame-Options        = "DENY"
     X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "geolocation=(), microphone=(), camera=(self)"
+    Referrer-Policy        = "strict-origin-when-cross-origin"
 
 [[headers]]
-  for = "/*.html"
+  for = "/assets/*"
   [headers.values]
-    Content-Type = "text/html; charset=utf-8"
-    Cache-Control = "public, max-age=0, must-revalidate"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*; connect-src 'self' https:;"
-
-[[headers]]
-  for = "/public.js"
-  [headers.values]
-    Content-Type = "application/javascript; charset=utf-8"
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/sw.js"
-  [headers.values]
-    Content-Type = "application/javascript; charset=utf-8"
-    Cache-Control = "public, max-age=0, must-revalidate"
-    Service-Worker-Allowed = "/"
-
-[[headers]]
-  for = "/assets/css/*"
-  [headers.values]
-    Content-Type = "text/css; charset=utf-8"
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/assets/icons/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/manifest.json"
-  [headers.values]
-    Content-Type = "application/manifest+json"
-    Cache-Control = "public, max-age=3600, must-revalidate"
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-[functions]
-  node_bundler = "esbuild"
-
-[context.production]
-  environment = { NODE_ENV = "production", MPESA_ENV="" }
-
-[context.staging]
-  environment = { NODE_ENV = "staging", MPESA_ENV="" }
-
-[context."deploy-preview"]
-  environment = { NODE_ENV = "preview", MPESA_ENV="" }
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
 
 [dev]
-  command = "npm run dev"
-  port = 3000
-  publish = "dist"
-  autoLaunch = false
-  framework = "#custom"
+  functions  = "netlify/functions"
+  targetPort = 8888
