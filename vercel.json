@@ -1,0 +1,36 @@
+{
+  "version": 3,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/sw.js",
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      },
+      "dest": "/sw.js"
+    },
+    {
+      "src": "/manifest.json",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "dest": "/manifest.json"
+    },
+    {
+      "src": "/(?!api/|assets/|public\.js|sw\.js|manifest\.json)(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
