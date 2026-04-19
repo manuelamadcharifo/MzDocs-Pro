@@ -129,7 +129,7 @@ export class PaymentController {
 
     try {
       const fullPhone = `258${phone}`;
-      const res = await fetch('/.netlify/functions/process-payment', {
+      const res = await fetch('/api/mpesa-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -116,6 +116,72 @@
     </div>
   </div>
 
-  <script type="module" src="/public.js"></script>
+  <!-- Notification Stack -->
+  <div id="notifStack" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- MODAIS FALTANTES -->
+
+  <!-- Modal: Formulário de Serviço -->
+  <div class="overlay" id="formOverlay" role="dialog" aria-modal="true" aria-labelledby="shTitle">
+    <div class="sheet">
+      <div class="sheet-header">
+        <div class="sheet-icon" id="shIco" aria-hidden="true"></div>
+        <div>
+          <div class="sheet-title" id="shTitle"></div>
+          <div class="sheet-subtitle" id="shSub"></div>
+        </div>
+        <button class="sheet-close" id="formClose" aria-label="Fechar formulário">✕</button>
+      </div>
+      <div class="sheet-body" id="formBody"></div>
+      <div class="sheet-foot" id="formFoot"></div>
+    </div>
+  </div>
+
+  <!-- Modal: Resultado do Documento -->
+  <div class="overlay" id="resultOverlay" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+    <div class="sheet">
+      <div class="sheet-header">
+        <div class="sheet-title" id="resultTitle">Documento Pronto</div>
+        <button class="sheet-close" id="resultClose" aria-label="Fechar resultado">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div id="resultContent" style="white-space: pre-wrap; font-family: monospace; max-height: 400px; overflow-y: auto;"></div>
+      </div>
+      <div class="sheet-foot">
+        <button id="btnCopy" class="btn btn-primary">📋 Copiar</button>
+        <button id="btnDl" class="btn btn-secondary">⬇ Descarregar</button>
+        <button id="btnWaResult" class="btn btn-wa">💬 WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Pagamento M-Pesa -->
+  <div class="overlay" id="payOverlay" role="dialog" aria-modal="true" aria-labelledby="payTitle">
+    <div class="sheet">
+      <div class="sheet-header">
+        <div class="sheet-title" id="payTitle">Comprar Créditos</div>
+        <button class="sheet-close" id="payClose" aria-label="Fechar pagamento">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="pay-plans" id="payPlans"></div>
+        <div id="mpesaSection" style="display:none; flex-direction: column; gap: 1rem; margin-top: 1.5rem;">
+          <div style="padding: 1rem; background: rgba(255,255,255,.05); border-radius: 0.75rem;">
+            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.5rem;">
+              Número de telemóvel M-Pesa (84-87)
+            </label>
+            <input type="tel" id="phoneInput" placeholder="84XXXXXXX" maxlength="9" style="width: 100%; padding: 0.75rem; border: 1px solid rgba(255,255,255,.1); border-radius: 0.5rem; background: rgba(0,0,0,.2); color: white;" />
+          </div>
+          <div id="paySummary" style="text-align: center; padding: 1rem; background: rgba(255,255,255,.08); border-radius: 0.75rem;"></div>
+          <div id="mpEnvLabel" style="font-size: 0.75rem; color: var(--muted); text-align: center;"></div>
+        </div>
+      </div>
+      <div class="sheet-foot">
+        <button id="btnPay" class="btn btn-primary" disabled>Pagar agora</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Principal -->
+  <script type="module" src="/assets/js/app.js"></script>
 </body>
 </html>

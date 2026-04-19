@@ -16,9 +16,9 @@ export const PUBLIC_CONFIG = {
   },
   
   services: {
-    generateDocument: '/.netlify/functions/generate-document',
-    processPayment: '/.netlify/functions/process-payment',
-    verifyCredits: '/.netlify/functions/verify-credits'
+    generateDocument: '/api/generate-document',
+    processPayment: '/api/mpesa-payment',
+    verifyCredits: '/api/verify-credits'
   },
   
   models: {

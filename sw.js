@@ -1,9 +1,13 @@
-const CACHE_NAME = 'mzdocs-static-v1';
+const CACHE_NAME = 'mzdocs-static-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/public.js',
+  '/assets/js/app.js',
+  '/assets/js/utils/Storage.js',
+  '/assets/js/models/Models.js',
+  '/assets/js/views/Views.js',
+  '/assets/js/controllers/Controllers.js',
   '/assets/css/styles.css',
   '/assets/icons/icon-192.png',
   '/assets/icons/icon-512.png'

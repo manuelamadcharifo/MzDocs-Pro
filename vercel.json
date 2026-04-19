@@ -2,36 +2,31 @@
   "version": 2,
   "buildCommand": "node build.js",
   "outputDirectory": "dist",
-
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "/api/$1"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/dist/assets/$1"
-    },
-    {
-      "src": "/public.js",
-      "dest": "/dist/public.js"
-    },
-    {
       "src": "/sw.js",
-      "headers": {
-        "Content-Type": "application/javascript"
-      },
+      "headers": { "Cache-Control": "public, max-age=0", "Content-Type": "application/javascript; charset=utf-8" },
       "dest": "/dist/sw.js"
     },
     {
       "src": "/manifest.json",
-      "headers": {
-        "Content-Type": "application/json"
-      },
+      "headers": { "Content-Type": "application/json; charset=utf-8" },
       "dest": "/dist/manifest.json"
     },
     {
+      "src": "/assets/(.*)",
+      "dest": "/dist/assets/$1"
+    },
+    {
       "src": "/(.*)",
+      "dest": "/dist/$1"
+    },
+    {
+      "src": "/(?!api/|assets/|.js$|.css$|.png$|.json$)(.*)",
       "dest": "/dist/index.html"
     }
   ]
