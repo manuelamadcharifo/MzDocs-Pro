@@ -1,14 +1,2 @@
-/* Netlify SPA Routing Configuration */
-
-/* SPA routing: serve index.html for all non-file requests */
-/* This must be the last rule to catch all other routes */
-/* 200 status means rewrite (not a redirect visible to the user) */
-/* Match all paths that don't have a file extension or match other rules */
-/*! /index.html 200
-
-/* Allow assets and static files to be served normally */
-/assets/* 200
-/public/* 200
-
-/* API calls are handled by netlify.toml functions/redirects */
-/api/* 200
+/api/* /.netlify/functions/:splat 200
+/* /index.html 200

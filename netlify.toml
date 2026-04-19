@@ -66,13 +66,13 @@
   node_bundler = "esbuild"
 
 [context.production]
-  environment = { NODE_ENV = "production", MPESA_ENV = "production" }
+  environment = { NODE_ENV = "production", MPESA_ENV="" }
 
 [context.staging]
-  environment = { NODE_ENV = "staging", MPESA_ENV = "sandbox" }
+  environment = { NODE_ENV = "staging", MPESA_ENV="" }
 
 [context."deploy-preview"]
-  environment = { NODE_ENV = "preview", MPESA_ENV = "sandbox" }
+  environment = { NODE_ENV = "preview", MPESA_ENV="" }
 
 [dev]
   command = "npm run dev"
