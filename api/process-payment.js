@@ -1,108 +1,170 @@
-// netlify/functions/process-payment.js — M-Pesa C2B com validação de ambiente
+// api/process-payment.js — M-Pesa C2B com validação de ambiente
 const { createClient } = require('@supabase/supabase-js');
-const { PACKAGES, MPESA_ERRORS } = require('../../config/constants');
-const ErrorHandler = require('../../utils/ErrorHandler');
+const { PACKAGES, MPESA_ERRORS } = require('../config/constants');
+const ErrorHandler = require('../utils/ErrorHandler');
 
 export default async function handler(req, res) {
-  const headers = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Content-Type', 'application/json');
 
   try {
-    if (event.httpMethod === 'OPTIONS') return { status: 200, headers, json: '' };
-    if (event.httpMethod !== 'POST') return ErrorHandler.createResponse(405, 'Method Not Allowed');
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method Not Allowed' });
+      return;
+    }
 
     let body;
-    try { body = JSON.parse(event.body || '{}'); }
-    catch { return ErrorHandler.createResponse(400, 'Body inválido'); }
+    try {
+      body = JSON.parse(req.body || '{}');
+    } catch {
+      res.status(400).json({ error: 'Body inválido' });
+      return;
+    }
 
     const { phoneNumber, amount, packageId, environment, userId } = body;
 
-    // ── Validação 1: Ambiente deve bater ──────────────────────
     const serverEnv = process.env.MPESA_ENV || 'production';
+
     if (environment !== serverEnv) {
-      return ErrorHandler.createResponse(400, `Ambiente incorreto. Esperado: ${serverEnv}, Recebido: ${environment}`);
+      res.status(400).json({ error: `Ambiente incorreto. Esperado: ${serverEnv}, Recebido: ${environment}` });
+      return;
     }
 
-    // ── Validação 2: Pacote e montante ────────────────────────
     const pkg = PACKAGES[packageId];
-    if (!pkg) return ErrorHandler.createResponse(400, 'Pacote inválido');
-    if (parseInt(amount) !== pkg.amount) return ErrorHandler.createResponse(400, 'Montante não corresponde ao pacote');
+    if (!pkg) { res.status(400).json({ error: 'Pacote inválido' }); return; }
 
-    // ── Validação 3: Número M-Pesa ────────────────────────────
+    if (parseInt(amount) !== pkg.amount) {
+      res.status(400).json({ error: 'Montante não corresponde ao pacote' });
+      return;
+    }
+
     if (!/^2588[4-7]\d{7}$/.test(phoneNumber)) {
-      return ErrorHandler.createResponse(400, 'Número M-Pesa inválido');
+      res.status(400).json({ error: 'Número M-Pesa inválido' });
+      return;
     }
 
-    // ── Verificar credenciais M-Pesa ──────────────────────────
-    if (!process.env.MPESA_API_KEY || !process.env.MPESA_PUBLIC_KEY || !process.env.MPESA_SERVICE_CODE) {
-      ErrorHandler.logError('process-payment', new Error('M-Pesa credentials not configured'));
+    const serverHasCreds =
+      process.env.MPESA_API_KEY &&
+      process.env.MPESA_PUBLIC_KEY &&
+      process.env.MPESA_SERVICE_CODE;
+
+    if (!serverHasCreds) {
+      ErrorHandler.logError(
+        'process-payment',
+        new Error('M-Pesa credentials not configured')
+      );
+
       const isTestMode = serverEnv !== 'production';
+
       if (isTestMode) {
-        console.warn('[M-Pesa] TEST MODE: Simulando pagamento bem-sucedido');
         await addCreditsToUser(userId, pkg.credits);
-        return { status: 200, headers, json: JSON.stringify({
-          success: true, transactionId: 'TESTPAY_' + Date.now(),
-          creditsAdded: pkg.credits, testMode: true,
-          message: `Pagamento simulado: ${pkg.credits} créditos adicionados.`
-        })};
+
+        res.status(200).json({
+          success: true,
+          transactionId: 'TESTPAY_' + Date.now(),
+          creditsAdded: pkg.credits,
+          testMode: true,
+          message: `Pagamento simulado: ${pkg.credits} créditos adicionados.`,
+        });
+        return;
       }
-      return ErrorHandler.createResponse(503, 'Pagamentos indisponíveis. Configure as credenciais M-Pesa.');
+
+      res.status(503).json({ error: 'Pagamentos indisponíveis. Configure as credenciais M-Pesa.' });
+      return;
     }
 
-    // ── Chamada real M-Pesa ───────────────────────────────────
-    const transRef = `MZDOCS-${Date.now()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
-    const mpesaOrigin = process.env.MPESA_ORIGIN || 'https://api.mpesa.vm.co.mz';
+    const transRef = `MZDOCS-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 7)
+      .toUpperCase()}`;
+
+    const mpesaOrigin =
+      process.env.MPESA_ORIGIN || 'https://api.mpesa.vm.co.mz';
 
     try {
-      const encKey = encryptApiKey(process.env.MPESA_API_KEY, process.env.MPESA_PUBLIC_KEY);
+      const encKey = encryptApiKey(
+        process.env.MPESA_API_KEY,
+        process.env.MPESA_PUBLIC_KEY
+      );
 
-      const mpRes = await fetch(`${mpesaOrigin.replace(/\/$/, '')}/ipg/v1x/c2bPayment/singleStage/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${encKey}`,
-          'Origin': mpesaOrigin,
-        },
-        json: JSON.stringify({
-          input_TransactionReference: transRef,
-          input_CustomerMSISDN: phoneNumber,
-          input_Amount: pkg.amount.toString(),
-          input_ThirdPartyReference: `${packageId}-${userId?.slice(0,8)||'anon'}`,
-          input_ServiceProviderCode: process.env.MPESA_SERVICE_CODE,
-        }),
-      });
+      const mpRes = await fetch(
+        `${mpesaOrigin.replace(/\/$/, '')}/ipg/v1x/c2bPayment/singleStage/`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${encKey}`,
+            Origin: mpesaOrigin,
+          },
+          body: JSON.stringify({
+            input_TransactionReference: transRef,
+            input_CustomerMSISDN: phoneNumber,
+            input_Amount: pkg.amount.toString(),
+            input_ThirdPartyReference: `${packageId}-${userId?.slice(0, 8) || 'anon'}`,
+            input_ServiceProviderCode: process.env.MPESA_SERVICE_CODE,
+          }),
+        }
+      );
 
       const mpData = await mpRes.json();
+
       if (mpData.output_ResponseCode !== 'INS-0') {
         throw new Error(getMpesaError(mpData.output_ResponseCode));
       }
 
       await addCreditsToUser(userId, pkg.credits);
 
-      console.log(JSON.stringify({ event:'payment_success', transRef, pkg:packageId, credits:pkg.credits, ts:new Date().toISOString() }));
-      return { status:200, headers, json: JSON.stringify({
-        success: true, transactionId: mpData.output_TransactionID,
-        creditsAdded: pkg.credits, message: `Pagamento confirmado! ${pkg.credits} créditos adicionados.`
-      })};
+      console.log(
+        JSON.stringify({
+          event: 'payment_success',
+          transRef,
+          pkg: packageId,
+          credits: pkg.credits,
+          ts: new Date().toISOString(),
+        })
+      );
 
+      res.status(200).json({
+        success: true,
+        transactionId: mpData.output_TransactionID,
+        creditsAdded: pkg.credits,
+        message: `Pagamento confirmado! ${pkg.credits} créditos adicionados.`,
+      });
     } catch (err) {
       ErrorHandler.logError('process-payment', err, { transRef });
-      return ErrorHandler.createResponse(400, err.message);
+      res.status(400).json({ error: err.message });
     }
-
   } catch (error) {
+    console.error(error);
     ErrorHandler.logError('process-payment', error);
-    return ErrorHandler.createResponse(500, 'Internal Server Error');
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 };
 
 async function addCreditsToUser(userId, credits) {
   if (!userId || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
-    ErrorHandler.logError('addCreditsToUser', new Error('Supabase not configured or no userId'));
+    ErrorHandler.logError(
+      'addCreditsToUser',
+      new Error('Supabase not configured or no userId')
+    );
     return;
   }
+
   try {
-    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-    await sb.rpc('add_credits', { user_id: userId, amount: credits });
+    const sb = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_KEY
+    );
+
+    await sb.rpc('add_credits', {
+      user_id: userId,
+      amount: credits,
+    });
   } catch (e) {
     ErrorHandler.logError('addCreditsToUser', e);
   }
@@ -110,15 +172,16 @@ async function addCreditsToUser(userId, credits) {
 
 function encryptApiKey(apiKey, publicKeyB64) {
   const { createPublicKey, publicEncrypt, constants } = require('crypto');
+
   const pem = `-----BEGIN PUBLIC KEY-----\n${publicKeyB64}\n-----END PUBLIC KEY-----`;
   const key = createPublicKey(pem);
-  return publicEncrypt({ key, padding: constants.RSA_PKCS1_PADDING }, Buffer.from(apiKey)).toString('base64');
+
+  return publicEncrypt(
+    { key, padding: constants.RSA_PKCS1_PADDING },
+    Buffer.from(apiKey)
+  ).toString('base64');
 }
 
 function getMpesaError(code) {
   return MPESA_ERRORS[code] || `Erro M-Pesa (${code}). Contacte o suporte.`;
 }
-  } catch (e) {
-    return { status:200, headers, json: JSON.stringify({ userId, credits:3, source:'fallback' }) };
-  }
-};

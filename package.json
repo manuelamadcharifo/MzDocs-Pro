@@ -4,8 +4,9 @@
   "description": "MzDocs Pro - Document generation for Mozambique",
   "main": "index.js",
   "scripts": {
-    "build": "echo 'static site'",
-    "start": "npx serve ."
+    "build": "node build.js",
+    "start": "echo 'Use Netlify'",
+    "test": "echo 'No tests'"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0"

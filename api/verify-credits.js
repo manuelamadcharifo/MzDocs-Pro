@@ -1,23 +1,28 @@
-// netlify/functions/verify-credits.js
+// api/verify-credits.js
 const { createClient } = require('@supabase/supabase-js');
-const ErrorHandler = require('../../utils/ErrorHandler');
+const ErrorHandler = require('../utils/ErrorHandler');
 
 export default async function handler(req, res) {
-  const headers = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Content-Type', 'application/json');
 
   try {
-    if (event.httpMethod === 'OPTIONS') return { status: 200, headers, json: '' };
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
 
     let body;
-    try { body = JSON.parse(event.body || '{}'); }
-    catch { return ErrorHandler.createResponse(400, 'Body inválido'); }
+    try { body = JSON.parse(req.body || '{}'); }
+    catch { res.status(400).json({ error: 'Body inválido' }); return; }
 
     const { userId } = body;
-    if (!userId) return ErrorHandler.createResponse(400, 'userId obrigatório');
+    if (!userId) { res.status(400).json({ error: 'userId obrigatório' }); return; }
 
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
       // Sem Supabase: retornar créditos gratuitos padrão
-      return { status: 200, headers, json: JSON.stringify({ userId, credits: 3, freeCredits: 3, paidCredits: 0, source: 'no-db' }) };
+      res.status(200).json({ userId, credits: 3, freeCredits: 3, paidCredits: 0, source: 'no-db' });
+      return;
     }
 
     try {
@@ -25,16 +30,17 @@ export default async function handler(req, res) {
       const { data, error } = await sb.from('users').select('credits').eq('id', userId).single();
       if (error?.code === 'PGRST116') {
         await sb.from('users').insert({ id: userId, credits: 3, created_at: new Date().toISOString() });
-        return { status: 200, headers, json: JSON.stringify({ userId, credits: 3, source: 'new' }) };
+        res.status(200).json({ userId, credits: 3, source: 'new' });
+        return;
       }
-      return { status: 200, headers, json: JSON.stringify({ userId, credits: data?.credits || 0, source: 'db' }) };
+      res.status(200).json({ userId, credits: data?.credits || 0, source: 'db' });
     } catch (e) {
       ErrorHandler.logError('verify-credits', e);
-      return { status: 200, headers, json: JSON.stringify({ userId, credits: 3, source: 'error-fallback' }) };
+      res.status(200).json({ userId, credits: 3, source: 'error-fallback' });
     }
 
   } catch (error) {
     ErrorHandler.logError('verify-credits', error);
-    return ErrorHandler.createResponse(500, 'Internal Server Error');
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 };
