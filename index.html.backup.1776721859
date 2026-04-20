@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-MZ">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"/>
+  <meta name="theme-color" content="#07101F"/>
+  <meta name="description" content="MzDocs Pro v3 — Documentos profissionais com IA gratuita para Moçambique"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-title" content="MzDocs Pro"/>
+  <title>MzDocs Pro v3</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="assets/css/styles.css"/>
+  <link rel="stylesheet" href="assets/css/interactivity-fix.css"/>
+  <!-- Supabase credentials (injected by backend - NEVER hardcoded) -->
+  <meta name="supabase-url" content=""/>
+  <meta name="supabase-anon-key" content=""/>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="hdr">
+  <div class="hdr-l">
+    <div class="logo-badge">📄</div>
+    <div class="logo-text"><span class="lt-name">MzDocs</span><span class="lt-pro">Pro</span></div>
+    <span class="ver-tag">v3 MVC</span>
+  </div>
+  <div class="hdr-r">
+    <div class="credit-pill" id="creditPill">
+      <span>⚡</span><span class="cp-val" id="creditVal">—</span><span class="cp-lbl">cr</span>
+    </div>
+    <button class="btn-topup" id="btnTopup">+ Comprar</button>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-body">
+    <div class="hero-eye">🇲🇿 &nbsp;OpenRouter · Gratuito · MVC</div>
+    <h1 class="hero-h1">Documentos<br/><em>por IA,</em><br/>sem custo</h1>
+    <p class="hero-p">Preenche → fila inteligente → IA redige → WhatsApp.<br/>OCR, M-Pesa e sincronização Supabase.</p>
+    <div class="chips">
+      <span class="chip gr">✦ IA Gratuita</span>
+      <span class="chip">📷 OCR</span>
+      <span class="chip">🔄 Fila Inteligente</span>
+      <span class="chip">💾 Supabase</span>
+    </div>
+  </div>
+</section>
+
+<!-- PAYMENT WARNING -->
+<div class="mode-warning" id="modeWarning" style="display:none">
+  ⚠️ <strong>MODO TESTE</strong> — Pagamentos M-Pesa não são reais
+  <button onclick="this.parentElement.style.display='none'">✕</button>
+</div>
+
+<!-- FREE CREDITS BANNER -->
+<div class="free-bar" id="freeBar">
+  🎁 <strong id="freeLeft">3</strong> créditos gratuitos este mês
+  <button onclick="this.parentElement.remove()">✕</button>
+</div>
+
+<!-- QUEUE STATUS BAR -->
+<div class="queue-bar" id="queueBar" style="display:none">
+  <div class="qb-spin"></div>
+  <span id="queueMsg">A processar…</span>
+  <span id="queuePos" class="qb-pos"></span>
+</div>
+
+<!-- SERVIÇOS -->
+<main class="main">
+  <p class="grid-label">ESCOLHA O SERVIÇO</p>
+  <div class="svc-grid" id="svcGrid">
+
+    <div class="sc" data-svc="trabalho">
+      <div class="sc-ai">✦ IA</div>
+      <div class="sc-ico" style="background:#EFF6FF">📚</div>
+      <div class="sc-name">Trabalho Escolar</div>
+      <div class="sc-desc">Redacções, pesquisas e TCCs com estrutura académica</div>
+      <div class="sc-foot"><span class="cost">1 crédito</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#3B82F6"></div>
+    </div>
+
+    <div class="sc" data-svc="cv">
+      <div class="sc-ai">✦ IA</div>
+      <div class="sc-ico" style="background:#ECFDF5">📋</div>
+      <div class="sc-name">Currículo (CV)</div>
+      <div class="sc-desc">CV profissional Europass para o mercado moçambicano</div>
+      <div class="sc-foot"><span class="cost">1 crédito</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#10B981"></div>
+    </div>
+
+    <div class="sc" data-svc="carta">
+      <div class="sc-ai">✦ IA</div>
+      <div class="sc-ico" style="background:#FFFBEB">✉️</div>
+      <div class="sc-name">Carta Formal</div>
+      <div class="sc-desc">Candidatura, pedidos, reclamações com tom profissional</div>
+      <div class="sc-foot"><span class="cost">1 crédito</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#F59E0B"></div>
+    </div>
+
+    <div class="sc" data-svc="orcamento">
+      <div class="sc-ai">✦ IA</div>
+      <div class="sc-ico" style="background:#F5F3FF">🏗️</div>
+      <div class="sc-name">Orçamento de Obra</div>
+      <div class="sc-desc">Materiais, mão-de-obra e totais em MZN com tabelas</div>
+      <div class="sc-foot"><span class="cost">1 crédito</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#8B5CF6"></div>
+    </div>
+
+    <div class="sc" data-svc="impressao">
+      <div class="sc-ico" style="background:#FDF2F8">🖨️</div>
+      <div class="sc-name">Impressão</div>
+      <div class="sc-desc">Pedido P&B ou colorido directo pelo WhatsApp</div>
+      <div class="sc-foot"><span class="cost free">Grátis</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#EC4899"></div>
+    </div>
+
+    <div class="sc" data-svc="foto">
+      <div class="sc-ico" style="background:#ECFEFF">📷</div>
+      <div class="sc-name">Foto Documentos</div>
+      <div class="sc-desc">BI, passaporte, CV — fundo e formato oficial</div>
+      <div class="sc-foot"><span class="cost free">Grátis</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#06B6D4"></div>
+    </div>
+
+    <div class="sc wide" data-svc="conversao">
+      <div class="sc-ico" style="background:#FEF2F2">🔄</div>
+      <div class="sc-name">Conversão de Ficheiros</div>
+      <div class="sc-desc">PDF ↔ Word · Excel · Imagem — entrega rápida</div>
+      <div class="sc-foot"><span class="cost free">Grátis</span><span class="arr">→</span></div>
+      <div class="sc-line" style="--c:#EF4444"></div>
+    </div>
+
+  </div>
+</main>
+
+<!-- MODAL FORMULÁRIO -->
+<div class="overlay" id="formOverlay">
+  <div class="sheet" id="formSheet">
+    <div class="pill"></div>
+    <div class="sheet-hdr" id="formHdr">
+      <div class="sh-ico" id="shIco"></div>
+      <div><div class="sh-title" id="shTitle"></div><div class="sh-sub" id="shSub"></div></div>
+      <button class="sh-x" id="formClose">✕</button>
+    </div>
+    <div id="ocrZone" style="display:none">
+      <div class="ocr-card">
+        <span>📷</span>
+        <div><strong>Tem um rascunho escrito?</strong><p>Fotografe e a IA usa como base</p></div>
+      </div>
+      <div class="ocr-btns">
+        <button id="btnCam">📸 Câmara</button>
+        <button id="btnFile">📁 Ficheiro</button>
+      </div>
+      <input type="file" id="ocrInput" accept="image/*" style="display:none"/>
+      <div id="ocrBar" style="display:none">
+        <div class="bar-track"><div class="bar-fill" id="ocrFill"></div></div>
+        <span id="ocrStatusTxt"></span>
+      </div>
+      <div id="ocrResultBox" style="display:none">
+        <div class="ocr-rhdr">
+          <span>Texto reconhecido</span><span id="ocrConf" class="conf"></span>
+        </div>
+        <textarea id="ocrTxt" rows="4"></textarea>
+        <div class="ocr-rbtns">
+          <button id="btnUseOcr">✓ Usar texto</button>
+          <button id="btnDiscardOcr">✕ Descartar</button>
+        </div>
+      </div>
+      <div class="ocr-divider"><span>ou preencha manualmente</span></div>
+    </div>
+    <div class="form-body" id="formBody"></div>
+    <div class="form-foot" id="formFoot"></div>
+  </div>
+</div>
+
+<!-- MODAL RESULTADO -->
+<div class="overlay" id="resultOverlay">
+  <div class="sheet tall" id="resultSheet">
+    <div class="pill"></div>
+    <div class="result-hdr">
+      <span class="res-ok">✅ Documento Gerado</span>
+      <span class="res-model" id="resModel"></span>
+      <button class="sh-x" id="resultClose">✕</button>
+    </div>
+    <div class="res-meta" id="resMeta"></div>
+    <div class="res-preview" id="resPreview"></div>
+    <div class="res-actions">
+      <button id="btnCopy">📋 Copiar</button>
+      <button id="btnDl">⬇️ Download</button>
+      <button class="wa-btn" id="btnWaResult">💬 WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PAGAMENTO -->
+<div class="overlay" id="payOverlay">
+  <div class="sheet" id="paySheet">
+    <div class="pill"></div>
+    <div class="sheet-hdr">
+      <div><div class="sh-title">Comprar Créditos</div><div class="sh-sub">M-Pesa · Instantâneo</div></div>
+      <button class="sh-x" id="payClose">✕</button>
+    </div>
+    <div class="pkg-grid">
+      <div class="pkg" data-pkg="starter">
+        <div class="pkg-name">Starter</div>
+        <div class="pkg-price">MZN 150</div>
+        <div class="pkg-cr">10 créditos</div>
+        <div class="pkg-per">MZN 15/doc</div>
+      </div>
+      <div class="pkg popular" data-pkg="basico">
+        <div class="pkg-badge">Popular</div>
+        <div class="pkg-name">Básico</div>
+        <div class="pkg-price">MZN 350</div>
+        <div class="pkg-cr">25 créditos</div>
+        <div class="pkg-per">MZN 14/doc</div>
+      </div>
+      <div class="pkg" data-pkg="pro">
+        <div class="pkg-name">Pro</div>
+        <div class="pkg-price">MZN 750</div>
+        <div class="pkg-cr">60/mês</div>
+        <div class="pkg-per">MZN 12.5/doc</div>
+      </div>
+    </div>
+    <div id="mpesaSection" style="display:none">
+      <div class="mp-hdr">
+        <div class="mp-logo">M</div>
+        <div><strong>Pagamento M-Pesa</strong><p id="mpEnvLabel"></p></div>
+      </div>
+      <label class="field-lbl">Número M-Pesa</label>
+      <div class="phone-wrap">
+        <span>+258</span>
+        <input type="tel" id="phoneInput" placeholder="84 XXX XXXX" maxlength="9"/>
+      </div>
+      <div class="pay-sum" id="paySummary"></div>
+      <button class="btn-pay" id="btnPay" disabled>Confirmar Pagamento</button>
+      <p class="mp-note">Receberá pedido de PIN no telemóvel</p>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIFICAÇÕES -->
+<div class="notif-stack" id="notifStack"></div>
+<!-- FAB -->
+<a class="fab" id="fabWa" href="#" target="_blank">💬</a>
+
+<!-- APP ENTRY POINT (ES Modules) -->
+<script type="module" src="assets/js/app.js"></script>
+
+<!-- PWA Interactivity System -->
+<script src="assets/js/interactivity-core.js"></script>
+
+<!-- Service Worker Registration -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .then((registration) => {
+          console.log('[App] Service worker registered:', registration);
+          
+          // Listen for updates
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'activated') {
+                  console.log('[App] New service worker activated');
+                  // Dispatch custom event for app to handle update
+                  window.dispatchEvent(new CustomEvent('service-worker-updated'));
+                }
+              });
+            }
+          });
+        })
+        .catch((error) => {
+          console.warn('[App] Service worker registration failed:', error);
+        });
+    });
+  }
+</script>
+</body>
+</html>
