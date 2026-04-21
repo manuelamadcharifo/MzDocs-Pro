@@ -1,5 +1,6 @@
 // models/QueueModel.js — Fila inteligente com retry e back-off
 import { NotificationView } from '../views/Views.js';
+import { Storage } from '../utils/Storage.js';
 
 export class QueueModel {
   constructor() {

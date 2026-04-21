@@ -5,6 +5,8 @@ import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 import { Validator } from '../utils/Validator.js';
 import { MPesaService } from '../services/Services.js';
+import { PaymentController } from './PaymentController.js';
+import { AdminController } from './AdminController.js';
 
 const WA_NUMBER = '258858695506'; // ← ALTERE
 
@@ -15,23 +17,7 @@ export class DocumentController {
     this.queue       = new QueueModel();
     this.openRouter  = new OpenRouterService();
     this._genIv      = null;
-    this._bindEvents();
-  }
-
-  _bindEvents() {
-    // Grid de serviços
-    document.querySelectorAll('.sc[data-svc]').forEach(el => {
-      el.addEventListener('click', () => this.open(el.dataset.svc));
-    });
-    // Fechar overlays
-    document.getElementById('formClose')?.addEventListener('click', () => this.closeForm());
-    document.getElementById('resultClose')?.addEventListener('click', () => this.closeResult());
-    document.getElementById('formOverlay')?.addEventListener('click', e => { if (e.target.id==='formOverlay') this.closeForm(); });
-    document.getElementById('resultOverlay')?.addEventListener('click', e => { if (e.target.id==='resultOverlay') this.closeResult(); });
-    // Resultado: botões
-    document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
-    document.getElementById('btnDl')?.addEventListener('click', () => this.downloadDoc());
-    document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
+    // Event delegation is handled by EventDelegation in app.js - no manual binding needed
   }
 
   open(key) {
@@ -174,15 +160,7 @@ export class OCRController {
     this.docModel = docModel;
     this._worker  = null;
     this._loaded  = false;
-    this._bindEvents();
-  }
-
-  _bindEvents() {
-    document.getElementById('btnCam')?.addEventListener('click', () => this.trigger('cam'));
-    document.getElementById('btnFile')?.addEventListener('click', () => this.trigger('file'));
-    document.getElementById('ocrInput')?.addEventListener('change', e => this.processFile(e));
-    document.getElementById('btnUseOcr')?.addEventListener('click', () => this.use());
-    document.getElementById('btnDiscardOcr')?.addEventListener('click', () => this.discard());
+    // Event delegation is handled by EventDelegation in app.js - no manual binding needed
   }
 
   trigger(mode) {
@@ -218,6 +196,10 @@ export class OCRController {
             }
           }
         });
+      }
+
+      if (!this._worker) {
+        throw new Error('OCR worker failed to initialize');
       }
 
       const result = await this._worker.recognize(file);

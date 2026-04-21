@@ -111,10 +111,7 @@ export class MPesaService {
     this.endpoint = '/.netlify/functions/process-payment';
     this.timeout = 30000;
     this.maxRetries = 1;
-  }
-
-  validatePhone(raw) {
-    if (!Validator.phone(raw)) throw new Error('Número inválido. Use formato: 84 XXX XXXX');
+    this.env = process.env.MPESA_ENV || 'production';
   }
 
   validatePhone(raw) {
@@ -230,6 +227,10 @@ export class SupabaseService {
 
   async syncUser(userId, localCredits) {
     if (!this._ready) return null;
+    if (!this._client) {
+      console.warn('[SupabaseService] Client not initialized');
+      return null;
+    }
     try {
       const { data, error } = await this._client
         .from('users').select('credits').eq('id', userId).single();
