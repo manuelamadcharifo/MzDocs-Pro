@@ -1,5 +1,5 @@
 # MzDocs Pro v3.0 🇲🇿
-### Arquitectura MVC · OpenRouter Gratuito · Supabase · M-Pesa
+### Arquitectura MVC · OpenRouter Gratuito · Supabase · Vercel
 
 ---
 
@@ -28,7 +28,7 @@ mzdocs-v3/
 │       │   └── Views.js                    ← NotificationView, ModalView, DocumentView
 │       └── controllers/
 │           └── Controllers.js              ← DocumentController, PaymentController, OCRController
-├── netlify/
+├── api/
 │   └── functions/
 │       ├── generate-document.js            ← Proxy OpenRouter (chave segura)
 │       ├── process-payment.js              ← M-Pesa C2B + Supabase
@@ -52,6 +52,20 @@ mzdocs-v3/
 3. Ir a **Settings → API** → copiar `Project URL` e `anon public key`
 4. Copiar também a `service_role key` (para as Netlify Functions)
 
+### Passo 3 — Netlify Environment Variables
+No **Netlify Dashboard → Site Settings → Environment Variables**:
+
+| Variável | Valor | Obrigatório |
+|---|---|---|
+| `OPENROUTER_API_KEY` | `sk-or-v1-...` | ✅ |
+| `SUPABASE_URL` | `https://xxx.supabase.co` | Para persistência |
+| `SUPABASE_SERVICE_KEY` | `eyJ...` (service_role) | Para persistência |
+| `MPESA_ENV` | `sandbox` ou `production` | Para pagamentos |
+| `MPESA_API_KEY` | Chave do portal M-Pesa | Para pagamentos |
+| `MPESA_PUBLIC_KEY` | Chave pública RSA M-Pesa | Para pagamentos |
+| `MPESA_SERVICE_CODE` | Ex: `171717` | Para pagamentos |
+| `SITE_URL` | URL do seu site Netlify | Recomendado |
+
 ### Número de WhatsApp
 Em `assets/js/controllers/Controllers.js`, linha 1:
 ```javascript
@@ -64,25 +78,22 @@ this.WA_SUPPORT = '258840000000'; // ← Número de suporte
 
 ---
 
-## 🚀 Deploy Netlify (5 minutos)
+## 🚀 Deploy Vercel (5 minutos)
 
-### Opção A — Drag & Drop
-1. Aceda a [netlify.com](https://netlify.com) → "Add new site" → "Deploy manually"
-2. Arraste a pasta `mzdocs-v3/` completa
-3. Configure as Environment Variables
-4. "Trigger deploy" para aplicar as variáveis
-
-### Opção B — CLI
+### Opção A — Vercel CLI
 ```bash
-npm install -g netlify-cli
-netlify login
-netlify init
-netlify env:set OPENROUTER_API_KEY "YOUR_OPENROUTER_API_KEY_HERE"
-netlify env:set SUPABASE_URL "YOUR_SUPABASE_URL_HERE"
-netlify env:set SUPABASE_SERVICE_KEY "YOUR_SUPABASE_SERVICE_KEY_HERE"
-netlify env:set MPESA_ENV "YOUR_ENV_HERE"
-netlify deploy --prod
+npm install -g vercel
+vercel login
+vercel
+# Seguir prompts, configurar env vars
+vercel --prod
 ```
+
+### Opção B — Dashboard
+1. Aceda a [vercel.com](https://vercel.com) → "New Project"
+2. Importe o repositório GitHub
+3. Configure as Environment Variables
+4. "Deploy"
 
 ---
 
@@ -133,10 +144,11 @@ WhatsApp / Copiar / Download
 - Retry automático com backoff exponencial (1.5s → 3s → 6s)
 - UI mostra posição na fila em tempo real
 
-### ✅ P2 — M-Pesa Test Mode → Validação de Ambiente
+### ✅ P2 — M-Pesa Sandbox → Validação de Ambiente
+- `MPesaService._detectEnv()` detecta localhost/produção automaticamente
 - Backend valida se `environment === MPESA_ENV`
-- Modo de teste simula pagamento sem credenciais quando não configurado
-- Banner visual avisa utilizador quando está em modo de teste
+- Sandbox simula pagamento bem-sucedido sem credenciais
+- Banner visual avisa utilizador quando está em modo teste
 
 ### ✅ P3 — Perda de Créditos → Supabase + operações atómicas
 - `deduct_credit()` usa `FOR UPDATE` (lock de linha) — sem race conditions

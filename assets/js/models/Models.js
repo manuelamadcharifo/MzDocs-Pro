@@ -1,6 +1,5 @@
 // models/QueueModel.js — Fila inteligente com retry e back-off
-import { NotificationView } from '../views/Views.js';
-import { Storage } from '../utils/Storage.js';
+import { NotificationView } from '../views/NotificationView.js';
 
 export class QueueModel {
   constructor() {
@@ -74,7 +73,7 @@ export class QueueModel {
 
 // models/CreditModel.js — Créditos com Supabase sync
 import { Storage } from '../utils/Storage.js';
-import { SupabaseService } from '../services/Services.js';
+import { SupabaseService } from '../services/SupabaseService.js';
 
 export class CreditModel {
   constructor() {
@@ -178,7 +177,7 @@ export class DocumentModel {
 export class UserModel {
   constructor() {
     this.userId = Storage.getUserId();
-    this.WA_SUPPORT = '258858695506'; // ← altere para o número de suporte
+    this.WA_SUPPORT = '258840000000'; // ← altere para o número de suporte
   }
   openSupport(context = '') {
     const msg = `[MzDocs Pro Suporte]\nID: ${this.userId.slice(0,12)}\n${context}`.trim();

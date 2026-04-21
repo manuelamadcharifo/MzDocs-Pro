@@ -129,7 +129,3 @@ export const DocumentView = {
     return data;
   },
 };
-
-// Import and re-export PaymentView
-import { PaymentView } from './PaymentView.js';
-export { PaymentView };

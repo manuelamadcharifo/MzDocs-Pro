@@ -1,12 +1,10 @@
 // controllers/DocumentController.js
 import { DocumentModel, CreditModel, QueueModel } from '../models/Models.js';
-import { DocumentView, ModalView, NotificationView } from '../views/Views.js';
+import { DocumentView } from '../views/Views.js';
+import { ModalView, NotificationView } from '../views/Views.js';
 import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
-import { Validator } from '../utils/Validator.js';
-import { MPesaService } from '../services/Services.js';
-import { PaymentController } from './PaymentController.js';
-import { AdminController } from './AdminController.js';
+import { Validator } from '../assets/utils/Validator.js';
 
 const WA_NUMBER = '258858695506'; // ← ALTERE
 
@@ -17,7 +15,23 @@ export class DocumentController {
     this.queue       = new QueueModel();
     this.openRouter  = new OpenRouterService();
     this._genIv      = null;
-    // Event delegation is handled by EventDelegation in app.js - no manual binding needed
+    this._bindEvents();
+  }
+
+  _bindEvents() {
+    // Grid de serviços
+    document.querySelectorAll('.sc[data-svc]').forEach(el => {
+      el.addEventListener('click', () => this.open(el.dataset.svc));
+    });
+    // Fechar overlays
+    document.getElementById('formClose')?.addEventListener('click', () => this.closeForm());
+    document.getElementById('resultClose')?.addEventListener('click', () => this.closeResult());
+    document.getElementById('formOverlay')?.addEventListener('click', e => { if (e.target.id==='formOverlay') this.closeForm(); });
+    document.getElementById('resultOverlay')?.addEventListener('click', e => { if (e.target.id==='resultOverlay') this.closeResult(); });
+    // Resultado: botões
+    document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
+    document.getElementById('btnDl')?.addEventListener('click', () => this.downloadDoc());
+    document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
   }
 
   open(key) {
@@ -148,11 +162,88 @@ export class DocumentController {
   }
 }
 
-// Import PaymentController from dedicated module
-export { PaymentController } from './PaymentController.js';
+// controllers/PaymentController.js
+import { MPesaService } from '../services/Services.js';
+import { ModalView, NotificationView } from '../views/Views.js';
 
-// Import AdminController from dedicated module
-export { AdminController } from './AdminController.js';
+const PACKAGES = {
+  starter: { amount:150, credits:10 },
+  basico:  { amount:350, credits:25 },
+  pro:     { amount:750, credits:60 },
+};
+
+export class PaymentController {
+  constructor(creditModel) {
+    this.creditModel = creditModel;
+    this.mpesa       = new MPesaService();
+    this.selectedPkg = null;
+    this._bindEvents();
+    this.mpesa.showSandboxWarning();
+  }
+
+  _bindEvents() {
+    document.getElementById('btnTopup')?.addEventListener('click', () => this.showPricing());
+    document.getElementById('creditPill')?.addEventListener('click', () => this.showPricing());
+    document.getElementById('payClose')?.addEventListener('click', () => this.close());
+    document.getElementById('payOverlay')?.addEventListener('click', e => { if (e.target.id==='payOverlay') this.close(); });
+    document.querySelectorAll('.pkg').forEach(el => {
+      el.addEventListener('click', () => this.selectPkg(el, el.dataset.pkg));
+    });
+    document.getElementById('phoneInput')?.addEventListener('input', e => this.onPhoneInput(e.target));
+    document.getElementById('btnPay')?.addEventListener('click', () => this.pay());
+  }
+
+  showPricing() { ModalView.open('payOverlay'); }
+  close() {
+    ModalView.close('payOverlay');
+    this.selectedPkg = null;
+    document.getElementById('mpesaSection').style.display = 'none';
+    document.querySelectorAll('.pkg').forEach(el => el.classList.remove('sel'));
+  }
+
+  selectPkg(el, key) {
+    const pkg = PACKAGES[key];
+    if (!pkg) return;
+    document.querySelectorAll('.pkg').forEach(p => p.classList.remove('sel'));
+    el.classList.add('sel');
+    this.selectedPkg = key;
+    const section = document.getElementById('mpesaSection');
+    section.style.display = 'flex';
+    document.getElementById('mpEnvLabel').textContent = this.mpesa.isSandbox()
+      ? '⚠️ Modo sandbox — pagamento não real' : 'Ambiente de produção';
+    document.getElementById('paySummary').innerHTML =
+      `<span>Pacote <strong>${key.charAt(0).toUpperCase()+key.slice(1)}</strong></span><strong>MZN ${pkg.amount} → ${pkg.credits} créditos</strong>`;
+    this.onPhoneInput(document.getElementById('phoneInput'));
+  }
+
+  onPhoneInput(input) {
+    const valid = Validator.phone(input?.value || '');
+    const btn = document.getElementById('btnPay');
+    if (btn) btn.disabled = !valid || !this.selectedPkg;
+  }
+
+  async pay() {
+    const phone = document.getElementById('phoneInput').value;
+    const pkg = PACKAGES[this.selectedPkg];
+    if (!pkg) return;
+
+    const btn = document.getElementById('btnPay');
+    btn.disabled = true;
+    btn.textContent = '⏳ A processar…';
+
+    try {
+      const result = await this.mpesa.processPayment(phone, pkg.amount, this.selectedPkg);
+      await this.creditModel.add(pkg.credits);
+      NotificationView.success(`✅ ${pkg.credits} créditos adicionados!`);
+      this.close();
+    } catch (err) {
+      NotificationView.error('❌ ' + (err.message || 'Erro no pagamento'));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Confirmar Pagamento';
+    }
+  }
+}
 
 // controllers/OCRController.js
 export class OCRController {
@@ -160,7 +251,15 @@ export class OCRController {
     this.docModel = docModel;
     this._worker  = null;
     this._loaded  = false;
-    // Event delegation is handled by EventDelegation in app.js - no manual binding needed
+    this._bindEvents();
+  }
+
+  _bindEvents() {
+    document.getElementById('btnCam')?.addEventListener('click', () => this.trigger('cam'));
+    document.getElementById('btnFile')?.addEventListener('click', () => this.trigger('file'));
+    document.getElementById('ocrInput')?.addEventListener('change', e => this.processFile(e));
+    document.getElementById('btnUseOcr')?.addEventListener('click', () => this.use());
+    document.getElementById('btnDiscardOcr')?.addEventListener('click', () => this.discard());
   }
 
   trigger(mode) {
@@ -196,10 +295,6 @@ export class OCRController {
             }
           }
         });
-      }
-
-      if (!this._worker) {
-        throw new Error('OCR worker failed to initialize');
       }
 
       const result = await this._worker.recognize(file);
