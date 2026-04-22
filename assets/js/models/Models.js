@@ -9,7 +9,7 @@ export class QueueModel {
     this.minInterval = 3000; // 3s entre requests
     this.maxRetries = 3;
   }
-
+ 
   add(job) {
     return new Promise((resolve, reject) => {
       const item = { id: Date.now() + Math.random(), job, resolve, reject, retries: 0 };
