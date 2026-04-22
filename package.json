@@ -6,7 +6,7 @@
   "homepage": "./",
   "scripts": {
     "dev": "vercel dev",
-    "build": "echo 'Static PWA - copying assets and SW' && echo 'Build ready for deployment to Vercel'",
+    "build": null,
     "start": "vercel dev"
   },
   "keywords": ["pwa", "ai", "documents", "mozambique"],

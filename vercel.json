@@ -1,8 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "echo 'Static PWA - no build required'",
+  "buildCommand": null,
   "outputDirectory": ".",
-  "public": true,
   "env": {
     "SUPABASE_URL": "@supabase_url",
     "SUPABASE_ANON_KEY": "@supabase_anon_key",
