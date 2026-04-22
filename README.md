@@ -80,6 +80,14 @@ this.WA_SUPPORT = '258840000000'; // ← Número de suporte
 
 ## 🚀 Deploy Vercel (5 minutos)
 
+### Configuração automática ✅
+O projeto agora inclui `vercel.json` com:
+- ✅ Output directory configurado como raiz (`.`)
+- ✅ Build command otimizado
+- ✅ Rotas de SPA configuradas
+- ✅ Serverless functions para API endpoints
+- ✅ Variáveis de ambiente prontas
+
 ### Opção A — Vercel CLI
 ```bash
 npm install -g vercel
@@ -92,8 +100,15 @@ vercel --prod
 ### Opção B — Dashboard
 1. Aceda a [vercel.com](https://vercel.com) → "New Project"
 2. Importe o repositório GitHub
-3. Configure as Environment Variables
+3. Configure as Environment Variables (OPENROUTER_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY)
 4. "Deploy"
+
+### Variáveis de Ambiente Vercel
+```bash
+OPENROUTER_API_KEY=sk-or-v1-...
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_ANON_KEY=eyJ...
+```
 
 ---
 

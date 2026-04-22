@@ -84,8 +84,8 @@ Preços de mercado moçambicano ${new Date().getFullYear()}.`,
 }
 
 // services/MPesaService.js — Integração M-Pesa com detecção de ambiente
-import { Validator } from '../utils/Validator.js';
-import { Formatter } from '../utils/Formatter.js';
+import { Validator } from './Formatter.js';
+import { Formatter } from './Formatter.js';
 
 export class MPesaService {
   constructor() {

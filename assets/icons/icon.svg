@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#07101F;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="192" height="192" fill="url(#grad)" rx="45"/>
+  <!-- Document icon -->
+  <g transform="translate(48, 36)">
+    <!-- Page -->
+    <rect x="0" y="0" width="96" height="120" fill="white" rx="4"/>
+    <!-- Lines -->
+    <line x1="12" y1="24" x2="84" y2="24" stroke="#07101F" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12" y1="40" x2="84" y2="40" stroke="#07101F" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12" y1="56" x2="84" y2="56" stroke="#07101F" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12" y1="72" x2="84" y2="72" stroke="#07101F" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12" y1="88" x2="60" y2="88" stroke="#07101F" stroke-width="2" stroke-linecap="round"/>
+    <!-- AI badge -->
+    <circle cx="72" cy="108" r="12" fill="#3B82F6"/>
+    <text x="72" y="113" text-anchor="middle" font-size="10" font-weight="bold" fill="white">IA</text>
+  </g>
+</svg>

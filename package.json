@@ -3,12 +3,16 @@
   "version": "3.0.0",
   "description": "MzDocs Pro v3 — Documentos profissionais com IA gratuita para Moçambique",
   "main": "index.html",
+  "homepage": "./",
   "scripts": {
     "dev": "vercel dev",
-    "build": "echo 'Static site - no build needed'",
+    "build": "echo 'Static PWA - copying assets and SW' && echo 'Build ready for deployment to Vercel'",
     "start": "vercel dev"
   },
   "keywords": ["pwa", "ai", "documents", "mozambique"],
   "author": "MzDocs Pro",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  }
 }
