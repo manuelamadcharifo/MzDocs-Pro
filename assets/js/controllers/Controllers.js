@@ -164,7 +164,6 @@ export class DocumentController {
 
 // controllers/PaymentController.js
 import { MPesaService } from '../services/Services.js';
-import { ModalView, NotificationView } from '../views/Views.js';
 
 const PACKAGES = {
   starter: { amount:150, credits:10 },
