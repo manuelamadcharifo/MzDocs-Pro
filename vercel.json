@@ -2,6 +2,17 @@
   "version": 2,
   "cleanUrls": true,
   "outputDirectory": ".",
+  "headers": [
+    {
+      "source": "/(.*)\\.js",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/javascript"
+        }
+      ]
+    }
+  ],
   "routes": [
     {
       "src": "/api/(.*)",
