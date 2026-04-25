@@ -14,7 +14,9 @@
     }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/api/generate-document", "dest": "/api/generate-document.js" },
+    { "src": "/api/process-payment", "dest": "/api/process-payment.js" },
+    { "src": "/api/verify-credits", "dest": "/api/verify-credits.js" },
     { "src": "/sw.js", "dest": "/sw.js" },
     { "src": "/(.*)", "dest": "/$1" }
   ]

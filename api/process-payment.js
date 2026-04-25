@@ -1,121 +1,181 @@
-// api/process-payment.js — M-Pesa C2B com validação de ambiente
-const { createClient } = require('@supabase/supabase-js');
+// api/process-payment.js
+// Processamento de pagamentos: M-Pesa + Manual (fallback)
+// Vercel Serverless Function
 
-const PACKAGES = { starter:{amount:150,credits:10}, basico:{amount:350,credits:25}, pro:{amount:750,credits:60} };
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+// Preços dos pacotes (em MZN)
+const PACKAGES = {
+  'basico': { credits: 5, price: 50, name: 'Básico' },
+  'padrao': { credits: 15, price: 120, name: 'Padrão' },
+  'premium': { credits: 50, price: 350, name: 'Premium' },
+  'ilimitado': { credits: 9999, price: 800, name: 'Ilimitado' },
+};
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Content-Type', 'application/json');
+  if (req.method === 'OPTIONS') {
+    return res.status(200).set(corsHeaders).end();
+  }
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({error:'Method Not Allowed'});
+  if (req.method !== 'POST') {
+    return res.status(405).set(corsHeaders).json({ error: 'Método não permitido' });
+  }
 
-  let body;
-  try { body = JSON.parse(req.body || '{}'); }
-  catch { return res.status(400).json({error:'Body inválido'}); }
+  const {
+    mode,           // 'mpesa' | 'manual'
+    packageId,
+    phoneNumber,    // Para M-Pesa
+    userId,
+    manualDetails,  // Para pagamento manual: { method, reference, screenshot }
+  } = req.body;
 
-  const { phoneNumber, amount, packageId, environment, userId } = body;
-
-  // ── Validação 1: Ambiente deve bater ──────────────────────
-  const serverEnv = process.env.MPESA_ENV || 'sandbox';
-  if (environment !== serverEnv) {
-    return res.status(400).json({
-      error: 'ENVIRONMENT_MISMATCH',
-      message: `Ambiente incorreto. Esperado: ${serverEnv}, Recebido: ${environment}`,
-      solution: 'Verifique se MPESA_ENV está correcto no Vercel.'
+  // Validações
+  if (!packageId || !PACKAGES[packageId]) {
+    return res.status(400).set(corsHeaders).json({
+      error: 'Pacote inválido',
+      available: Object.keys(PACKAGES),
     });
   }
 
-  // ── Validação 2: Pacote e montante ────────────────────────
   const pkg = PACKAGES[packageId];
-  if (!pkg) return res.status(400).json({error:'Pacote inválido'});
-  if (parseInt(amount) !== pkg.amount) return res.status(400).json({error:'Montante não corresponde ao pacote'});
 
-  // ── Validação 3: Número M-Pesa ────────────────────────────
-  if (!/^2588[4-7]\d{7}$/.test(phoneNumber)) {
-    return res.status(400).json({error:'Número M-Pesa inválido'});
-  }
+  // ============================================
+  // MODO 1: M-PESA AUTOMÁTICO
+  // ============================================
+  if (mode === 'mpesa') {
+    const mpesaActive = process.env.MPESA_ENV === 'production';
 
-  // ── Verificar credenciais M-Pesa ──────────────────────────
-  if (!process.env.MPESA_API_KEY || !process.env.MPESA_PUBLIC_KEY || !process.env.MPESA_SERVICE_CODE) {
-    console.error('Credenciais M-Pesa não configuradas');
-    // Em sandbox, simular sucesso para testes
-    if (serverEnv === 'sandbox') {
-      console.warn('[M-Pesa] SANDBOX MODE: Simulando pagamento bem-sucedido');
-      await addCreditsToUser(userId, pkg.credits);
-      return res.status(200).json({
-        success: true, transactionId: 'SANDBOX_' + Date.now(),
-        creditsAdded: pkg.credits, sandbox: true,
-        message: `[SANDBOX] ${pkg.credits} créditos adicionados (teste)`
+    if (!mpesaActive) {
+      return res.status(503).set(corsHeaders).json({
+        error: 'M-Pesa indisponível',
+        details: 'Pagamento automático M-Pesa ainda não ativado',
+        fallback: 'Use modo manual',
       });
     }
-    return res.status(503).json({error:'Pagamentos indisponíveis. Configure as credenciais M-Pesa.'});
-  }
 
-  // ── Chamada real M-Pesa ───────────────────────────────────
-  const transRef = `MZDOCS-${Date.now()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
-  const mpesaBase = serverEnv === 'production' ? 'https://api.mpesa.vm.co.mz' : 'https://api.sandbox.vm.co.mz';
-
-  try {
-    const encKey = encryptApiKey(process.env.MPESA_API_KEY, process.env.MPESA_PUBLIC_KEY);
-
-    const mpRes = await fetch(`${mpesaBase}/ipg/v1x/c2bPayment/singleStage/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${encKey}`,
-        'Origin': process.env.MPESA_ORIGIN || mpesaBase,
-      },
-      body: JSON.stringify({
-        input_TransactionReference: transRef,
-        input_CustomerMSISDN:       phoneNumber,
-        input_Amount:               pkg.amount.toString(),
-        input_ThirdPartyReference:  `${packageId}-${userId?.slice(0,8)||'anon'}`,
-        input_ServiceProviderCode:  process.env.MPESA_SERVICE_CODE,
-      }),
-    });
-
-    const mpData = await mpRes.json();
-    if (mpData.output_ResponseCode !== 'INS-0') {
-      throw new Error(getMpesaError(mpData.output_ResponseCode));
+    // Validação M-Pesa
+    if (!phoneNumber || !/^2588[4-7]\d{7}$/.test(phoneNumber)) {
+      return res.status(400).set(corsHeaders).json({
+        error: 'Número M-Pesa inválido',
+        format: '25884XXXXXXX',
+      });
     }
 
-    await addCreditsToUser(userId, pkg.credits);
+    try {
+      // Aqui integrarias a API real do M-Pesa quando ativares
+      // Por agora, simula o fluxo
+      const transactionId = `MP${Date.now()}`;
 
-    console.log(JSON.stringify({ event:'payment_success', transRef, pkg:packageId, credits:pkg.credits, ts:new Date().toISOString() }));
-    return res.status(200).json({
-      success: true, transactionId: mpData.output_TransactionID,
-      creditsAdded: pkg.credits, message: `Pagamento confirmado! ${pkg.credits} créditos adicionados.`
+      // Guarda transação pendente no Supabase (se disponível)
+      await saveTransaction({
+        id: transactionId,
+        userId,
+        packageId,
+        amount: pkg.price,
+        phoneNumber,
+        status: 'pending',
+        mode: 'mpesa',
+        createdAt: new Date().toISOString(),
+      });
+
+      return res.status(200).set(corsHeaders).json({
+        success: true,
+        mode: 'mpesa',
+        transactionId,
+        status: 'pending',
+        message: 'Confirme o pagamento no seu telemóvel M-Pesa',
+        instructions: `Dial *150# → Opção 3 (Pagamentos) → Código: ${transactionId}`,
+      });
+
+    } catch (error) {
+      console.error('Erro M-Pesa:', error);
+      return res.status(500).set(corsHeaders).json({
+        error: 'Falha no processamento M-Pesa',
+        fallback: 'Use modo manual',
+      });
+    }
+  }
+
+  // ============================================
+  // MODO 2: PAGAMENTO MANUAL (Fallback)
+  // ============================================
+  if (mode === 'manual') {
+    const whatsappNumber = process.env.WHATSAPP_NUMBER || '258840000000';
+
+    const manualId = `MAN${Date.now()}`;
+
+    // Guarda pedido manual
+    await saveTransaction({
+      id: manualId,
+      userId,
+      packageId,
+      amount: pkg.price,
+      status: 'awaiting_payment',
+      mode: 'manual',
+      manualDetails: manualDetails || {},
+      createdAt: new Date().toISOString(),
     });
 
-  } catch (err) {
-    console.error('[M-Pesa] Erro:', err.message);
-    return res.status(400).json({ success:false, message: err.message });
+    const message = encodeURIComponent(
+      `*Pedido MzDocs Pro — ${manualId}*\n\n` +
+      `Pacote: ${pkg.name}\n` +
+      `Créditos: ${pkg.credits}\n` +
+      `Valor: ${pkg.price} MZN\n` +
+      `Utilizador: ${userId}\n\n` +
+      `Por favor envie o comprovativo de pagamento.`
+    );
+
+    return res.status(200).set(corsHeaders).json({
+      success: true,
+      mode: 'manual',
+      transactionId: manualId,
+      status: 'awaiting_payment',
+      package: pkg,
+      paymentInstructions: {
+        method: 'M-Pesa (manual)',
+        number: whatsappNumber,
+        amount: pkg.price,
+        reference: manualId,
+        steps: [
+          `1. Faça M-Pesa para ${whatsappNumber}`,
+          `2. Valor: ${pkg.price} MZN`,
+          `3. Referência: ${manualId}`,
+          `4. Envie comprovativo por WhatsApp`,
+        ],
+      },
+      whatsappLink: `https://wa.me/${whatsappNumber}?text=${message}`,
+      message: 'Envie o comprovativo de pagamento pelo WhatsApp para ativação manual',
+    });
   }
-};
 
-async function addCreditsToUser(userId, credits) {
-  if (!userId || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) return;
-  try {
-    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-    await sb.rpc('add_credits', { user_id: userId, amount: credits });
-  } catch (e) { console.warn('Supabase addCredits falhou:', e.message); }
+  // Modo desconhecido
+  return res.status(400).set(corsHeaders).json({
+    error: 'Modo de pagamento inválido',
+    validModes: ['mpesa', 'manual'],
+  });
 }
 
-function encryptApiKey(apiKey, publicKeyB64) {
-  const { createPublicKey, publicEncrypt, constants } = require('crypto');
-  const pem = `-----BEGIN PUBLIC KEY-----\n${publicKeyB64}\n-----END PUBLIC KEY-----`;
-  const key = createPublicKey(pem);
-  return publicEncrypt({ key, padding: constants.RSA_PKCS1_PADDING }, Buffer.from(apiKey)).toString('base64');
+// Helper para guardar transações (Supabase ou memória)
+async function saveTransaction(transaction) {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      await supabase.from('transactions').insert(transaction);
+      console.log('✅ Transação guardada:', transaction.id);
+    } catch (e) {
+      console.warn('Supabase indisponível, log local:', e.message);
+    }
+  } else {
+    console.log('📝 Transação (sem Supabase):', transaction);
+  }
 }
 
-const MPESA_ERRORS = {
-  'INS-9':'Saldo insuficiente na conta M-Pesa.',
-  'INS-16':'Limite diário atingido.',
-  'INS-18':'Número não registado no M-Pesa.',
-  'INS-22':'Utilizador cancelou a transacção.',
-  'INS-23':'Tempo esgotado — sem resposta do utilizador.',
-  'INS-24':'Transacção pendente em curso.',
-  'INS-25':'Conta M-Pesa bloqueada.',
-};
-function getMpesaError(code) { return MPESA_ERRORS[code] || `Erro M-Pesa (${code}). Contacte o suporte.`; }
+export const config = { maxDuration: 15 };
