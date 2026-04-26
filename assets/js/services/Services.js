@@ -15,6 +15,34 @@ export class OpenRouterService {
     return await this._callBackend(serviceType, prompt);
   }
 
+  // Para reedição via Editor
+  async generateRaw(prompt) {
+    const userId = localStorage.getItem('mz_uid') || 'anon';
+    const credits = JSON.parse(localStorage.getItem('mz_credits') ?? '0') || 0;
+
+    const res = await fetch(this.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        serviceType: 'reedit', 
+        prompt, 
+        userId, 
+        userCredits: credits 
+      }),
+    });
+
+    if (res.status === 429) { const e = new Error('RATE_LIMIT'); e.status = 429; throw e; }
+    if (res.status === 402) { const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const e = new Error(data.error || `HTTP ${res.status}`);
+      e.status = res.status;
+      throw e;
+    }
+
+    return await res.json();
+  }
+
   async _callBackend(serviceType, prompt) {
     const userId = localStorage.getItem('mz_uid') || 'anon';
     const credits = JSON.parse(localStorage.getItem('mz_credits') ?? '0') || 0;

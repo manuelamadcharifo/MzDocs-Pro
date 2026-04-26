@@ -113,12 +113,34 @@ export const DocumentView = {
     if (btn) { btn.style.display = ''; btn.disabled = false; }
   },
 
-  // Renderizar resultado gerado
+  // Renderizar resultado gerado com Editor
   renderResult(content, svc, credits, model) {
     document.getElementById('resModel').textContent = model || 'openrouter';
     document.getElementById('resMeta').innerHTML =
       `<span>📄 ${svc.title}</span><span>⚡ ${credits} créditos restantes</span><span>🕐 ${new Date().toLocaleTimeString('pt')}</span>`;
-    document.getElementById('resPreview').innerHTML = Formatter.markdownToHTML(content);
+    
+    // Substituir preview simples pelo Editor
+    const previewContainer = document.getElementById('resPreview');
+    if (previewContainer) {
+      previewContainer.innerHTML = '';
+      previewContainer.id = 'editor-container';
+      
+      // Criar instância do editor
+      window.documentEditor = new DocumentEditor('editor-container');
+      window.documentEditor.loadDocument(content, svc.title);
+      
+      // Configurar callback para reedição
+      window.documentEditor.onReedit = (data) => {
+        this._handleReedit(data);
+      };
+    }
+  },
+
+  // Handler para reedição via IA
+  _handleReedit(reeditData) {
+    // Disparar evento para o controller tratar
+    const event = new CustomEvent('document:reedit', { detail: reeditData });
+    document.dispatchEvent(event);
   },
 
   // Colectar dados do formulário

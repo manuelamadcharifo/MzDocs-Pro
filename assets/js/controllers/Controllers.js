@@ -5,6 +5,7 @@ import { ModalView, NotificationView } from '../views/Views.js';
 import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 import { Validator } from '../utils/Formatter.js';
+import { DocumentEditor } from '../components/DocumentEditor.js';
 
 const WA_NUMBER = '258858695506'; // ← ALTERE
 
@@ -32,6 +33,9 @@ export class DocumentController {
     document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
     document.getElementById('btnDl')?.addEventListener('click', () => this.downloadDoc());
     document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
+    
+    // Evento de reedição via Editor
+    document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
   }
 
   open(key) {
@@ -159,6 +163,45 @@ export class DocumentController {
     const preview = this.docModel.content.slice(0, 1000).replace(/#{1,3} /g, '*');
     const msg = `📄 *${svc?.title||'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`;
     window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
+  }
+
+  // ============================================
+  // REEDIÇÃO VIA EDITOR
+  // ============================================
+  async handleReedit({ currentContent, instruction, serviceType }) {
+    if (!this.creditModel.canConsume(1)) {
+      NotificationView.warn('⚠️ Créditos insuficientes para reedição.');
+      return;
+    }
+
+    const btn = document.getElementById('btnGen');
+    if (btn) btn.disabled = true;
+
+    NotificationView.info('🤖 A reeditar documento...');
+
+    try {
+      // Construir prompt para reedição
+      const reeditPrompt = `Reedita o seguinte documento conforme a instrução:\n\n---\n${currentContent}\n---\n\nINSTRUÇÃO: ${instruction}\n\nMantenha o formato Markdown.`;
+
+      const result = await this.openRouter.generateRaw(reeditPrompt);
+
+      // Atualizar editor com novo conteúdo
+      if (window.documentEditor) {
+        window.documentEditor.loadDocument(result.document, serviceType);
+        this.docModel.setGenerated(result.document, result.model);
+      }
+
+      // Consumir crédito
+      await this.creditModel.consume(1);
+
+      NotificationView.success('✅ Documento reeditado!');
+
+    } catch (err) {
+      NotificationView.error('❌ ' + (err.message || 'Erro na reedição.'));
+    } finally {
+      const btn = document.getElementById('btnGen');
+      if (btn) btn.disabled = false;
+    }
   }
 }
 
