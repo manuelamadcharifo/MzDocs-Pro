@@ -16,19 +16,31 @@ export class OpenRouterService {
   }
 
   // Para reedição via Editor
-  async generateRaw(prompt) {
+  async generateRaw(prompt, reeditData = null) {
     const userId = localStorage.getItem('mz_uid') || 'anon';
     const credits = JSON.parse(localStorage.getItem('mz_credits') ?? '0') || 0;
+
+    const body = reeditData 
+      ? { 
+          serviceType: 'reedit', 
+          prompt: prompt, // Prompt original (não usado na reedição)
+          userId, 
+          userCredits: credits,
+          _reedit: true,
+          _currentContent: reeditData.currentContent,
+          _instruction: reeditData.instruction,
+        }
+      : { 
+          serviceType: 'reedit', 
+          prompt, 
+          userId, 
+          userCredits: credits 
+        };
 
     const res = await fetch(this.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        serviceType: 'reedit', 
-        prompt, 
-        userId, 
-        userCredits: credits 
-      }),
+      body: JSON.stringify(body),
     });
 
     if (res.status === 429) { const e = new Error('RATE_LIMIT'); e.status = 429; throw e; }

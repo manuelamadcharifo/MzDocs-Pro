@@ -32,8 +32,29 @@ export default async function handler(req, res) {
   try { body = JSON.parse(req.body || '{}'); }
   catch { return res.status(400).json({ error: 'Body JSON inválido' }); }
 
-  const { serviceType, prompt, userId, userCredits } = body;
-  if (!prompt) return res.status(400).json({ error: 'prompt obrigatório' });
+  const { serviceType, prompt, userId, userCredits, _reedit, _currentContent, _instruction } = body;
+  
+  let finalPrompt = prompt;
+
+  // Se for reedição, constrói prompt especial
+  if (_reedit === true && _currentContent && _instruction) {
+    finalPrompt = `Você é um editor de documentos profissional. 
+
+DOCUMENTO ATUAL:
+"""
+${_currentContent}
+"""
+
+INSTRUÇÃO DO UTILIZADOR:
+"${_instruction}"
+
+TAREFA: Edite o documento acima seguindo a instrução do utilizador. 
+Mantenha o formato Markdown. 
+Não altere partes que não foram mencionadas na instrução.
+Responda apenas com o documento editado, sem explicações adicionais.`;
+  }
+
+  if (!finalPrompt) return res.status(400).json({ error: 'prompt obrigatório' });
 
   // Verificar créditos
   if (typeof userCredits === 'number' && userCredits < 1) {
@@ -44,7 +65,7 @@ export default async function handler(req, res) {
   let lastError = null;
   for (const model of MODELS) {
     try {
-      const result = await callOpenRouter(prompt, model, OPENROUTER_KEY);
+      const result = await callOpenRouter(finalPrompt, model, OPENROUTER_KEY);
       const creditsRemaining = typeof userCredits === 'number' ? Math.max(0, userCredits - 1) : null;
 
       // Log (sem dados pessoais)
@@ -93,8 +114,8 @@ async function callOpenRouter(prompt, model, apiKey) {
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user',   content: prompt },
       ],
-      max_tokens:  2000,
-      temperature: 0.3,
+      max_tokens:  4000,
+      temperature: 0.7,
       top_p:       0.9,
     }),
   });

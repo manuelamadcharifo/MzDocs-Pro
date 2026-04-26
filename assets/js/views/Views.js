@@ -1,3 +1,5 @@
+import { DocumentEditor } from '../components/DocumentEditor.js';
+
 // views/NotificationView.js — Sistema de notificações em pilha
 export const NotificationView = {
   _stack: document.getElementById('notifStack'),
@@ -119,11 +121,16 @@ export const DocumentView = {
     document.getElementById('resMeta').innerHTML =
       `<span>📄 ${svc.title}</span><span>⚡ ${credits} créditos restantes</span><span>🕐 ${new Date().toLocaleTimeString('pt')}</span>`;
     
-    // Substituir preview simples pelo Editor
+    // ✅ CORREÇÃO: Manter o resPreview, criar div interna para o editor
     const previewContainer = document.getElementById('resPreview');
     if (previewContainer) {
-      previewContainer.innerHTML = '';
-      previewContainer.id = 'editor-container';
+      previewContainer.innerHTML = ''; // Limpa conteúdo anterior
+      
+      // Criar div interna para o editor (NÃO alterar o id do resPreview!)
+      const editorWrapper = document.createElement('div');
+      editorWrapper.id = 'editor-container';
+      editorWrapper.style.cssText = 'width:100%;height:100%;';
+      previewContainer.appendChild(editorWrapper);
       
       // Criar instância do editor
       window.documentEditor = new DocumentEditor('editor-container');

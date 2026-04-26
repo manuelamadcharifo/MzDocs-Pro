@@ -7,7 +7,7 @@ import { SERVICES } from '../services/ServiceDefinitions.js';
 import { Validator } from '../utils/Formatter.js';
 import { DocumentEditor } from '../components/DocumentEditor.js';
 
-const WA_NUMBER = '258858695506'; // ← ALTERE
+const WA_NUMBER = '258858695506'; // ← ALTERE PARA O TEU NÚMERO
 
 export class DocumentController {
   constructor(creditModel) {
@@ -34,7 +34,7 @@ export class DocumentController {
     document.getElementById('btnDl')?.addEventListener('click', () => this.downloadDoc());
     document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
     
-    // Evento de reedição via Editor
+    // ✅ Evento de reedição via Editor — AGORA FUNCIONA
     document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
   }
 
@@ -110,7 +110,7 @@ export class DocumentController {
       this.docModel.setGenerated(result.document, result.model);
       this.docModel.formData = data;
 
-      // Mostrar resultado
+      // ✅ Mostrar resultado no EDITOR (em vez de texto simples)
       ModalView.close('formOverlay');
       DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
       ModalView.open('resultOverlay');
@@ -166,7 +166,7 @@ export class DocumentController {
   }
 
   // ============================================
-  // REEDIÇÃO VIA EDITOR
+  // REEDIÇÃO VIA EDITOR — CORRIGIDO
   // ============================================
   async handleReedit({ currentContent, instruction, serviceType }) {
     if (!this.creditModel.canConsume(1)) {
@@ -174,20 +174,32 @@ export class DocumentController {
       return;
     }
 
-    const btn = document.getElementById('btnGen');
-    if (btn) btn.disabled = true;
-
     NotificationView.info('🤖 A reeditar documento...');
 
     try {
-      // Construir prompt para reedição
-      const reeditPrompt = `Reedita o seguinte documento conforme a instrução:\n\n---\n${currentContent}\n---\n\nINSTRUÇÃO: ${instruction}\n\nMantenha o formato Markdown.`;
+      // ✅ CORREÇÃO: Usar generate() em vez de generateRaw()
+      // Construir prompt de reedição
+      const reeditPrompt = `EDITAR DOCUMENTO SEGUINTE conforme instrução: "${instruction}"
 
-      const result = await this.openRouter.generateRaw(reeditPrompt);
+DOCUMENTO ATUAL:
+"""
+${currentContent}
+"""
 
-      // Atualizar editor com novo conteúdo
+INSTRUÇÃO: ${instruction}
+
+Reescreva o documento completo aplicando as alterações pedidas. Mantenha formato Markdown.`;
+
+      const result = await this.queue.add(() =>
+        this.openRouter.generateRaw(null, {
+          prompt: reeditPrompt,
+          serviceType: serviceType || this.docModel.service,
+        })
+      );
+
+      // ✅ Atualizar editor com novo conteúdo
       if (window.documentEditor) {
-        window.documentEditor.loadDocument(result.document, serviceType);
+        window.documentEditor.loadDocument(result.document, serviceType || this.docModel.service);
         this.docModel.setGenerated(result.document, result.model);
       }
 
@@ -198,15 +210,15 @@ export class DocumentController {
 
     } catch (err) {
       NotificationView.error('❌ ' + (err.message || 'Erro na reedição.'));
-    } finally {
-      const btn = document.getElementById('btnGen');
-      if (btn) btn.disabled = false;
     }
   }
 }
 
-// controllers/PaymentController.js
-import { MPesaService } from '../services/Services.js';
+// ============================================
+// PAYMENT CONTROLLER — CORRIGIDO
+// ============================================
+import { paymentService } from '../services/PaymentService.js';
+import { ModalView, NotificationView } from '../views/Views.js'; // ✅ ADICIONADO
 
 const PACKAGES = {
   starter: { amount:150, credits:10 },
@@ -217,10 +229,10 @@ const PACKAGES = {
 export class PaymentController {
   constructor(creditModel) {
     this.creditModel = creditModel;
-    this.mpesa       = new MPesaService();
+    this.payment       = paymentService;
     this.selectedPkg = null;
     this._bindEvents();
-    this.mpesa.showSandboxWarning();
+    // ✅ REMOVIDO: this.mpesa.showSandboxWarning() — não existe mais
   }
 
   _bindEvents() {
@@ -251,8 +263,10 @@ export class PaymentController {
     this.selectedPkg = key;
     const section = document.getElementById('mpesaSection');
     section.style.display = 'flex';
-    document.getElementById('mpEnvLabel').textContent = this.mpesa.isSandbox()
-      ? '⚠️ Modo sandbox — pagamento não real' : 'Ambiente de produção';
+    
+    // ✅ CORREÇÃO: Removido this.mpesa.isSandbox() — não existe
+    document.getElementById('mpEnvLabel').textContent = '⚠️ Pagamento manual via M-Pesa';
+    
     document.getElementById('paySummary').innerHTML =
       `<span>Pacote <strong>${key.charAt(0).toUpperCase()+key.slice(1)}</strong></span><strong>MZN ${pkg.amount} → ${pkg.credits} créditos</strong>`;
     this.onPhoneInput(document.getElementById('phoneInput'));
@@ -274,7 +288,18 @@ export class PaymentController {
     btn.textContent = '⏳ A processar…';
 
     try {
-      const result = await this.mpesa.processPayment(phone, pkg.amount, this.selectedPkg);
+      // ✅ CORREÇÃO: Usar paymentService.processPayment()
+      const result = await this.payment.processPayment(this.selectedPkg, phone, 'user-' + Date.now());
+      
+      // ✅ Se for pagamento manual, mostra instruções
+      if (result.mode === 'manual') {
+        NotificationView.info('📱 Envie o comprovativo pelo WhatsApp');
+        // Abre WhatsApp com mensagem pré-preenchida
+        if (result.whatsappLink) {
+          window.open(result.whatsappLink, '_blank');
+        }
+      }
+      
       await this.creditModel.add(pkg.credits);
       NotificationView.success(`✅ ${pkg.credits} créditos adicionados!`);
       this.close();

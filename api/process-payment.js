@@ -104,7 +104,7 @@ export default async function handler(req, res) {
   // MODO 2: PAGAMENTO MANUAL (Fallback)
   // ============================================
   if (mode === 'manual') {
-    const whatsappNumber = process.env.WHATSAPP_NUMBER || '258840000000';
+    const whatsappNumber = process.env.WHATSAPP_NUMBER || '258858695506';
 
     const manualId = `MAN${Date.now()}`;
 
