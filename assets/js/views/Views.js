@@ -1,5 +1,3 @@
-import { DocumentEditor } from '../components/DocumentEditor.js';
-
 // views/NotificationView.js — Sistema de notificações em pilha
 export const NotificationView = {
   _stack: document.getElementById('notifStack'),
@@ -19,10 +17,10 @@ export const NotificationView = {
   },
 
   success(msg) { this._show(msg, 'success'); },
-  error(msg)   { this._show(msg, 'error', 5000); },
-  warn(msg)    { this._show(msg, 'warn', 4000); },
-  info(msg)    { this._show(msg, 'info'); },
-  show(msg)    { this._show(msg); },
+  error(msg) { this._show(msg, 'error', 5000); },
+  warn(msg) { this._show(msg, 'warn', 4000); },
+  info(msg) { this._show(msg, 'info'); },
+  show(msg) { this._show(msg); },
 };
 
 // views/ModalView.js — Abrir/fechar overlays
@@ -43,29 +41,32 @@ import { Formatter } from '../utils/Formatter.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 
 export const DocumentView = {
-  // Renderizar campos do formulário
   renderForm(svc, formBodyEl, formFootEl) {
     formBodyEl.innerHTML = this._buildFieldsHTML(svc.fields);
     if (svc.hasAI) {
       formFootEl.innerHTML = `
-        <div class="loader-wrap" id="loaderWrap">
-          <div class="l-spin"></div>
-          <div class="l-steps" id="loaderSteps"></div>
-        </div>
-        <button class="btn-gen" id="btnGen">
-          <span>✦</span> Gerar com IA &nbsp;<small style="opacity:.65;font-weight:500">(1 crédito)</small>
-        </button>`;
+        <button id="btnGen" class="btn-primary" type="button">
+          <span>✨ Gerar com IA</span>
+          <small>1 crédito</small>
+        </button>
+      `;
     } else {
       formFootEl.innerHTML = `
-        <button class="btn-wa-direct" id="btnWaDirect">
-          💬 Enviar pelo WhatsApp
-        </button>`;
+        <button id="btnWaDirect" class="btn-wa" type="button">
+          <span>📱 Enviar pelo WhatsApp</span>
+          <small>Grátis</small>
+        </button>
+      `;
     }
   },
 
   _buildFieldsHTML(fields) {
     return fields.map(f => {
-      if (f.row) return `<div class="fg-row">${f.items.map(fi => this._field(fi)).join('')}</div>`;
+      if (f.row) return `
+        <div class="form-row">
+          ${f.items.map(fi => this._field(fi)).join('')}
+        </div>
+      `;
       return this._field(f);
     }).join('');
   },
@@ -75,30 +76,35 @@ export const DocumentView = {
     let input = '';
     if (f.type === 'select') {
       const opts = (f.opts || []).map(o => `<option value="${o}">${o}</option>`).join('');
-      input = `<select class="fs" id="${f.id}" name="${f.id}" ${req}><option value="">Seleccione…</option>${opts}</select>`;
+      input = `<select id="${f.id}" ${req}><option value="" disabled selected>${f.ph || 'Selecione…'}</option>${opts}</select>`;
     } else if (f.type === 'textarea') {
-      input = `<textarea class="fta" id="${f.id}" name="${f.id}" placeholder="${f.ph||''}" ${req}></textarea>`;
+      input = `<textarea id="${f.id}" ${req} placeholder="${f.ph || ''}" rows="4"></textarea>`;
     } else {
-      const extras = [f.min?`min="${f.min}"`:'', f.max?`max="${f.max}"`:'', f.val?`value="${f.val}"`:''].filter(Boolean).join(' ');
-      input = `<input class="fi" id="${f.id}" name="${f.id}" type="${f.type||'text'}" placeholder="${f.ph||''}" ${extras} ${req}/>`;
+      const extras = [f.min ? `min="${f.min}"` : '', f.max ? `max="${f.max}"` : '', f.val ? `value="${f.val}"` : ''].filter(Boolean).join(' ');
+      input = `<input type="${f.type}" id="${f.id}" ${req} placeholder="${f.ph || ''}" ${extras} />`;
     }
-    return `<div class="fg"><label class="fl">${f.label}${f.required?' *':''}</label>${input}</div>`;
+    return `
+      <div class="field-group">
+        <label for="${f.id}">${f.label}${f.required ? ' *' : ''}</label>
+        ${input}
+      </div>
+    `;
   },
 
-  // Mostrar loader animado
   showLoader(steps = []) {
     const lw = document.getElementById('loaderWrap');
     const ls = document.getElementById('loaderSteps');
     const btn = document.getElementById('btnGen');
     if (!lw || !ls) return;
-    ls.innerHTML = steps.map((s,i) =>
-      `<div class="ls" id="lstep${i}"><div class="ls-dot"></div>${s}</div>`).join('');
+    ls.innerHTML = steps.map((s, i) =>
+      `<div class="lstep" id="lstep${i}"><span class="lnum">${i + 1}</span><span>${s}</span></div>`
+    ).join('');
     lw.classList.add('show');
     if (btn) btn.style.display = 'none';
 
     let i = 0;
     const iv = setInterval(() => {
-      if (i > 0) document.getElementById(`lstep${i-1}`)?.classList.replace('active','done');
+      if (i > 0) document.getElementById(`lstep${i - 1}`)?.classList.replace('active', 'done');
       const el = document.getElementById(`lstep${i}`);
       if (el) el.classList.add('active');
       i++;
@@ -115,42 +121,38 @@ export const DocumentView = {
     if (btn) { btn.style.display = ''; btn.disabled = false; }
   },
 
-  // Renderizar resultado gerado com Editor
   renderResult(content, svc, credits, model) {
     document.getElementById('resModel').textContent = model || 'openrouter';
     document.getElementById('resMeta').innerHTML =
-      `<span>📄 ${svc.title}</span><span>⚡ ${credits} créditos restantes</span><span>🕐 ${new Date().toLocaleTimeString('pt')}</span>`;
-    
-    // ✅ CORREÇÃO: Manter o resPreview, criar div interna para o editor
+      `📄 ${svc.title} &nbsp;|&nbsp; ⚡ ${credits} créditos restantes &nbsp;|&nbsp; 🕐 ${new Date().toLocaleTimeString('pt')}`;
+
     const previewContainer = document.getElementById('resPreview');
     if (previewContainer) {
-      previewContainer.innerHTML = ''; // Limpa conteúdo anterior
-      
-      // Criar div interna para o editor (NÃO alterar o id do resPreview!)
+      previewContainer.innerHTML = '';
       const editorWrapper = document.createElement('div');
       editorWrapper.id = 'editor-container';
       editorWrapper.style.cssText = 'width:100%;height:100%;';
       previewContainer.appendChild(editorWrapper);
-      
-      // Criar instância do editor
-      window.documentEditor = new DocumentEditor('editor-container');
-      window.documentEditor.loadDocument(content, svc.title);
-      
-      // Configurar callback para reedição
-      window.documentEditor.onReedit = (data) => {
-        this._handleReedit(data);
-      };
+
+      if (window.documentEditor) {
+        window.documentEditor.loadDocument(content, svc.title);
+      } else {
+        previewContainer.innerHTML = `<pre style="white-space:pre-wrap;font-family:inherit;padding:20px;">${content.replace(/</g, '&lt;')}</pre>`;
+      }
+
+      if (window.documentEditor) {
+        window.documentEditor.onReedit = (data) => {
+          this._handleReedit(data);
+        };
+      }
     }
   },
 
-  // Handler para reedição via IA
   _handleReedit(reeditData) {
-    // Disparar evento para o controller tratar
     const event = new CustomEvent('document:reedit', { detail: reeditData });
     document.dispatchEvent(event);
   },
 
-  // Colectar dados do formulário
   collectData(fields) {
     const data = {};
     const collect = f => { const el = document.getElementById(f.id); if (el) data[f.id] = el.value.trim(); };

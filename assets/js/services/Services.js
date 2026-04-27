@@ -1,11 +1,11 @@
-// services/OpenRouterService.js — IA gratuita com fallback automático
+// assets/js/services/OpenRouterService.js — IA gratuita com fallback automático
 export class OpenRouterService {
   constructor() {
     this.endpoint = '/api/generate-document';
     this.models = {
       primary:   'meta-llama/llama-3.3-70b-instruct:free',
       fallback:  'google/gemma-3-27b-it:free',
-      emergency: 'mistralai/mistral-7b-instruct:free',
+      emergency: 'nvidia/nemotron-3-nano-30b-a3b:free',
     };
     this.currentModel = this.models.primary;
   }
@@ -15,26 +15,25 @@ export class OpenRouterService {
     return await this._callBackend(serviceType, prompt);
   }
 
-  // Para reedição via Editor
   async generateRaw(prompt, reeditData = null) {
     const userId = localStorage.getItem('mz_uid') || 'anon';
     const credits = JSON.parse(localStorage.getItem('mz_credits') ?? '0') || 0;
 
-    const body = reeditData 
-      ? { 
-          serviceType: 'reedit', 
-          prompt: prompt, // Prompt original (não usado na reedição)
-          userId, 
+    const body = reeditData
+      ? {
+          serviceType: reeditData.serviceType || 'reedit',
+          prompt: prompt,
+          userId,
           userCredits: credits,
           _reedit: true,
           _currentContent: reeditData.currentContent,
           _instruction: reeditData.instruction,
         }
-      : { 
-          serviceType: 'reedit', 
-          prompt, 
-          userId, 
-          userCredits: credits 
+      : {
+          serviceType: 'reedit',
+          prompt,
+          userId,
+          userCredits: credits
         };
 
     const res = await fetch(this.endpoint, {
@@ -83,8 +82,8 @@ export class OpenRouterService {
     const builders = {
       trabalho: () =>
         `Gere um TRABALHO ACADÉMICO COMPLETO sobre "${data.tema}".
-Nível: ${data.nivel}. Disciplina: ${data.disciplina}. Extensão: ${data.paginas||5} páginas.
-Requisitos: ${data.requisitos||'nenhum'}.${ocrBlock}
+Nível: ${data.nivel}. Disciplina: ${data.disciplina}. Extensão: ${data.paginas || 5} páginas.
+Requisitos: ${data.requisitos || 'nenhum'}.${ocrBlock}
 Estrutura obrigatória em Markdown:
 # [TÍTULO]
 (Capa completa)
@@ -97,24 +96,24 @@ Estrutura obrigatória em Markdown:
 
       cv: () =>
         `Crie um CURRÍCULO VITAE PROFISSIONAL em Markdown para o mercado moçambicano.
-Nome: ${data.nome}. Cargo: ${data.cargo}. Nascimento: ${data.nascimento||'-'}.
-Contacto: ${data.contacto||'-'}. Email: ${data.email||'-'}.
-Formação: ${data.formacao}. Experiência: ${data.experiencia||'Recém-formado'}.
-Habilidades: ${data.habilidades||'-'}. Objectivo: ${data.objectivo||'-'}.${ocrBlock}
+Nome: ${data.nome}. Cargo: ${data.cargo}. Nascimento: ${data.nascimento || '-'}.
+Contacto: ${data.contacto || '-'}. Email: ${data.email || '-'}.
+Formação: ${data.formacao}. Experiência: ${data.experiencia || 'Recém-formado'}.
+Habilidades: ${data.habilidades || '-'}. Objectivo: ${data.objectivo || '-'}${ocrBlock}
 Formato Europass: Dados Pessoais → Objectivo → Formação → Experiência (verbos de acção) → Competências → Referências.`,
 
       carta: () =>
         `Redija uma CARTA FORMAL COMPLETA do tipo "${data.tipo}".
-Remetente: ${data.remetenteNome}, ${data.remetenteLocal||'Maputo'}.
+Remetente: ${data.remetenteNome}, ${data.remetenteLocal || 'Maputo'}.
 Destinatário: ${data.destinatarioNome} — ${data.destinatarioEnti}.
 Assunto: ${data.assunto}. Pontos: ${data.pontos}.${ocrBlock}
 Estrutura: cabeçalho com data/local → dados de remetente e destinatário → assunto → saudação formal → 3-4 parágrafos → fecho → assinatura.`,
 
       orcamento: () =>
         `Elabore um ORÇAMENTO DE CONSTRUÇÃO DETALHADO em Markdown com tabelas.
-Obra: ${data.tipoObra}. Área: ${data.area||'?'} m². Local: ${data.local}.
-Acabamento: ${data.acabamento||'médio'}. Fase: ${data.fase}. Prazo: ${data.prazo||60} dias.
-Detalhes: ${data.extra||'padrão'}.${ocrBlock}
+Obra: ${data.tipoObra}. Área: ${data.area || '?'} m². Local: ${data.local}.
+Acabamento: ${data.acabamento || 'médio'}. Fase: ${data.fase}. Prazo: ${data.prazo || 60} dias.
+Detalhes: ${data.extra || 'padrão'}.${ocrBlock}
 Incluir: resumo da obra → tabelas de materiais por fase (cimento, tijolos, ferro, areia, telha etc.) com quantidades e preços MZN → mão-de-obra → equipamentos → resumo financeiro com total → condições comerciais.
 Preços de mercado moçambicano ${new Date().getFullYear()}.`,
     };
@@ -141,13 +140,6 @@ export class MPesaService {
   }
 
   isSandbox() { return this.env === 'sandbox'; }
-
-  showSandboxWarning() {
-    if (this.isSandbox()) {
-      const el = document.getElementById('sandboxBar');
-      if (el) el.style.display = 'flex';
-    }
-  }
 
   validatePhone(raw) {
     if (!Validator.phone(raw)) throw new Error('Número inválido. Use formato: 84 XXX XXXX');
@@ -185,13 +177,11 @@ export class SupabaseService {
   }
 
   async init() {
-    // Verificar se as env vars existem (injectadas via meta tag pelo netlify function)
-    const url  = window.__SUPABASE_URL__;
-    const key  = window.__SUPABASE_ANON_KEY__;
+    const url = window.__SUPABASE_URL__;
+    const key = window.__SUPABASE_ANON_KEY__;
     if (!url || !key) { console.info('[Supabase] Não configurado — modo localStorage'); return false; }
 
     try {
-      // Importação dinâmica (evita bundle desnecessário se não configurado)
       const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
       this._client = createClient(url, key);
       this._ready = true;
@@ -209,13 +199,11 @@ export class SupabaseService {
         .from('users').select('credits').eq('id', userId).single();
 
       if (error?.code === 'PGRST116') {
-        // Novo utilizador
         await this._client.from('users').insert({ id: userId, credits: localCredits });
         return { credits: localCredits };
       }
       if (error) throw error;
 
-      // Resolver conflito: maior valor vence (evita perda de compras)
       const resolved = Math.max(data.credits, localCredits);
       if (resolved !== data.credits) {
         await this._client.from('users').update({ credits: resolved }).eq('id', userId);

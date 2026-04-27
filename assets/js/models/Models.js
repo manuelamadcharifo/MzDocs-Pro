@@ -6,10 +6,10 @@ export class QueueModel {
     this.queue = [];
     this.processing = false;
     this.lastRequest = 0;
-    this.minInterval = 3000; // 3s entre requests
+    this.minInterval = 3000;
     this.maxRetries = 3;
   }
- 
+
   add(job) {
     return new Promise((resolve, reject) => {
       const item = { id: Date.now() + Math.random(), job, resolve, reject, retries: 0 };
@@ -39,7 +39,7 @@ export class QueueModel {
       if (is429 && item.retries < this.maxRetries) {
         item.retries++;
         const backoff = Math.pow(2, item.retries) * 1500;
-        NotificationView.warn(`Limite de velocidade. Tentando em ${Math.round(backoff/1000)}s…`);
+        NotificationView.warn(`Limite de velocidade. Tentando em ${Math.round(backoff / 1000)}s…`);
         await this._sleep(backoff);
       } else {
         this.queue.shift();
@@ -84,7 +84,6 @@ export class CreditModel {
   }
 
   async init() {
-    // 1. Carregar local (instantâneo)
     const paid = Storage.get('credits', 0);
     const freeKey = Storage.getFreeKey();
     const freeUsed = Storage.get(freeKey, 0);
@@ -92,7 +91,6 @@ export class CreditModel {
     this.credits = paid + freeLeft;
     this._emit();
 
-    // 2. Tentar sync Supabase (assíncrono, não bloqueia)
     const ok = await this.supabase.init().catch(() => false);
     if (ok) {
       await this._syncFromServer();
@@ -118,14 +116,11 @@ export class CreditModel {
   async consume(n = 1) {
     if (!this.canConsume(n)) throw new Error('INSUFFICIENT_CREDITS');
 
-    // Deduzir no servidor (atômico)
     const server = await this.supabase.deductCredit(this.userId).catch(() => null);
     if (server !== null && server >= 0) {
       this.credits = server;
     } else {
-      // Fallback local
       this.credits = Math.max(0, this.credits - n);
-      // Deduzir do saldo de créditos gratuitos primeiro
       const freeKey = Storage.getFreeKey();
       const freeUsed = Storage.get(freeKey, 0);
       if (freeUsed < 3) Storage.set(freeKey, freeUsed + 1);
@@ -174,13 +169,15 @@ export class DocumentModel {
 }
 
 // models/UserModel.js — Dados do utilizador e suporte
+import { Storage } from '../utils/Storage.js';
+
 export class UserModel {
   constructor() {
     this.userId = Storage.getUserId();
-    this.WA_SUPPORT = '258840000000'; // ← altere para o número de suporte
+    this.WA_SUPPORT = '258858695506'; // ← ALTERE PARA O NÚMERO DE SUPORTE
   }
   openSupport(context = '') {
-    const msg = `[MzDocs Pro Suporte]\nID: ${this.userId.slice(0,12)}\n${context}`.trim();
+    const msg = `[MzDocs Pro Suporte]\nID: ${this.userId.slice(0, 12)}\n${context}`.trim();
     window.open(`https://wa.me/${this.WA_SUPPORT}?text=${encodeURIComponent(msg)}`, '_blank');
   }
 }
