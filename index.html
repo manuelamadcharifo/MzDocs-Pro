@@ -14,6 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="assets/css/styles.css"/>
+  <link rel="stylesheet" href="assets/css/auth.css">
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
 </head>
 <body>
@@ -245,6 +246,48 @@
 <div class="notif-stack" id="notifStack"></div>
 <!-- FAB -->
 <a class="fab" id="fabWa" href="#" target="_blank">💬</a>
+
+<script type="module">
+    import { authManager } from './assets/js/auth/AuthManager.js';
+    import { authUI } from './assets/js/auth/AuthUI.js';
+    
+    // Tornar globais para uso em outros módulos
+    window.authManager = authManager;
+    window.authUI = authUI;
+    
+    // Atualizar UI quando auth muda
+    authManager.onAuthChange(({ user, profile }) => {
+        updateAuthUI(user, profile);
+    });
+    
+    function updateAuthUI(user, profile) {
+        const authBtn = document.getElementById('authBtn');
+        const userMenu = document.getElementById('userMenu');
+        
+        if (user) {
+            // Utilizador logado
+            if (authBtn) authBtn.style.display = 'none';
+            if (userMenu) {
+                userMenu.style.display = 'flex';
+                userMenu.innerHTML = `
+                    <div class="user-avatar">${(profile?.full_name || 'U').charAt(0).toUpperCase()}</div>
+                    <span class="user-name">${profile?.full_name || 'Utilizador'}</span>
+                    <span class="credit-badge">💎 ${profile?.credits || 0}</span>
+                    <button id="btnLogout" class="btn-icon">🚪</button>
+                `;
+                document.getElementById('btnLogout')?.addEventListener('click', () => authManager.signOut());
+            }
+        } else {
+            // Visitante
+            if (authBtn) {
+                authBtn.style.display = 'block';
+                authBtn.textContent = '🔐 Entrar';
+                authBtn.onclick = () => authUI.open('login');
+            }
+            if (userMenu) userMenu.style.display = 'none';
+        }
+    }
+</script>
 
 <!-- APP ENTRY POINT (ES Modules) -->
 <script type="module" src="assets/js/app.js"></script>

@@ -1,181 +1,118 @@
-// api/process-payment.js
-// Processamento de pagamentos: M-Pesa + Manual (fallback)
-// Vercel Serverless Function
+// api/process-payment.js — M-Pesa C2B + Manual
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
-
-// Preços dos pacotes (em MZN)
 const PACKAGES = {
-  'basico': { credits: 5, price: 50, name: 'Básico' },
-  'padrao': { credits: 15, price: 120, name: 'Padrão' },
-  'premium': { credits: 50, price: 350, name: 'Premium' },
-  'ilimitado': { credits: 9999, price: 800, name: 'Ilimitado' },
+    starter: { amount: 150, credits: 10 },
+    basico: { amount: 350, credits: 25 },
+    pro: { amount: 750, credits: 60 }
 };
 
 export default async function handler(req, res) {
-  if (req.method === 'OPTIONS') {
-    return res.status(200).set(corsHeaders).end();
-  }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    
+    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-  if (req.method !== 'POST') {
-    return res.status(405).set(corsHeaders).json({ error: 'Método não permitido' });
-  }
+    const { phoneNumber, amount, packageId, environment, userId } = JSON.parse(req.body || '{}');
+    const pkg = PACKAGES[packageId];
 
-  const {
-    mode,           // 'mpesa' | 'manual'
-    packageId,
-    phoneNumber,    // Para M-Pesa
-    userId,
-    manualDetails,  // Para pagamento manual: { method, reference, screenshot }
-  } = req.body;
+    if (!pkg) return res.status(400).json({ error: 'Pacote inválido' });
 
-  // Validações
-  if (!packageId || !PACKAGES[packageId]) {
-    return res.status(400).set(corsHeaders).json({
-      error: 'Pacote inválido',
-      available: Object.keys(PACKAGES),
-    });
-  }
+    // Verificar se M-Pesa está configurado
+    const mpesaConfigured = process.env.MPESA_API_KEY && process.env.MPESA_SERVICE_CODE;
 
-  const pkg = PACKAGES[packageId];
-
-  // ============================================
-  // MODO 1: M-PESA AUTOMÁTICO
-  // ============================================
-  if (mode === 'mpesa') {
-    const mpesaActive = process.env.MPESA_ENV === 'production';
-
-    if (!mpesaActive) {
-      return res.status(503).set(corsHeaders).json({
-        error: 'M-Pesa indisponível',
-        details: 'Pagamento automático M-Pesa ainda não ativado',
-        fallback: 'Use modo manual',
-      });
+    if (mpesaConfigured && environment === 'production') {
+        // MODO AUTOMÁTICO M-PESA
+        try {
+            const result = await processMPesaPayment(phoneNumber, pkg.amount, packageId);
+            
+            // Guardar transação
+            await saveTransaction(userId, packageId, pkg, 'mpesa', result.receipt);
+            
+            return res.status(200).json({
+                success: true,
+                mode: 'automatic',
+                receipt: result.receipt,
+                message: 'Confirme o pagamento no seu telemóvel'
+            });
+        } catch (err) {
+            // Fallback para manual
+            return processManual(userId, packageId, pkg, phoneNumber, res);
+        }
+    } else {
+        // MODO MANUAL (padrão)
+        return processManual(userId, packageId, pkg, phoneNumber, res);
     }
+}
 
-    // Validação M-Pesa
-    if (!phoneNumber || !/^2588[4-7]\d{7}$/.test(phoneNumber)) {
-      return res.status(400).set(corsHeaders).json({
-        error: 'Número M-Pesa inválido',
-        format: '25884XXXXXXX',
-      });
-    }
-
-    try {
-      // Aqui integrarias a API real do M-Pesa quando ativares
-      // Por agora, simula o fluxo
-      const transactionId = `MP${Date.now()}`;
-
-      // Guarda transação pendente no Supabase (se disponível)
-      await saveTransaction({
-        id: transactionId,
-        userId,
-        packageId,
-        amount: pkg.price,
-        phoneNumber,
-        status: 'pending',
-        mode: 'mpesa',
-        createdAt: new Date().toISOString(),
-      });
-
-      return res.status(200).set(corsHeaders).json({
-        success: true,
-        mode: 'mpesa',
-        transactionId,
-        status: 'pending',
-        message: 'Confirme o pagamento no seu telemóvel M-Pesa',
-        instructions: `Dial *150# → Opção 3 (Pagamentos) → Código: ${transactionId}`,
-      });
-
-    } catch (error) {
-      console.error('Erro M-Pesa:', error);
-      return res.status(500).set(corsHeaders).json({
-        error: 'Falha no processamento M-Pesa',
-        fallback: 'Use modo manual',
-      });
-    }
-  }
-
-  // ============================================
-  // MODO 2: PAGAMENTO MANUAL (Fallback)
-  // ============================================
-  if (mode === 'manual') {
+async function processManual(userId, packageId, pkg, phoneNumber, res) {
+    const referenceId = 'MAN' + Math.random().toString(36).substring(2, 10).toUpperCase();
+    
+    // Guardar transação pendente
+    await saveTransaction(userId, packageId, pkg, 'manual', null, referenceId, phoneNumber);
+    
     const whatsappNumber = process.env.WHATSAPP_NUMBER || '258858695506';
-
-    const manualId = `MAN${Date.now()}`;
-
-    // Guarda pedido manual
-    await saveTransaction({
-      id: manualId,
-      userId,
-      packageId,
-      amount: pkg.price,
-      status: 'awaiting_payment',
-      mode: 'manual',
-      manualDetails: manualDetails || {},
-      createdAt: new Date().toISOString(),
+    const message = `🧾 *PAGAMENTO MzDocs Pro*\n\n` +
+        `📦 Pacote: ${packageId.toUpperCase()}\n` +
+        `💰 Valor: ${pkg.amount} MZN\n` +
+        `🆔 Referência: ${referenceId}\n` +
+        `📱 Número: ${phoneNumber}\n\n` +
+        `Por favor, faça M-Pesa para *${whatsappNumber}* e envie o comprovativo aqui.`;
+    
+    const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
+    
+    return res.status(200).json({
+        success: true,
+        mode: 'manual',
+        referenceId,
+        whatsappLink,
+        message: 'Envie o comprovativo pelo WhatsApp'
     });
-
-    const message = encodeURIComponent(
-      `*Pedido MzDocs Pro — ${manualId}*\n\n` +
-      `Pacote: ${pkg.name}\n` +
-      `Créditos: ${pkg.credits}\n` +
-      `Valor: ${pkg.price} MZN\n` +
-      `Utilizador: ${userId}\n\n` +
-      `Por favor envie o comprovativo de pagamento.`
-    );
-
-    return res.status(200).set(corsHeaders).json({
-      success: true,
-      mode: 'manual',
-      transactionId: manualId,
-      status: 'awaiting_payment',
-      package: pkg,
-      paymentInstructions: {
-        method: 'M-Pesa (manual)',
-        number: whatsappNumber,
-        amount: pkg.price,
-        reference: manualId,
-        steps: [
-          `1. Faça M-Pesa para ${whatsappNumber}`,
-          `2. Valor: ${pkg.price} MZN`,
-          `3. Referência: ${manualId}`,
-          `4. Envie comprovativo por WhatsApp`,
-        ],
-      },
-      whatsappLink: `https://wa.me/${whatsappNumber}?text=${message}`,
-      message: 'Envie o comprovativo de pagamento pelo WhatsApp para ativação manual',
-    });
-  }
-
-  // Modo desconhecido
-  return res.status(400).set(corsHeaders).json({
-    error: 'Modo de pagamento inválido',
-    validModes: ['mpesa', 'manual'],
-  });
 }
 
-// Helper para guardar transações (Supabase ou memória)
-async function saveTransaction(transaction) {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+async function processMPesaPayment(phone, amount, packageId) {
+    // Integração real com API M-Pesa C2B
+    // Requer: MPESA_API_KEY, MPESA_PUBLIC_KEY, MPESA_SERVICE_CODE
+    
+    const apiKey = process.env.MPESA_API_KEY;
+    const serviceCode = process.env.MPESA_SERVICE_CODE;
+    
+    const response = await fetch('https://api.mpesa.vm.co.mz:18346/ipg/v1x/c2bPayment/singleStage/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'Origin': process.env.SITE_URL
+        },
+        body: JSON.stringify({
+            input_TransactionReference: `MZDOCS-${Date.now()}`,
+            input_CustomerMSISDN: phone,
+            input_Amount: amount.toString(),
+            input_ThirdPartyReference: packageId,
+            input_ServiceProviderCode: serviceCode
+        })
+    });
 
-  if (supabaseUrl && supabaseKey) {
-    try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      await supabase.from('transactions').insert(transaction);
-      console.log('✅ Transação guardada:', transaction.id);
-    } catch (e) {
-      console.warn('Supabase indisponível, log local:', e.message);
-    }
-  } else {
-    console.log('📝 Transação (sem Supabase):', transaction);
-  }
+    if (!response.ok) throw new Error('M-Pesa API error');
+    
+    const data = await response.json();
+    return { receipt: data.output_TransactionID };
 }
 
-export const config = { maxDuration: 15 };
+async function saveTransaction(userId, packageId, pkg, method, receipt, referenceId, phone) {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    
+    await supabase.from('transactions').insert({
+        user_id: userId,
+        package_id: packageId,
+        amount: pkg.amount,
+        credits: pkg.credits,
+        status: method === 'mpesa' ? 'pending' : 'pending',
+        payment_method: method,
+        mpesa_receipt: receipt,
+        reference_id: referenceId,
+        phone_number: phone
+    });
+}

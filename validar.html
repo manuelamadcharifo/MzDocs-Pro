@@ -1,0 +1,150 @@
+<!-- validar.html — Página pública de validação -->
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validar Documento — MzDocs Pro</title>
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <style>
+        .validate-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1rem;
+        }
+        .validate-card {
+            background: white;
+            border-radius: 24px;
+            padding: 3rem;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+        }
+        .validate-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1.5rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+        }
+        .valid { background: #d1fae5; }
+        .invalid { background: #fee2e2; }
+        .validate-status {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        .validate-details {
+            color: #6b7280;
+            margin-bottom: 1.5rem;
+        }
+        .validate-meta {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: left;
+        }
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .meta-row:last-child { border: none; }
+    </style>
+</head>
+<body>
+    <div class="validate-page">
+        <div class="validate-card" id="validateCard">
+            <div class="validate-icon" id="validateIcon">⏳</div>
+            <h2 class="validate-status" id="validateStatus">A validar...</h2>
+            <p class="validate-details" id="validateDetails">Verificando autenticidade do documento</p>
+            <div class="validate-meta" id="validateMeta" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+        
+        const SUPABASE_URL = 'https://seu-projeto.supabase.co';
+        const SUPABASE_ANON_KEY = 'sua-anon-key';
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function validateDocument() {
+            const params = new URLSearchParams(window.location.search);
+            const docId = params.get('id');
+
+            if (!docId) {
+                showInvalid('Código de validação não fornecido');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('documents')
+                    .select('*, profiles(full_name)')
+                    .eq('id', docId)
+                    .single();
+
+                if (error || !data) {
+                    showInvalid('Documento não encontrado ou código inválido');
+                    return;
+                }
+
+                showValid(data);
+            } catch (err) {
+                showInvalid('Erro na validação: ' + err.message);
+            }
+        }
+
+        function showValid(doc) {
+            document.getElementById('validateIcon').textContent = '✅';
+            document.getElementById('validateIcon').className = 'validate-icon valid';
+            document.getElementById('validateStatus').textContent = 'Documento Válido';
+            document.getElementById('validateStatus').style.color = '#059669';
+            document.getElementById('validateDetails').textContent = 'Este documento foi gerado autenticamente pelo MzDocs Pro';
+            
+            document.getElementById('validateMeta').style.display = 'block';
+            document.getElementById('validateMeta').innerHTML = `
+                <div class="meta-row">
+                    <span>Tipo:</span>
+                    <strong>${doc.service_type}</strong>
+                </div>
+                <div class="meta-row">
+                    <span>Gerado por:</span>
+                    <strong>${doc.profiles?.full_name || 'Anónimo'}</strong>
+                </div>
+                <div class="meta-row">
+                    <span>Data:</span>
+                    <strong>${new Date(doc.created_at).toLocaleString('pt-MZ')}</strong>
+                </div>
+                <div class="meta-row">
+                    <span>Modelo IA:</span>
+                    <strong>${doc.model_used}</strong>
+                </div>
+                <div class="meta-row">
+                    <span>Hash:</span>
+                    <code>${doc.id.slice(0, 16)}...</code>
+                </div>
+            `;
+        }
+
+        function showInvalid(reason) {
+            document.getElementById('validateIcon').textContent = '❌';
+            document.getElementById('validateIcon').className = 'validate-icon invalid';
+            document.getElementById('validateStatus').textContent = 'Documento Inválido';
+            document.getElementById('validateStatus').style.color = '#dc2626';
+            document.getElementById('validateDetails').textContent = reason;
+        }
+
+        validateDocument();
+    </script>
+</body>
+</html>

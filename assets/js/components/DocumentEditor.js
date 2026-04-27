@@ -1,383 +1,220 @@
 // assets/js/components/DocumentEditor.js
-// Editor Markdown + Preview ao vivo + Toolbar
-import { exportService } from '../utils/ExportService.js';
+// Editor Markdown interativo com exportação multi-formato
+
+import { exportManager } from '../utils/ExportManager.js';
+import { authManager } from '../auth/AuthManager.js';
 
 export class DocumentEditor {
-  constructor(containerId) {
-    this.container = document.getElementById(containerId);
-    this.content = '';
-    this.originalContent = '';
-    this.onSave = null;
-    this.onExport = null;
-    this.onReedit = null;
-    this._init();
-  }
-
-  _init() {
-    this.container.innerHTML = `
-      <div class="doc-editor" style="
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        background: white;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-      ">
-        <!-- Toolbar -->
-        <div class="editor-toolbar" style="
-          display: flex;
-          gap: 8px;
-          padding: 12px 16px;
-          background: #f8fafc;
-          border-bottom: 1px solid #e2e8f0;
-          flex-wrap: wrap;
-          align-items: center;
-        ">
-          <span style="font-weight: 600; color: #1e293b; margin-right: 8px;">✏️ Editor</span>
-          
-          <button data-action="bold" title="Negrito" style="${this._btnStyle()}">
-            <strong>B</strong>
-          </button>
-          <button data-action="italic" title="Itálico" style="${this._btnStyle()}">
-            <em>I</em>
-          </button>
-          <button data-action="heading" title="Título" style="${this._btnStyle()}">
-            H
-          </button>
-          <button data-action="list" title="Lista" style="${this._btnStyle()}">
-            • List
-          </button>
-          <div style="width: 1px; height: 24px; background: #cbd5e1; margin: 0 4px;"></div>
-          
-          <button data-action="undo" title="Desfazer" style="${this._btnStyle()}">
-            ↩️
-          </button>
-          <button data-action="reset" title="Original" style="${this._btnStyle()}">
-            🔄
-          </button>
-          <div style="width: 1px; height: 24px; background: #cbd5e1; margin: 0 4px;"></div>
-          
-          <button data-action="reedit" title="Pedir reedição à IA" style="${this._btnStyle('#7c3aed', '#fff')}">
-            🤖 Reeditar
-          </button>
-          <div style="flex: 1;"></div>
-          
-          <button data-action="copy" title="Copiar" style="${this._btnStyle()}">
-            📋 Copiar
-          </button>
-          <button data-action="download-txt" title="Download TXT" style="${this._btnStyle()}">
-            📝 .txt
-          </button>
-          <button data-action="download-pdf" title="Download PDF" style="${this._btnStyle('#dc2626', '#fff')}">
-            📕 PDF
-          </button>
-          <button data-action="download-word" title="Download Word" style="${this._btnStyle('#2563eb', '#fff')}">
-            📘 Word
-          </button>
-          <button data-action="whatsapp" title="Enviar WhatsApp" style="${this._btnStyle('#25d366', '#fff')}">
-            📱 WhatsApp
-          </button>
-        </div>
-
-        <!-- Área principal: Editor + Preview -->
-        <div class="editor-body" style="
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
-          padding: 0 16px 16px;
-          min-height: 500px;
-        ">
-          <!-- Editor -->
-          <div class="editor-pane">
-            <label style="
-              display: block;
-              font-size: 12px;
-              font-weight: 600;
-              color: #64748b;
-              margin-bottom: 6px;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-            ">Editar Markdown</label>
-            <textarea class="editor-textarea" style="
-              width: 100%;
-              min-height: 500px;
-              padding: 16px;
-              border: 2px solid #e2e8f0;
-              border-radius: 8px;
-              font-family: 'Monaco', 'Consolas', monospace;
-              font-size: 14px;
-              line-height: 1.6;
-              resize: vertical;
-              background: #fafafa;
-            "></textarea>
-          </div>
-
-          <!-- Preview -->
-          <div class="preview-pane">
-            <label style="
-              display: block;
-              font-size: 12px;
-              font-weight: 600;
-              color: #64748b;
-              margin-bottom: 6px;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-            ">👁️ Preview</label>
-            <div class="preview-content" style="
-              width: 100%;
-              min-height: 500px;
-              padding: 24px;
-              border: 2px solid #e2e8f0;
-              border-radius: 8px;
-              background: white;
-              overflow-y: auto;
-              font-family: 'Georgia', 'Times New Roman', serif;
-              line-height: 1.8;
-            "></div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    this.textarea = this.container.querySelector('.editor-textarea');
-    this.preview = this.container.querySelector('.preview-content');
-    
-    this._bindEvents();
-  }
-
-  _btnStyle(bg = '#f1f5f9', color = '#334155') {
-    return `
-      padding: 6px 12px;
-      border: 1px solid #cbd5e1;
-      border-radius: 6px;
-      background: ${bg};
-      color: ${color};
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.2s;
-    `;
-  }
-
-  _bindEvents() {
-    // Live preview
-    this.textarea.addEventListener('input', () => {
-      this.content = this.textarea.value;
-      this._renderPreview();
-    });
-
-    // Toolbar
-    this.container.querySelectorAll('[data-action]').forEach(btn => {
-      btn.addEventListener('click', (e) => this._handleAction(e.target.dataset.action));
-    });
-  }
-
-  // ============================================
-  // CARREGAR DOCUMENTO
-  // ============================================
-  loadDocument(markdown, serviceType = 'documento') {
-    this.originalContent = markdown;
-    this.content = markdown;
-    this.serviceType = serviceType;
-    this.textarea.value = markdown;
-    this._renderPreview();
-  }
-
-  // ============================================
-  // RENDERIZAR PREVIEW (Markdown → HTML)
-  // ============================================
-  _renderPreview() {
-    const html = this._markdownToHtml(this.content);
-    this.preview.innerHTML = html;
-  }
-
-  _markdownToHtml(md) {
-    let html = md
-      // Headers
-      .replace(/^### (.*$)/gim, '<h3 style="color:#1e293b;margin-top:24px;margin-bottom:12px;">$1</h3>')
-      .replace(/^## (.*$)/gim, '<h2 style="color:#0f172a;margin-top:28px;margin-bottom:14px;border-bottom:2px solid #e2e8f0;padding-bottom:8px;">$1</h2>')
-      .replace(/^# (.*$)/gim, '<h1 style="color:#0f172a;font-size:28px;margin-bottom:16px;text-align:center;">$1</h1>')
-      
-      // Bold e Italic
-      .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      
-      // Listas
-      .replace(/^\- (.*$)/gim, '<li style="margin-bottom:6px;">$1</li>')
-      .replace(/(<li.*<\/li>\n?)+/g, '<ul style="margin-left:20px;margin-bottom:16px;">$&</ul>')
-      
-      // Tabelas (simples)
-      .replace(/\|(.+)\|/g, (match) => {
-        const cells = match.split('|').filter(c => c.trim());
-        if (cells.length === 0) return '';
-        const isHeader = match.includes('---');
-        if (isHeader) return '';
-        return `<tr>${cells.map(c => `<td style="border:1px solid #e2e8f0;padding:8px;">${c.trim()}</td>`).join('')}</tr>`;
-      })
-      
-      // Parágrafos
-      .replace(/\n\n/g, '</p><p style="margin-bottom:12px;">')
-      .replace(/^(?!<[hlu]|$)(.*$)/gim, '<p style="margin-bottom:12px;">$1</p>');
-
-    // Envolve em container
-    return `<div style="max-width:100%;">${html}</div>`;
-  }
-
-  // ============================================
-  // AÇÕES DA TOOLBAR
-  // ============================================
-  _handleAction(action) {
-    const ta = this.textarea;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const selected = ta.value.substring(start, end);
-
-    switch (action) {
-      case 'bold':
-        this._insertWrap('**', '**');
-        break;
-      case 'italic':
-        this._insertWrap('*', '*');
-        break;
-      case 'heading':
-        this._insertAtLineStart('## ');
-        break;
-      case 'list':
-        this._insertAtLineStart('- ');
-        break;
-      case 'undo':
-        // Simples: volta ao original se não houve alteração manual significativa
-        if (confirm('Desfazer todas as alterações?')) {
-          this.loadDocument(this.originalContent);
-        }
-        break;
-      case 'reset':
-        if (confirm('Voltar ao documento original gerado pela IA?')) {
-          this.loadDocument(this.originalContent);
-        }
-        break;
-      case 'reedit':
-        this._askReedit();
-        break;
-      case 'copy':
-        navigator.clipboard.writeText(this.content);
-        this._toast('✅ Copiado!');
-        break;
-      case 'download-txt':
-        this._downloadTxt();
-        break;
-      case 'download-pdf':
-        this._downloadPdf();
-        break;
-      case 'download-word':
-        this._downloadWord();
-        break;
-      case 'whatsapp':
-        this._sendWhatsApp();
-        break;
+    constructor() {
+        this.content = '';
+        this.serviceType = '';
+        this.modal = null;
+        this._createModal();
     }
-  }
 
-  _insertWrap(before, after) {
-    const ta = this.textarea;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const text = ta.value;
-    ta.value = text.substring(0, start) + before + text.substring(start, end) + after + text.substring(end);
-    ta.focus();
-    ta.setSelectionRange(start + before.length, end + before.length);
-    this.content = ta.value;
-    this._renderPreview();
-  }
+    _createModal() {
+        const html = `
+        <div id="editorOverlay" class="modal-overlay" style="display:none;">
+            <div class="editor-modal">
+                <div class="editor-header">
+                    <h3>✏️ Editor de Documento</h3>
+                    <div class="editor-actions">
+                        <button id="btnPreview" class="btn btn-ghost btn-sm">👁 Pré-visualizar</button>
+                        <button id="btnReedit" class="btn btn-primary btn-sm">🤖 Reeditar com IA</button>
+                        <button id="btnExportPdf" class="btn btn-ghost btn-sm">📄 PDF</button>
+                        <button id="btnExportWord" class="btn btn-ghost btn-sm">📝 Word</button>
+                        <button id="btnExportMd" class="btn btn-ghost btn-sm">💾 Markdown</button>
+                        <button id="btnCopy" class="btn btn-ghost btn-sm">📋 Copiar</button>
+                        <button id="editorClose" class="btn btn-close">×</button>
+                    </div>
+                </div>
+                
+                <div class="editor-body">
+                    <div class="editor-pane">
+                        <textarea id="editorTextarea" class="editor-textarea" placeholder="Edite seu documento aqui..."></textarea>
+                    </div>
+                    <div id="previewPane" class="preview-pane" style="display:none;">
+                        <div id="previewContent" class="preview-content"></div>
+                    </div>
+                </div>
+                
+                <div class="editor-footer">
+                    <span id="editorStats">0 palavras | 0 caracteres</span>
+                    <div class="editor-templates">
+                        <label>Template:</label>
+                        <select id="templateSelect">
+                            <option value="default">Padrão</option>
+                            <option value="formal">Formal Institucional</option>
+                            <option value="modern">Moderno</option>
+                            <option value="minimal">Minimalista</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>`;
 
-  _insertAtLineStart(prefix) {
-    const ta = this.textarea;
-    const start = ta.selectionStart;
-    const text = ta.value;
-    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
-    ta.value = text.substring(0, lineStart) + prefix + text.substring(lineStart);
-    ta.focus();
-    this.content = ta.value;
-    this._renderPreview();
-  }
+        if (!document.getElementById('editorOverlay')) {
+            const div = document.createElement('div');
+            div.innerHTML = html;
+            document.body.appendChild(div.firstElementChild);
+            this.modal = document.getElementById('editorOverlay');
+            this._bindEvents();
+        }
+    }
 
-  // ============================================
-  // REEDIÇÃO COM IA
-  // ============================================
-  _askReedit() {
-    const instruction = prompt(
-      '🤖 O que deseja alterar?\n\n' +
-      'Exemplos:\n' +
-      '• "Adicionar mais experiência profissional"\n' +
-      '• "Tornar mais formal"\n' +
-      '• "Adicionar secção de habilidades técnicas"\n' +
-      '• "Reduzir para 1 página"'
-    );
+    _bindEvents() {
+        document.getElementById('editorClose')?.addEventListener('click', () => this.close());
+        document.getElementById('btnCopy')?.addEventListener('click', () => this._copyContent());
+        document.getElementById('btnExportMd')?.addEventListener('click', () => this._downloadMarkdown());
+        document.getElementById('btnExportPdf')?.addEventListener('click', () => this._exportPDF());
+        document.getElementById('btnExportWord')?.addEventListener('click', () => this._exportWord());
+        document.getElementById('btnPreview')?.addEventListener('click', () => this._togglePreview());
+        document.getElementById('btnReedit')?.addEventListener('click', () => this._showReeditDialog());
+        
+        // Stats
+        document.getElementById('editorTextarea')?.addEventListener('input', (e) => {
+            this.content = e.target.value;
+            this._updateStats();
+        });
+    }
 
-    if (!instruction || !this.onReedit) return;
+    loadDocument(content, serviceType) {
+        this.content = content;
+        this.serviceType = serviceType;
+        
+        const textarea = document.getElementById('editorTextarea');
+        if (textarea) textarea.value = content;
+        
+        this._updateStats();
+        this.open();
+    }
 
-    this.onReedit({
-      currentContent: this.content,
-      instruction: instruction,
-      serviceType: this.serviceType,
-    });
-  }
+    open() {
+        this.modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
 
-  // ============================================
-  // EXPORTAR
-  // ============================================
-  _downloadTxt() {
-    exportService.toTxt(this.content, `mzdocs-${this.serviceType}-${Date.now()}.txt`);
-    this._toast('📥 Download TXT iniciado');
-  }
+    close() {
+        this.modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
 
-  async _downloadPdf() {
-    const html = this._markdownToHtml(this.content);
-    const filename = `mzdocs-${this.serviceType}-${Date.now()}.pdf`;
-    await exportService.toPdf(html, filename);
-    this._toast('📕 Download PDF iniciado');
-  }
+    // ============================================
+    // EXPORTAÇÕES
+    // ============================================
+    async _exportPDF() {
+        const btn = document.getElementById('btnExportPdf');
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        
+        try {
+            await exportManager.toPDF(this.content, 'Documento', {
+                type: this.serviceType,
+                user: authManager.profile?.full_name
+            });
+        } catch (err) {
+            alert('❌ Erro ao gerar PDF: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '📄 PDF';
+        }
+    }
 
-  _downloadWord() {
-    const html = this._markdownToHtml(this.content);
-    const filename = `mzdocs-${this.serviceType}-${Date.now()}.doc`;
-    exportService.toWord(html, filename);
-    this._toast('📘 Download Word iniciado');
-  }
+    async _exportWord() {
+        const btn = document.getElementById('btnExportWord');
+        btn.disabled = true;
+        btn.textContent = '⏳...';
+        
+        try {
+            await exportManager.toWord(this.content, 'Documento', {
+                type: this.serviceType,
+                user: authManager.profile?.full_name
+            });
+        } catch (err) {
+            alert('❌ Erro ao gerar Word: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '📝 Word';
+        }
+    }
 
-  _sendWhatsApp() {
-    // Usa o número do ExportService
-    exportService.toWhatsApp(this.content, this.serviceType || 'Documento');
-  }
+    _downloadMarkdown() {
+        const blob = new Blob([this.content], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mzdocs-${this.serviceType}-${Date.now()}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
 
-  // ============================================
-  // UTILS
-  // ============================================
-  _toast(msg) {
-    const toast = document.createElement('div');
-    toast.textContent = msg;
-    toast.style.cssText = `
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      background: #1e293b;
-      color: white;
-      padding: 12px 20px;
-      border-radius: 8px;
-      font-size: 14px;
-      z-index: 9999;
-      animation: slideIn 0.3s ease;
-    `;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  }
+    _copyContent() {
+        navigator.clipboard.writeText(this.content)
+            .then(() => alert('✅ Copiado!'))
+            .catch(() => alert('❌ Não foi possível copiar'));
+    }
 
-  getContent() {
-    return this.content;
-  }
+    // ============================================
+    // PRÉ-VISUALIZAÇÃO
+    // ============================================
+    _togglePreview() {
+        const previewPane = document.getElementById('previewPane');
+        const isVisible = previewPane.style.display !== 'none';
+        
+        if (isVisible) {
+            previewPane.style.display = 'none';
+        } else {
+            previewPane.style.display = 'block';
+            this._renderPreview();
+        }
+    }
 
-  getHtml() {
-    return this._markdownToHtml(this.content);
-  }
+    _renderPreview() {
+        const preview = document.getElementById('previewContent');
+        // Converter Markdown simples para HTML
+        let html = this.content
+            .replace(/#{6}\s(.+)/g, '<h6>$1</h6>')
+            .replace(/#{5}\s(.+)/g, '<h5>$1</h5>')
+            .replace(/#{4}\s(.+)/g, '<h4>$1</h4>')
+            .replace(/#{3}\s(.+)/g, '<h3>$1</h3>')
+            .replace(/#{2}\s(.+)/g, '<h2>$1</h2>')
+            .replace(/#{1}\s(.+)/g, '<h1>$1</h1>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`(.+?)`/g, '<code>$1</code>')
+            .replace(/\n/g, '<br>');
+        
+        preview.innerHTML = html;
+    }
+
+    // ============================================
+    // REEDIÇÃO COM IA
+    // ============================================
+    _showReeditDialog() {
+        const instruction = prompt('💡 O que deseja alterar no documento?\n\nExemplo: "Adicione mais detalhes na introdução"');
+        if (!instruction) return;
+
+        // Disparar evento para o DocumentController
+        document.dispatchEvent(new CustomEvent('document:reedit', {
+            detail: {
+                currentContent: this.content,
+                instruction,
+                serviceType: this.serviceType
+            }
+        }));
+    }
+
+    _updateStats() {
+        const words = this.content.trim().split(/\s+/).filter(w => w.length > 0).length;
+        const chars = this.content.length;
+        document.getElementById('editorStats').textContent = 
+            `${words} palavras | ${chars} caracteres`;
+    }
+
+    getContent() {
+        return this.content;
+    }
 }
+
+export const documentEditor = new DocumentEditor();
+window.documentEditor = documentEditor;
