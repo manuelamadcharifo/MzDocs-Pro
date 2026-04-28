@@ -5,18 +5,20 @@
   "headers": [
     {
       "source": "/(.*)\\.(js|mjs)",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/javascript"
-        }
-      ]
+      "headers": [{ "key": "Content-Type", "value": "application/javascript" }]
     }
   ],
   "routes": [
     { "src": "/api/generate-document", "dest": "/api/generate-document.js" },
     { "src": "/api/process-payment", "dest": "/api/process-payment.js" },
     { "src": "/api/verify-credits", "dest": "/api/verify-credits.js" },
+    { "src": "/api/auth/signup", "dest": "/api/auth/signup.js" },
+    { "src": "/api/auth/signin", "dest": "/api/auth/signin.js" },
+    { "src": "/api/auth/verify-otp", "dest": "/api/auth/verify-otp.js" },
+    { "src": "/api/auth/reset-password", "dest": "/api/auth/reset-password.js" },
+    { "src": "/api/admin/transactions", "dest": "/api/admin/transactions.js" },
+    { "src": "/api/admin/confirm-payment", "dest": "/api/admin/confirm-payment.js" },
+    { "src": "/api/admin/stats", "dest": "/api/admin/stats.js" },
     { "src": "/sw.js", "dest": "/sw.js" },
     { "src": "/(.*)", "dest": "/$1" }
   ]

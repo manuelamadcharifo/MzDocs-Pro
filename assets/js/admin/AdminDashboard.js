@@ -12,7 +12,6 @@ export class AdminDashboard {
             const today = new Date().toISOString().split('T')[0];
             const todayStart = `${today}T00:00:00.000Z`;
 
-            // Receita de hoje
             const { data: revenueData, error: revErr } = await this.supabase
                 .from('transactions')
                 .select('amount')
@@ -21,25 +20,21 @@ export class AdminDashboard {
 
             const revenue = revenueData?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0;
 
-            // Documentos de hoje
-            const { count: docsToday, error: docsErr } = await this.supabase
+            const { count: docsToday } = await this.supabase
                 .from('documents')
                 .select('*', { count: 'exact', head: true })
                 .gte('created_at', todayStart);
 
-            // Utilizadores de hoje
-            const { count: usersToday, error: usersErr } = await this.supabase
+            const { count: usersToday } = await this.supabase
                 .from('profiles')
                 .select('*', { count: 'exact', head: true })
                 .gte('created_at', todayStart);
 
-            // Transações pendentes
-            const { count: pendingCount, error: pendErr } = await this.supabase
+            const { count: pendingCount } = await this.supabase
                 .from('transactions')
                 .select('*', { count: 'exact', head: true })
                 .eq('status', 'pending');
 
-            // Actualizar DOM
             const setText = (id, val) => {
                 const el = document.getElementById(id);
                 if (el) el.textContent = val;
@@ -65,19 +60,17 @@ export class AdminDashboard {
 
     async renderCharts() {
         try {
-            const { createClient } = await import('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/+esm');
-            const Chart = createClient.Chart || window.Chart;
-            if (!Chart && !window.Chart) {
+            const ChartModule = await import('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/+esm');
+            const Chart = ChartModule.default || ChartModule.Chart || window.Chart;
+            
+            if (!Chart) {
                 console.warn('[AdminDashboard] Chart.js não disponível');
                 return;
             }
-            const chartLib = Chart || window.Chart;
 
-            // Destruir charts anteriores
             Object.values(this.charts).forEach(c => c?.destroy?.());
             this.charts = {};
 
-            // Dados dos últimos 7 dias
             const labels = [];
             const revenueData = [];
             const docsData = [];
@@ -109,10 +102,9 @@ export class AdminDashboard {
                 docsData.push(dc || 0);
             }
 
-            // Gráfico de receita
             const revCanvas = document.getElementById('revenueChart');
             if (revCanvas) {
-                this.charts.revenue = new chartLib(revCanvas, {
+                this.charts.revenue = new Chart(revCanvas, {
                     type: 'line',
                     data: {
                         labels,
@@ -139,7 +131,6 @@ export class AdminDashboard {
                 });
             }
 
-            // Documentos por tipo (últimos 30 dias)
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             const { data: typeData } = await this.supabase
@@ -157,7 +148,7 @@ export class AdminDashboard {
 
             const docCanvas = document.getElementById('documentsChart');
             if (docCanvas && typeValues.length > 0) {
-                this.charts.documents = new chartLib(docCanvas, {
+                this.charts.documents = new Chart(docCanvas, {
                     type: 'doughnut',
                     data: {
                         labels: typeLabels,

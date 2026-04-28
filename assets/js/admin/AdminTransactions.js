@@ -59,7 +59,13 @@ export class AdminTransactions {
         if (!tbody) return;
 
         if (transactions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8;">Nenhuma transação encontrada</td></tr>';
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:24px;color:#94a3b8;">
+                        Nenhuma transação encontrada
+                    </td>
+                </tr>
+            `;
             return;
         }
 
@@ -108,7 +114,6 @@ export class AdminTransactions {
             `;
         }).join('');
 
-        // Bind botões de confirmar
         tbody.querySelectorAll('.btn-confirm').forEach(btn => {
             btn.addEventListener('click', () => {
                 this.confirmPayment(
@@ -141,7 +146,6 @@ export class AdminTransactions {
             const { id, userId, credits } = this.selected;
             const adminId = authManager.user?.id;
 
-            // 1. Actualizar transação
             const { error: txErr } = await this.supabase
                 .from('transactions')
                 .update({
@@ -153,18 +157,15 @@ export class AdminTransactions {
 
             if (txErr) throw txErr;
 
-            // 2. Adicionar créditos via RPC
             const { data: newCredits, error: rpcErr } = await this.supabase
                 .rpc('add_credits', { user_id: userId, amount: credits });
 
             if (rpcErr) throw rpcErr;
 
-            // Fechar modal e recarregar
             document.getElementById('confirmModal').style.display = 'none';
             this.selected = null;
             await this.load();
 
-            // Notificação
             const notif = document.createElement('div');
             notif.style.cssText = 'position:fixed;top:20px;right:20px;padding:16px 20px;background:#10b981;color:#fff;border-radius:12px;font-weight:700;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
             notif.textContent = `✅ ${credits} créditos adicionados!`;

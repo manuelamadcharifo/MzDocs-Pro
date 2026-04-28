@@ -1,46 +1,97 @@
-# MzDocs Pro v3.0 🇲🇿
+# MzDocs Pro v3.1 🇲🇿
 
-Plataforma de geração inteligente de documentos para Moçambique — PWA completo com IA gratuita, pagamentos M-Pesa e editor integrado.
+Plataforma de geração inteligente de documentos para Moçambique — PWA completo com IA gratuita, pagamentos M-Pesa, OCR, editor Markdown e painel administrativo.
 
-**Stack:** Arquitectura MVC · OpenRouter (IA Gratuita) · Supabase · Vercel Serverless Functions · Tesseract.js OCR
+**Stack:** Arquitetura MVC · OpenRouter (IA Gratuita) · Supabase Auth + PostgreSQL · Vercel Serverless Functions · Tesseract.js OCR · Chart.js
 
 ---
 
-## 📁 Estrutura do Projeto
+## 📁 Estrutura do Projeto (v3.1)
 
 ```
 MzDocs-Pro/
 ├── index.html                              ← Entry point / SPA shell
+├── validar.html                            ← Página de validação de documentos/transações
 ├── manifest.json                           ← PWA manifest
-├── sw.js                                   ← Service Worker (cache + offline)
-├── vercel.json                             ← Configuração de deploy Vercel
+├── sw.js                                   ← Service Worker (Workbox)
+├── vercel.json                             ← Configuração de deploy Vercel + rotas API
+├── README.md                               ← Este ficheiro
 ├── api/                                    ← Serverless Functions (Vercel)
 │   ├── generate-document.js                ← Proxy seguro OpenRouter + fallback 3 modelos
-│   ├── process-payment.js                ← M-Pesa (automático) + Pagamento Manual via WhatsApp
-│   └── verify-credits.js                   ← Verificação de saldo Supabase + fallback local
+│   ├── process-payment.js                  ← M-Pesa (automático) + Pagamento Manual via WhatsApp
+│   ├── verify-credits.js                 ← Verificação de saldo Supabase (tabela profiles)
+│   ├── auth/
+│   │   ├── signup.js                       ← Registo de utilizadores (Supabase Admin SDK)
+│   │   ├── signin.js                       ← Login de utilizadores
+│   │   ├── verify-otp.js                   ← Verificação de token OTP/magic link
+│   │   └── reset-password.js             ← Envio de email de recuperação de password
+│   └── admin/
+│       ├── transactions.js                 ← Listar transações (requer admin)
+│       ├── confirm-payment.js            ← Confirmar pagamento pendente + adicionar créditos
+│       └── stats.js                        ← Estatísticas agregadas para dashboard
 ├── assets/
 │   ├── css/
-│   │   └── styles.css                      ← Estilos globais + temas
+│   │   ├── styles.css                      ← Estilos globais + temas
+│   │   └── editor.css                      ← Estilos do Editor Markdown
 │   └── js/
 │       ├── app.js                          ← Bootstrap MVC + Service Worker
-│       ├── utils/
-│       │   ├── Storage.js                  ← localStorage wrapper + userId
-│       │   └── Formatter.js                ← Validação telefone, montantes, markdown→HTML
+│       ├── auth/
+│       │   ├── AuthManager.js              ← Gestão de autenticação Supabase Auth
+│       │   └── AuthGuard.js                ← Proteção de rotas (auth/admin/guest)
+│       ├── admin/
+│       │   ├── AdminDashboard.js           ← Dashboard com gráficos (Chart.js)
+│       │   └── AdminTransactions.js        ← Gestão de transações pendentes
+│       ├── components/
+│       │   ├── DocumentEditor.js           ← Editor Markdown interativo + reedição IA
+│       │   ├── PDFExporter.js              ← Exportador dedicado PDF (jsPDF)
+│       │   ├── WordExporter.js             ← Exportador dedicado Word (.doc)
+│       │   └── ExelExporter.js             ← Exportador Excel para orçamentos (SheetJS)
+│       ├── controllers/
+│       │   ├── DocumentController.js         ← Controller de documentos
+│       │   ├── PaymentController.js        ← Controller de pagamentos
+│       │   └── OCRController.js            ← Controller de OCR (Tesseract.js)
 │       ├── models/
 │       │   └── Models.js                   ← CreditModel, DocumentModel, QueueModel, UserModel
 │       ├── services/
-│       │   ├── Services.js                 ← OpenRouterService, MPesaService, SupabaseService
+│       │   ├── Services.js                 ← OpenRouterService, SupabaseService
 │       │   ├── ServiceDefinitions.js       ← Definição dos 7 serviços disponíveis
-│       │   └── PaymentService.js           ← Facade pagamentos (M-Pesa + Manual)
-│       ├── views/
-│       │   └── Views.js                    ← NotificationView, ModalView, DocumentView
-│       ├── controllers/
-│       │   └── Controllers.js              ← DocumentController, PaymentController, OCRController
-│       └── components/
-│           └── DocumentEditor.js           ← Editor Markdown interativo + reedição IA
+│       │   ├── PaymentService.js           ← Facade pagamentos (M-Pesa + Manual)
+│       │   ├── MPesaService.js             ← Módulo standalone M-Pesa
+│       │   └── SupabaseService.js          ← Módulo standalone Supabase
+│       ├── utils/
+│       │   ├── Storage.js                  ← localStorage wrapper + userId
+│       │   └── Formatter.js                ← Validação telefone, montantes, markdown→HTML
+│       └── views/
+│           └── Views.js                    ← NotificationView, ModalView, DocumentView
 └── supabase/
-    └── schema.sql                          ← Tabelas users/transactions + função atómica deduct_credit()
+    ├── schema.sql                          ← Tabelas profiles/documents/transactions + funções RPC
+    └── policies.sql                        ← Row Level Security (RLS) + triggers
 ```
+
+> **NOTA:** O ficheiro `assets/js/controllers/Controllers.js` foi **removido** na v3.1. Era um monolito com 3 classes que causava erros de importação. Agora cada controller tem o seu próprio ficheiro.
+
+---
+
+## ⚠️ Problemas Resolvidos na v3.1
+
+| Problema | Estado | Detalhes |
+|----------|--------|----------|
+| `Controllers.js` monolito | ✅ RESOLVIDO | Separado em 3 ficheiros individuais |
+| `PaymentService.js` não usado | ✅ RESOLVIDO | Agora é a única fonte de verdade para pagamentos |
+| `MPesaService` duplicado | ✅ RESOLVIDO | Extraído para módulo standalone próprio |
+| HTML vazio no `DocumentEditor.js` | ✅ RESOLVIDO | Modal completo com todos os botões |
+| HTML vazio nos botões do formulário | ✅ RESOLVIDO | Botões "Gerar com IA" e "Enviar WhatsApp" renderizam |
+| Schema Supabase inconsistente | ✅ RESOLVIDO | `verify-credits.js` usa tabela `profiles` |
+| `sw.js` usava `openDB` sem importar | ✅ RESOLVIDO | Removido IndexedDB, usa Workbox puro |
+| Número WhatsApp inconsistente | ✅ RESOLVIDO | Unificado em todos os ficheiros |
+| `AuthManager.js` inexistente | ✅ RESOLVIDO | Criado módulo completo de autenticação |
+| `editor.css` inexistente | ✅ RESOLVIDO | Criado ficheiro de estilos do editor |
+| `policies.sql` inexistente | ✅ RESOLVIDO | Criado RLS policies + trigger handle_new_user |
+| `validar.html` inexistente | ✅ RESOLVIDO | Criada página de validação de documentos |
+| `vercel.json` sem rotas auth/admin | ✅ RESOLVIDO | Adicionadas todas as rotas necessárias |
+| `PaymentController.js` sem import Storage | ✅ RESOLVIDO | Adicionado `import { Storage }` |
+| `AdminDashboard.js` import Chart.js errado | ✅ RESOLVIDO | Corrigido para `.default` |
+| `AdminTransactions.js` HTML tabela inválido | ✅ RESOLVIDO | Corrigido para HTML de tabela válido |
 
 ---
 
@@ -58,7 +109,8 @@ MzDocs-Pro/
 
 1. Criar projecto em [supabase.com](https://supabase.com)
 2. Ir a **SQL Editor** → colar o conteúdo de `supabase/schema.sql` → executar
-3. Ir a **Project Settings → API** → copiar:
+3. Ir a **SQL Editor** → colar o conteúdo de `supabase/policies.sql` → executar
+4. Ir a **Project Settings → API** → copiar:
    - `Project URL` (`https://xxx.supabase.co`)
    - `anon public key`
    - `service_role key` (necessário para as Serverless Functions)
@@ -78,7 +130,7 @@ No **Vercel Dashboard** → Seu projeto → **Settings → Environment Variables
 | `MPESA_API_KEY` | Chave do portal M-Pesa | ❌ Opcional | Modo M-Pesa automático |
 | `MPESA_PUBLIC_KEY` | Chave pública RSA do M-Pesa | ❌ Opcional | Modo M-Pesa automático |
 | `MPESA_SERVICE_CODE` | Código de serviço M-Pesa | ❌ Opcional | Modo M-Pesa automático |
-| `SITE_URL` | URL do site em produção | ❌ Recomendado | Headers OpenRouter |
+| `SITE_URL` | URL do site em produção | ❌ Recomendado | Headers OpenRouter + reset password |
 
 > **Nota:** Sem `MPESA_*` configurado, o sistema funciona em **modo manual** — o utilizador faz M-Pesa para o número de WhatsApp e envia comprovativo.
 
@@ -103,29 +155,6 @@ vercel --prod
 3. Configure as **Environment Variables** (tabela acima)
 4. Clique **Deploy**
 
-### Configuração `vercel.json` (já incluída)
-
-```json
-{
-  "version": 2,
-  "cleanUrls": true,
-  "outputDirectory": ".",
-  "headers": [
-    {
-      "source": "/(.*)\.(js|mjs)",
-      "headers": [{ "key": "Content-Type", "value": "application/javascript" }]
-    }
-  ],
-  "routes": [
-    { "src": "/api/generate-document", "dest": "/api/generate-document.js" },
-    { "src": "/api/process-payment", "dest": "/api/process-payment.js" },
-    { "src": "/api/verify-credits", "dest": "/api/verify-credits.js" },
-    { "src": "/sw.js", "dest": "/sw.js" },
-    { "src": "/(.*)", "dest": "/$1" }
-  ]
-}
-```
-
 ---
 
 ## 🤖 Modelos IA (OpenRouter — Gratuitos)
@@ -134,7 +163,7 @@ vercel --prod
 |--------|-----------|------------|-------|
 | `meta-llama/llama-3.3-70b-instruct:free` | ⭐⭐⭐⭐⭐ | Médio | **1º — Principal** |
 | `google/gemma-3-27b-it:free` | ⭐⭐⭐⭐ | Rápido | **2º — Fallback automático** |
-| `mistralai/mistral-7b-instruct:free` | ⭐⭐⭐ | Muito rápido | **3º — Emergência** |
+| `nvidia/nemotron-3-nano-30b-a3b:free` | ⭐⭐⭐ | Muito rápido | **3º — Emergência** |
 
 O sistema tenta os modelos em cascata automaticamente se um falhar (rate limit, indisponibilidade).
 
@@ -161,7 +190,7 @@ CreditModel.consume(1) → SupabaseService.deductCredit() (atómico) + fallback 
         ↓
 DocumentEditor.render(result.document) ← Editor Markdown com reedição IA
         ↓
-Copiar / Download .md / WhatsApp / Reeditar
+Copiar / Download .md / PDF / Word / WhatsApp / Reeditar
 ```
 
 ---
@@ -177,7 +206,7 @@ Copiar / Download .md / WhatsApp / Reeditar
    - Valor: conforme pacote
    - Referência: ID da transação
 4. Administrador verifica comprovativo manualmente
-5. Adiciona créditos via painel Supabase
+5. Adiciona créditos via painel admin (RPC `add_credits`)
 
 ### Modo M-Pesa Automático (requer credenciais)
 
@@ -199,68 +228,28 @@ Copiar / Download .md / WhatsApp / Reeditar
 
 ---
 
-## 🔧 Problemas Resolvidos
+## 🔐 Autenticação e Admin
 
-### ✅ P1 — Rate Limit OpenRouter → QueueModel
-- Fila FIFO com mínimo 3s entre requests
-- Retry automático com backoff exponencial (1.5s → 3s → 6s)
-- UI mostra posição na fila em tempo real
+### Registo de Utilizadores
 
-### ✅ P2 — Custo API → OpenRouter Gratuito
-- Custo: **MZN 0** (era ~MZN 3.90/doc com APIs pagas)
-- Fallback automático entre 3 modelos gratuitos
-- Margem de lucro sobe para **~92%**
+- POST `/api/auth/signup` → cria conta com 3 créditos grátis
+- Trigger `handle_new_user` cria perfil automaticamente
+- RLS policies garantem isolamento de dados
 
-### ✅ P3 — Perda de Créditos → Supabase + Operações Atómicas
-- `deduct_credit()` usa transação atómica no Supabase
-- Conflito local vs servidor: **maior valor vence** (evita perda de compras)
-- Auto-sync a cada 30s em background
-- Fallback transparente para localStorage se Supabase indisponível
+### Login
 
-### ✅ P4 — Reedição de Documentos → DocumentEditor
-- Editor Markdown interativo no modal de resultado
-- Botão "Reeditar com IA" — envia documento atual + instrução
-- Consome 1 crédito por reedição
-- Preserva formatação e estrutura original
+- POST `/api/auth/signin` → retorna session token
+- Token usado em todas as chamadas autenticadas
+- `AuthManager.js` gere sessão no frontend
 
-### ✅ P5 — OCR Integrado → Tesseract.js
-- Reconhecimento de texto em imagens (português)
-- Usa rascunho OCR como base para geração de documentos
-- Funciona 100% no browser (sem backend)
-- Confiança exibida ao utilizador
+### Painel Administrativo
 
-### ✅ P6 — PWA Completo
-- `manifest.json` + `sw.js` para instalação e funcionamento offline
-- Cache de assets essenciais
-- Interface responsiva (mobile-first)
-
----
-
-## 📊 Comparativo v2 → v3
-
-| Métrica | v2 (Monolítico) | v3 (MVC + Vercel) |
-|---------|-----------------|-------------------|
-| Custo API/doc | MZN ~4 | **MZN 0** |
-| Arquitectura | Monolítico | **MVC modular** |
-| Rate limiting | Quebra | **Fila inteligente** |
-| Persistência | localStorage apenas | **Supabase + local** |
-| Fallback IA | Nenhum | **3 modelos** |
-| Reedição | Não existia | **Editor + IA** |
-| OCR | Não existia | **Tesseract.js** |
-| Deploy | Netlify | **Vercel** |
-| Margem/doc | ~73% | **~92%** |
-
----
-
-## 💰 Projecção de Receita
-
-| Volume | Receita bruta | Custo API | **Lucro** |
-|--------|---------------|-----------|-----------|
-| 50 docs/dia | MZN 2.300/mês | MZN 0 | **MZN 2.300** |
-| 100 docs/dia | MZN 4.600/mês | MZN 0 | **MZN 4.600** |
-| 300 docs/dia | MZN 13.800/mês | MZN 0 | **MZN 13.800** |
-
-_(Preço médio: MZN 46/doc · Custo OpenRouter: MZN 0 · Pacotes de créditos: MZN 15/crédito)_
+- Acesso restrito a utilizadores com `is_admin = true`
+- Endpoints `/api/admin/*` verificam token JWT + flag admin
+- Funcionalidades:
+  - Dashboard com estatísticas e gráficos
+  - Lista de transações com filtros
+  - Confirmação manual de pagamentos pendentes
 
 ---
 
@@ -268,27 +257,87 @@ _(Preço médio: MZN 46/doc · Custo OpenRouter: MZN 0 · Pacotes de créditos: 
 
 ### Número de WhatsApp
 
-Edite em **dois** ficheiros (substitua pelo seu número real):
+Edite em **todos** estes ficheiros (substitua pelo seu número real):
 
-1. `assets/js/controllers/Controllers.js`:
-```js
-const WA_NUMBER = '25884XXXXXXX'; // ← ALTERE PARA O TEU NÚMERO
-```
+1. `assets/js/controllers/DocumentController.js`:
+   ```javascript
+   const WA_NUMBER = '25884XXXXXXX'; // ← ALTERE PARA O TEU NÚMERO
+   ```
 
-2. `assets/js/models/Models.js` (UserModel):
-```js
-this.WA_SUPPORT = '25884XXXXXXX'; // ← ALTERE PARA O NÚMERO DE SUPORTE
-```
+2. `assets/js/services/PaymentService.js`:
+   ```javascript
+   const WA_NUMBER = '25884XXXXXXX'; // ← ALTERE PARA O TEU NÚMERO
+   ```
 
-3. **Environment Variable** `WHATSAPP_NUMBER` nas Vercel Functions
+3. `assets/js/models/Models.js` (UserModel):
+   ```javascript
+   this.WA_SUPPORT = '25884XXXXXXX'; // ← ALTERE PARA O NÚMERO DE SUPORTE
+   ```
+
+4. **Environment Variable** `WHATSAPP_NUMBER` nas Vercel Functions
 
 ### Supabase Schema
 
-Execute `supabase/schema.sql` no SQL Editor do Supabase. Inclui:
-- Tabela `users` (id, credits, last_sync, created_at)
-- Tabela `transactions` (id, user_id, package_id, amount, status, mode, created_at)
-- Função `deduct_credit(user_id UUID)` — operação atómica com lock de linha
+Execute **por ordem** no SQL Editor do Supabase:
+
+1. `supabase/schema.sql` — cria tabelas e funções RPC
+2. `supabase/policies.sql` — ativa RLS e cria policies
+
+Tabelas criadas:
+- `profiles` (id, full_name, phone, credits, is_admin, created_at, updated_at)
+- `documents` (id, user_id, service_type, title, content, model_used, format, is_favorite, tags, created_at, updated_at)
+- `transactions` (id, user_id, package_id, amount, credits, status, payment_method, mpesa_receipt, phone_number, reference_id, confirmed_by, confirmed_at, created_at)
+
+Funções RPC:
+- `deduct_credit(user_id UUID)` — operação atómica, retorna créditos restantes ou -1
+- `add_credits(user_id UUID, amount INTEGER)` — adiciona créditos (admin only)
 
 ---
 
-_MzDocs Pro v3.0 © 2025 · MVC · OpenRouter · Supabase · Vercel · Feito para Moçambique 🇲🇿_
+## 🔧 Changelog
+
+### v3.1 (2026-04-27) — Correções Críticas
+- **Fix:** Separado `Controllers.js` monolito em 3 ficheiros individuais
+- **Fix:** Criado `AuthManager.js` — gestão completa de autenticação Supabase
+- **Fix:** Criado `AuthGuard.js` — proteção de rotas por auth/admin/guest
+- **Fix:** Criado `editor.css` — estilos completos do Editor Markdown
+- **Fix:** Criado `policies.sql` — RLS policies + trigger handle_new_user
+- **Fix:** Criado `validar.html` — página de validação de documentos
+- **Fix:** Criado `PDFExporter.js` — exportador PDF dedicado (jsPDF)
+- **Fix:** Criado `WordExporter.js` — exportador Word dedicado
+- **Fix:** Criado `ExelExporter.js` — exportador Excel para orçamentos
+- **Fix:** Criado `AdminDashboard.js` — dashboard com gráficos Chart.js
+- **Fix:** Criado `AdminTransactions.js` — gestão de transações pendentes
+- **Fix:** Criado `api/auth/*` — signup, signin, verify-otp, reset-password
+- **Fix:** Criado `api/admin/*` — transactions, confirm-payment, stats
+- **Fix:** Unificada lógica de pagamentos no `PaymentService.js`
+- **Fix:** Extraído `MPesaService.js` e `SupabaseService.js` para módulos standalone
+- **Fix:** Corrigido schema Supabase — usa tabela `profiles` em vez de `users`
+- **Fix:** Corrigido `PaymentController.js` — adicionado import Storage
+- **Fix:** Corrigido `AdminDashboard.js` — import Chart.js via `.default`
+- **Fix:** Corrigido `AdminTransactions.js` — HTML de tabela vazia válido
+- **Fix:** Corrigido `vercel.json` — todas as rotas API mapeadas
+- **Fix:** Atualizado modelo de emergência OpenRouter para `nvidia/nemotron-3-nano-30b-a3b:free`
+
+### v3.0 (2025) — Lançamento Inicial
+- Arquitectura MVC modular com ES Modules
+- OpenRouter com fallback de 3 modelos gratuitos
+- Supabase + operações atómicas de créditos
+- Editor Markdown com reedição IA
+- OCR com Tesseract.js
+- PWA completo com Workbox
+
+---
+
+## 🛡️ Segurança
+
+- **RLS (Row Level Security)** ativado em todas as tabelas
+- **Operações atómicas** via PostgreSQL functions com `SECURITY DEFINER`
+- **Tokens JWT** para autenticação em todas as API functions
+- **Verificação de admin** em endpoints sensíveis
+- **CORS** configurado em todas as serverless functions
+- **Não revelação** de existência de email no reset de password
+
+---
+
+MzDocs Pro v3.1 © 2025 · MVC · OpenRouter · Supabase · Vercel · Feito para Moçambique 🇲🇿

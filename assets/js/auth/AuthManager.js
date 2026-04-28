@@ -1,234 +1,113 @@
 // assets/js/auth/AuthManager.js
-// Sistema de autenticação completo com Supabase Auth
-
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-
-const SUPABASE_URL = window.__SUPABASE_URL__ || 'https://seu-projeto.supabase.co';
-const SUPABASE_ANON_KEY = window.__SUPABASE_ANON_KEY__ || 'sua-anon-key';
+// Gestão de autenticação com Supabase Auth
 
 export class AuthManager {
     constructor() {
-        this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-            auth: {
-                autoRefreshToken: true,
-                persistSession: true,
-                detectSessionInUrl: true,
-                storage: localStorage
-            }
-        });
-        this.user = null;
-        this.profile = null;
-        this.listeners = [];
+        this.user = undefined;
+        this.session = null;
+        this.supabase = null;
+        this._listeners = [];
         this._init();
     }
 
     async _init() {
-        // Verificar sessão existente
-        const { data: { session } } = await this.client.auth.getSession();
-        if (session) {
-            this.user = session.user;
-            await this._loadProfile();
+        const url = window.__SUPABASE_URL__;
+        const key = window.__SUPABASE_ANON_KEY__;
+
+        if (!url || !key) {
+            console.info('[AuthManager] Supabase não configurado — modo anónimo');
+            this.user = null;
+            return;
         }
 
-        // Escutar mudanças de auth
-        this.client.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        try {
+            const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+            this.supabase = createClient(url, key);
+
+            const { data: { session } } = await this.supabase.auth.getSession();
+            if (session) {
+                this.session = session;
                 this.user = session.user;
-                await this._loadProfile();
-            } else if (event === 'SIGNED_OUT') {
+            } else {
                 this.user = null;
-                this.profile = null;
             }
-            this._notifyListeners();
-        });
-    }
 
-    async _loadProfile() {
-        if (!this.user) return;
-        const { data, error } = await this.client
-            .from('profiles')
-            .select('*')
-            .eq('id', this.user.id)
-            .single();
-        
-        if (!error) {
-            this.profile = data;
+            this.supabase.auth.onAuthStateChange((event, session) => {
+                this.session = session;
+                this.user = session?.user || null;
+                this._notify();
+            });
+
+        } catch (err) {
+            console.error('[AuthManager] Erro ao inicializar:', err);
+            this.user = null;
         }
     }
 
-    // ============================================
-    // REGISTO COM EMAIL + PASSWORD
-    // ============================================
-    async signUp(email, password, fullName, phone) {
-        const { data, error } = await this.client.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    full_name: fullName,
-                    phone: phone
-                },
-                emailRedirectTo: `${window.location.origin}/auth/callback`
-            }
-        });
-
-        if (error) throw error;
-        
-        // O trigger handle_new_user já criou o perfil com 3 créditos
-        return { user: data.user, message: 'Verifique seu email para confirmar o registo.' };
-    }
-
-    // ============================================
-    // LOGIN COM EMAIL + PASSWORD
-    // ============================================
-    async signIn(email, password) {
-        const { data, error } = await this.client.auth.signInWithPassword({
-            email,
-            password
-        });
-
-        if (error) throw error;
-        
-        this.user = data.user;
-        await this._loadProfile();
-        this._notifyListeners();
-        
-        return { user: data.user, session: data.session };
-    }
-
-    // ============================================
-    // LOGIN COM OTP (MAGIC LINK) — SEM PASSWORD
-    // ============================================
-    async signInWithOtp(email) {
-        const { error } = await this.client.auth.signInWithOtp({
-            email,
-            options: {
-                emailRedirectTo: `${window.location.origin}/auth/callback`
-            }
-        });
-
-        if (error) throw error;
-        return { message: 'Link de acesso enviado para seu email.' };
-    }
-
-    // ============================================
-    // LOGIN ANÓNIMO (para testes rápidos)
-    // ============================================
-    async signInAnonymous() {
-        const { data, error } = await this.client.auth.signInAnonymously();
-        if (error) throw error;
-        
-        this.user = data.user;
-        await this._loadProfile();
-        this._notifyListeners();
-        
-        return { user: data.user };
-    }
-
-    // ============================================
-    // RECUPERAÇÃO DE PASSWORD
-    // ============================================
-    async resetPassword(email) {
-        const { error } = await this.client.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/auth/reset-password`
-        });
-        if (error) throw error;
-        return { message: 'Instruções enviadas para seu email.' };
-    }
-
-    // ============================================
-    // ATUALIZAR PASSWORD
-    // ============================================
-    async updatePassword(newPassword) {
-        const { error } = await this.client.auth.updateUser({
-            password: newPassword
-        });
-        if (error) throw error;
-        return { message: 'Password atualizada com sucesso.' };
-    }
-
-    // ============================================
-    // ATUALIZAR PERFIL
-    // ============================================
-    async updateProfile(updates) {
-        if (!this.user) throw new Error('Não autenticado');
-        
-        const { data, error } = await this.client
-            .from('profiles')
-            .update({ ...updates, updated_at: new Date().toISOString() })
-            .eq('id', this.user.id)
-            .select()
-            .single();
-
-        if (error) throw error;
-        this.profile = data;
-        this._notifyListeners();
-        return data;
-    }
-
-    // ============================================
-    // LOGOUT
-    // ============================================
-    async signOut() {
-        const { error } = await this.client.auth.signOut();
-        if (error) throw error;
-        
-        this.user = null;
-        this.profile = null;
-        this._notifyListeners();
-    }
-
-    // ============================================
-    // VERIFICAÇÕES
-    // ============================================
     isAuthenticated() {
         return !!this.user;
     }
 
     isAdmin() {
-        return this.profile?.is_admin === true;
+        return this.user?.user_metadata?.is_admin === true ||
+               this.user?.app_metadata?.is_admin === true;
     }
 
-    getUserId() {
-        return this.user?.id || localStorage.getItem('mz_uid') || this._generateAnonymousId();
+    async signUp(email, password, metadata = {}) {
+        if (!this.supabase) throw new Error('Supabase não configurado');
+        const { data, error } = await this.supabase.auth.signUp({
+            email,
+            password,
+            options: { data: metadata }
+        });
+        if (error) throw error;
+        return data;
     }
 
-    getCredits() {
-        return this.profile?.credits || parseInt(localStorage.getItem('mz_credits')) || 0;
+    async signIn(email, password) {
+        if (!this.supabase) throw new Error('Supabase não configurado');
+        const { data, error } = await this.supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+        if (error) throw error;
+        this.session = data.session;
+        this.user = data.user;
+        this._notify();
+        return data;
     }
 
-    _generateAnonymousId() {
-        let id = localStorage.getItem('mz_uid');
-        if (!id) {
-            id = 'anon-' + crypto.randomUUID();
-            localStorage.setItem('mz_uid', id);
-        }
-        return id;
+    async signOut() {
+        if (!this.supabase) return;
+        await this.supabase.auth.signOut();
+        this.session = null;
+        this.user = null;
+        this._notify();
     }
 
-    // ============================================
-    // LISTENERS (para UI reativa)
-    // ============================================
-    onAuthChange(callback) {
-        this.listeners.push(callback);
-        // Chamar imediatamente com estado atual
-        callback({ user: this.user, profile: this.profile });
+    async resetPassword(email) {
+        if (!this.supabase) throw new Error('Supabase não configurado');
+        const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/auth/reset-password`
+        });
+        if (error) throw error;
+    }
+
+    getToken() {
+        return this.session?.access_token || null;
+    }
+
+    onChange(callback) {
+        this._listeners.push(callback);
         return () => {
-            this.listeners = this.listeners.filter(l => l !== callback);
+            this._listeners = this._listeners.filter(l => l !== callback);
         };
     }
 
-    _notifyListeners() {
-        this.listeners.forEach(cb => cb({ user: this.user, profile: this.profile }));
-    }
-
-    // ============================================
-    // GETTERS
-    // ============================================
-    get supabase() {
-        return this.client;
+    _notify() {
+        this._listeners.forEach(cb => cb(this.user, this.session));
     }
 }
 
-// Singleton
 export const authManager = new AuthManager();
+export default AuthManager;
