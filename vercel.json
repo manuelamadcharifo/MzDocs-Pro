@@ -9,6 +9,7 @@
     }
   ],
   "routes": [
+    { "src": "/api/config", "dest": "/api/config.js" },
     { "src": "/api/generate-document", "dest": "/api/generate-document.js" },
     { "src": "/api/process-payment", "dest": "/api/process-payment.js" },
     { "src": "/api/verify-credits", "dest": "/api/verify-credits.js" },
