@@ -22,6 +22,17 @@ export class AuthManager {
                 return;
             }
 
+            // ✅ CORREÇÃO: Verificar Content-Type antes de fazer .json()
+            const contentType = res.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const rawText = await res.text();
+                console.warn('[AuthManager] Resposta não é JSON. Content-Type:', contentType);
+                console.warn('[AuthManager] Corpo da resposta (primeiros 200 chars):', rawText.substring(0, 200));
+                console.info('[AuthManager] Supabase não configurado — modo anónimo');
+                this.user = null;
+                return;
+            }
+
             const config = await res.json();
             if (!config.configured || !config.supabaseUrl || !config.supabaseAnonKey) {
                 console.info('[AuthManager] Supabase não configurado — modo anónimo');
@@ -29,7 +40,36 @@ export class AuthManager {
                 return;
             }
 
-            const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+            // ✅ CORREÇÃO: Importação do Supabase via CDN com fallback seguro
+            let createClient;
+            try {
+                const supabaseModule = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+                createClient = supabaseModule.createClient;
+                
+                // Fallback: se createClient não existir no namespace, tentar default export
+                if (!createClient && supabaseModule.default) {
+                    createClient = supabaseModule.default.createClient || supabaseModule.default;
+                }
+            } catch (importErr) {
+                console.warn('[AuthManager] Falha ao importar Supabase via +esm, tentando fallback...', importErr);
+                
+                // Fallback: tentar importar sem +esm
+                try {
+                    const supabaseModule = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
+                    createClient = supabaseModule.createClient;
+                } catch (fallbackErr) {
+                    console.error('[AuthManager] Falha total na importação do Supabase:', fallbackErr);
+                    this.user = null;
+                    return;
+                }
+            }
+
+            if (!createClient) {
+                console.error('[AuthManager] createClient não encontrado no módulo Supabase');
+                this.user = null;
+                return;
+            }
+
             this.supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
 
             // Verificar sessão existente

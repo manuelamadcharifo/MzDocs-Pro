@@ -1,6 +1,3 @@
-// api/config.js
-// Serve configuração pública do Supabase (anon key apenas, nunca service key)
-
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -23,7 +20,6 @@ export default async function handler(req, res) {
         configured: true,
         supabaseUrl,
         supabaseAnonKey
-        // NOTA: NUNCA expor SUPABASE_SERVICE_KEY aqui
     });
 }
 
