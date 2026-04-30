@@ -14,10 +14,34 @@ export class AuthManager {
 
     async _init() {
         try {
-            // Buscar configuração de forma segura do backend (lê do .env)
-            const res = await fetch('/api/config');
-            if (!res.ok) {
-                console.info('[AuthManager] Supabase não configurado no servidor — modo anónimo');
+            // ✅ CORREÇÃO: Tentar múltiplos endpoints possíveis para config
+            const endpoints = [
+                '/api/config',           // Endpoint padrão
+                '/api/functions/config', // Fallback para estrutura atual do projeto
+            ];
+            
+            let res = null;
+            let lastError = null;
+            
+            for (const endpoint of endpoints) {
+                try {
+                    res = await fetch(endpoint);
+                    if (res.ok) {
+                        const contentType = res.headers.get('content-type');
+                        if (contentType && contentType.includes('application/json')) {
+                            console.log(`[AuthManager] Config carregada de: ${endpoint}`);
+                            break; // Encontrou endpoint válido com JSON
+                        }
+                    }
+                } catch (e) {
+                    lastError = e;
+                }
+            }
+
+            // Se nenhum endpoint retornou JSON válido
+            if (!res || !res.ok) {
+                console.info('[AuthManager] Endpoint /api/config não encontrado — modo anónimo');
+                console.info('[AuthManager] Dica: Crie o arquivo api/config.js ou api/functions/config.js no seu projeto');
                 this.user = null;
                 return;
             }
