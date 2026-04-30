@@ -1,7 +1,9 @@
-/* MzDocs Pro v3 — styles.css */
+/* ============================================
+   MzDocs Pro v3 — styles.css (CORRIGIDO)
+   ============================================ */
 :root {
   --ink:#07101F; --ink2:#0F1E3B; --ink3:#1A2F52;
-  --dim:#334155; --muted:#64748B; --border:#E2E8F0;
+  --dim:#334155; --muted:#64748B; --border:#E2E8F0; 
   --surface:#F8FAFD; --white:#FFFFFF;
   --blue:#3B82F6; --blue-d:#1D4ED8; --blue-s:#EFF6FF;
   --green:#009A44; --green-l:#10B981; --green-s:#ECFDF5;
@@ -108,21 +110,185 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .ocr-divider::before{content:'';position:absolute;top:50%;left:0;right:0;height:1px;background:var(--border)}
 .ocr-divider span{background:#fff;padding:0 10px;position:relative}
 
-/* FORM */
-.form-body{padding:16px 18px;display:flex;flex-direction:column;gap:14px}
-.fg{display:flex;flex-direction:column;gap:6px}
-.fg-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.fl{font-size:11px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--dim)}
-.fi,.fs,.fta{width:100%;padding:13px 15px;border:1.5px solid var(--border);border-radius:var(--rs);font-family:'Bricolage Grotesque',sans-serif;font-size:15px;color:var(--ink);background:var(--white);outline:none;transition:var(--t);-webkit-appearance:none}
-.fi:focus,.fs:focus,.fta:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
-.fta{resize:vertical;min-height:88px}
-.fi::placeholder,.fta::placeholder{color:var(--muted)}
-.form-foot{padding:0 18px 6px;display:flex;flex-direction:column;gap:10px}
-.btn-gen{width:100%;padding:16px;background:linear-gradient(135deg,var(--ink2),var(--blue-d));color:#fff;border:none;border-radius:var(--rs);font-family:'Bricolage Grotesque',sans-serif;font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 4px 18px rgba(29,78,216,.3);transition:var(--t)}
-.btn-gen:hover{transform:translateY(-2px);box-shadow:0 6px 26px rgba(29,78,216,.4)}
-.btn-gen:disabled{opacity:.55;cursor:not-allowed;transform:none}
-.btn-wa-direct{width:100%;padding:15px;background:linear-gradient(135deg,var(--wa),var(--wa-d));color:#fff;border:none;border-radius:var(--rs);font-family:'Bricolage Grotesque',sans-serif;font-size:15.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 4px 14px rgba(37,211,102,.3);transition:var(--t)}
-.btn-wa-direct:hover{transform:translateY(-2px)}
+/* ============================================
+   FORM — CORRIGIDO: Agora estiliza TODOS os 
+   elementos filhos de .form-body, mesmo sem 
+   classes específicas
+   ============================================ */
+
+.form-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ✅ CORREÇÃO: Estilizar todos os divs filhos como form groups */
+.form-body > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ✅ CORREÇÃO: Estilizar TODOS os inputs, selects, textareas dentro de .form-body */
+.form-body input[type="text"],
+.form-body input[type="email"],
+.form-body input[type="tel"],
+.form-body input[type="number"],
+.form-body input[type="date"],
+.form-body select,
+.form-body textarea {
+  width: 100%;
+  padding: 13px 15px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--rs);
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--white);
+  outline: none;
+  transition: var(--t);
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+}
+
+/* Focus states */
+.form-body input:focus,
+.form-body select:focus,
+.form-body textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
+}
+
+/* Placeholder */
+.form-body input::placeholder,
+.form-body textarea::placeholder {
+  color: var(--muted);
+}
+
+/* Textarea específico */
+.form-body textarea {
+  resize: vertical;
+  min-height: 88px;
+  line-height: 1.5;
+}
+
+/* Select dropdown custom arrow */
+.form-body select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+/* ✅ CORREÇÃO: Estilizar todas as labels dentro de .form-body */
+.form-body label,
+.form-body .fl {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+  color: var(--dim);
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* Grid para campos lado a lado (2 colunas) */
+.form-body .fg-row,
+.form-body .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Input pequeno (número de páginas, etc) */
+.form-body input[type="number"].small,
+.form-body .fi-small {
+  width: 80px;
+  text-align: center;
+}
+
+/* Estados de erro */
+.form-body input.error,
+.form-body select.error,
+.form-body textarea.error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+/* Manter compatibilidade com classes antigas */
+.fg { display: flex; flex-direction: column; gap: 6px; }
+.fg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fl { font-size: 11px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; color: var(--dim); }
+.fi, .fs, .fta { width: 100%; padding: 13px 15px; border: 1.5px solid var(--border); border-radius: var(--rs); font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; color: var(--ink); background: var(--white); outline: none; transition: var(--t); -webkit-appearance: none; appearance: none; }
+.fi:focus, .fs:focus, .fta:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59, 130, 246, .1); }
+.fta { resize: vertical; min-height: 88px; }
+.fi::placeholder, .fta::placeholder { color: var(--muted); }
+
+/* FORM FOOTER */
+.form-foot {
+  padding: 0 18px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Botão Gerar */
+.btn-gen {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--ink2), var(--blue-d));
+  color: #fff;
+  border: none;
+  border-radius: var(--rs);
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  box-shadow: 0 4px 18px rgba(29, 78, 216, .3);
+  transition: var(--t);
+}
+
+.btn-gen:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 26px rgba(29, 78, 216, .4);
+}
+
+.btn-gen:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Botão WhatsApp Direct */
+.btn-wa-direct {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, var(--wa), var(--wa-d));
+  color: #fff;
+  border: none;
+  border-radius: var(--rs);
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 15.5px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  box-shadow: 0 4px 14px rgba(37, 211, 102, .3);
+  transition: var(--t);
+}
+
+.btn-wa-direct:hover {
+  transform: translateY(-2px);
+}
 
 /* LOADER STEPS */
 .loader-wrap{display:none;flex-direction:column;align-items:center;padding:24px 18px;gap:14px}
