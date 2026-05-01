@@ -52,7 +52,7 @@ export const DocumentView = {
       `;
     } else {
       formFootEl.innerHTML = `
-        <button id="btnWaDirect" class="btn-wa" type="button">
+        <button id="btnWaDirect" class="btn-wa btn-wa-direct" type="button">
           <span>📱 Enviar pelo WhatsApp</span>
           <small>Grátis</small>
         </button>
