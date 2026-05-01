@@ -45,7 +45,7 @@ export const DocumentView = {
     formBodyEl.innerHTML = this._buildFieldsHTML(svc.fields);
     if (svc.hasAI) {
       formFootEl.innerHTML = `
-        <button id="btnGen" class="btn-primary" type="button">
+        <button id="btnGen" class="btn-primary btn-gen" type="button">
           <span>✨ Gerar com IA</span>
           <small>1 crédito</small>
         </button>
