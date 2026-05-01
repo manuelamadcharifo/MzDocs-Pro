@@ -124,6 +124,97 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .btn-wa-direct{width:100%;padding:15px;background:linear-gradient(135deg,var(--wa),var(--wa-d));color:#fff;border:none;border-radius:var(--rs);font-family:'Bricolage Grotesque',sans-serif;font-size:15.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 4px 14px rgba(37,211,102,.3);transition:var(--t)}
 .btn-wa-direct:hover{transform:translateY(-2px)}
 
+/* ============================================================
+   ADIÇÕES — Estilização de formulários sem classes específicas
+   (Adicionado para resolver inputs sem estilo no modal)
+   ============================================================ */
+
+/* Todos os divs filhos diretos de .form-body viram form-groups */
+.form-body > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Estilizar inputs, selects e textareas dentro de .form-body 
+   mesmo sem as classes .fi, .fs, .fta */
+.form-body input[type="text"],
+.form-body input[type="email"],
+.form-body input[type="tel"],
+.form-body input[type="number"],
+.form-body input[type="date"],
+.form-body select,
+.form-body textarea {
+  width: 100%;
+  padding: 13px 15px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--rs);
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--white);
+  outline: none;
+  transition: var(--t);
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+}
+
+.form-body input:focus,
+.form-body select:focus,
+.form-body textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
+}
+
+.form-body input::placeholder,
+.form-body textarea::placeholder {
+  color: var(--muted);
+}
+
+/* Select com seta customizada */
+.form-body select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+/* Labels dentro de .form-body */
+.form-body label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+  color: var(--dim);
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* Grid 2 colunas dentro de .form-body */
+.form-body .fg-row,
+.form-body .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Input pequeno */
+.form-body input[type="number"].small,
+.form-body .fi-small {
+  width: 80px;
+  text-align: center;
+}
+
+/* Estados de erro */
+.form-body input.error,
+.form-body select.error,
+.form-body textarea.error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
 /* LOADER STEPS */
 .loader-wrap{display:none;flex-direction:column;align-items:center;padding:24px 18px;gap:14px}
 .loader-wrap.show{display:flex;animation:fadeIn .2s}
@@ -141,11 +232,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .res-ok{font-size:15px;font-weight:800;color:var(--green)}
 .res-model{font-size:10.5px;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:600}
 .res-meta{padding:10px 18px;font-size:12px;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:14px;flex-wrap:wrap}
-.res-preview{padding:0;font-size:13.5px;line-height:1.75;color:var(--ink);white-space:pre-wrap;min-height:400px;max-height:70vh;overflow-y:auto;border-bottom:1px solid var(--border);background:var(--white)}
-.res-preview .doc-editor{border:none;box-shadow:none;border-radius:0}
-.res-preview .editor-body{grid-template-columns:1fr 1fr;gap:0}
-.res-preview .editor-pane,.res-preview .preview-pane{padding:8px}
-.res-preview .editor-textarea,.res-preview .preview-content{min-height:400px!important}
+.res-preview{padding:16px 18px;font-size:13.5px;line-height:1.75;color:var(--ink);white-space:pre-wrap;max-height:340px;overflow-y:auto;border-bottom:1px solid var(--border)}
 .res-preview h1{font-size:17px;font-weight:800;margin:12px 0 6px}
 .res-preview h2{font-size:15px;font-weight:700;margin:10px 0 5px}
 .res-preview h3{font-size:13.5px;font-weight:700;margin:8px 0 4px}
