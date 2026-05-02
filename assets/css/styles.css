@@ -218,6 +218,11 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 /* LOADER STEPS */
 .loader-wrap{display:none;flex-direction:column;align-items:center;padding:24px 18px;gap:14px}
 .loader-wrap.show{display:flex;animation:fadeIn .2s}
+.lstep{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--muted);transition:color .3s}
+.lstep.active{color:var(--blue)}.lstep.done{color:var(--green)}
+.lnum{width:22px;height:22px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;transition:background .3s}
+.lstep.active .lnum{background:var(--blue);color:#fff;box-shadow:0 0 0 3px rgba(59,130,246,.2)}
+.lstep.done .lnum{background:var(--green);color:#fff}
 .l-spin{width:50px;height:50px;border:4px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .75s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .l-steps{display:flex;flex-direction:column;gap:7px;width:100%;max-width:240px}

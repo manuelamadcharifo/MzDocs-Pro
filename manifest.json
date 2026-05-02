@@ -9,14 +9,22 @@
   "theme_color": "#07101F",
   "orientation": "portrait-primary",
   "lang": "pt",
+  "prefer_related_applications": false,
   "categories": ["productivity", "utilities", "business"],
   "icons": [
-    { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "assets/icons/icon.svg",          "sizes": "any",     "type": "image/svg+xml",  "purpose": "any" },
+    { "src": "assets/icons/icon-192x192.png",  "sizes": "192x192", "type": "image/png",      "purpose": "any maskable" },
+    { "src": "assets/icons/icon-512x512.png",  "sizes": "512x512", "type": "image/png",      "purpose": "any maskable" },
+    { "src": "assets/icons/apple-touch-icon.png", "sizes": "180x180", "type": "image/png",   "purpose": "any" }
+  ],
+  "screenshots": [
+    { "src": "assets/screenshots/screen-mobile.png", "sizes": "390x844",   "type": "image/png", "form_factor": "narrow",  "label": "Ecrã principal MzDocs Pro" },
+    { "src": "assets/screenshots/screen-desktop.png","sizes": "1280x720",  "type": "image/png", "form_factor": "wide",    "label": "Vista desktop MzDocs Pro" }
   ],
   "shortcuts": [
-    { "name": "Novo CV",     "url": "/?s=cv",        "description": "Criar currículo com IA" },
-    { "name": "Nova Carta",  "url": "/?s=carta",     "description": "Redigir carta formal" },
-    { "name": "Trabalho",    "url": "/?s=trabalho",  "description": "Trabalho académico com IA" },
-    { "name": "Orçamento",   "url": "/?s=orcamento", "description": "Orçamento de construção" }
+    { "name": "Novo CV",    "url": "/?s=cv",       "description": "Criar currículo com IA",    "icons": [{ "src": "assets/icons/icon-192x192.png", "sizes": "192x192" }] },
+    { "name": "Nova Carta", "url": "/?s=carta",    "description": "Redigir carta formal",      "icons": [{ "src": "assets/icons/icon-192x192.png", "sizes": "192x192" }] },
+    { "name": "Trabalho",   "url": "/?s=trabalho", "description": "Trabalho académico com IA", "icons": [{ "src": "assets/icons/icon-192x192.png", "sizes": "192x192" }] },
+    { "name": "Orçamento",  "url": "/?s=orcamento","description": "Orçamento de construção",   "icons": [{ "src": "assets/icons/icon-192x192.png", "sizes": "192x192" }] }
   ]
 }

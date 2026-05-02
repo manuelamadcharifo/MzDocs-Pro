@@ -1,28 +1,21 @@
 // api/verify-credits.js
-// Verificação de saldo de créditos — Supabase + fallback
+// Verificação de saldo de créditos — tabela profiles (corrigido)
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
 export default async function handler(req, res) {
-  if (req.method === 'OPTIONS') {
-    return res.status(200).set(corsHeaders).end();
-  }
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  const { userId } = req.method === 'GET' 
-    ? req.query 
-    : req.body;
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const { userId } = req.method === 'GET' ? req.query : req.body;
 
   if (!userId) {
-    return res.status(400).set(corsHeaders).json({
-      error: 'userId é obrigatório',
-    });
+    return res.status(400).json({ error: 'userId é obrigatório' });
   }
 
-  // Tenta Supabase se configurado
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 
@@ -31,33 +24,33 @@ export default async function handler(req, res) {
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(supabaseUrl, supabaseKey);
 
+      // CORRIGIDO: usar tabela 'profiles' (não 'users')
       const { data, error } = await supabase
-        .from('users')
-        .select('credits, last_sync')
+        .from('profiles')
+        .select('credits, updated_at')
         .eq('id', userId)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
+      if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        return res.status(200).set(corsHeaders).json({
+        return res.status(200).json({
           success: true,
           credits: data.credits,
           source: 'supabase',
-          lastSync: data.last_sync,
+          lastSync: data.updated_at,
         });
       }
 
-      // Utilizador novo — cria registo
-      await supabase.from('users').insert({
+      // Novo utilizador — criar perfil com 3 créditos
+      await supabase.from('profiles').insert({
         id: userId,
-        credits: 3, // Créditos iniciais grátis
+        credits: 3,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       });
 
-      return res.status(200).set(corsHeaders).json({
+      return res.status(200).json({
         success: true,
         credits: 3,
         source: 'supabase',
@@ -65,18 +58,17 @@ export default async function handler(req, res) {
       });
 
     } catch (e) {
-      console.warn('Supabase falhou, usando fallback:', e.message);
+      console.warn('[verify-credits] Supabase falhou, fallback local:', e.message);
     }
   }
 
-  // Fallback — responde com os créditos locais enviados pelo frontend
+  // Fallback offline
   const localCredits = parseInt(req.body?.localCredits) || 0;
-
-  return res.status(200).set(corsHeaders).json({
+  return res.status(200).json({
     success: true,
     credits: localCredits,
     source: 'local',
-    warning: 'Modo offline — sincronize quando possível',
+    warning: 'Modo offline',
   });
 }
 

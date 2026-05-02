@@ -177,13 +177,25 @@ export class SupabaseService {
   }
 
   async init() {
-    const url = window.__SUPABASE_URL__;
-    const key = window.__SUPABASE_ANON_KEY__;
-    if (!url || !key) { console.info('[Supabase] Não configurado — modo localStorage'); return false; }
-
+    // CORRIGIDO: reutilizar o cliente do authManager se disponível
     try {
+      const { authManager } = await import('./../../auth/AuthManager.js');
+      await authManager.ready();
+      if (authManager.supabase) {
+        this._client = authManager.supabase;
+        this._ready = true;
+        return true;
+      }
+    } catch { /* fallback abaixo */ }
+
+    // Fallback: tentar /api/config directamente
+    try {
+      const r = await fetch('/api/config');
+      if (!r.ok) return false;
+      const config = await r.json();
+      if (!config.configured) return false;
       const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-      this._client = createClient(url, key);
+      this._client = createClient(config.supabaseUrl, config.supabaseAnonKey);
       this._ready = true;
       return true;
     } catch (e) {
@@ -195,18 +207,19 @@ export class SupabaseService {
   async syncUser(userId, localCredits) {
     if (!this._ready) return null;
     try {
+      // CORRIGIDO: tabela 'profiles' (não 'users')
       const { data, error } = await this._client
-        .from('users').select('credits').eq('id', userId).single();
+        .from('profiles').select('credits').eq('id', userId).single();
 
       if (error?.code === 'PGRST116') {
-        await this._client.from('users').insert({ id: userId, credits: localCredits });
+        await this._client.from('profiles').insert({ id: userId, credits: localCredits });
         return { credits: localCredits };
       }
       if (error) throw error;
 
       const resolved = Math.max(data.credits, localCredits);
       if (resolved !== data.credits) {
-        await this._client.from('users').update({ credits: resolved }).eq('id', userId);
+        await this._client.from('profiles').update({ credits: resolved, updated_at: new Date().toISOString() }).eq('id', userId);
       }
       return { credits: resolved };
     } catch (e) {
@@ -226,7 +239,12 @@ export class SupabaseService {
   async updateCredits(userId, credits) {
     if (!this._ready) return;
     try {
-      await this._client.from('users').upsert({ id: userId, credits, last_sync: new Date().toISOString() });
+      // CORRIGIDO: tabela 'profiles', campo updated_at
+      await this._client.from('profiles').upsert({
+        id: userId,
+        credits,
+        updated_at: new Date().toISOString()
+      });
     } catch (e) { console.warn('[Supabase] updateCredits falhou:', e); }
   }
 }

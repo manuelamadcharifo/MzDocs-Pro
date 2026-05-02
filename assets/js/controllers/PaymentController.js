@@ -29,7 +29,8 @@ export class PaymentController {
     close() {
         ModalView.close('payOverlay');
         this.selectedPkg = null;
-        document.getElementById('mpesaSection').style.display = 'none';
+        const sec = document.getElementById('mpesaSection');
+        if (sec) sec.style.display = 'none';
         document.querySelectorAll('.pkg').forEach(el => el.classList.remove('sel'));
     }
 
@@ -40,9 +41,11 @@ export class PaymentController {
         el.classList.add('sel');
         this.selectedPkg = key;
         const section = document.getElementById('mpesaSection');
-        section.style.display = 'flex';
-        document.getElementById('mpEnvLabel').textContent = '⚠️ Pagamento manual via M-Pesa';
-        document.getElementById('paySummary').innerHTML =
+        if (section) section.style.display = 'flex';
+        const label = document.getElementById('mpEnvLabel');
+        if (label) label.textContent = '⚠️ Pagamento manual via M-Pesa';
+        const summary = document.getElementById('paySummary');
+        if (summary) summary.innerHTML =
             `<span>Pacote <strong>${pkg.name}</strong></span><strong>MZN ${pkg.price} → ${pkg.credits} créditos</strong>`;
         this.onPhoneInput(document.getElementById('phoneInput'));
     }
@@ -54,9 +57,9 @@ export class PaymentController {
     }
 
     async pay() {
-        const phone = document.getElementById('phoneInput').value;
+        const phone = document.getElementById('phoneInput')?.value;
         const pkg = this.payment.getPackages()[this.selectedPkg];
-        if (!pkg) return;
+        if (!pkg || !phone) return;
 
         const btn = document.getElementById('btnPay');
         btn.disabled = true;
@@ -66,14 +69,17 @@ export class PaymentController {
             const result = await this.payment.processPayment(this.selectedPkg, phone, Storage.getUserId());
 
             if (result.mode === 'manual') {
-                NotificationView.info('📱 Envie o comprovativo pelo WhatsApp');
-                if (result.whatsappLink) {
-                    window.open(result.whatsappLink, '_blank');
-                }
+                // CORRIGIDO: pagamento manual → NÃO adicionar créditos agora.
+                // Créditos só são adicionados pelo admin após confirmação.
+                NotificationView.info('📱 Envie o comprovativo pelo WhatsApp para receber os créditos.');
+                if (result.whatsappLink) window.open(result.whatsappLink, '_blank');
+                NotificationView.warn(`🆔 Referência: ${result.referenceId} — guarde este número`);
+            } else if (result.mode === 'automatic') {
+                // M-Pesa automático confirmado — adicionar créditos
+                await this.creditModel.add(pkg.credits);
+                NotificationView.success(`✅ ${pkg.credits} créditos adicionados!`);
             }
 
-            await this.creditModel.add(pkg.credits);
-            NotificationView.success(`✅ ${pkg.credits} créditos adicionados!`);
             this.close();
         } catch (err) {
             NotificationView.error('❌ ' + (err.message || 'Erro no pagamento'));

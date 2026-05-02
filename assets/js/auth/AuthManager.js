@@ -1,6 +1,5 @@
 // assets/js/auth/AuthManager.js
-// Gestão de autenticação com Supabase Auth
-// Configuração carregada de forma segura via /api/config (nunca exposta no HTML)
+// Gestão de autenticação com Supabase — login por telemóvel + password
 
 export class AuthManager {
     constructor() {
@@ -8,191 +7,153 @@ export class AuthManager {
         this.session = null;
         this.supabase = null;
         this._listeners = [];
-        this._configLoaded = false;
-        this._init();
+        this._initPromise = this._init();
     }
 
     async _init() {
         try {
-            // ✅ CORREÇÃO: Tentar múltiplos endpoints possíveis para config
-            const endpoints = [
-                '/api/config',           // Endpoint padrão
-                '/api/functions/config', // Fallback para estrutura atual do projeto
-            ];
-            
+            const endpoints = ['/api/config', '/api/functions/config'];
             let res = null;
-            let lastError = null;
-            
-            for (const endpoint of endpoints) {
+
+            for (const ep of endpoints) {
                 try {
-                    res = await fetch(endpoint);
-                    if (res.ok) {
-                        const contentType = res.headers.get('content-type');
-                        if (contentType && contentType.includes('application/json')) {
-                            console.log(`[AuthManager] Config carregada de: ${endpoint}`);
-                            break; // Encontrou endpoint válido com JSON
-                        }
+                    const r = await fetch(ep);
+                    if (r.ok && r.headers.get('content-type')?.includes('application/json')) {
+                        res = r; break;
                     }
-                } catch (e) {
-                    lastError = e;
-                }
+                } catch { /* continuar */ }
             }
 
-            // Se nenhum endpoint retornou JSON válido
-            if (!res || !res.ok) {
-                console.info('[AuthManager] Endpoint /api/config não encontrado — modo anónimo');
-                console.info('[AuthManager] Dica: Crie o arquivo api/config.js ou api/functions/config.js no seu projeto');
-                this.user = null;
-                return;
-            }
-
-            // ✅ CORREÇÃO: Verificar Content-Type antes de fazer .json()
-            const contentType = res.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                const rawText = await res.text();
-                console.warn('[AuthManager] Resposta não é JSON. Content-Type:', contentType);
-                console.warn('[AuthManager] Corpo da resposta (primeiros 200 chars):', rawText.substring(0, 200));
-                console.info('[AuthManager] Supabase não configurado — modo anónimo');
-                this.user = null;
-                return;
+            if (!res) {
+                console.info('[AuthManager] /api/config não encontrado — modo anónimo');
+                this.user = null; this._notify(); return;
             }
 
             const config = await res.json();
             if (!config.configured || !config.supabaseUrl || !config.supabaseAnonKey) {
                 console.info('[AuthManager] Supabase não configurado — modo anónimo');
-                this.user = null;
-                return;
+                this.user = null; this._notify(); return;
             }
 
-            // ✅ CORREÇÃO: Importação do Supabase via CDN com fallback seguro
             let createClient;
             try {
-                const supabaseModule = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-                createClient = supabaseModule.createClient;
-                
-                // Fallback: se createClient não existir no namespace, tentar default export
-                if (!createClient && supabaseModule.default) {
-                    createClient = supabaseModule.default.createClient || supabaseModule.default;
-                }
-            } catch (importErr) {
-                console.warn('[AuthManager] Falha ao importar Supabase via +esm, tentando fallback...', importErr);
-                
-                // Fallback: tentar importar sem +esm
+                ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
+                if (!createClient) throw new Error('createClient ausente');
+            } catch {
                 try {
-                    const supabaseModule = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
-                    createClient = supabaseModule.createClient;
-                } catch (fallbackErr) {
-                    console.error('[AuthManager] Falha total na importação do Supabase:', fallbackErr);
-                    this.user = null;
-                    return;
+                    ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'));
+                } catch (e) {
+                    console.error('[AuthManager] Falha ao importar Supabase:', e);
+                    this.user = null; this._notify(); return;
                 }
-            }
-
-            if (!createClient) {
-                console.error('[AuthManager] createClient não encontrado no módulo Supabase');
-                this.user = null;
-                return;
             }
 
             this.supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
 
-            // Verificar sessão existente
             const { data: { session } } = await this.supabase.auth.getSession();
-            if (session) {
-                this.session = session;
-                this.user = session.user;
-            } else {
-                this.user = null;
-            }
+            if (session) { this.session = session; this.user = session.user; }
+            else { this.user = null; }
 
-            // Escutar mudanças de auth
-            this.supabase.auth.onAuthStateChange((event, session) => {
+            this.supabase.auth.onAuthStateChange((_event, session) => {
                 this.session = session;
                 this.user = session?.user || null;
                 this._notify();
             });
 
-            this._configLoaded = true;
-
         } catch (err) {
-            console.error('[AuthManager] Erro ao inicializar:', err);
+            console.error('[AuthManager] Erro de inicialização:', err);
             this.user = null;
         }
+        this._notify();
     }
 
-    isAuthenticated() {
-        return !!this.user;
-    }
+    async ready() { return this._initPromise; }
+
+    isAuthenticated() { return !!this.user; }
 
     isAdmin() {
         return this.user?.user_metadata?.is_admin === true ||
                this.user?.app_metadata?.is_admin === true;
     }
 
-    async signUp(email, password, metadata = {}) {
-        if (!this.supabase) throw new Error('Supabase não configurado');
-        const { data, error } = await this.supabase.auth.signUp({
-            email,
-            password,
-            options: { data: metadata }
+    // Registo com telemóvel + password
+    async signUp(phone, password, fullName = '') {
+        const res = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, password, fullName })
         });
-        if (error) throw error;
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao criar conta');
         return data;
     }
 
-    async signIn(email, password) {
+    // Login com telemóvel + password
+    async signIn(phone, password) {
         if (!this.supabase) throw new Error('Supabase não configurado');
+        const clean = phone.replace(/\D/g, '');
+        const normalized = clean.startsWith('258') ? `+${clean}` : `+258${clean}`;
+
         const { data, error } = await this.supabase.auth.signInWithPassword({
-            email,
+            phone: normalized,
             password
         });
-        if (error) throw error;
+        if (error) throw new Error('Número ou password incorrectos');
         this.session = data.session;
         this.user = data.user;
         this._notify();
         return data;
     }
 
+    // Modo anónimo (3 créditos locais, sem conta)
+    async signInAnonymous() {
+        if (this.supabase) {
+            try {
+                const { data, error } = await this.supabase.auth.signInAnonymously();
+                if (!error) {
+                    this.session = data.session;
+                    this.user = data.user;
+                    this._notify();
+                    return data;
+                }
+            } catch { /* fallback abaixo */ }
+        }
+        // Fallback: continuar sem conta
+        this.user = null;
+        this._notify();
+        return { anonymous: true };
+    }
+
     async signOut() {
-        if (!this.supabase) return;
-        await this.supabase.auth.signOut();
+        if (this.supabase) await this.supabase.auth.signOut();
         this.session = null;
         this.user = null;
         this._notify();
     }
 
-    async resetPassword(email) {
-        if (!this.supabase) throw new Error('Supabase não configurado');
-        const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/auth/reset-password`
+    // Redefinir password via telemóvel
+    async resetPassword(phone, newPassword) {
+        const res = await fetch('/api/auth/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, newPassword })
         });
-        if (error) throw error;
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao redefinir password');
+        return data;
     }
 
-    getToken() {
-        return this.session?.access_token || null;
-    }
+    getToken() { return this.session?.access_token || null; }
 
-    // Método principal: onChange
     onChange(callback) {
         this._listeners.push(callback);
-        // Notificar imediatamente com estado atual (se já carregado)
-        if (this.user !== undefined) {
-            callback(this.user, this.session);
-        }
-        return () => {
-            this._listeners = this._listeners.filter(l => l !== callback);
-        };
+        if (this.user !== undefined) callback(this.user, this.session);
+        return () => { this._listeners = this._listeners.filter(l => l !== callback); };
     }
 
-    // Alias para compatibilidade com código que usa onAuthChange
-    onAuthChange(callback) {
-        return this.onChange(callback);
-    }
+    onAuthChange(callback) { return this.onChange(callback); }
 
-    _notify() {
-        this._listeners.forEach(cb => cb(this.user, this.session));
-    }
+    _notify() { this._listeners.forEach(cb => cb(this.user, this.session)); }
 }
 
 export const authManager = new AuthManager();

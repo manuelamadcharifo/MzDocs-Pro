@@ -203,3 +203,18 @@
         border-radius: 16px;
     }
 }
+/* ── AUTH VIEWS (usadas por AuthUI.js) ─────────────────────────────────── */
+.auth-view {
+    display: block;
+}
+
+.auth-error {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #dc2626;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+    animation: fadeIn 0.2s ease;
+}

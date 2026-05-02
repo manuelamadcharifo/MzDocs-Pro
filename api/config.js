@@ -1,22 +1,18 @@
-// api/config.js
+// api/config.js — Configuração pública do Supabase (nunca expõe service key)
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+    res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
 
-    const supabaseUrl = process.env.SUPABASE_URL;
+    if (req.method === 'OPTIONS') return res.status(200).end();
+
+    const supabaseUrl     = process.env.SUPABASE_URL;
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
-        return res.status(200).json({ 
-            configured: false,
-            message: 'Supabase não configurado'
-        });
+        return res.status(200).json({ configured: false, message: 'Supabase não configurado' });
     }
 
-    return res.status(200).json({
-        configured: true,
-        supabaseUrl,
-        supabaseAnonKey
-    });
+    return res.status(200).json({ configured: true, supabaseUrl, supabaseAnonKey });
 }

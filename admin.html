@@ -1,253 +1,227 @@
-<!-- admin.html -->
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin — MzDocs Pro</title>
-    <link rel="stylesheet" href="assets/css/styles.css">
-    <link rel="stylesheet" href="assets/css/admin.css">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="robots" content="noindex, nofollow"/>
+  <title>Admin — MzDocs Pro</title>
+  <link rel="stylesheet" href="assets/css/styles.css"/>
+  <link rel="stylesheet" href="assets/css/admin.css"/>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⚙️%3C/text%3E%3C/svg%3E" type="image/svg+xml"/>
 </head>
 <body>
-    <div id="adminApp">
-        <!-- Sidebar -->
-        <aside class="admin-sidebar">
-            <div class="admin-brand">
-                <span class="flag">🇲🇿</span>
-                <h1>MzDocs Pro</h1>
-                <span class="badge">Admin</span>
-            </div>
-            
-            <nav class="admin-nav">
-                <a href="#dashboard" class="nav-item active" data-section="dashboard">
-                    📊 Dashboard
-                </a>
-                <a href="#transactions" class="nav-item" data-section="transactions">
-                    💳 Transações
-                    <span id="pendingCount" class="nav-badge">0</span>
-                </a>
-                <a href="#users" class="nav-item" data-section="users">
-                    👥 Utilizadores
-                </a>
-                <a href="#documents" class="nav-item" data-section="documents">
-                    📄 Documentos
-                </a>
-                <a href="#settings" class="nav-item" data-section="settings">
-                    ⚙️ Configurações
-                </a>
-            </nav>
-            
-            <div class="admin-footer">
-                <button id="adminLogout" class="btn btn-danger btn-block">
-                    🚪 Sair
-                </button>
-            </div>
-        </aside>
+  <div id="adminApp">
 
-        <!-- Main Content -->
-        <main class="admin-main">
-            <!-- Header -->
-            <header class="admin-header">
-                <h2 id="pageTitle">Dashboard</h2>
-                <div class="admin-actions">
-                    <span id="adminDate"></span>
-                    <div class="admin-user">
-                        <span id="adminName">Admin</span>
-                    </div>
-                </div>
-            </header>
+    <!-- Sidebar -->
+    <aside class="admin-sidebar">
+      <div class="admin-brand">
+        <span class="flag">🇲🇿</span>
+        <h1>MzDocs Pro</h1>
+        <span class="badge">Admin</span>
+      </div>
+      <nav class="admin-nav">
+        <a href="#dashboard"    class="nav-item active" data-section="dashboard">📊 Dashboard</a>
+        <a href="#transactions" class="nav-item"        data-section="transactions">
+          💳 Transações <span id="pendingCount" class="nav-badge">0</span>
+        </a>
+        <a href="#users"        class="nav-item"        data-section="users">👥 Utilizadores</a>
+        <a href="#documents"    class="nav-item"        data-section="documents">📄 Documentos</a>
+        <a href="#settings"     class="nav-item"        data-section="settings">⚙️ Configurações</a>
+      </nav>
+      <div class="admin-footer">
+        <button id="adminLogout" class="btn btn-danger btn-block">🚪 Sair</button>
+      </div>
+    </aside>
 
-            <!-- DASHBOARD SECTION -->
-            <section id="section-dashboard" class="admin-section">
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon">💰</div>
-                        <div class="stat-info">
-                            <span class="stat-value" id="statRevenue">0 MZN</span>
-                            <span class="stat-label">Receita Hoje</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">📄</div>
-                        <div class="stat-info">
-                            <span class="stat-value" id="statDocuments">0</span>
-                            <span class="stat-label">Documentos Hoje</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">👤</div>
-                        <div class="stat-info">
-                            <span class="stat-value" id="statUsers">0</span>
-                            <span class="stat-label">Novos Utilizadores</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">⏳</div>
-                        <div class="stat-info">
-                            <span class="stat-value" id="statPending">0</span>
-                            <span class="stat-label">Pagamentos Pendentes</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="charts-row">
-                    <div class="chart-card">
-                        <h3>📈 Receita dos Últimos 7 Dias</h3>
-                        <canvas id="revenueChart"></canvas>
-                    </div>
-                    <div class="chart-card">
-                        <h3>📊 Documentos por Tipo</h3>
-                        <canvas id="documentsChart"></canvas>
-                    </div>
-                </div>
-            </section>
-
-            <!-- TRANSACTIONS SECTION -->
-            <section id="section-transactions" class="admin-section" style="display:none;">
-                <div class="section-header">
-                    <h3>Gestão de Pagamentos</h3>
-                    <div class="filters">
-                        <select id="filterStatus">
-                            <option value="all">Todos</option>
-                            <option value="pending">Pendentes</option>
-                            <option value="completed">Confirmados</option>
-                            <option value="failed">Falhados</option>
-                        </select>
-                        <input type="date" id="filterDate">
-                        <button id="btnRefresh" class="btn btn-primary">🔄 Atualizar</button>
-                    </div>
-                </div>
-
-                <div class="table-container">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Referência</th>
-                                <th>Utilizador</th>
-                                <th>Pacote</th>
-                                <th>Valor</th>
-                                <th>Método</th>
-                                <th>Estado</th>
-                                <th>Data</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="transactionsTable">
-                            <!-- Preenchido via JS -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- USERS SECTION -->
-            <section id="section-users" class="admin-section" style="display:none;">
-                <div class="section-header">
-                    <h3>Utilizadores</h3>
-                    <input type="search" id="searchUsers" placeholder="Pesquisar...">
-                </div>
-                <div class="table-container">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Nome</th>
-                                <th>Email</th>
-                                <th>Telefone</th>
-                                <th>Créditos</th>
-                                <th>Documentos</th>
-                                <th>Registo</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="usersTable"></tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- DOCUMENTS SECTION -->
-            <section id="section-documents" class="admin-section" style="display:none;">
-                <div class="section-header">
-                    <h3>Documentos Gerados</h3>
-                </div>
-                <div class="table-container">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Tipo</th>
-                                <th>Utilizador</th>
-                                <th>Modelo IA</th>
-                                <th>Data</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="documentsTable"></tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- SETTINGS SECTION -->
-            <section id="section-settings" class="admin-section" style="display:none;">
-                <div class="settings-grid">
-                    <div class="settings-card">
-                        <h3>💳 Configuração M-Pesa</h3>
-                        <form id="mpesaConfigForm">
-                            <div class="form-group">
-                                <label>Ambiente</label>
-                                <select id="mpesaEnv">
-                                    <option value="sandbox">Sandbox (Teste)</option>
-                                    <option value="production">Produção</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>API Key</label>
-                                <input type="password" id="mpesaApiKey" placeholder="sk-...">
-                            </div>
-                            <div class="form-group">
-                                <label>Service Code</label>
-                                <input type="text" id="mpesaServiceCode" placeholder="Código de serviço">
-                            </div>
-                            <button type="submit" class="btn btn-primary">Guardar</button>
-                        </form>
-                    </div>
-
-                    <div class="settings-card">
-                        <h3>📦 Preços dos Pacotes</h3>
-                        <form id="pricingForm">
-                            <div class="form-group">
-                                <label>Starter (créditos)</label>
-                                <input type="number" id="pkgStarterCredits" value="10">
-                                <input type="number" id="pkgStarterPrice" value="150" placeholder="Preço MZN">
-                            </div>
-                            <div class="form-group">
-                                <label>Básico (créditos)</label>
-                                <input type="number" id="pkgBasicoCredits" value="25">
-                                <input type="number" id="pkgBasicoPrice" value="350" placeholder="Preço MZN">
-                            </div>
-                            <div class="form-group">
-                                <label>Pro (créditos)</label>
-                                <input type="number" id="pkgProCredits" value="60">
-                                <input type="number" id="pkgProPrice" value="750" placeholder="Preço MZN">
-                            </div>
-                            <button type="submit" class="btn btn-primary">Atualizar Preços</button>
-                        </form>
-                    </div>
-                </div>
-            </section>
-        </main>
-    </div>
-
-    <!-- Modal de Confirmação -->
-    <div id="confirmModal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>✅ Confirmar Pagamento</h3>
-            <p id="confirmText">Deseja confirmar este pagamento?</p>
-            <div class="modal-actions">
-                <button id="btnCancelConfirm" class="btn btn-ghost">Cancelar</button>
-                <button id="btnConfirmPayment" class="btn btn-success">Confirmar</button>
-            </div>
+    <!-- Main -->
+    <main class="admin-main">
+      <header class="admin-header">
+        <h2 id="pageTitle">Dashboard</h2>
+        <div class="admin-actions">
+          <span id="adminDate"></span>
+          <div class="admin-user"><span id="adminName">Admin</span></div>
         </div>
-    </div>
+      </header>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <script type="module" src="assets/js/admin/AdminApp.js"></script>
+      <!-- DASHBOARD -->
+      <section id="section-dashboard" class="admin-section">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-info">
+              <span class="stat-value" id="statRevenue">0 MZN</span>
+              <span class="stat-label">Receita Hoje</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">📄</div>
+            <div class="stat-info">
+              <span class="stat-value" id="statDocuments">0</span>
+              <span class="stat-label">Documentos Hoje</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">👤</div>
+            <div class="stat-info">
+              <span class="stat-value" id="statUsers">0</span>
+              <span class="stat-label">Novos Utilizadores</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-info">
+              <span class="stat-value" id="statPending">0</span>
+              <span class="stat-label">Pagamentos Pendentes</span>
+            </div>
+          </div>
+        </div>
+        <div class="charts-row">
+          <div class="chart-card">
+            <h3>📈 Receita — Últimos 7 Dias</h3>
+            <canvas id="revenueChart"></canvas>
+          </div>
+          <div class="chart-card">
+            <h3>📊 Documentos por Tipo</h3>
+            <canvas id="documentsChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- TRANSAÇÕES -->
+      <section id="section-transactions" class="admin-section" style="display:none;">
+        <div class="section-header">
+          <h3>Gestão de Pagamentos</h3>
+          <div class="filters">
+            <select id="filterStatus">
+              <option value="all">Todos</option>
+              <option value="pending">Pendentes</option>
+              <option value="completed">Confirmados</option>
+              <option value="failed">Falhados</option>
+            </select>
+            <input type="date" id="filterDate"/>
+            <button id="btnRefresh" class="btn btn-primary">🔄 Atualizar</button>
+          </div>
+        </div>
+        <div class="table-container">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Referência</th><th>Utilizador</th><th>Pacote</th>
+                <th>Valor</th><th>Créditos</th><th>Telemóvel</th>
+                <th>Estado</th><th>Data</th><th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="transactionsTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- UTILIZADORES -->
+      <section id="section-users" class="admin-section" style="display:none;">
+        <div class="section-header">
+          <h3>Utilizadores</h3>
+          <input type="search" id="searchUsers" placeholder="Pesquisar por nome ou telemóvel…"/>
+        </div>
+        <div class="table-container">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Nome</th><th>Telemóvel</th><th>Créditos</th>
+                <th>Documentos</th><th>Tipo</th><th>Registo</th><th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="usersTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- DOCUMENTOS -->
+      <section id="section-documents" class="admin-section" style="display:none;">
+        <div class="section-header">
+          <h3>Documentos Gerados</h3>
+        </div>
+        <div class="table-container">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Tipo</th><th>Utilizador</th><th>Modelo IA</th><th>Data</th><th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="documentsTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CONFIGURAÇÕES -->
+      <section id="section-settings" class="admin-section" style="display:none;">
+        <div class="settings-grid">
+          <div class="settings-card">
+            <h3>💳 Configuração M-Pesa</h3>
+            <form id="mpesaConfigForm">
+              <div class="form-group">
+                <label>Ambiente</label>
+                <select id="mpesaEnv">
+                  <option value="sandbox">Sandbox (Teste)</option>
+                  <option value="production">Produção</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="mpesaApiKey" placeholder="Chave API M-Pesa"/>
+              </div>
+              <div class="form-group">
+                <label>Service Code</label>
+                <input type="text" id="mpesaServiceCode" placeholder="Código de serviço"/>
+              </div>
+              <button type="submit" class="btn btn-primary">💾 Guardar</button>
+            </form>
+          </div>
+          <div class="settings-card">
+            <h3>📦 Preços dos Pacotes</h3>
+            <form id="pricingForm">
+              <div class="form-group">
+                <label>Starter — Créditos / Preço (MZN)</label>
+                <div style="display:flex;gap:.5rem;">
+                  <input type="number" id="pkgStarterCredits" value="10" min="1" placeholder="Créditos"/>
+                  <input type="number" id="pkgStarterPrice"   value="150" min="1" placeholder="MZN"/>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Básico — Créditos / Preço (MZN)</label>
+                <div style="display:flex;gap:.5rem;">
+                  <input type="number" id="pkgBasicoCredits" value="25" min="1" placeholder="Créditos"/>
+                  <input type="number" id="pkgBasicoPrice"   value="350" min="1" placeholder="MZN"/>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Pro — Créditos / Preço (MZN)</label>
+                <div style="display:flex;gap:.5rem;">
+                  <input type="number" id="pkgProCredits" value="60" min="1" placeholder="Créditos"/>
+                  <input type="number" id="pkgProPrice"   value="750" min="1" placeholder="MZN"/>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary">💾 Atualizar Preços</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Modal Confirmação de Pagamento -->
+  <div id="confirmModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:9999;">
+    <div class="modal-content" style="background:#fff;border-radius:16px;padding:2rem;max-width:400px;width:90vw;">
+      <h3 style="margin:0 0 .75rem">✅ Confirmar Pagamento</h3>
+      <p id="confirmText" style="color:#6b7280;margin-bottom:1.5rem;">Deseja confirmar este pagamento?</p>
+      <div class="modal-actions" style="display:flex;gap:.75rem;">
+        <button id="btnCancelConfirm"  class="btn btn-ghost"   style="flex:1;">Cancelar</button>
+        <button id="btnConfirmPayment" class="btn btn-success" style="flex:1;">✅ Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script type="module" src="assets/js/admin/AdminApp.js"></script>
 </body>
 </html>

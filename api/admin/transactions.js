@@ -1,8 +1,10 @@
 // api/admin/transactions.js
 // Lista de transações para o painel admin
 
+const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
 

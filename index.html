@@ -4,20 +4,36 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <meta name="theme-color" content="#07101F"/>
-  <meta name="description" content="MzDocs Pro — Crie documentos profissionais em segundos. Organize, agilize e proteja seus arquivos com IA gratuita."/>
+  <meta name="description" content="MzDocs Pro — Crie documentos profissionais em segundos. CV, cartas, trabalhos e orçamentos com IA gratuita para Moçambique."/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="MzDocs Pro"/>
-  <title>MzDocs Pro v3</title>
+  <meta name="robots" content="index, follow"/>
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="website"/>
+  <meta property="og:title"       content="MzDocs Pro — Documentos com IA para Moçambique"/>
+  <meta property="og:description" content="Crie CVs, cartas, trabalhos e orçamentos profissionais em segundos com IA gratuita."/>
+  <meta property="og:url"         content="https://mz-docs-pro.vercel.app"/>
+  <meta property="og:image"       content="https://mz-docs-pro.vercel.app/assets/screenshots/screen-mobile.png"/>
+  <meta property="og:locale"      content="pt_MZ"/>
+  <!-- Twitter Card -->
+  <meta name="twitter:card"        content="summary_large_image"/>
+  <meta name="twitter:title"       content="MzDocs Pro"/>
+  <meta name="twitter:description" content="Documentos profissionais com IA para Moçambique"/>
+  <meta name="twitter:image"       content="https://mz-docs-pro.vercel.app/assets/screenshots/screen-mobile.png"/>
+
+  <title>MzDocs Pro — Documentos com IA</title>
   <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="assets/css/styles.css"/>
-  <link rel="stylesheet" href="assets/css/editor.css">
-  <link rel="stylesheet" href="assets/css/auth.css">
-  <!-- Favicon inline SVG — resolve 404 sem ficheiro externo -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📄%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/editor.css"/>
+  <link rel="stylesheet" href="assets/css/auth.css"/>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📄%3C/text%3E%3C/svg%3E" type="image/svg+xml"/>
 </head>
 <body>
 
@@ -29,10 +45,12 @@
     <span class="ver-tag">v3 MVC</span>
   </div>
   <div class="hdr-r">
-    <!-- Auth UI container -->
     <div id="authContainer" style="display:flex;align-items:center;gap:8px;">
       <button class="btn-topup" id="btnTopup" style="display:none;">+ Comprar</button>
-      <button class="btn-auth" id="authBtn" style="padding:8px 16px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">🔐 Entrar</button>
+      <button class="btn-auth" id="authBtn"
+        style="padding:8px 16px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
+        🔐 Entrar
+      </button>
       <div id="userMenu" style="display:none;align-items:center;gap:8px;"></div>
     </div>
     <div class="credit-pill" id="creditPill" style="display:none;">
@@ -181,6 +199,11 @@
     </div>
     <div class="form-body" id="formBody"></div>
     <div class="form-foot" id="formFoot"></div>
+    <!-- LOADER DE GERAÇÃO (usado por Views.js showLoader/hideLoader) -->
+    <div class="loader-wrap" id="loaderWrap">
+      <div class="l-spin"></div>
+      <div class="l-steps" id="loaderSteps"></div>
+    </div>
   </div>
 </div>
 
@@ -240,7 +263,7 @@
       <label class="field-lbl">Número M-Pesa</label>
       <div class="phone-wrap">
         <span>+258</span>
-        <input type="tel" id="phoneInput" placeholder="84 XXX XXXX" maxlength="9"/>
+        <input type="tel" id="phoneInput" placeholder="84 XXX XXXX" maxlength="9" inputmode="numeric"/>
       </div>
       <div class="pay-sum" id="paySummary"></div>
       <button class="btn-pay" id="btnPay" disabled>Pagar com M-Pesa</button>
@@ -251,10 +274,10 @@
 
 <!-- NOTIFICAÇÕES -->
 <div class="notif-stack" id="notifStack"></div>
-<!-- FAB -->
-<a class="fab" id="fabWa" href="#" target="_blank">💬</a>
+<!-- FAB WhatsApp -->
+<a class="fab" id="fabWa" href="#" target="_blank" rel="noopener noreferrer">💬</a>
 
-<!-- APP ENTRY POINT (ES Modules) -->
+<!-- APP ENTRY POINT -->
 <script type="module" src="assets/js/app.js"></script>
 </body>
 </html>

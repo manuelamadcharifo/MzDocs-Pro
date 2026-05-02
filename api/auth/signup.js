@@ -1,13 +1,14 @@
 // api/auth/signup.js
-// Registo de utilizadores via Supabase Admin SDK
+// Registo via número de telemóvel moçambicano + password — sem email obrigatório
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+    res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
 
     if (req.method === 'OPTIONS') return res.status(200).end();
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
     let body;
     try {
@@ -16,53 +17,43 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Body JSON inválido' });
     }
 
-    const { email, password, fullName, phone } = body;
+    const { phone, fullName, password } = body;
 
-    if (!email || !password) {
-        return res.status(400).json({ error: 'Email e password são obrigatórios' });
-    }
+    if (!phone) return res.status(400).json({ error: 'Número de telemóvel é obrigatório' });
+    if (!password || password.length < 6) return res.status(400).json({ error: 'Password deve ter pelo menos 6 caracteres' });
 
-    if (password.length < 6) {
-        return res.status(400).json({ error: 'Password deve ter pelo menos 6 caracteres' });
+    // Normalizar para formato internacional moçambicano
+    const clean = phone.replace(/\D/g, '');
+    const normalized = clean.startsWith('258') ? `+${clean}` : `+258${clean}`;
+    if (!/^\+2588[4-7]\d{7}$/.test(normalized)) {
+        return res.status(400).json({ error: 'Número inválido. Use formato: 8X XXX XXXX (Vodacom/Tmcel/Movitel)' });
     }
 
     try {
         const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_KEY
-        );
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-        // Verificar se email já existe
-        const { data: existing } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('email', email)
-            .single();
-
-        if (existing) {
-            return res.status(409).json({ error: 'Email já registado' });
-        }
-
-        // Criar utilizador via Admin SDK
+        // Criar utilizador — phone como identificador principal
         const { data: userData, error: userErr } = await supabase.auth.admin.createUser({
-            email,
+            phone: normalized,
             password,
-            email_confirm: true,
-            user_metadata: { full_name: fullName, phone }
+            phone_confirm: true,
+            user_metadata: { full_name: fullName || '', phone: normalized }
         });
 
-        if (userErr) throw userErr;
+        if (userErr) {
+            if (userErr.message?.toLowerCase().includes('already') || userErr.message?.includes('registered')) {
+                return res.status(409).json({ error: 'Este número já está registado' });
+            }
+            throw userErr;
+        }
 
-        // O trigger handle_new_user cria o perfil automaticamente com 3 créditos
+        // Trigger handle_new_user cria perfil com 3 créditos automaticamente
 
         return res.status(201).json({
             success: true,
-            user: {
-                id: userData.user.id,
-                email: userData.user.email
-            },
-            message: 'Conta criada com sucesso. 3 créditos grátis atribuídos!'
+            user: { id: userData.user.id, phone: normalized },
+            message: 'Conta criada! 3 créditos grátis atribuídos.'
         });
 
     } catch (err) {
