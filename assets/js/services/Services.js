@@ -179,7 +179,7 @@ export class SupabaseService {
   async init() {
     // CORRIGIDO: reutilizar o cliente do authManager se disponível
     try {
-      const { authManager } = await import('./../../auth/AuthManager.js');
+      const { authManager } = await import('../auth/AuthManager.js');
       await authManager.ready();
       if (authManager.supabase) {
         this._client = authManager.supabase;

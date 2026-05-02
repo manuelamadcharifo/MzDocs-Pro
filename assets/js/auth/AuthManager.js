@@ -12,17 +12,13 @@ export class AuthManager {
 
     async _init() {
         try {
-            const endpoints = ['/api/config', '/api/functions/config'];
             let res = null;
-
-            for (const ep of endpoints) {
-                try {
-                    const r = await fetch(ep);
-                    if (r.ok && r.headers.get('content-type')?.includes('application/json')) {
-                        res = r; break;
-                    }
-                } catch { /* continuar */ }
-            }
+            try {
+                const r = await fetch('/api/config');
+                if (r.ok && r.headers.get('content-type')?.includes('application/json')) {
+                    res = r;
+                }
+            } catch { /* continuar */ }
 
             if (!res) {
                 console.info('[AuthManager] /api/config não encontrado — modo anónimo');

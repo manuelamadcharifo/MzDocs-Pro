@@ -1,26 +1,30 @@
 {
   "version": 2,
-  "cleanUrls": true,
   "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/sw.js",  "destination": "/sw.js" },
+    { "source": "/(.*)",   "destination": "/$1" }
+  ],
   "headers": [
     {
-      "source": "/(.*)\\.(js|mjs)",
-      "headers": [{ "key": "Content-Type", "value": "application/javascript" }]
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Content-Type",  "value": "application/javascript" },
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)\\.js",
+      "headers": [
+        { "key": "Content-Type", "value": "application/javascript" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
     }
-  ],
-  "routes": [
-    { "src": "/api/config", "dest": "/api/config.js" },
-    { "src": "/api/generate-document", "dest": "/api/generate-document.js" },
-    { "src": "/api/process-payment", "dest": "/api/process-payment.js" },
-    { "src": "/api/verify-credits", "dest": "/api/verify-credits.js" },
-    { "src": "/api/auth/signup", "dest": "/api/auth/signup.js" },
-    { "src": "/api/auth/signin", "dest": "/api/auth/signin.js" },
-    { "src": "/api/auth/verify-otp", "dest": "/api/auth/verify-otp.js" },
-    { "src": "/api/auth/reset-password", "dest": "/api/auth/reset-password.js" },
-    { "src": "/api/admin/transactions", "dest": "/api/admin/transactions.js" },
-    { "src": "/api/admin/confirm-payment", "dest": "/api/admin/confirm-payment.js" },
-    { "src": "/api/admin/stats", "dest": "/api/admin/stats.js" },
-    { "src": "/sw.js", "dest": "/sw.js" },
-    { "src": "/(.*)", "dest": "/$1" }
   ]
 }
