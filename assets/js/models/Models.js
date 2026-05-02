@@ -100,9 +100,21 @@ export class CreditModel {
         this._emit();
 
         const ok = await this.supabase.init().catch(() => false);
-        if (ok) {
-            await this._syncFromServer();
-            this._startAutoSync();
+        if (!ok) return;
+
+        // CORRIGIDO: usar UUID real do Supabase, não o ID local (mz_xxx)
+        try {
+            const { authManager } = await import('../auth/AuthManager.js');
+            await authManager.ready();
+            if (authManager.user?.id) {
+                // Utilizador autenticado — usar UUID real
+                this.userId = authManager.user.id;
+                await this._syncFromServer();
+                this._startAutoSync();
+            }
+            // Sem autenticação: não sincronizar com Supabase, manter créditos locais
+        } catch {
+            // Falha silenciosa — modo local
         }
     }
 
