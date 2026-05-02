@@ -10,21 +10,22 @@ export class OpenRouterService {
     this.currentModel = this.models.primary;
   }
 
-  async generate(serviceType, formData, ocrText = null) {
+  async generate(serviceType, formData, ocrText = null, credits = null) {
     const prompt = this._buildPrompt(serviceType, formData, ocrText);
-    return await this._callBackend(serviceType, prompt);
-  }
+    return await this._callBackend(serviceType, prompt, credits);
+}
 
-  async generateRaw(prompt, reeditData = null) {
-    const userId = localStorage.getItem('mz_uid') || 'anon';
-    const credits = JSON.parse(localStorage.getItem('mz_credits') ?? '0') || 0;
+
+  async generateRaw(prompt, reeditData = null, credits = null) {
+    const userId      = localStorage.getItem('mz_uid') || 'anon';
+    const userCredits = credits !== null ? credits : 0;
 
     const body = reeditData
       ? {
           serviceType: reeditData.serviceType || 'reedit',
           prompt: prompt,
           userId,
-          userCredits: credits,
+          userCredits: userCredits,
           _reedit: true,
           _currentContent: reeditData.currentContent,
           _instruction: reeditData.instruction,
@@ -54,14 +55,14 @@ export class OpenRouterService {
     return await res.json();
   }
 
-  async _callBackend(serviceType, prompt) {
-    const userId = localStorage.getItem('mz_uid') || 'anon';
-    const credits = JSON.parse(localStorage.getItem('mz_credits') ?? '0') || 0;
+  async _callBackend(serviceType, prompt, credits = null) {
+    const userId       = localStorage.getItem('mz_uid') || 'anon';
+    const userCredits  = credits !== null ? credits : 0;
 
     const res = await fetch(this.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serviceType, prompt, userId, userCredits: credits }),
+      body: JSON.stringify({ serviceType, prompt, userId, userCredits: userCredits }),
     });
 
     if (res.status === 429) { const e = new Error('RATE_LIMIT'); e.status = 429; throw e; }
