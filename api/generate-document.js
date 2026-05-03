@@ -5,12 +5,13 @@ Gere documentos COMPLETOS e prontos para uso em português (variante moçambican
 Use Markdown. Nunca use meta-comentários como "Aqui está o documento...".
 Nunca invente dados pessoais — use [PREENCHER]. Nunca corte o documento no meio.`;
 
+// IDs verificados e activos em Maio 2026 (openrouter.ai/collections/free-models)
 const MODELS = [
-    'deepseek/deepseek-chat-v3-5:free',
-    'meta-llama/llama-3.1-8b-instruct:free',
-    'mistralai/mistral-7b-instruct:free',
-    'google/gemma-3-12b-it:free',
-    'qwen/qwen3-8b:free',
+    'meta-llama/llama-3.3-70b-instruct:free',   // 66K ctx — melhor qualidade
+    'google/gemma-3-27b-it:free',                 // 131K ctx — alternativa Google
+    'nousresearch/hermes-3-llama-3.1-405b:free',  // 131K ctx — muito capaz
+    'google/gemma-3-12b-it:free',                 // 33K ctx — rápido
+    'meta-llama/llama-3.2-3b-instruct:free',      // 131K ctx — leve, último recurso
 ];
 
 // Rate limit simples em memória (por IP, 20 req/min)
@@ -75,11 +76,9 @@ export default async function handler(req, res) {
         } catch (err) {
             console.warn(`[generate-document] ${model} falhou:`, err.status, err.message);
             lastError = err;
-            if (err.status === 429 || err.status === 503 || err.status === 502) {
-                if (i < MODELS.length - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
-                continue;
-            }
-            break;
+            // Continua para o próximo modelo em TODOS os erros do provider (400 incluso — ID pode estar deprecated)
+            if (i < MODELS.length - 1) await new Promise(r => setTimeout(r, 400 * (i + 1)));
+            continue;
         }
     }
 
