@@ -22,9 +22,7 @@ export class WordExporter {
         const sections = this._parseMarkdown(markdownContent, metadata, window.docx);
 
         const doc = new Document({
-            creator: 'MzDocs Pro',
             title: metadata.title || 'Documento',
-            description: 'Gerado por MzDocs Pro',
 
             numbering: {
                 config: [
@@ -108,34 +106,16 @@ export class WordExporter {
                         }
                     }
                 },
-                headers: {
-                    default: new Header({
-                        children: [
-                            new Paragraph({
-                                alignment: AlignmentType.RIGHT,
-                                children: [
-                                    new TextRun({
-                                        text: (metadata.title || 'MzDocs Pro').slice(0, 60),
-                                        font: 'Times New Roman', size: 20, color: '666666'
-                                    })
-                                ],
-                                border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC', space: 4 } }
-                            })
-                        ]
-                    })
-                },
+                // Sem cabeçalho — documentos académicos não levam header de app
                 footers: {
+                    // Rodapé apenas com número de página, sem texto de app
                     default: new Footer({
                         children: [
                             new Paragraph({
                                 alignment: AlignmentType.CENTER,
                                 children: [
-                                    new TextRun({ text: 'Página ', font: 'Times New Roman', size: 20, color: '666666' }),
-                                    new TextRun({ children: [PageNumber.CURRENT], font: 'Times New Roman', size: 20, color: '666666' }),
-                                    new TextRun({ text: ' de ', font: 'Times New Roman', size: 20, color: '666666' }),
-                                    new TextRun({ children: [PageNumber.TOTAL_PAGES], font: 'Times New Roman', size: 20, color: '666666' })
+                                    new TextRun({ children: [PageNumber.CURRENT], font: 'Times New Roman', size: 20, color: '000000' }),
                                 ],
-                                border: { top: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC', space: 4 } }
                             })
                         ]
                     })
