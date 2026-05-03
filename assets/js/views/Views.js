@@ -128,29 +128,49 @@ export const DocumentView = {
 
     const previewContainer = document.getElementById('resPreview');
     if (previewContainer) {
-      previewContainer.innerHTML = '';
-      const editorWrapper = document.createElement('div');
-      editorWrapper.id = 'editor-container';
-      editorWrapper.style.cssText = 'width:100%;height:100%;';
-      previewContainer.appendChild(editorWrapper);
+      previewContainer.innerHTML = this._markdownToHTML(content);
+    }
 
-      if (window.documentEditor) {
-        window.documentEditor.loadDocument(content, svc.title);
-      } else {
-        previewContainer.innerHTML = `<pre style="white-space:pre-wrap;font-family:inherit;padding:20px;">${content.replace(/</g, '&lt;')}</pre>`;
-      }
-
-      if (window.documentEditor) {
-        window.documentEditor.onReedit = (data) => {
-          this._handleReedit(data);
-        };
-      }
+    // Garante que o botão Editar existe nas res-actions
+    const resActions = document.querySelector('.res-actions');
+    if (resActions && !document.getElementById('btnEdit')) {
+      const editBtn = document.createElement('button');
+      editBtn.id = 'btnEdit';
+      editBtn.innerHTML = '✏️ Editar';
+      editBtn.style.cssText = 'grid-column:1/-1;background:#EFF6FF;color:#1d4ed8;border:1.5px solid #bfdbfe;';
+      resActions.appendChild(editBtn);
+      // re-bind no controller
+      editBtn.onclick = () => document.dispatchEvent(new CustomEvent('result:openEditor'));
     }
   },
 
-  _handleReedit(reeditData) {
-    const event = new CustomEvent('document:reedit', { detail: reeditData });
-    document.dispatchEvent(event);
+  // Converte Markdown para HTML para preview legível
+  _markdownToHTML(md) {
+    let html = md
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      // Headers
+      .replace(/^######\s+(.+)$/gm, '<h6>$1</h6>')
+      .replace(/^#####\s+(.+)$/gm, '<h5>$1</h5>')
+      .replace(/^####\s+(.+)$/gm, '<h4>$1</h4>')
+      .replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
+      .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
+      .replace(/^#\s+(.+)$/gm, '<h1>$1</h1>')
+      // Bold, italic
+      .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Code
+      .replace(/`(.+?)`/g, '<code>$1</code>')
+      // HR
+      .replace(/^---+$/gm, '<hr>')
+      // Listas
+      .replace(/^(\s*)[-*]\s+(.+)$/gm, '<li>$2</li>')
+      .replace(/^(\s*)\d+\.\s+(.+)$/gm, '<li>$2</li>')
+      // Parágrafos
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+
+    return `<div class="md-preview"><p>${html}</p></div>`;
   },
 
   collectData(fields) {

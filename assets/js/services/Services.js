@@ -79,44 +79,156 @@ export class OpenRouterService {
 
   _buildPrompt(type, data, ocr) {
     const ocrBlock = ocr ? `\n\nRascunho OCR (use como base, corrija erros):\n${ocr}` : '';
+    const paginas  = parseInt(data.paginas) || 5;
+    // 1 página A4 densa ≈ 450 palavras de corpo de texto
+    const palavrasMin = paginas * 420;
+    const palavrasMax = paginas * 500;
 
     const builders = {
-      trabalho: () =>
-        `Gere um TRABALHO ACADÉMICO COMPLETO sobre "${data.tema}".
-Nível: ${data.nivel}. Disciplina: ${data.disciplina}. Extensão: ${data.paginas || 5} páginas.
-Requisitos: ${data.requisitos || 'nenhum'}.${ocrBlock}
+      trabalho: () => {
+        // Gera subcapítulos de desenvolvimento proporcional ao número de páginas
+        const numCaps = Math.max(2, Math.floor((paginas - 2) / 1.5)); // 2 páginas para intro+conclusão+capa
+        const caps = Array.from({ length: numCaps }, (_, i) =>
+          `### ${i + 1}.${i === 0 ? 1 : 1} [Subtema ${i + 1} — desenvolvido com no mínimo 2 subcapítulos e exemplos concretos]`
+        ).join('\n');
+
+        return `Gere um TRABALHO ACADÉMICO COMPLETO, EXTENSO E DENSO sobre "${data.tema}".
+Nível: ${data.nivel}. Disciplina: ${data.disciplina}.
+Extensão obrigatória: ${paginas} páginas A4 completas = MÍNIMO ${palavrasMin} palavras de conteúdo (MÁXIMO ${palavrasMax} palavras).
+NÃO corte o documento. NÃO faça resumo. ESCREVA TODO O CONTEÚDO.
+Requisitos do professor: ${data.requisitos || 'nenhum'}.${ocrBlock}
+
+REGRAS DE EXTENSÃO (OBRIGATÓRIAS):
+- Cada secção de desenvolvimento deve ter NO MÍNIMO 3 parágrafos longos (5-8 linhas cada)
+- Use exemplos, dados, contexto moçambicano e africano sempre que possível
+- Não use marcadores de lugar como "[escrever aqui]" — escreva o conteúdo real
+- Introdução: pelo menos 2 parágrafos completos
+- Cada capítulo de desenvolvimento: pelo menos 4-6 parágrafos com subcapítulos
+- Conclusão: pelo menos 2 parágrafos
+
 Estrutura obrigatória em Markdown:
-# [TÍTULO]
-(Capa completa)
+# ${data.tema}
+**Disciplina:** ${data.disciplina} | **Nível:** ${data.nivel} | **Data:** ${new Date().toLocaleDateString('pt-MZ')}
+
+---
+
 ## Índice
+1. Introdução
+2. [Capítulos de desenvolvimento — liste todos]
+${Array.from({ length: numCaps }, (_, i) => `${i + 3}. [Capítulo ${i + 1}]`).join('\n')}
+${numCaps + 3}. Conclusão
+${numCaps + 4}. Referências Bibliográficas
+
+---
+
 ## 1. Introdução
-## 2. Desenvolvimento — [capítulo relevante]
-## 3. Desenvolvimento — [capítulo relevante]
-## 4. Conclusão
-## 5. Referências Bibliográficas (mín. 5 fontes)`,
+[Mínimo 350 palavras: contextualização, relevância, objectivos, metodologia]
+
+${Array.from({ length: numCaps }, (_, i) => `
+## ${i + 2}. [Título do Capítulo ${i + 1}]
+
+### ${i + 2}.1 [Subtópico A]
+[Mínimo 300 palavras com análise aprofundada]
+
+### ${i + 2}.2 [Subtópico B]
+[Mínimo 300 palavras com exemplos e dados]
+`).join('\n')}
+
+## ${numCaps + 2}. Conclusão
+[Mínimo 300 palavras: síntese, contribuições, limitações, perspectivas futuras]
+
+## ${numCaps + 3}. Referências Bibliográficas
+[Mínimo 5 fontes em formato APA]`;
+      },
 
       cv: () =>
-        `Crie um CURRÍCULO VITAE PROFISSIONAL em Markdown para o mercado moçambicano.
-Nome: ${data.nome}. Cargo: ${data.cargo}. Nascimento: ${data.nascimento || '-'}.
-Contacto: ${data.contacto || '-'}. Email: ${data.email || '-'}.
-Formação: ${data.formacao}. Experiência: ${data.experiencia || 'Recém-formado'}.
-Habilidades: ${data.habilidades || '-'}. Objectivo: ${data.objectivo || '-'}${ocrBlock}
-Formato Europass: Dados Pessoais → Objectivo → Formação → Experiência (verbos de acção) → Competências → Referências.`,
+        `Crie um CURRÍCULO VITAE PROFISSIONAL COMPLETO em Markdown para o mercado moçambicano.
+Nome: ${data.nome}. Cargo pretendido: ${data.cargo}.
+Nascimento: ${data.nascimento || '-'}. Contacto: ${data.contacto || '-'}. Email: ${data.email || '-'}.
+Formação: ${data.formacao}. Experiência: ${data.experiencia || 'Recém-formado sem experiência formal'}.
+Habilidades: ${data.habilidades || '-'}. Objectivo: ${data.objectivo || '-'}.${ocrBlock}
+
+Gere um CV PROFISSIONAL COMPLETO com todas as secções preenchidas com detalhe.
+Formato Europass adaptado ao mercado moçambicano:
+# ${data.nome}
+**${data.cargo}**
+
+---
+## Dados Pessoais
+[tabela ou lista com todos os contactos]
+
+## Objectivo Profissional
+[Parágrafo de 3-5 linhas descrevendo perfil e ambições para a vaga]
+
+## Formação Académica
+[Cada formação com: Grau | Instituição | Ano | Localidade]
+
+## Experiência Profissional
+[Cada cargo com: Empresa | Período | Descrição detalhada com verbos de acção (gerí, coordenei, implementei...)]
+
+## Competências Técnicas
+[Lista organizada por categoria]
+
+## Competências Pessoais / Soft Skills
+[5-8 competências com breve descrição]
+
+## Línguas
+[Cada língua com nível: Nativo / Fluente / Intermédio / Básico]
+
+## Referências
+[Formato: Nome, Cargo, Empresa, Contacto — ou "Disponíveis mediante solicitação"]`,
 
       carta: () =>
-        `Redija uma CARTA FORMAL COMPLETA do tipo "${data.tipo}".
+        `Redija uma CARTA FORMAL COMPLETA E PROFISSIONAL do tipo "${data.tipo}".
 Remetente: ${data.remetenteNome}, ${data.remetenteLocal || 'Maputo'}.
 Destinatário: ${data.destinatarioNome} — ${data.destinatarioEnti}.
-Assunto: ${data.assunto}. Pontos: ${data.pontos}.${ocrBlock}
-Estrutura: cabeçalho com data/local → dados de remetente e destinatário → assunto → saudação formal → 3-4 parágrafos → fecho → assinatura.`,
+Assunto: ${data.assunto}.
+Conteúdo a incluir: ${data.pontos}.${ocrBlock}
+
+A carta deve ser COMPLETA, FORMAL e CONVINCENTE. Inclua:
+- Cabeçalho com local e data
+- Dados completos do remetente (morada, contacto)
+- Dados do destinatário
+- Linha de assunto em destaque
+- Saudação formal adequada ao contexto moçambicano
+- Corpo da carta em 4-6 parágrafos bem desenvolvidos (cada um com 4-6 linhas)
+- Fecho formal ("Atenciosamente" / "Com os melhores cumprimentos")
+- Assinatura com nome e cargo/título
+NÃO use marcadores de lugar. Escreva o conteúdo real baseado nos pontos fornecidos.`,
 
       orcamento: () =>
-        `Elabore um ORÇAMENTO DE CONSTRUÇÃO DETALHADO em Markdown com tabelas.
+        `Elabore um ORÇAMENTO DE CONSTRUÇÃO PROFISSIONAL E DETALHADO em Markdown com tabelas completas.
 Obra: ${data.tipoObra}. Área: ${data.area || '?'} m². Local: ${data.local}.
-Acabamento: ${data.acabamento || 'médio'}. Fase: ${data.fase}. Prazo: ${data.prazo || 60} dias.
-Detalhes: ${data.extra || 'padrão'}.${ocrBlock}
-Incluir: resumo da obra → tabelas de materiais por fase (cimento, tijolos, ferro, areia, telha etc.) com quantidades e preços MZN → mão-de-obra → equipamentos → resumo financeiro com total → condições comerciais.
-Preços de mercado moçambicano ${new Date().getFullYear()}.`,
+Acabamento: ${data.acabamento || 'Médio / Padrão'}. Fase: ${data.fase || 'Construção do zero'}. Prazo: ${data.prazo || 60} dias.
+Detalhes adicionais: ${data.extra || 'padrão'}.${ocrBlock}
+
+O orçamento deve ser PROFISSIONAL E COMPLETO com:
+# Orçamento de ${data.tipoObra}
+**Local:** ${data.local} | **Data:** ${new Date().toLocaleDateString('pt-MZ')} | **Validade:** 30 dias
+
+## 1. Resumo da Obra
+[Descrição detalhada: tipo, dimensões, especificações técnicas]
+
+## 2. Materiais de Construção
+[Tabela completa: | Item | Unidade | Quantidade | Preço Unit. (MZN) | Total (MZN) |]
+[Inclui: cimento, areia, brita, tijolos, ferro, telhado, portas, janelas, azulejos, tintas, canalizações, elétrica, etc.]
+
+## 3. Mão-de-Obra
+[Tabela: | Especialidade | Dias | Diária (MZN) | Total (MZN) |]
+
+## 4. Equipamentos e Ferramentas
+[Tabela com aluguer/compra]
+
+## 5. Resumo Financeiro
+[Tabela com totais por categoria, subtotal, IVA 17%, TOTAL GERAL]
+
+## 6. Cronograma de Obra
+[Tabela: fases com duração em semanas]
+
+## 7. Condições Comerciais
+[Formas de pagamento, garantia, responsabilidades]
+
+Use preços de mercado moçambicano ${new Date().getFullYear()} realistas em MZN.`,
     };
 
     return (builders[type] || builders.trabalho)();

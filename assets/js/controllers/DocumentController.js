@@ -5,7 +5,7 @@ import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 import { Validator } from '../utils/Formatter.js';
 
-const WA_NUMBER = '258858695506'; // ← SUBSTITUA PELO TEU NÚMERO WHATSAPP
+const WA_NUMBER = '258858695506';
 
 export class DocumentController {
   constructor(creditModel) {
@@ -21,13 +21,23 @@ export class DocumentController {
     document.querySelectorAll('.sc[data-svc]').forEach(el => {
       el.addEventListener('click', () => this.open(el.dataset.svc));
     });
+
     document.getElementById('formClose')?.addEventListener('click', () => this.closeForm());
     document.getElementById('resultClose')?.addEventListener('click', () => this.closeResult());
-    document.getElementById('formOverlay')?.addEventListener('click', e => { if (e.target.id === 'formOverlay') this.closeForm(); });
-    document.getElementById('resultOverlay')?.addEventListener('click', e => { if (e.target.id === 'resultOverlay') this.closeResult(); });
+
+    // Overlay do formulário fecha ao clicar fora (excepto durante geração)
+    document.getElementById('formOverlay')?.addEventListener('click', e => {
+      if (e.target.id === 'formOverlay' && !this._generating) this.closeForm();
+    });
+
+    // Resultado NÃO fecha ao clicar fora — utilizador pode perder o documento
+    // Para fechar usa o botão ✕ no topo
+
     document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
-    document.getElementById('btnDl')?.addEventListener('click', () => this.downloadDoc());
+    document.getElementById('btnDl')?.addEventListener('click', () => this._showExportMenu());
     document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
+    document.getElementById('btnEdit')?.addEventListener('click', () => this._openEditor());
+    document.addEventListener('result:openEditor', () => this._openEditor());
     document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
   }
 
@@ -65,7 +75,7 @@ export class DocumentController {
   }
 
   closeForm()   { ModalView.close('formOverlay');  DocumentView.hideLoader(this._genIv); this.docModel.reset(); }
-  closeResult() { ModalView.close('resultOverlay'); }
+  closeResult() { ModalView.close('resultOverlay'); this._removeExportMenu(); }
 
   async generate() {
     const key = this.docModel.service;
@@ -79,6 +89,7 @@ export class DocumentController {
 
     const btn = document.getElementById('btnGen');
     if (btn) btn.disabled = true;
+    this._generating = true;
 
     const STEPS = [
       'A analisar dados do formulário…',
@@ -89,8 +100,6 @@ export class DocumentController {
     this._genIv = DocumentView.showLoader(STEPS);
 
     try {
-      // CORRIGIDO: passa creditModel.value directamente para a API
-      // evita leitura errada do localStorage com chave incorrecta
       const result = await this.queue.add(() =>
         this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value)
       );
@@ -114,6 +123,8 @@ export class DocumentController {
       } else {
         NotificationView.error('❌ ' + (err.message || 'Erro ao gerar. Tente novamente.'));
       }
+    } finally {
+      this._generating = false;
     }
   }
 
@@ -137,8 +148,86 @@ export class DocumentController {
       .catch(() => NotificationView.error('Não foi possível copiar'));
   }
 
-  downloadDoc() {
+  // Mostra menu de exportação inline sob o botão Download
+  _showExportMenu() {
     if (!this.docModel.content) return;
+    this._removeExportMenu();
+
+    const menu = document.createElement('div');
+    menu.id = 'exportMenu';
+    menu.style.cssText = `
+      position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+      background:#fff;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.18);
+      padding:8px;display:flex;flex-direction:column;gap:4px;z-index:9999;
+      min-width:200px;border:1.5px solid #e5e7eb;
+    `;
+
+    const options = [
+      { label: '📄 PDF',      fn: () => this._exportPDF() },
+      { label: '📃 Word (.docx)', fn: () => this._exportWord() },
+      { label: '📝 Markdown', fn: () => this._exportMarkdown() },
+    ];
+
+    options.forEach(({ label, fn }) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.style.cssText = `
+        padding:12px 16px;border:none;background:none;border-radius:10px;
+        font-size:14px;font-weight:600;cursor:pointer;text-align:left;
+        font-family:inherit;transition:background .15s;color:#07101f;
+      `;
+      btn.onmouseenter = () => btn.style.background = '#f3f4f6';
+      btn.onmouseleave = () => btn.style.background = 'none';
+      btn.onclick = () => { this._removeExportMenu(); fn(); };
+      menu.appendChild(btn);
+    });
+
+    document.body.appendChild(menu);
+    setTimeout(() => document.addEventListener('click', this._menuClickOutside = (e) => {
+      if (!menu.contains(e.target)) this._removeExportMenu();
+    }), 100);
+  }
+
+  _removeExportMenu() {
+    document.getElementById('exportMenu')?.remove();
+    if (this._menuClickOutside) {
+      document.removeEventListener('click', this._menuClickOutside);
+      this._menuClickOutside = null;
+    }
+  }
+
+  async _exportPDF() {
+    NotificationView.info('⏳ A gerar PDF…');
+    try {
+      const { PDFExporter } = await import('../components/PDFExporter.js');
+      const exp = new PDFExporter();
+      const svc = SERVICES[this.docModel.service];
+      await exp.export(this.docModel.content, `mzdocs-${this.docModel.service}-${Date.now()}.pdf`, {
+        title: svc?.title || 'Documento',
+        date: new Date().toLocaleDateString('pt-MZ'),
+      });
+      NotificationView.success('✅ PDF descarregado!');
+    } catch (err) {
+      NotificationView.error('❌ Erro no PDF: ' + err.message);
+    }
+  }
+
+  async _exportWord() {
+    NotificationView.info('⏳ A gerar Word…');
+    try {
+      const { WordExporter } = await import('../components/WordExporter.js');
+      const exp = new WordExporter();
+      const svc = SERVICES[this.docModel.service];
+      exp.export(this.docModel.content, `mzdocs-${this.docModel.service}-${Date.now()}.doc`, {
+        title: svc?.title || 'Documento',
+      });
+      NotificationView.success('✅ Word descarregado!');
+    } catch (err) {
+      NotificationView.error('❌ Erro no Word: ' + err.message);
+    }
+  }
+
+  _exportMarkdown() {
     const blob = new Blob([this.docModel.content], { type: 'text/markdown;charset=utf-8' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -146,6 +235,15 @@ export class DocumentController {
     a.download = `mzdocs-${this.docModel.service || 'doc'}-${Date.now()}.md`;
     a.click();
     URL.revokeObjectURL(url);
+    NotificationView.success('✅ Markdown descarregado!');
+  }
+
+  _openEditor() {
+    if (!this.docModel.content) return;
+    const svc = SERVICES[this.docModel.service];
+    if (window.documentEditor) {
+      window.documentEditor.loadDocument(this.docModel.content, svc?.title || this.docModel.service);
+    }
   }
 
   sendWA() {
@@ -168,19 +266,20 @@ export class DocumentController {
       const result = await this.queue.add(() =>
         this.openRouter.generateRaw(
           `EDITAR DOCUMENTO conforme instrução: "${instruction}"\n\nDOCUMENTO ATUAL:\n"""\n${currentContent}\n"""\n\nINSTRUÇÃO: ${instruction}\n\nReescreva o documento completo aplicando as alterações. Mantenha formato Markdown.`,
-          {
-            serviceType:    serviceType || this.docModel.service,
-            currentContent,
-            instruction,
-          },
-          this.creditModel.value  // CORRIGIDO: passa créditos reais
+          { serviceType: serviceType || this.docModel.service, currentContent, instruction },
+          this.creditModel.value
         )
       );
 
+      this.docModel.setGenerated(result.document, result.model);
+
       if (window.documentEditor) {
         window.documentEditor.loadDocument(result.document, serviceType || this.docModel.service);
-        this.docModel.setGenerated(result.document, result.model);
       }
+
+      // Actualiza também o preview no modal de resultado
+      const svc = SERVICES[this.docModel.service];
+      DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
 
       await this.creditModel.consume(1);
       NotificationView.success('✅ Documento reeditado!');
