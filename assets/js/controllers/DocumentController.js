@@ -4,6 +4,7 @@ import { DocumentView, ModalView, NotificationView } from '../views/Views.js';
 import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 import { Validator } from '../utils/Formatter.js';
+import { DocumentEditor } from '../components/DocumentEditor.js';
 
 const WA_NUMBER = '258858695506'; // ← SUBSTITUA PELO TEU NÚMERO WHATSAPP
 
@@ -24,12 +25,17 @@ export class DocumentController {
     document.getElementById('formClose')?.addEventListener('click', () => this.closeForm());
     document.getElementById('resultClose')?.addEventListener('click', () => this.closeResult());
     document.getElementById('formOverlay')?.addEventListener('click', e => { if (e.target.id === 'formOverlay') this.closeForm(); });
-    // resultOverlay NÃO fecha ao clicar fora — utilizador pode perder o documento
+    document.getElementById('resultOverlay')?.addEventListener('click', e => { if (e.target.id === 'resultOverlay') this.closeResult(); });
     document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
     document.getElementById('btnDl')?.addEventListener('click', () => this.downloadDoc());
     document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
     document.getElementById('btnEdit')?.addEventListener('click', () => this._openEditor());
     document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
+
+    // Garante que o DocumentEditor está inicializado e acessível globalmente
+    if (!window.documentEditor) {
+      window.documentEditor = new DocumentEditor();
+    }
   }
 
   open(key) {
@@ -140,23 +146,87 @@ export class DocumentController {
 
   downloadDoc() {
     if (!this.docModel.content) return;
-    const blob = new Blob([this.docModel.content], { type: 'text/markdown;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `mzdocs-${this.docModel.service || 'doc'}-${Date.now()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    this._removeExportMenu();
+
+    const menu = document.createElement('div');
+    menu.id = 'exportMenu';
+    menu.style.cssText = [
+      'position:fixed','bottom:90px','left:50%','transform:translateX(-50%)',
+      'background:#fff','border-radius:14px','box-shadow:0 8px 32px rgba(0,0,0,.18)',
+      'padding:8px','display:flex','flex-direction:column','gap:4px',
+      'z-index:99999','min-width:210px','border:1.5px solid #e5e7eb',
+    ].join(';');
+
+    const opts = [
+      { icon:'📄', label:'PDF',           fn: () => this._exportPDF()  },
+      { icon:'📃', label:'Word (.docx)',  fn: () => this._exportWord() },
+      { icon:'📊', label:'Excel (.xlsx)', fn: () => this._exportExcel()},
+    ];
+
+    opts.forEach(({ icon, label, fn }) => {
+      const btn = document.createElement('button');
+      btn.textContent = `${icon} ${label}`;
+      btn.style.cssText = [
+        'padding:12px 16px','border:none','background:none','border-radius:10px',
+        'font-size:14px','font-weight:600','cursor:pointer','text-align:left',
+        'font-family:inherit','width:100%','color:#07101f',
+      ].join(';');
+      btn.onmouseenter = () => { btn.style.background = '#f3f4f6'; };
+      btn.onmouseleave = () => { btn.style.background = 'none'; };
+      btn.onclick = () => { this._removeExportMenu(); fn(); };
+      menu.appendChild(btn);
+    });
+
+    document.body.appendChild(menu);
+    setTimeout(() => {
+      this._menuOutside = (e) => { if (!menu.contains(e.target)) this._removeExportMenu(); };
+      document.addEventListener('click', this._menuOutside);
+    }, 100);
+  }
+
+  _removeExportMenu() {
+    document.getElementById('exportMenu')?.remove();
+    if (this._menuOutside) { document.removeEventListener('click', this._menuOutside); this._menuOutside = null; }
+  }
+
+  async _exportPDF() {
+    NotificationView.info('⏳ A gerar PDF…');
+    try {
+      const { PDFExporter } = await import('../components/PDFExporter.js');
+      const exp = new PDFExporter();
+      const svc = SERVICES[this.docModel.service];
+      await exp.export(this.docModel.content, `mzdocs-${this.docModel.service}-${Date.now()}.pdf`, { title: svc?.title || 'Documento' });
+      NotificationView.success('✅ PDF descarregado!');
+    } catch (err) { NotificationView.error('❌ Erro no PDF: ' + err.message); }
+  }
+
+  async _exportWord() {
+    NotificationView.info('⏳ A gerar Word…');
+    try {
+      const { WordExporter } = await import('../components/WordExporter.js');
+      const exp = new WordExporter();
+      const svc = SERVICES[this.docModel.service];
+      await exp.export(this.docModel.content, `mzdocs-${this.docModel.service}-${Date.now()}.docx`, { title: svc?.title || 'Documento' });
+      NotificationView.success('✅ Word descarregado!');
+    } catch (err) { NotificationView.error('❌ Erro no Word: ' + err.message); }
+  }
+
+  async _exportExcel() {
+    NotificationView.info('⏳ A gerar Excel…');
+    try {
+      const { ExcelExporter } = await import('../components/ExcelExporter.js');
+      const exp = new ExcelExporter();
+      const svc = SERVICES[this.docModel.service];
+      await exp.export(this.docModel.content, `mzdocs-${this.docModel.service}-${Date.now()}.xlsx`, { title: svc?.title || 'Documento' });
+      NotificationView.success('✅ Excel descarregado!');
+    } catch (err) { NotificationView.error('❌ Erro no Excel: ' + err.message); }
   }
 
   _openEditor() {
-    if (!this.docModel.content) return;
+    if (!this.docModel.content) { NotificationView.warn('⚠️ Nenhum documento gerado ainda.'); return; }
+    if (!window.documentEditor) { window.documentEditor = new DocumentEditor(); }
     const svc = SERVICES[this.docModel.service];
-    if (window.documentEditor) {
-      window.documentEditor.loadDocument(this.docModel.content, svc?.title || this.docModel.service);
-    } else {
-      console.warn('[DocumentController] window.documentEditor não disponível');
-    }
+    window.documentEditor.loadDocument(this.docModel.content, svc?.title || this.docModel.service);
   }
 
   sendWA() {
