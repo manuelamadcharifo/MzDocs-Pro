@@ -189,9 +189,17 @@ export class WordExporter {
             // Linha em branco
             if (!line.trim()) { i++; continue; }
 
-            // Quebra de página explícita (--- sozinho)
+            // PAGE_BREAK explícito — quebra de folha A4 real
+            if (line.trim() === '---PAGE_BREAK---') {
+                children.push(new Paragraph({
+                    children: [new PageBreak()],
+                    spacing: { before: 0, after: 0 },
+                }));
+                i++; continue;
+            }
+
+            // Separador --- normal — linha horizontal
             if (/^---+$/.test(line.trim()) || /^\*\*\*+$/.test(line.trim())) {
-                // Separador — linha horizontal em vez de quebra de página
                 children.push(new Paragraph({
                     border: { bottom: { style: docx.BorderStyle.SINGLE, size: 4, color: 'CCCCCC', space: 4 } },
                     spacing: { before: 200, after: 200 },

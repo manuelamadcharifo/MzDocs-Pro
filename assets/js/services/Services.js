@@ -79,156 +79,134 @@ export class OpenRouterService {
 
   _buildPrompt(type, data, ocr) {
     const ocrBlock = ocr ? `\n\nRascunho OCR (use como base, corrija erros):\n${ocr}` : '';
-    const paginas  = parseInt(data.paginas) || 5;
-    // 1 página A4 densa ≈ 450 palavras de corpo de texto
-    const palavrasMin = paginas * 420;
-    const palavrasMax = paginas * 500;
 
     const builders = {
       trabalho: () => {
-        // Gera subcapítulos de desenvolvimento proporcional ao número de páginas
-        const numCaps = Math.max(2, Math.floor((paginas - 2) / 1.5)); // 2 páginas para intro+conclusão+capa
-        const caps = Array.from({ length: numCaps }, (_, i) =>
-          `### ${i + 1}.${i === 0 ? 1 : 1} [Subtema ${i + 1} — desenvolvido com no mínimo 2 subcapítulos e exemplos concretos]`
+        const pags    = parseInt(data.paginas) || 5;
+        const devPags = Math.max(2, pags - 3);
+        const numCaps = Math.max(2, Math.round(devPags / 1.5));
+        const palavras = pags * 420;
+        const ano = new Date().getFullYear();
+
+        const capsEstrutura = Array.from({ length: numCaps }, (_, i) => {
+          const capNum = i + 2;
+          return [
+            '',
+            '---PAGE_BREAK---',
+            `## ${capNum}. [Título do Capítulo ${i + 1} — específico ao tema "${data.tema}"]`,
+            '',
+            `### ${capNum}.1 [Subtítulo A — aspecto principal]`,
+            `[ESCREVA AGORA: mínimo 4 parágrafos completos de 6-8 linhas cada. Conteúdo académico real com dados, datas, nomes, exemplos concretos do contexto moçambicano/africano. PROIBIDO usar marcadores de lugar.]`,
+            '',
+            `### ${capNum}.2 [Subtítulo B — aspecto complementar]`,
+            `[ESCREVA AGORA: mínimo 3 parágrafos completos de 6-8 linhas cada. Análise crítica, comparações, implicações práticas para Moçambique.]`,
+            '',
+            `### ${capNum}.3 [Subtítulo C — síntese do capítulo]`,
+            `[ESCREVA AGORA: mínimo 2 parágrafos de 5-6 linhas resumindo os pontos-chave do capítulo e ligando ao próximo.]`,
+          ].join('\n');
+        }).join('\n');
+
+        const indice = Array.from({ length: numCaps }, (_, i) =>
+          `   ${i + 2}. [Capítulo ${i + 1}] .................................................. ${i + 4}`
         ).join('\n');
 
-        return `Gere um TRABALHO ACADÉMICO COMPLETO, EXTENSO E DENSO sobre "${data.tema}".
-Nível: ${data.nivel}. Disciplina: ${data.disciplina}.
-Extensão obrigatória: ${paginas} páginas A4 completas = MÍNIMO ${palavrasMin} palavras de conteúdo (MÁXIMO ${palavrasMax} palavras).
-NÃO corte o documento. NÃO faça resumo. ESCREVA TODO O CONTEÚDO.
-Requisitos do professor: ${data.requisitos || 'nenhum'}.${ocrBlock}
+        return `Você é um docente universitário experiente. Redija um TRABALHO ACADÉMICO COMPLETO, EXTENSO E DETALHADO seguindo exactamente a estrutura abaixo.
 
-REGRAS DE EXTENSÃO (OBRIGATÓRIAS):
-- Cada secção de desenvolvimento deve ter NO MÍNIMO 3 parágrafos longos (5-8 linhas cada)
-- Use exemplos, dados, contexto moçambicano e africano sempre que possível
-- Não use marcadores de lugar como "[escrever aqui]" — escreva o conteúdo real
-- Introdução: pelo menos 2 parágrafos completos
-- Cada capítulo de desenvolvimento: pelo menos 4-6 parágrafos com subcapítulos
-- Conclusão: pelo menos 2 parágrafos
+DADOS DO TRABALHO:
+- Tema: "${data.tema}"
+- Disciplina: ${data.disciplina}
+- Nível: ${data.nivel}
+- Extensão: ${pags} folhas A4 = MÍNIMO ${palavras} palavras de conteúdo real
+- Requisitos do docente: ${data.requisitos || 'seguir normas académicas padrão APA'}
 
-Estrutura obrigatória em Markdown:
+REGRAS ABSOLUTAS DE CONTEÚDO:
+1. O marcador ---PAGE_BREAK--- separa cada folha A4 — use-o exactamente como indicado
+2. Cada parágrafo deve ter 6-8 linhas de texto académico denso e contínuo
+3. NUNCA escreva "[PREENCHER]", "[escrever aqui]" ou qualquer marcador de lugar no conteúdo narrativo — escreva o texto real
+4. Use exemplos reais, dados históricos verificáveis, contexto moçambicano e africano sempre que possível
+5. Corrija ortografia e acentuação em português europeu/moçambicano
+6. Títulos e subtítulos em **negrito** e bem hierarquizados
+
+ESTRUTURA OBRIGATÓRIA (copie exactamente incluindo ---PAGE_BREAK---):
+
+---PAGE_BREAK---
 # ${data.tema}
-**Disciplina:** ${data.disciplina} | **Nível:** ${data.nivel} | **Data:** ${new Date().toLocaleDateString('pt-MZ')}
 
----
+| | |
+|---|---|
+| **Instituição:** | [Nome da Instituição] |
+| **Curso/Disciplina:** | ${data.disciplina} |
+| **Nível:** | ${data.nivel} |
+| **Aluno(a):** | [Nome Completo] |
+| **Número de Estudante:** | [Número] |
+| **Docente:** | [Nome do Professor] |
+| **Cidade e Ano:** | Maputo, ${ano} |
 
+---PAGE_BREAK---
 ## Índice
-1. Introdução
-2. [Capítulos de desenvolvimento — liste todos]
-${Array.from({ length: numCaps }, (_, i) => `${i + 3}. [Capítulo ${i + 1}]`).join('\n')}
-${numCaps + 3}. Conclusão
-${numCaps + 4}. Referências Bibliográficas
 
----
+   1. Introdução .................................................. 3
+${indice}
+   ${numCaps + 2}. Conclusão .................................................. ${numCaps + 4}
+   ${numCaps + 3}. Referências Bibliográficas ................................ ${numCaps + 5}
 
+---PAGE_BREAK---
 ## 1. Introdução
-[Mínimo 350 palavras: contextualização, relevância, objectivos, metodologia]
 
-${Array.from({ length: numCaps }, (_, i) => `
-## ${i + 2}. [Título do Capítulo ${i + 1}]
-
-### ${i + 2}.1 [Subtópico A]
-[Mínimo 300 palavras com análise aprofundada]
-
-### ${i + 2}.2 [Subtópico B]
-[Mínimo 300 palavras com exemplos e dados]
-`).join('\n')}
-
+[ESCREVA AGORA um texto introdutório com MÍNIMO 5 parágrafos de 6-8 linhas cada:
+Parágrafo 1 — Contextualização: apresente o tema com dados históricos, geográficos ou sociais reais que enquadrem o leitor. Cite datas, locais e factos verificáveis.
+Parágrafo 2 — Relevância: explique por que este tema é importante para Moçambique, para África e para o mundo actual. Use argumentos sólidos.
+Parágrafo 3 — Objectivos: defina claramente o objectivo geral e pelo menos 3 objectivos específicos do trabalho usando verbos de acção (analisar, descrever, comparar, avaliar...).
+Parágrafo 4 — Metodologia: descreva o tipo de pesquisa (bibliográfica, qualitativa, descritiva), as fontes consultadas e os critérios de selecção.
+Parágrafo 5 — Estrutura do trabalho: apresente brevemente o que o leitor encontrará em cada capítulo.]
+${capsEstrutura}
+---PAGE_BREAK---
 ## ${numCaps + 2}. Conclusão
-[Mínimo 300 palavras: síntese, contribuições, limitações, perspectivas futuras]
 
+[ESCREVA AGORA uma conclusão com MÍNIMO 4 parágrafos de 6-8 linhas cada:
+Parágrafo 1 — Síntese geral: retome os principais achados de cada capítulo de forma integrada, mostrando como se relacionam.
+Parágrafo 2 — Resposta aos objectivos: avalie explicitamente se os objectivos propostos na introdução foram atingidos e como.
+Parágrafo 3 — Contribuições e limitações: indique o contributo deste trabalho para o conhecimento na área e reconheça as limitações encontradas.
+Parágrafo 4 — Recomendações: proponha acções concretas para gestores, políticos, educadores ou investigadores, e indique linhas futuras de pesquisa.]
+
+---PAGE_BREAK---
 ## ${numCaps + 3}. Referências Bibliográficas
-[Mínimo 5 fontes em formato APA]`;
+
+[Liste MÍNIMO 7 referências reais e verificáveis em formato APA 7ª edição, incluindo obrigatoriamente:
+- Pelo menos 2 livros académicos publicados sobre o tema
+- Pelo menos 1 artigo científico de revista indexada
+- Pelo menos 1 relatório de organismo internacional (ONU, Banco Mundial, UA, SADC)
+- Pelo menos 1 fonte moçambicana (INE, Governo de Moçambique, universidades moçambicanas)
+
+Exemplo de formato:
+Apelido, A. B. (Ano). *Título do livro em itálico*. Editora.
+Apelido, A. B., & Apelido, C. D. (Ano). Título do artigo. *Nome da Revista*, Volume(Número), páginas. https://doi.org/xxxxx]
+`;
       },
 
+
       cv: () =>
-        `Crie um CURRÍCULO VITAE PROFISSIONAL COMPLETO em Markdown para o mercado moçambicano.
-Nome: ${data.nome}. Cargo pretendido: ${data.cargo}.
-Nascimento: ${data.nascimento || '-'}. Contacto: ${data.contacto || '-'}. Email: ${data.email || '-'}.
-Formação: ${data.formacao}. Experiência: ${data.experiencia || 'Recém-formado sem experiência formal'}.
-Habilidades: ${data.habilidades || '-'}. Objectivo: ${data.objectivo || '-'}.${ocrBlock}
-
-Gere um CV PROFISSIONAL COMPLETO com todas as secções preenchidas com detalhe.
-Formato Europass adaptado ao mercado moçambicano:
-# ${data.nome}
-**${data.cargo}**
-
----
-## Dados Pessoais
-[tabela ou lista com todos os contactos]
-
-## Objectivo Profissional
-[Parágrafo de 3-5 linhas descrevendo perfil e ambições para a vaga]
-
-## Formação Académica
-[Cada formação com: Grau | Instituição | Ano | Localidade]
-
-## Experiência Profissional
-[Cada cargo com: Empresa | Período | Descrição detalhada com verbos de acção (gerí, coordenei, implementei...)]
-
-## Competências Técnicas
-[Lista organizada por categoria]
-
-## Competências Pessoais / Soft Skills
-[5-8 competências com breve descrição]
-
-## Línguas
-[Cada língua com nível: Nativo / Fluente / Intermédio / Básico]
-
-## Referências
-[Formato: Nome, Cargo, Empresa, Contacto — ou "Disponíveis mediante solicitação"]`,
+        `Crie um CURRÍCULO VITAE PROFISSIONAL em Markdown para o mercado moçambicano.
+Nome: ${data.nome}. Cargo: ${data.cargo}. Nascimento: ${data.nascimento || '-'}.
+Contacto: ${data.contacto || '-'}. Email: ${data.email || '-'}.
+Formação: ${data.formacao}. Experiência: ${data.experiencia || 'Recém-formado'}.
+Habilidades: ${data.habilidades || '-'}. Objectivo: ${data.objectivo || '-'}${ocrBlock}
+Formato Europass: Dados Pessoais → Objectivo → Formação → Experiência (verbos de acção) → Competências → Referências.`,
 
       carta: () =>
-        `Redija uma CARTA FORMAL COMPLETA E PROFISSIONAL do tipo "${data.tipo}".
+        `Redija uma CARTA FORMAL COMPLETA do tipo "${data.tipo}".
 Remetente: ${data.remetenteNome}, ${data.remetenteLocal || 'Maputo'}.
 Destinatário: ${data.destinatarioNome} — ${data.destinatarioEnti}.
-Assunto: ${data.assunto}.
-Conteúdo a incluir: ${data.pontos}.${ocrBlock}
-
-A carta deve ser COMPLETA, FORMAL e CONVINCENTE. Inclua:
-- Cabeçalho com local e data
-- Dados completos do remetente (morada, contacto)
-- Dados do destinatário
-- Linha de assunto em destaque
-- Saudação formal adequada ao contexto moçambicano
-- Corpo da carta em 4-6 parágrafos bem desenvolvidos (cada um com 4-6 linhas)
-- Fecho formal ("Atenciosamente" / "Com os melhores cumprimentos")
-- Assinatura com nome e cargo/título
-NÃO use marcadores de lugar. Escreva o conteúdo real baseado nos pontos fornecidos.`,
+Assunto: ${data.assunto}. Pontos: ${data.pontos}.${ocrBlock}
+Estrutura: cabeçalho com data/local → dados de remetente e destinatário → assunto → saudação formal → 3-4 parágrafos → fecho → assinatura.`,
 
       orcamento: () =>
-        `Elabore um ORÇAMENTO DE CONSTRUÇÃO PROFISSIONAL E DETALHADO em Markdown com tabelas completas.
+        `Elabore um ORÇAMENTO DE CONSTRUÇÃO DETALHADO em Markdown com tabelas.
 Obra: ${data.tipoObra}. Área: ${data.area || '?'} m². Local: ${data.local}.
-Acabamento: ${data.acabamento || 'Médio / Padrão'}. Fase: ${data.fase || 'Construção do zero'}. Prazo: ${data.prazo || 60} dias.
-Detalhes adicionais: ${data.extra || 'padrão'}.${ocrBlock}
-
-O orçamento deve ser PROFISSIONAL E COMPLETO com:
-# Orçamento de ${data.tipoObra}
-**Local:** ${data.local} | **Data:** ${new Date().toLocaleDateString('pt-MZ')} | **Validade:** 30 dias
-
-## 1. Resumo da Obra
-[Descrição detalhada: tipo, dimensões, especificações técnicas]
-
-## 2. Materiais de Construção
-[Tabela completa: | Item | Unidade | Quantidade | Preço Unit. (MZN) | Total (MZN) |]
-[Inclui: cimento, areia, brita, tijolos, ferro, telhado, portas, janelas, azulejos, tintas, canalizações, elétrica, etc.]
-
-## 3. Mão-de-Obra
-[Tabela: | Especialidade | Dias | Diária (MZN) | Total (MZN) |]
-
-## 4. Equipamentos e Ferramentas
-[Tabela com aluguer/compra]
-
-## 5. Resumo Financeiro
-[Tabela com totais por categoria, subtotal, IVA 17%, TOTAL GERAL]
-
-## 6. Cronograma de Obra
-[Tabela: fases com duração em semanas]
-
-## 7. Condições Comerciais
-[Formas de pagamento, garantia, responsabilidades]
-
-Use preços de mercado moçambicano ${new Date().getFullYear()} realistas em MZN.`,
+Acabamento: ${data.acabamento || 'médio'}. Fase: ${data.fase}. Prazo: ${data.prazo || 60} dias.
+Detalhes: ${data.extra || 'padrão'}.${ocrBlock}
+Incluir: resumo da obra → tabelas de materiais por fase (cimento, tijolos, ferro, areia, telha etc.) com quantidades e preços MZN → mão-de-obra → equipamentos → resumo financeiro com total → condições comerciais.
+Preços de mercado moçambicano ${new Date().getFullYear()}.`,
     };
 
     return (builders[type] || builders.trabalho)();
