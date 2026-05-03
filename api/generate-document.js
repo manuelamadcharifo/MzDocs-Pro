@@ -1,30 +1,32 @@
-// api/generate-document.js — Proxy seguro para OpenRouter + rate limit simples
+// api/generate-document.js — Proxy OpenRouter com corridas paralelas
 
 const SYSTEM_PROMPT = `Você é o MzDocs Pro, motor de geração de documentos para Moçambique.
 Gere documentos COMPLETOS e prontos para uso em português (variante moçambicana, formal).
 Use Markdown. Nunca use meta-comentários como "Aqui está o documento...".
 Nunca invente dados pessoais — use [PREENCHER]. Nunca corte o documento no meio.`;
 
-// IDs verificados e activos em Maio 2026 (openrouter.ai/collections/free-models)
-const MODELS = [
-    'meta-llama/llama-3.3-70b-instruct:free',   // 66K ctx — melhor qualidade
-    'google/gemma-3-27b-it:free',                 // 131K ctx — alternativa Google
-    'nousresearch/hermes-3-llama-3.1-405b:free',  // 131K ctx — muito capaz
-    'google/gemma-3-12b-it:free',                 // 33K ctx — rápido
-    'meta-llama/llama-3.2-3b-instruct:free',      // 131K ctx — leve, último recurso
+// Modelos confirmados activos em Maio 2026 (openrouter.ai/collections/free-models)
+// Agrupados em waves: primeiro tenta Wave 1 em paralelo, se todos falharem tenta Wave 2
+const WAVE1 = [
+    'google/gemma-3-27b-it:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'nousresearch/hermes-3-llama-3.1-405b:free',
+];
+const WAVE2 = [
+    'google/gemma-3-12b-it:free',
+    'meta-llama/llama-3.2-3b-instruct:free',
+    'mistralai/mistral-7b-instruct:free',
 ];
 
-// Rate limit simples em memória (por IP, 20 req/min)
+// Rate limit simples em memória (por IP, 10 req/min para não esgotar quotas)
 const rateMap = new Map();
 function checkRateLimit(ip) {
     const now = Date.now();
-    const window = 60_000;
-    const max = 20;
-    const entry = rateMap.get(ip) || { count: 0, reset: now + window };
-    if (now > entry.reset) { entry.count = 0; entry.reset = now + window; }
+    const entry = rateMap.get(ip) || { count: 0, reset: now + 60_000 };
+    if (now > entry.reset) { entry.count = 0; entry.reset = now + 60_000; }
     entry.count++;
     rateMap.set(ip, entry);
-    return entry.count <= max;
+    return entry.count <= 10;
 }
 
 const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
@@ -61,32 +63,53 @@ export default async function handler(req, res) {
         return res.status(402).json({ error: 'INSUFFICIENT_CREDITS', code: 'INSUFFICIENT_CREDITS' });
     }
 
-    let lastError = null;
-    for (let i = 0; i < MODELS.length; i++) {
-        const model = MODELS[i];
-        try {
-            const result = await callOpenRouter(finalPrompt, model, OPENROUTER_KEY);
-            console.log(JSON.stringify({ event: 'doc_generated', serviceType, model, userId: userId ? userId.slice(0,8)+'***' : 'anon', ts: new Date().toISOString() }));
-            return res.status(200).json({
-                document: result.content,
-                model,
-                creditsRemaining: typeof userCredits === 'number' ? Math.max(0, userCredits - 1) : null,
-                usage: result.usage
-            });
-        } catch (err) {
-            console.warn(`[generate-document] ${model} falhou:`, err.status, err.message);
-            lastError = err;
-            // Continua para o próximo modelo em TODOS os erros do provider (400 incluso — ID pode estar deprecated)
-            if (i < MODELS.length - 1) await new Promise(r => setTimeout(r, 400 * (i + 1)));
-            continue;
-        }
+    // Tenta uma wave de modelos em paralelo — retorna o primeiro que responder com sucesso
+    async function tryWave(models) {
+        return Promise.any(
+            models.map(model =>
+                callOpenRouter(finalPrompt, model, OPENROUTER_KEY)
+                    .then(result => ({ ...result, model }))
+                    .catch(err => {
+                        console.warn(`[generate-document] ${model} falhou:`, err.status, err.message);
+                        throw err; // Promise.any precisa de rejeição para tentar o próximo
+                    })
+            )
+        );
     }
 
-    const status = lastError?.status === 429 ? 429 : 503;
-    return res.status(status).json({
-        error: status === 429 ? 'Limite de velocidade atingido. Tente novamente em segundos.' : 'Serviço de IA temporariamente indisponível.',
-        code:  status === 429 ? 'RATE_LIMIT' : 'SERVICE_UNAVAILABLE',
-    });
+    try {
+        // Wave 1: 3 modelos em paralelo
+        let result;
+        try {
+            result = await tryWave(WAVE1);
+        } catch {
+            // Todos da Wave 1 falharam — tenta Wave 2
+            console.warn('[generate-document] Wave 1 falhou, a tentar Wave 2…');
+            result = await tryWave(WAVE2);
+        }
+
+        console.log(JSON.stringify({
+            event: 'doc_generated', serviceType,
+            model: result.model,
+            userId: userId ? userId.slice(0, 8) + '***' : 'anon',
+            ts: new Date().toISOString()
+        }));
+
+        return res.status(200).json({
+            document: result.content,
+            model: result.model,
+            creditsRemaining: typeof userCredits === 'number' ? Math.max(0, userCredits - 1) : null,
+            usage: result.usage
+        });
+
+    } catch (err) {
+        // Ambas as waves falharam
+        console.error('[generate-document] Todas as waves falharam:', err);
+        return res.status(503).json({
+            error: 'Serviço de IA temporariamente indisponível. Tente novamente em 30 segundos.',
+            code: 'SERVICE_UNAVAILABLE',
+        });
+    }
 }
 
 async function callOpenRouter(prompt, model, apiKey) {
@@ -95,7 +118,7 @@ async function callOpenRouter(prompt, model, apiKey) {
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
-            'HTTP-Referer': process.env.VERCEL_URL || 'https://mz-docs-pro.vercel.app',
+            'HTTP-Referer': 'https://mz-docs-pro.vercel.app',
             'X-Title': 'MzDocs Pro',
         },
         body: JSON.stringify({
@@ -108,15 +131,20 @@ async function callOpenRouter(prompt, model, apiKey) {
             temperature: 0.7,
             top_p: 0.9,
         }),
+        signal: AbortSignal.timeout(50_000), // 50s timeout por chamada (dentro do limite 60s da Vercel)
     });
+
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         const e = new Error(data?.error?.message || `OpenRouter HTTP ${res.status}`);
         e.status = res.status;
         throw e;
     }
+
     const data = await res.json();
-    return { content: data.choices?.[0]?.message?.content || '', usage: data.usage };
+    const content = data.choices?.[0]?.message?.content || '';
+    if (!content) throw Object.assign(new Error('Resposta vazia do modelo'), { status: 503 });
+    return { content, usage: data.usage };
 }
 
 export const config = { maxDuration: 60 };
