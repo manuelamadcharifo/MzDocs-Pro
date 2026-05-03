@@ -6,9 +6,11 @@ Use Markdown. Nunca use meta-comentários como "Aqui está o documento...".
 Nunca invente dados pessoais — use [PREENCHER]. Nunca corte o documento no meio.`;
 
 const MODELS = [
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'google/gemma-3-27b-it:free',
+    'deepseek/deepseek-chat-v3-5:free',
+    'meta-llama/llama-3.1-8b-instruct:free',
     'mistralai/mistral-7b-instruct:free',
+    'google/gemma-3-12b-it:free',
+    'qwen/qwen3-8b:free',
 ];
 
 // Rate limit simples em memória (por IP, 20 req/min)
@@ -59,7 +61,8 @@ export default async function handler(req, res) {
     }
 
     let lastError = null;
-    for (const model of MODELS) {
+    for (let i = 0; i < MODELS.length; i++) {
+        const model = MODELS[i];
         try {
             const result = await callOpenRouter(finalPrompt, model, OPENROUTER_KEY);
             console.log(JSON.stringify({ event: 'doc_generated', serviceType, model, userId: userId ? userId.slice(0,8)+'***' : 'anon', ts: new Date().toISOString() }));
@@ -72,7 +75,10 @@ export default async function handler(req, res) {
         } catch (err) {
             console.warn(`[generate-document] ${model} falhou:`, err.status, err.message);
             lastError = err;
-            if (err.status === 429 || err.status === 503) continue;
+            if (err.status === 429 || err.status === 503 || err.status === 502) {
+                if (i < MODELS.length - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
+                continue;
+            }
             break;
         }
     }
