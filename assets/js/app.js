@@ -8,6 +8,7 @@ import { OCRController } from './controllers/OCRController.js';
 import { authManager } from './auth/AuthManager.js';
 import { authUI } from './auth/AuthUI.js';
 import { authGuard } from './auth/AuthGuard.js';
+import { DocumentEditor } from './components/DocumentEditor.js';
 
 async function bootstrap() {
     // 1. Aguardar auth inicializar (evita race condition)
@@ -17,6 +18,9 @@ async function bootstrap() {
     const creditModel = new CreditModel();
     await creditModel.init();
     const docModel = new DocumentModel();
+
+    // Instancia o editor de documentos globalmente (antes dos controllers)
+    window.documentEditor = new DocumentEditor();
 
     // 3. Controllers
     const docCtrl = new DocumentController(creditModel);
