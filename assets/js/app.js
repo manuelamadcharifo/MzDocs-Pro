@@ -19,7 +19,7 @@ async function bootstrap() {
     await creditModel.init();
     const docModel = new DocumentModel();
 
-    // Instancia o editor de documentos globalmente (antes dos controllers)
+    // Instancia editor globalmente antes dos controllers
     window.documentEditor = new DocumentEditor();
 
     // 3. Controllers
