@@ -92,11 +92,9 @@ export class CreditModel {
     }
 
     async init() {
+        // Créditos só vêm de pacotes pagos — não há créditos grátis automáticos para visitantes
         const paid = Storage.get('credits', 0);
-        const freeKey = Storage.getFreeKey();
-        const freeUsed = Storage.get(freeKey, 0);
-        const freeLeft = Math.max(0, 3 - freeUsed);
-        this.credits = paid + freeLeft;
+        this.credits = paid;
         this._emit();
 
         const ok = await this.supabase.init().catch(() => false);
@@ -140,11 +138,9 @@ export class CreditModel {
         if (server !== null && server >= 0) {
             this.credits = server;
         } else {
+            // Fallback local — descontar dos créditos pagos
             this.credits = Math.max(0, this.credits - n);
-            const freeKey = Storage.getFreeKey();
-            const freeUsed = Storage.get(freeKey, 0);
-            if (freeUsed < 3) Storage.set(freeKey, freeUsed + 1);
-            else Storage.set('credits', Math.max(0, Storage.get('credits', 0) - 1));
+            Storage.set('credits', Math.max(0, Storage.get('credits', 0) - n));
         }
         this._emit();
         return this.credits;

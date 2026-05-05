@@ -20,11 +20,32 @@ export class PaymentController {
         document.querySelectorAll('.pkg').forEach(el => {
             el.addEventListener('click', () => this.selectPkg(el, el.dataset.pkg));
         });
+        // Pacote avulso (botão inline na secção de visitante)
+        document.querySelector('.pkg-avulso-btn')?.addEventListener('click', (e) => {
+            this.selectPkg(e.currentTarget, 'avulso');
+        });
         document.getElementById('phoneInput')?.addEventListener('input', e => this.onPhoneInput(e.target));
         document.getElementById('btnPay')?.addEventListener('click', () => this.pay());
     }
 
-    showPricing() { ModalView.open('payOverlay'); }
+    // Abrir modal em modo visitante — mostra secção avulso em destaque
+    showPricing(guestMode = false) {
+        const avulsoSec = document.getElementById('avulsoSection');
+        const payTitle  = document.getElementById('payTitle');
+        const paySub    = document.getElementById('paySubtitle');
+        if (guestMode) {
+            if (avulsoSec) avulsoSec.style.display = 'block';
+            if (payTitle)  payTitle.textContent  = 'Acesso sem conta';
+            if (paySub)    paySub.textContent    = 'Pague 50 MZN e gere 1 documento agora';
+        } else {
+            if (avulsoSec) avulsoSec.style.display = 'none';
+            if (payTitle)  payTitle.textContent  = 'Adquirir Créditos';
+            if (paySub)    paySub.textContent    = 'Pagamento rápido via M-Pesa';
+        }
+        ModalView.open('payOverlay');
+    }
+
+    openAsGuest() { this.showPricing(true); }
 
     close() {
         ModalView.close('payOverlay');
@@ -32,6 +53,13 @@ export class PaymentController {
         const sec = document.getElementById('mpesaSection');
         if (sec) sec.style.display = 'none';
         document.querySelectorAll('.pkg').forEach(el => el.classList.remove('sel'));
+        // Resetar aviso manual
+        const mpNote = document.getElementById('mpNote');
+        const manualInfo = document.getElementById('payManualInfo');
+        const btnPay = document.getElementById('btnPay');
+        if (mpNote) mpNote.style.display = '';
+        if (manualInfo) manualInfo.style.display = 'none';
+        if (btnPay) btnPay.textContent = 'Pagar com M-Pesa';
     }
 
     selectPkg(el, key) {
@@ -47,6 +75,15 @@ export class PaymentController {
         const summary = document.getElementById('paySummary');
         if (summary) summary.innerHTML =
             `<span>Pacote <strong>${pkg.name}</strong></span><strong>MZN ${pkg.price} → ${pkg.credits} créditos</strong>`;
+
+        // Mostrar aviso de pagamento manual e ajustar nota/botão
+        const mpNote = document.getElementById('mpNote');
+        const manualInfo = document.getElementById('payManualInfo');
+        const btnPay = document.getElementById('btnPay');
+        if (mpNote) mpNote.style.display = 'none';
+        if (manualInfo) manualInfo.style.display = 'block';
+        if (btnPay) btnPay.textContent = 'Confirmar e Abrir WhatsApp';
+
         this.onPhoneInput(document.getElementById('phoneInput'));
     }
 

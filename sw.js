@@ -7,14 +7,42 @@ workbox.setConfig({ debug: false });
 
 // ── PRECACHING ──────────────────────────────────────────────────────────────
 workbox.precaching.precacheAndRoute([
-    { url: '/',               revision: '3.1' },
-    { url: '/index.html',     revision: '3.1' },
-    { url: '/offline.html',   revision: '3.1' },
-    { url: '/manifest.json',  revision: '3.1' },
-    { url: '/assets/css/styles.css',  revision: '3.1' },
-    { url: '/assets/css/editor.css',  revision: '3.1' },
-    { url: '/assets/css/auth.css',    revision: '3.1' },
-    { url: '/assets/js/app.js',       revision: '3.1' },
+    { url: '/',               revision: '3.2' },
+    { url: '/index.html',     revision: '3.2' },
+    { url: '/offline.html',   revision: '3.2' },
+    { url: '/manifest.json',  revision: '3.2' },
+    // CSS
+    { url: '/assets/css/styles.css',  revision: '3.2' },
+    { url: '/assets/css/editor.css',  revision: '3.2' },
+    { url: '/assets/css/auth.css',    revision: '3.2' },
+    // JS — entry point e todos os módulos
+    { url: '/assets/js/app.js',                              revision: '3.2' },
+    { url: '/assets/js/models/Models.js',                    revision: '3.2' },
+    { url: '/assets/js/views/Views.js',                      revision: '3.2' },
+    { url: '/assets/js/controllers/DocumentController.js',   revision: '3.2' },
+    { url: '/assets/js/controllers/PaymentController.js',    revision: '3.2' },
+    { url: '/assets/js/controllers/OCRController.js',        revision: '3.2' },
+    { url: '/assets/js/controllers/HistoryController.js',    revision: '3.2' },
+    { url: '/assets/js/services/Services.js',                revision: '3.2' },
+    { url: '/assets/js/services/ServiceDefinitions.js',      revision: '3.2' },
+    { url: '/assets/js/services/PaymentService.js',          revision: '3.2' },
+    { url: '/assets/js/services/MPesaService.js',            revision: '3.2' },
+    { url: '/assets/js/auth/AuthManager.js',                 revision: '3.2' },
+    { url: '/assets/js/auth/AuthUI.js',                      revision: '3.2' },
+    { url: '/assets/js/auth/AuthGuard.js',                   revision: '3.2' },
+    { url: '/assets/js/components/DocumentEditor.js',        revision: '3.2' },
+    { url: '/assets/js/components/PDFExporter.js',           revision: '3.2' },
+    { url: '/assets/js/components/WordExporter.js',          revision: '3.2' },
+    { url: '/assets/js/components/ExcelExporter.js',         revision: '3.2' },
+    { url: '/assets/js/components/SignatureCanvas.js',        revision: '3.2' },
+    { url: '/assets/js/utils/Storage.js',                    revision: '3.2' },
+    { url: '/assets/js/utils/Formatter.js',                  revision: '3.2' },
+    { url: '/assets/js/utils/IndexedDB.js',                  revision: '3.2' },
+    // Ícones
+    { url: '/assets/icons/icon.svg',            revision: '3.2' },
+    { url: '/assets/icons/icon-192x192.png',    revision: '3.2' },
+    { url: '/assets/icons/icon-512x512.png',    revision: '3.2' },
+    { url: '/assets/icons/apple-touch-icon.png',revision: '3.2' },
 ]);
 
 // ── ESTRATÉGIAS DE CACHE ────────────────────────────────────────────────────

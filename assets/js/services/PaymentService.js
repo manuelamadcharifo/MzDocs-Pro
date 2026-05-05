@@ -4,8 +4,9 @@
 const WA_NUMBER = '258858695506'; // ← ALTERE PARA O TEU NÚMERO
 
 const PACKAGES = {
+  avulso:   { credits: 3,  price: 50,  name: 'Avulso',  popular: false, desc: '1 documento + 2 revisões, sem conta' },
   starter:  { credits: 10, price: 150, name: 'Starter',  popular: false },
-  basico:   { credits: 25, price: 350, name: 'Básico',   popular: true },
+  basico:   { credits: 25, price: 350, name: 'Básico',   popular: true  },
   pro:      { credits: 60, price: 750, name: 'Pro',      popular: false },
 };
 

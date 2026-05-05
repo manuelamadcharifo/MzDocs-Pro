@@ -1,6 +1,7 @@
 // api/process-payment.js — M-Pesa C2B + Manual (WhatsApp)
 
 const PACKAGES = {
+    avulso:  { amount: 50,  credits: 3,  name: 'Avulso'  },
     starter: { amount: 150, credits: 10, name: 'Starter' },
     basico:  { amount: 350, credits: 25, name: 'Básico'  },
     pro:     { amount: 750, credits: 60, name: 'Pro'     },

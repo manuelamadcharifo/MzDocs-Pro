@@ -45,16 +45,22 @@
     <span class="ver-tag">v3 MVC</span>
   </div>
   <div class="hdr-r">
-    <div id="authContainer" style="display:flex;align-items:center;gap:8px;">
-      <button class="btn-topup" id="btnTopup" style="display:none;">+ Comprar</button>
-      <button class="btn-auth" id="authBtn"
-        style="padding:8px 16px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
-        🔐 Entrar
+    <!-- Visitante: apenas botão Entrar -->
+    <button class="btn-auth" id="authBtn"
+      style="padding:8px 16px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
+      🔐 Entrar
+    </button>
+    <!-- Autenticado: avatar + arquivo + créditos + comprar -->
+    <div id="userArea" style="display:none;align-items:center;gap:8px;">
+      <div id="userMenu" style="display:flex;align-items:center;gap:8px;"></div>
+      <button class="btn-history" id="btnHistory" title="Arquivo de documentos"
+        style="padding:7px 11px;background:#f1f5f9;color:#334155;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;">
+        📁
       </button>
-      <div id="userMenu" style="display:none;align-items:center;gap:8px;"></div>
-    </div>
-    <div class="credit-pill" id="creditPill" style="display:none;">
-      <span>⚡</span><span class="cp-val" id="creditVal">—</span><span class="cp-lbl">cr</span>
+      <div class="credit-pill" id="creditPill" style="cursor:pointer;" title="Créditos disponíveis">
+        <span>⚡</span><span class="cp-val" id="creditVal">—</span><span class="cp-lbl">cr</span>
+      </div>
+      <button class="btn-topup" id="btnTopup">+ Comprar</button>
     </div>
   </div>
 </header>
@@ -81,10 +87,10 @@
   <button onclick="this.parentElement.style.display='none'">✕</button>
 </div>
 
-<!-- FREE CREDITS BANNER -->
-<div class="free-bar" id="freeBar">
-  🎁 <strong id="freeLeft">3</strong> créditos gratuitos este mês
-  <button onclick="this.parentElement.remove()">✕</button>
+<!-- BANNER VISITANTE — aparece só para não autenticados -->
+<div class="free-bar" id="guestBar" style="display:none;">
+  👋 <strong>Bem-vindo!</strong> Crie uma conta gratuita e ganhe 3 créditos — ou <button id="btnGuestBuy" style="background:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.5);color:inherit;border-radius:6px;padding:2px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-left:4px;">Comprar acesso avulso · 50 MZN</button>
+  <button onclick="this.parentElement.style.display='none'" style="margin-left:8px;background:none;border:none;cursor:pointer;font-size:16px;color:inherit;">✕</button>
 </div>
 
 <!-- QUEUE STATUS BAR -->
@@ -232,8 +238,27 @@
   <div class="sheet" id="paySheet">
     <div class="pill"></div>
     <div class="sheet-hdr">
-      <div><div class="sh-title">Adquirir Créditos</div><div class="sh-sub">Pagamento rápido via M-Pesa</div></div>
+      <div><div class="sh-title" id="payTitle">Adquirir Créditos</div><div class="sh-sub" id="paySubtitle">Pagamento rápido via M-Pesa</div></div>
       <button class="sh-x" id="payClose">✕</button>
+    </div>
+    <!-- ACESSO AVULSO (visitantes) -->
+    <div id="avulsoSection" style="display:none;margin-bottom:16px;">
+      <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;">
+        <div style="font-size:13px;font-weight:700;color:#1D4ED8;margin-bottom:4px;">🚀 Acesso Avulso — Sem Conta</div>
+        <div style="font-size:13px;color:#1e40af;line-height:1.5;">1 documento gerado por IA + 2 revisões</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+          <span style="font-size:20px;font-weight:800;color:#1D4ED8;">MZN 50</span>
+          <button class="pkg-avulso-btn" data-pkg="avulso"
+            style="padding:8px 18px;background:#1D4ED8;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
+            Pagar agora
+          </button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:14px 0 4px;">
+        <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+        <span style="font-size:12px;color:#94a3b8;font-weight:500;">ou crie conta e poupe mais</span>
+        <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+      </div>
     </div>
     <div class="pkg-grid">
       <div class="pkg" data-pkg="starter">
@@ -268,7 +293,32 @@
       </div>
       <div class="pay-sum" id="paySummary"></div>
       <button class="btn-pay" id="btnPay" disabled>Pagar com M-Pesa</button>
-      <p class="mp-note">Irá receber um pedido de confirmação no seu telemóvel</p>
+      <p class="mp-note" id="mpNote">Irá receber um pedido de confirmação no seu telemóvel</p>
+      <div class="pay-manual-info" id="payManualInfo" style="display:none;margin-top:12px;padding:12px 14px;background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:10px;font-size:13px;color:#92400E;line-height:1.6;">
+        ⚠️ <strong>Pagamento manual:</strong><br/>
+        Após clicar, será redireccionado para o WhatsApp. Envie o comprovativo M-Pesa para o nosso número e os créditos serão activados em até <strong>24 horas</strong>.<br/>
+        <span style="margin-top:6px;display:block;">📌 Guarde o número de referência que receberá — é necessário para confirmar o pagamento.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HISTÓRICO -->
+<div class="overlay" id="historyOverlay">
+  <div class="sheet tall" id="historySheet">
+    <div class="pill"></div>
+    <div class="sheet-hdr">
+      <div>
+        <div class="sh-title">📁 Arquivo de Documentos</div>
+        <div class="sh-sub">Os seus documentos gerados neste dispositivo</div>
+      </div>
+      <button class="sh-x" id="historyClose">✕</button>
+    </div>
+    <div id="historyBody" style="padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;">
+      <div id="historyLoading" style="text-align:center;padding:40px;color:#64748b;">
+        <div style="font-size:32px;margin-bottom:8px;">⏳</div>
+        <div>A carregar documentos…</div>
+      </div>
     </div>
   </div>
 </div>

@@ -5,6 +5,8 @@ import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 import { Validator } from '../utils/Formatter.js';
 import { DocumentEditor } from '../components/DocumentEditor.js';
+import { offlineDB } from '../utils/IndexedDB.js';
+import { Storage } from '../utils/Storage.js';
 
 const WA_NUMBER = '258858695506';
 
@@ -54,8 +56,11 @@ export class DocumentController {
     if (!svc) return;
 
     if (svc.hasAI && !this.creditModel.canConsume(1)) {
-      window.paymentController?.showPricing();
-      NotificationView.warn('⚠️ Créditos insuficientes. Compre mais para continuar.');
+      const isGuest = !window.authManager?.isAuthenticated();
+      window.paymentController?.showPricing(isGuest);
+      NotificationView.warn(isGuest
+        ? '⚠️ Inicie sessão ou adquira acesso avulso para gerar documentos.'
+        : '⚠️ Créditos insuficientes. Compre mais para continuar.');
       return;
     }
 
@@ -93,7 +98,11 @@ export class DocumentController {
     const data    = DocumentView.collectData(svc.fields);
     const missing = Validator.required(svc.fields, data);
     if (missing) { NotificationView.warn(`⚠️ Campo obrigatório: ${missing}`); return; }
-    if (!this.creditModel.canConsume(1)) { window.paymentController?.showPricing(); return; }
+    if (!this.creditModel.canConsume(1)) {
+      const isGuest = !window.authManager?.isAuthenticated();
+      window.paymentController?.showPricing(isGuest);
+      return;
+    }
 
     const btn = document.getElementById('btnGen');
     if (btn) btn.disabled = true;
@@ -116,6 +125,20 @@ export class DocumentController {
 
       this.docModel.setGenerated(result.document, result.model);
       this.docModel.formData = data;
+
+      // Guardar no histórico local (IndexedDB)
+      try {
+        const userId = Storage.getUserId();
+        await offlineDB.saveDocument({
+          id: 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+          user_id: userId,
+          service_type: key,
+          title: svc.title,
+          content: result.document,
+          model_used: result.model,
+          created_at: new Date().toISOString(),
+        });
+      } catch (_) { /* histórico não é crítico */ }
 
       ModalView.close('formOverlay');
       DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
@@ -186,7 +209,15 @@ export class DocumentController {
       });
       btn.onmouseenter = () => { btn.style.background = '#f3f4f6'; };
       btn.onmouseleave = () => { btn.style.background = 'none'; };
-      btn.onclick = () => { this._removeExportMenu(); fn(); };
+      btn.onclick = () => {
+        this._removeExportMenu();
+        // Feedback visual no botão principal de download
+        const dlBtn = document.getElementById('btnDl');
+        if (dlBtn) { dlBtn.textContent = '⏳ A preparar…'; dlBtn.disabled = true; }
+        Promise.resolve(fn()).finally(() => {
+          if (dlBtn) { dlBtn.textContent = '⬇️ Download'; dlBtn.disabled = false; }
+        });
+      };
       menu.appendChild(btn);
     });
 

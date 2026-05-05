@@ -40,7 +40,7 @@ export class AuthUI {
                         <button id="btnLogin" class="btn btn-primary btn-block">Entrar</button>
                     </div>
                     <div class="auth-divider"><span>ou</span></div>
-                    <button id="btnAnonymous" class="btn btn-ghost btn-block">🚀 Usar sem registo (3 créditos grátis)</button>
+                    <button id="btnAnonymous" class="btn btn-ghost btn-block">🚀 Continuar sem conta (acesso avulso · 50 MZN)</button>
                     <p class="auth-footer">Não tem conta? <a href="#" class="auth-link" data-view="register">Criar conta</a></p>
                 </div>
 
@@ -104,7 +104,7 @@ export class AuthUI {
                         <p>Pode fazer login agora com o seu número</p>
                     </div>
                     <div class="auth-info">
-                        <p>🎁 3 créditos grátis já foram atribuídos à sua conta.</p>
+                        <p>🎁 3 créditos grátis já foram atribuídos à sua conta. Bem-vindo ao MzDocs Pro!</p>
                     </div>
                     <div style="margin-top:1.5rem;">
                         <button class="btn btn-primary btn-block auth-link-btn" data-view="login">Entrar agora →</button>
@@ -214,13 +214,9 @@ export class AuthUI {
     }
 
     async _handleAnonymous() {
-        try {
-            await authManager.signInAnonymous();
-            this.close();
-            this._toast('✅ Modo visitante — 3 créditos disponíveis', 'success');
-        } catch (err) {
-            this.close(); // Continuar mesmo sem auth
-        }
+        this.close();
+        // Sem conta → abrir modal de acesso avulso
+        setTimeout(() => window.paymentController?.openAsGuest(), 200);
     }
 
     _switchView(name) {
