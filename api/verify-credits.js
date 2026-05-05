@@ -42,19 +42,13 @@ export default async function handler(req, res) {
         });
       }
 
-      // Novo utilizador — criar perfil com 3 créditos
-      await supabase.from('profiles').insert({
-        id: userId,
-        credits: 3,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
+      // Perfil não encontrado — não criar aqui, o trigger do Supabase faz isso no registo
+      // Devolver 0 para não atribuir créditos indevidos a visitantes/utilizadores anónimos
       return res.status(200).json({
         success: true,
-        credits: 3,
+        credits: 0,
         source: 'supabase',
-        message: 'Novo utilizador — 3 créditos grátis',
+        message: 'Perfil ainda não criado — aguardar trigger pós-registo',
       });
 
     } catch (e) {

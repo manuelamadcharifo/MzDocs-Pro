@@ -1,8 +1,9 @@
 // api/auth/reset-password.js
-// Recuperação de conta via número de telemóvel — gera token admin e notifica suporte
+// Recuperação de password via e-mail — Supabase envia o link gratuitamente
+// Não requer SMS pago nem OTP — funciona com qualquer plano gratuito
 
 export default async function handler(req, res) {
-    const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+    const origin  = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -17,44 +18,35 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Body JSON inválido' });
     }
 
-    const { phone, newPassword } = body;
+    const { email } = body;
 
-    if (!phone) return res.status(400).json({ error: 'Número de telemóvel é obrigatório' });
-    if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Nova password deve ter pelo menos 6 caracteres' });
-
-    const clean = phone.replace(/\D/g, '');
-    const normalized = clean.startsWith('258') ? `+${clean}` : `+258${clean}`;
+    if (!email) return res.status(400).json({ error: 'E-mail é obrigatório' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        return res.status(400).json({ error: 'E-mail inválido' });
 
     try {
         const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+        // Usar anon key para o resetPasswordForEmail — não precisa de service key
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-        // Encontrar utilizador pelo telefone
-        const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers();
-        if (listErr) throw listErr;
-
-        const user = users.find(u => u.phone === normalized);
-        if (!user) {
-            // Mensagem genérica por segurança
-            return res.status(200).json({ success: true, message: 'Se o número estiver registado, a password será redefinida.' });
-        }
-
-        // Redefinir password directamente via Admin API
-        const { error: updateErr } = await supabase.auth.admin.updateUserById(user.id, {
-            password: newPassword
+        await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+            redirectTo: `${origin}/?reset=true`,
         });
 
-        if (updateErr) throw updateErr;
-
+        // Sempre devolver sucesso por segurança — não revelar se o email existe
         return res.status(200).json({
             success: true,
-            message: 'Password redefinida com sucesso. Pode fazer login agora.'
+            message: 'Se o e-mail estiver registado, receberá um link de recuperação em breve.',
         });
 
     } catch (err) {
         console.error('[reset-password] Erro:', err);
-        return res.status(500).json({ error: 'Erro ao redefinir password' });
+        // Mesmo em caso de erro — resposta genérica por segurança
+        return res.status(200).json({
+            success: true,
+            message: 'Se o e-mail estiver registado, receberá um link de recuperação em breve.',
+        });
     }
 }
 
-export const config = { maxDuration: 30 };
+export const config = { maxDuration: 15 };

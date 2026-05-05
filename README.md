@@ -1,14 +1,13 @@
-# MzDocs Pro v3.2 🇲🇿
+# MzDocs Pro v3.3 🇲🇿
 
 Plataforma de geração inteligente de documentos para Moçambique — PWA completo com IA gratuita, pagamentos M-Pesa, OCR, editor Markdown, histórico local e painel administrativo.
 
-**Stack:** Arquitectura MVC · Groq + Gemini + OpenRouter (IA em corrida paralela) · Supabase Auth (Phone) + PostgreSQL · Vercel Serverless Functions · Tesseract.js OCR · Workbox PWA
+**Stack:** Arquitectura MVC · Groq + Gemini + OpenRouter (IA em corrida paralela) · Supabase Auth (Email + Phone) + PostgreSQL · Vercel Serverless Functions · Tesseract.js OCR · Workbox PWA
 
 ---
 
 ## 📁 Estrutura do Projecto
 
-```
 MzDocs-Pro/
 ├── index.html
 ├── admin.html
@@ -51,12 +50,12 @@ MzDocs-Pro/
 │       │   ├── DocumentController.js
 │       │   ├── PaymentController.js
 │       │   ├── OCRController.js
-│       │   └── HistoryController.js    ← NOVO v3.2
+│       │   └── HistoryController.js
 │       ├── components/
 │       │   ├── DocumentEditor.js
 │       │   ├── PDFExporter.js
 │       │   ├── WordExporter.js
-│       │   ├── ExcelExporter.js        ← Corrigido typo v3.2
+│       │   ├── ExcelExporter.js
 │       │   └── SignatureCanvas.js
 │       ├── services/
 │       │   ├── Services.js
@@ -74,7 +73,8 @@ MzDocs-Pro/
 │
 └── supabase/
     ├── schema.sql
-    └── polices.sql
+    ├── polices.sql
+    └── migration_add_email.sql         ← NOVO v3.3
 ```
 
 ---
@@ -97,7 +97,7 @@ Configure no **Vercel Dashboard → Settings → Environment Variables**:
 |---|---|---|
 | `SUPABASE_URL` | ✅ | URL do projecto Supabase |
 | `SUPABASE_ANON_KEY` | ✅ | Chave anónima pública |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Chave privada (reset password, admin) |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Chave privada (admin) |
 | `GROQ_API_KEY` | ✅ (1 de 3) | console.groq.com — gratuito |
 | `GEMINI_API_KEY` | ✅ (1 de 3) | aistudio.google.com — gratuito |
 | `OPENROUTER_API_KEY` | ✅ (1 de 3) | openrouter.ai — gratuito |
@@ -107,6 +107,8 @@ Configure no **Vercel Dashboard → Settings → Environment Variables**:
 | `MPESA_SERVICE_CODE` | Opcional | Código do serviço M-Pesa |
 
 > **Nota:** Basta uma das 3 chaves de IA para o sistema funcionar. Com todas as 3, o documento é gerado pelo provider mais rápido a responder.
+
+> **Nota v3.3:** `SUPABASE_SERVICE_ROLE_KEY` já não é necessária para reset de password — o reset usa o método nativo do Supabase (gratuito, sem SMS). Continua necessária apenas para o painel admin.
 
 ### 3. Supabase — aplicar schema
 
@@ -120,11 +122,19 @@ No **Supabase Dashboard → SQL Editor**, execute em ordem:
 -- (conteúdo de supabase/polices.sql)
 ```
 
-### 4. Supabase Auth — activar Phone Auth
+**Se já tens o schema aplicado da v3.2**, execute apenas a migração:
 
-**Authentication → Providers → Phone → activar.**
+```sql
+-- (conteúdo de supabase/migration_add_email.sql)
+```
 
-> Se não tiver provider SMS, desactive "Enable phone confirmations" para que o registo funcione apenas com password, sem OTP.
+### 4. Supabase Auth — configurar Email Auth
+
+**Authentication → Providers → Email → activar.**
+
+Desactivar "Confirm email" se não quiser verificação por email no registo (recomendado para começar).
+
+> **Nota:** Phone Auth continua suportado para login, mas o identificador principal passou a ser o email.
 
 ---
 
@@ -204,7 +214,8 @@ Todos os documentos gerados são guardados automaticamente no **IndexedDB local*
 ## 🔒 Segurança
 
 - **RLS activado** em todas as tabelas — utilizadores só acedem aos seus dados
-- **Supabase Phone Auth** — autenticação por telemóvel + password (sem email)
+- **Supabase Email Auth** — autenticação por email + password; telemóvel guardado em `profiles`
+- **Reset de password** — via email nativo do Supabase (gratuito, sem SMS, sem custo)
 - **CORS restrito** — API aceita pedidos apenas de `SITE_URL`
 - **Rate limiting** — 10 req/min por IP no endpoint de geração (em memória)
 - **Chaves separadas** — `anon key` no frontend; `service_role key` apenas em serverless
@@ -222,45 +233,42 @@ vercel dev   # Frontend + funções serverless em localhost
 
 ## 📋 Changelog
 
-### v3.2 (actual)
+### v3.3 (actual)
 
-#### Header e UX de Autenticação
-- **Visitantes** vêem apenas o botão 🔐 Entrar — interface limpa, sem ruído
-- **Após login**, header apresenta: avatar · 📁 · ⚡ créditos · + Comprar
-- Banner de boas-vindas para visitantes com acesso directo ao pacote avulso
-- Botão "Continuar sem conta" no modal de login redirige para compra avulso (sem dar créditos grátis)
+#### Autenticação — email obrigatório + login duplo
 
-#### Modelo de Acesso Avulso
-- Removidos os 3 créditos grátis automáticos para visitantes anónimos
-- Novo pacote **Avulso — 50 MZN** (1 documento + 2 revisões, sem conta)
-- Modal de pagamento detecta se o utilizador está autenticado e ajusta o modo automaticamente
-- Mensagem de erro ao gerar sem créditos diferencia visitantes de utilizadores com saldo esgotado
+- **Registo** agora requer 5 campos: Nome · Telemóvel · E-mail · Password · Confirmar password
+- Email validado no frontend e verificado como único antes de criar a conta
+- **Login** aceita telemóvel ou email indistintamente no mesmo campo — `AuthManager.signIn()` detecta automaticamente
+- Identificador principal no Supabase Auth passou de telemóvel para email (mais estável no plano gratuito)
 
-#### Arquivo de Documentos (novo)
-- `HistoryController.js` — guarda todos os documentos gerados no IndexedDB após cada geração
-- Modal 📁 com lista de documentos: ícone do serviço, título, data, pré-visualização de texto
-- Acções por documento: 👁️ Ver · 📋 Copiar · 🗑️ Apagar
-- "Ver" reabre o modal de resultado com o documento carregado (inclui download e envio por WhatsApp)
-- Funciona offline — documentos disponíveis sem internet após geração
+#### Recuperação de password — 100% gratuita via email
 
-#### Service Worker
-- Precache expandido de 8 → 33 ficheiros (todos os módulos JS, auth, utils, components)
-- `HistoryController.js` adicionado ao precache
-- Revisão `3.1` → `3.2` para forçar actualização do SW em browsers existentes
+- Substituído o fluxo anterior (redefinição directa, inseguro) por `supabase.auth.resetPasswordForEmail()`
+- O Supabase envia o link de reset pelo seu próprio sistema de email — sem custo, funciona no plano free
+- Formulário "Esqueceu a password?" pede apenas o email (antes pedia telemóvel + nova password)
+- Nova vista `forgotSent` com mensagem clara a instruir o utilizador a verificar o spam
+- Resposta sempre genérica (sucesso) — não revela se o email está ou não registado
+- `api/auth/reset-password.js` simplificado: usa apenas `SUPABASE_ANON_KEY`, sem `listUsers()`
 
-#### Pagamento Manual
-- Aviso claro (banner amarelo) após seleccionar pacote: processo manual, prazo 24h, referência
-- Botão muda de "Pagar com M-Pesa" → "Confirmar e Abrir WhatsApp"
-- Aviso e texto do botão resetam ao fechar o modal
+#### Schema e migração
 
-#### Feedback Visual no Download
-- Botão ⬇️ Download muda para ⏳ A preparar… durante geração de PDF/Word/Excel
-- Botão desactivado durante o processo e restaurado ao terminar (sucesso ou erro)
+- Tabela `profiles` ganhou coluna `email` com índice único
+- Trigger `handle_new_user` actualizado para guardar o email
+- `supabase/migration_add_email.sql` — para quem já tem a base criada na v3.2: adiciona coluna, cria índices, popula a partir de `auth.users`
 
-#### Correcções
-- `ExcelExporter.js` — corrigido typo no nome do ficheiro (`ExelExporter.js` → `ExcelExporter.js`)
-- `manifest.json` — ícones `maskable` declarados em entradas separadas dos ícones `any` (W3C)
-- `CreditModel.consume()` — simplificado, sem dependência da chave de créditos grátis mensais
+#### Header
+
+- Quando autenticado, o header mostra nome + email ou telemóvel por baixo — o utilizador sabe com que conta está a trabalhar
+
+### v3.2
+- `HistoryController.js` — arquivo de documentos em IndexedDB
+- Header limpo para visitantes (apenas 🔐 Entrar)
+- Pacote avulso 50 MZN sem conta obrigatória
+- Precache expandido para 33 ficheiros
+- Aviso de processo manual no modal de pagamento
+- Feedback visual no botão de download
+- Correcção typo `ExcelExporter.js`
 
 ### v3.1
 - Arquitectura MVC completa

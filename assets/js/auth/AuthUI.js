@@ -1,5 +1,5 @@
 // assets/js/auth/AuthUI.js
-// Modal de autenticação — login/registo por TELEMÓVEL + password
+// Modal de autenticação — login por TELEMÓVEL (principal) + EMAIL (secundário/recuperação)
 
 import { authManager } from './AuthManager.js';
 
@@ -25,16 +25,18 @@ export class AuthUI {
                 <div id="authLogin" class="auth-view">
                     <div class="auth-header">
                         <h2>🔐 Entrar no MzDocs Pro</h2>
-                        <p>Use o seu número de telemóvel</p>
+                        <p>Use o seu número de telemóvel ou e-mail</p>
                     </div>
                     <div class="auth-form">
                         <div class="form-group">
-                            <label>Telemóvel</label>
-                            <input type="tel" id="loginPhone" placeholder="84 XXX XXXX" maxlength="13" inputmode="tel">
+                            <label>Telemóvel ou E-mail</label>
+                            <input type="text" id="loginIdentifier" placeholder="84 XXX XXXX ou email@exemplo.com"
+                                inputmode="email" autocomplete="username">
+                            <small style="color:#6b7280;font-size:.75rem;">Pode usar o número ou o e-mail para entrar</small>
                         </div>
                         <div class="form-group">
                             <label>Password</label>
-                            <input type="password" id="loginPassword" placeholder="••••••••">
+                            <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
                             <a href="#" class="auth-link" data-view="forgot">Esqueceu a password?</a>
                         </div>
                         <button id="btnLogin" class="btn btn-primary btn-block">Entrar</button>
@@ -53,20 +55,25 @@ export class AuthUI {
                     <div class="auth-form">
                         <div class="form-group">
                             <label>Nome Completo</label>
-                            <input type="text" id="regName" placeholder="Ana Sofia Machava">
+                            <input type="text" id="regName" placeholder="Ana Sofia Machava" autocomplete="name">
                         </div>
                         <div class="form-group">
                             <label>Telemóvel <span style="color:#ef4444">*</span></label>
-                            <input type="tel" id="regPhone" placeholder="84 XXX XXXX" maxlength="13" inputmode="tel">
-                            <small style="color:#6b7280;font-size:0.78rem;">Vodacom, Tmcel ou Movitel</small>
+                            <input type="tel" id="regPhone" placeholder="84 XXX XXXX" maxlength="13" inputmode="tel" autocomplete="tel">
+                            <small style="color:#6b7280;font-size:.75rem;">Vodacom, Tmcel ou Movitel — usado para login principal</small>
+                        </div>
+                        <div class="form-group">
+                            <label>E-mail <span style="color:#ef4444">*</span></label>
+                            <input type="email" id="regEmail" placeholder="email@exemplo.com" inputmode="email" autocomplete="email">
+                            <small style="color:#6b7280;font-size:.75rem;">Para recuperação de password — receberá um link no e-mail</small>
                         </div>
                         <div class="form-group">
                             <label>Password <span style="color:#ef4444">*</span></label>
-                            <input type="password" id="regPassword" placeholder="Mínimo 6 caracteres">
+                            <input type="password" id="regPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
                         </div>
                         <div class="form-group">
                             <label>Confirmar Password <span style="color:#ef4444">*</span></label>
-                            <input type="password" id="regPasswordConfirm" placeholder="Repita a password">
+                            <input type="password" id="regPasswordConfirm" placeholder="Repita a password" autocomplete="new-password">
                         </div>
                         <button id="btnRegister" class="btn btn-primary btn-block">Criar Conta</button>
                     </div>
@@ -77,39 +84,53 @@ export class AuthUI {
                 <div id="authForgot" class="auth-view" style="display:none;">
                     <div class="auth-header">
                         <h2>🔑 Recuperar Password</h2>
-                        <p>Introduza o seu número e defina uma nova password</p>
+                        <p>Insira o seu e-mail para receber o link de recuperação</p>
                     </div>
                     <div class="auth-form">
                         <div class="form-group">
-                            <label>Telemóvel</label>
-                            <input type="tel" id="forgotPhone" placeholder="84 XXX XXXX" maxlength="13" inputmode="tel">
+                            <label>E-mail da conta</label>
+                            <input type="email" id="forgotEmail" placeholder="email@exemplo.com" inputmode="email" autocomplete="email">
+                            <small style="color:#6b7280;font-size:.75rem;">Receberá um link para redefinir a password — verifique também o spam</small>
                         </div>
-                        <div class="form-group">
-                            <label>Nova Password</label>
-                            <input type="password" id="forgotNewPassword" placeholder="Mínimo 6 caracteres">
-                        </div>
-                        <div class="form-group">
-                            <label>Confirmar Nova Password</label>
-                            <input type="password" id="forgotConfirmPassword" placeholder="Repita a nova password">
-                        </div>
-                        <button id="btnForgot" class="btn btn-primary btn-block">Redefinir Password</button>
+                        <button id="btnForgot" class="btn btn-primary btn-block">Enviar link de recuperação</button>
                     </div>
                     <p class="auth-footer"><a href="#" class="auth-link" data-view="login">← Voltar ao login</a></p>
                 </div>
 
-                <!-- SUCESSO -->
+                <!-- SUCESSO REGISTO -->
                 <div id="authSuccess" class="auth-view" style="display:none;">
                     <div class="auth-header">
                         <h2>✅ Conta Criada!</h2>
-                        <p>Pode fazer login agora com o seu número</p>
+                        <p>Pode fazer login agora com o seu número ou e-mail</p>
                     </div>
                     <div class="auth-info">
                         <p>🎁 3 créditos grátis já foram atribuídos à sua conta. Bem-vindo ao MzDocs Pro!</p>
+                        <p style="margin-top:.75rem;font-size:.85rem;color:#6b7280;">
+                            💡 Verifique o seu e-mail — pode ter recebido uma mensagem de confirmação do Supabase.
+                        </p>
                     </div>
                     <div style="margin-top:1.5rem;">
                         <button class="btn btn-primary btn-block auth-link-btn" data-view="login">Entrar agora →</button>
                     </div>
                 </div>
+
+                <!-- SUCESSO RECUPERAÇÃO -->
+                <div id="authForgotSent" class="auth-view" style="display:none;">
+                    <div class="auth-header">
+                        <h2>📧 E-mail Enviado!</h2>
+                        <p>Verifique a sua caixa de entrada</p>
+                    </div>
+                    <div class="auth-info">
+                        <p>Enviámos um link de recuperação para o seu e-mail. Clique no link para redefinir a sua password.</p>
+                        <p style="margin-top:.75rem;font-size:.85rem;color:#6b7280;">
+                            ⚠️ Não encontra o e-mail? Verifique a pasta de spam ou lixo electrónico.
+                        </p>
+                    </div>
+                    <div style="margin-top:1.5rem;">
+                        <button class="btn btn-primary btn-block auth-link-btn" data-view="login">← Voltar ao login</button>
+                    </div>
+                </div>
+
             </div>
         </div>`;
         document.body.appendChild(div.firstElementChild);
@@ -136,95 +157,101 @@ export class AuthUI {
         document.getElementById('btnForgot')?.addEventListener('click', () => this._handleForgot());
         document.getElementById('btnAnonymous')?.addEventListener('click', () => this._handleAnonymous());
 
-        // Enter nos campos
-        ['loginPhone','loginPassword'].forEach(id => {
+        // Enter nos campos de login
+        ['loginIdentifier', 'loginPassword'].forEach(id => {
             document.getElementById(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') this._handleLogin(); });
         });
+        // Enter no campo de email de recuperação
+        document.getElementById('forgotEmail')?.addEventListener('keydown', e => { if (e.key === 'Enter') this._handleForgot(); });
     }
 
     async _handleLogin() {
-        const btn = document.getElementById('btnLogin');
-        const phone = document.getElementById('loginPhone')?.value?.trim();
-        const password = document.getElementById('loginPassword')?.value;
+        const btn        = document.getElementById('btnLogin');
+        const identifier = document.getElementById('loginIdentifier')?.value?.trim();
+        const password   = document.getElementById('loginPassword')?.value;
 
-        if (!phone) return this._showError('Introduza o número de telemóvel');
-        if (!password) return this._showError('Introduza a password');
+        if (!identifier) return this._showError('Introduza o número de telemóvel ou e-mail');
+        if (!password)   return this._showError('Introduza a password');
 
-        btn.disabled = true;
+        btn.disabled    = true;
         btn.textContent = '⏳ A entrar...';
         try {
-            await authManager.signIn(phone, password);
+            await authManager.signIn(identifier, password);
             this.close();
             this._toast('✅ Bem-vindo de volta!', 'success');
         } catch (err) {
             this._showError(err.message);
         } finally {
-            btn.disabled = false;
+            btn.disabled    = false;
             btn.textContent = 'Entrar';
         }
     }
 
     async _handleRegister() {
-        const btn = document.getElementById('btnRegister');
-        const name = document.getElementById('regName')?.value?.trim();
-        const phone = document.getElementById('regPhone')?.value?.trim();
-        const password = document.getElementById('regPassword')?.value;
+        const btn     = document.getElementById('btnRegister');
+        const name    = document.getElementById('regName')?.value?.trim();
+        const phone   = document.getElementById('regPhone')?.value?.trim();
+        const email   = document.getElementById('regEmail')?.value?.trim();
+        const pass    = document.getElementById('regPassword')?.value;
         const confirm = document.getElementById('regPasswordConfirm')?.value;
 
-        if (!phone) return this._showError('Número de telemóvel é obrigatório');
-        if (!password || password.length < 6) return this._showError('Password deve ter pelo menos 6 caracteres');
-        if (password !== confirm) return this._showError('As passwords não coincidem');
+        if (!phone)              return this._showError('Número de telemóvel é obrigatório');
+        if (!email)              return this._showError('E-mail é obrigatório');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this._showError('E-mail inválido');
+        if (!pass || pass.length < 6) return this._showError('Password deve ter pelo menos 6 caracteres');
+        if (pass !== confirm)    return this._showError('As passwords não coincidem');
 
-        btn.disabled = true;
+        btn.disabled    = true;
         btn.textContent = '⏳ A criar conta...';
         try {
-            await authManager.signUp(phone, password, name);
+            await authManager.signUp(phone, email, pass, name);
             this._switchView('success');
             this._toast('✅ Conta criada com sucesso!', 'success');
         } catch (err) {
             this._showError(err.message);
         } finally {
-            btn.disabled = false;
+            btn.disabled    = false;
             btn.textContent = 'Criar Conta';
         }
     }
 
     async _handleForgot() {
-        const btn = document.getElementById('btnForgot');
-        const phone = document.getElementById('forgotPhone')?.value?.trim();
-        const newPassword = document.getElementById('forgotNewPassword')?.value;
-        const confirm = document.getElementById('forgotConfirmPassword')?.value;
+        const btn   = document.getElementById('btnForgot');
+        const email = document.getElementById('forgotEmail')?.value?.trim();
 
-        if (!phone) return this._showError('Introduza o número de telemóvel');
-        if (!newPassword || newPassword.length < 6) return this._showError('Nova password deve ter pelo menos 6 caracteres');
-        if (newPassword !== confirm) return this._showError('As passwords não coincidem');
+        if (!email) return this._showError('Introduza o e-mail da conta');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this._showError('E-mail inválido');
 
-        btn.disabled = true;
-        btn.textContent = '⏳ A redefinir...';
+        btn.disabled    = true;
+        btn.textContent = '⏳ A enviar...';
         try {
-            await authManager.resetPassword(phone, newPassword);
-            this._toast('✅ Password redefinida! Faça login agora.', 'success');
-            this._switchView('login');
+            await authManager.resetPasswordByEmail(email);
+            this._switchView('forgotSent');
         } catch (err) {
-            this._showError(err.message);
+            // Mostrar sempre sucesso por segurança (não revelar se o email existe)
+            this._switchView('forgotSent');
         } finally {
-            btn.disabled = false;
-            btn.textContent = 'Redefinir Password';
+            btn.disabled    = false;
+            btn.textContent = 'Enviar link de recuperação';
         }
     }
 
     async _handleAnonymous() {
         this.close();
-        // Sem conta → abrir modal de acesso avulso
         setTimeout(() => window.paymentController?.openAsGuest(), 200);
     }
 
     _switchView(name) {
-        const map = { login: 'authLogin', register: 'authRegister', forgot: 'authForgot', success: 'authSuccess' };
+        const map = {
+            login:       'authLogin',
+            register:    'authRegister',
+            forgot:      'authForgot',
+            forgotSent:  'authForgotSent',
+            success:     'authSuccess',
+        };
         document.querySelectorAll('.auth-view').forEach(v => v.style.display = 'none');
         const target = document.getElementById(map[name]);
         if (target) target.style.display = 'block';
-        // Limpar mensagens de erro
         this.overlay.querySelectorAll('.auth-error').forEach(e => e.remove());
     }
 

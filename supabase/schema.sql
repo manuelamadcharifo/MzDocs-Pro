@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     id           UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name    TEXT,
     phone        TEXT,                          -- número normalizado +258XXXXXXXXX
+    email        TEXT,                          -- e-mail para recuperação de password
     avatar_url   TEXT,
     credits      INTEGER     DEFAULT 3,         -- 3 créditos grátis no registo
     total_documents INTEGER  DEFAULT 0,
@@ -18,15 +19,24 @@ CREATE TABLE IF NOT EXISTS profiles (
     updated_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Trigger: criar perfil após registo via telemóvel
+-- Índice único no email (sem NULL duplicados)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_email
+    ON profiles (email) WHERE email IS NOT NULL;
+
+-- Índice único no phone (sem NULL duplicados)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_phone
+    ON profiles (phone) WHERE phone IS NOT NULL;
+
+-- Trigger: criar perfil após registo
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.profiles (id, full_name, phone, credits)
+    INSERT INTO public.profiles (id, full_name, phone, email, credits)
     VALUES (
         NEW.id,
         NEW.raw_user_meta_data->>'full_name',
         COALESCE(NEW.phone, NEW.raw_user_meta_data->>'phone'),
+        COALESCE(NEW.email, NEW.raw_user_meta_data->>'email'),
         3
     )
     ON CONFLICT (id) DO NOTHING;

@@ -65,7 +65,14 @@ async function bootstrap() {
     const fab = document.getElementById('fabWa');
     if (fab) fab.href = `https://wa.me/${userModel.WA_SUPPORT}`;
 
-    // 8. Service Worker
+    // 8. Sandbox bar — mostrar apenas quando M-Pesa automático não está configurado
+    try {
+        const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+        const sandboxBar = document.getElementById('sandboxBar');
+        if (sandboxBar) sandboxBar.style.display = cfg.isSandbox ? 'flex' : 'none';
+    } catch { /* não crítico */ }
+
+    // 9. Service Worker
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js')
             .then(() => console.log('[MzDocs] SW registado ✅'))
@@ -95,17 +102,23 @@ function _setupAuthHeader() {
             if (userArea) userArea.style.display  = 'flex';
             if (guestBar) guestBar.style.display  = 'none';
 
-            const phone    = user.phone || '';
-            const name     = user.user_metadata?.full_name || (phone ? phone.slice(-4) : 'Utilizador');
+            const phone    = user.phone || user._profile?.phone || '';
+            const email    = user.email || user._profile?.email || '';
+            const name     = user._profile?.full_name || user.user_metadata?.full_name || (phone ? phone.slice(-4) : 'Utilizador');
             const initials = name.charAt(0).toUpperCase();
+            const subtitle = email || phone || '';
 
             if (userMenu) {
                 userMenu.innerHTML = `
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;margin-right:2px;">
+                        <span style="font-size:12px;font-weight:700;color:#334155;">${name}</span>
+                        <span style="font-size:10px;color:#94a3b8;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${subtitle}</span>
+                    </div>
                     <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#3B82F6,#1D4ED8);
                         color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;
-                        cursor:default;" title="${name}">${initials}</div>
+                        flex-shrink:0;" title="${name} · ${subtitle}">${initials}</div>
                     <button id="btnLogout" style="padding:6px 12px;background:#f1f5f9;border:none;border-radius:8px;
-                        font-size:12px;cursor:pointer;color:#64748b;">🚪 Sair</button>
+                        font-size:12px;cursor:pointer;color:#64748b;flex-shrink:0;">🚪 Sair</button>
                 `;
                 document.getElementById('btnLogout')?.addEventListener('click', () => {
                     authManager.signOut().then(() => location.reload());

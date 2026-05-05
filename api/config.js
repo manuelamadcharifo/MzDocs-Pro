@@ -10,9 +10,12 @@ export default async function handler(req, res) {
     const supabaseUrl     = process.env.SUPABASE_URL;
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
+    // Sandbox = M-Pesa automático não configurado
+    const isSandbox = !process.env.MPESA_API_KEY || !process.env.MPESA_SERVICE_CODE;
+
     if (!supabaseUrl || !supabaseAnonKey) {
-        return res.status(200).json({ configured: false, message: 'Supabase não configurado' });
+        return res.status(200).json({ configured: false, isSandbox, message: 'Supabase não configurado' });
     }
 
-    return res.status(200).json({ configured: true, supabaseUrl, supabaseAnonKey });
+    return res.status(200).json({ configured: true, supabaseUrl, supabaseAnonKey, isSandbox });
 }

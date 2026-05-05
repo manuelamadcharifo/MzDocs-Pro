@@ -22,9 +22,9 @@ const GROQ_MODELS = [
 // Signup: aistudio.google.com (sem cartão de crédito)
 const GEMINI_BASE   = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_MODELS = [
-    'gemini-2.5-flash-lite-preview-06-17',
-    'gemini-2.5-flash',
-    'gemini-1.5-flash',
+    'gemini-2.5-flash',   // melhor qualidade, 500 req/dia gratuitos
+    'gemini-2.0-flash',   // muito rápido, 1500 req/dia gratuitos
+    'gemini-1.5-flash',   // fallback estável
 ];
 
 // ─── OPENROUTER ────────────────────────────────────────────────────────────
@@ -40,14 +40,25 @@ const OR_MODELS = [
 ];
 
 // ─── RATE LIMIT INTERNO ────────────────────────────────────────────────────
+// NOTA: Em Vercel serverless cada instância tem o seu próprio Map em memória.
+// Este rate-limit protege contra abuso dentro de uma mesma instância quente.
+// Para rate-limit persistente em produção, usar Vercel KV ou Upstash Redis.
 const rateMap = new Map();
-function checkRateLimit(ip) {
+function checkRateLimit(req) {
+    // Preferir token de auth como chave (mais estável que IP em móvel)
+    const auth = req.headers['authorization'];
+    const ip   = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
+    const key  = auth ? `auth:${auth.slice(-16)}` : `ip:${ip}`;
+
     const now   = Date.now();
-    const entry = rateMap.get(ip) || { count: 0, reset: now + 60_000 };
+    const entry = rateMap.get(key) || { count: 0, reset: now + 60_000 };
     if (now > entry.reset) { entry.count = 0; entry.reset = now + 60_000; }
     entry.count++;
-    rateMap.set(ip, entry);
-    return entry.count <= 10;
+    rateMap.set(key, entry);
+
+    // Autenticados: 20 req/min | Visitantes: 5 req/min
+    const limit = auth ? 20 : 5;
+    return entry.count <= limit;
 }
 
 const SITE_URL = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
@@ -60,7 +71,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST')   return res.status(405).json({ error: 'Método não permitido' });
 
     const ip = req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
-    if (!checkRateLimit(ip)) {
+    if (!checkRateLimit(req)) {
         return res.status(429).json({ error: 'Muitos pedidos. Aguarde 1 minuto.', code: 'RATE_LIMIT' });
     }
 
