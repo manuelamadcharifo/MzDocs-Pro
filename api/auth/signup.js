@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 
     try {
         const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
         // Verificar se email já existe na tabela profiles
         const { data: existingEmail } = await supabase
