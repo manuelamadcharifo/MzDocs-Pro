@@ -227,7 +227,51 @@ vercel dev   # Frontend + funções serverless em localhost
 
 ## 📋 Changelog
 
-### v3.3 (actual)
+### v3.5 (actual)
+
+#### Correcção Crítica — Créditos reiniciavam a cada limpeza de cache
+
+**Causa raiz (3 bugs combinados):**
+
+1. `Models.js init()` lia `localStorage.get('credits')` antes de ir ao servidor — se o utilizador nunca tivesse apagado o localStorage, tinha lá `3` (valor inicial), e isso era usado como valor de arranque
+2. `Services.js syncUser()` fazia `Math.max(serverCredits, localCredits)` — se o localStorage tivesse `3` e o servidor tivesse `0`, repunha os 3 no Supabase, voltando sempre ao início
+3. Não existia lógica de créditos mensais por plano nem marcação de "bónus inicial já dado"
+
+**Ficheiros corrigidos:**
+- `assets/js/models/Models.js` — `init()` já não lê créditos do localStorage; mostra `0` enquanto carrega e usa sempre o valor do Supabase; visitantes ficam com `0`
+- `assets/js/models/Models.js` — `_syncFromServer()` chama `syncUser()` sem passar `localCredits`
+- `assets/js/services/Services.js` — `syncUser()` removido o `Math.max`; Supabase é sempre a fonte de verdade; verifica e atribui créditos mensais via RPC `grant_monthly_credits`
+
+**Nova migração SQL:** `supabase/migration_monthly_credits.sql`
+- Adiciona colunas `welcome_bonus_given`, `plan`, `plan_expires_at`, `monthly_renewal_at` à tabela `profiles`
+- Trigger `handle_new_user` actualizado: marca `welcome_bonus_given = TRUE` no registo (bónus dado uma única vez)
+- Função `grant_monthly_credits(user_id)`: atribui créditos mensais por plano (idempotente — ignora se já atribuiu no mês corrente)
+  - `starter` → 1 crédito/mês
+  - `basico`  → 3 créditos/mês  
+  - `pro`     → 8 créditos/mês
+- Função `confirm_payment_and_set_plan(transaction_id, admin_id)`: ao confirmar pagamento, grava o plano + validade (30 dias) no perfil
+- Utilizadores existentes: marcados como `welcome_bonus_given = TRUE` (não recebem o bónus novamente)
+
+**Regra de negócio implementada:**
+- 3 créditos grátis: dados **uma única vez** no registo (trigger SQL)
+- Créditos mensais: apenas para utilizadores com plano activo (starter/basico/pro), no 1.º login de cada mês
+- Plano expira 30 dias após confirmação do pagamento
+- Cache limpa / reabrir browser → créditos vêm sempre do Supabase, nunca do localStorage
+
+---
+
+### v3.4
+
+#### Correcção — Header quebrado em mobile
+- **Bug:** o header não tinha media queries, quebrando em ecrãs ≤ 480 px (elementos sobrepostos ou empurrados para fora da linha)
+- **Solução:** adicionadas regras CSS responsivas em  para dois breakpoints:
+  -  — logo e botões compactados,  oculta,  ("cr") oculta, espaçamentos reduzidos
+  -  — "+ Comprar" oculto (o pill de créditos fica clicável para abrir a compra)
+- Sem alterações de HTML ou JS — apenas CSS puro
+
+---
+
+### v3.3
 
 #### Correcção Crítica — UUID inválido no Supabase
 - **Bug:** ao guardar um documento, o Supabase retornava erro 400 `invalid input syntax for type uuid` porque o campo `id` era gerado como `doc-<timestamp>-<random>` (string livre), incompatível com o tipo `UUID PRIMARY KEY` definido no schema da tabela `documents`

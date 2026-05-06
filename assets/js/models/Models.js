@@ -92,33 +92,43 @@ export class CreditModel {
     }
 
     async init() {
-        // Créditos só vêm de pacotes pagos — não há créditos grátis automáticos para visitantes
-        const paid = Storage.get('credits', 0);
-        this.credits = paid;
+        // Mostrar 0 enquanto carrega (nunca ler o localStorage como valor real)
+        this.credits = 0;
         this._emit();
 
         const ok = await this.supabase.init().catch(() => false);
-        if (!ok) return;
+        if (!ok) {
+            // Supabase indisponível: usar localStorage apenas como fallback de exibição
+            this.credits = Storage.get('credits', 0);
+            this._emit();
+            return;
+        }
 
-        // CORRIGIDO: usar UUID real do Supabase, não o ID local (mz_xxx)
         try {
             const { authManager } = await import('../auth/AuthManager.js');
             await authManager.ready();
             if (authManager.user?.id) {
-                // Utilizador autenticado — usar UUID real
+                // Utilizador autenticado — Supabase é a fonte de verdade
                 this.userId = authManager.user.id;
-                await this._syncFromServer();
+                await this._syncFromServer(); // sobrescreve localStorage com valor do servidor
                 this._startAutoSync();
+            } else {
+                // Visitante — sem créditos (não há créditos grátis para não autenticados)
+                this.credits = 0;
+                this._emit();
             }
-            // Sem autenticação: não sincronizar com Supabase, manter créditos locais
         } catch {
             // Falha silenciosa — modo local
+            this.credits = Storage.get('credits', 0);
+            this._emit();
         }
     }
 
     async _syncFromServer() {
-        const data = await this.supabase.syncUser(this.userId, this.credits).catch(() => null);
-        if (data && typeof data.credits === 'number' && data.credits !== this.credits) {
+        // syncUser não recebe localCredits — Supabase é a fonte de verdade
+        const data = await this.supabase.syncUser(this.userId).catch(() => null);
+        if (data && typeof data.credits === 'number') {
+            // Sempre sobrescrever o localStorage com o valor do servidor
             this.credits = data.credits;
             Storage.set('credits', this.credits);
             this._emit();

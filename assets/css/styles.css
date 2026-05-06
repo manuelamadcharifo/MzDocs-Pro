@@ -290,3 +290,45 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 /* FAB */
 .fab{position:fixed;bottom:22px;right:18px;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,var(--wa),var(--wa-d));color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;text-decoration:none;box-shadow:0 4px 20px rgba(37,211,102,.5);z-index:80;transition:var(--t)}
 .fab:hover{transform:scale(1.1);box-shadow:0 6px 28px rgba(37,211,102,.6)}
+
+/* ── HEADER RESPONSIVO ───────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Header não quebra linha */
+  .hdr { height: auto; min-height: 54px; padding: 8px 12px; flex-wrap: nowrap; gap: 6px; }
+
+  /* Lado esquerdo: logo compacto */
+  .hdr-l { gap: 6px; flex-shrink: 0; }
+  .logo-badge { width: 28px; height: 28px; font-size: 15px; }
+  .lt-name { font-size: 16px; }
+  .lt-pro { font-size: 11px; }
+  .ver-tag { display: none; } /* oculta "v3 MVC" em mobile — poupa espaço */
+
+  /* Lado direito: itens compactos, sem quebrar */
+  .hdr-r { flex-shrink: 0; gap: 6px; }
+
+  /* Botão Entrar compacto */
+  .btn-auth { padding: 6px 12px !important; font-size: 12px !important; border-radius: 8px !important; white-space: nowrap; }
+
+  /* Área autenticada: sem gap excessivo */
+  #userArea { gap: 6px !important; }
+  #userMenu { gap: 6px !important; }
+
+  /* Pill de créditos: mais compacto */
+  .credit-pill { padding: 4px 8px; gap: 3px; }
+  .cp-val { font-size: 13px; }
+  .cp-lbl { display: none; } /* oculta "cr" — o ⚡ já comunica */
+
+  /* Botão + Comprar: texto curto */
+  .btn-topup { padding: 6px 10px; font-size: 11px; border-radius: 16px; }
+  .btn-topup::before { content: "+"; }
+
+  /* Arquivo: só ícone */
+  .btn-history { padding: 6px 9px !important; font-size: 13px !important; }
+}
+
+@media (max-width: 360px) {
+  .hdr { padding: 7px 10px; }
+  .lt-name { font-size: 15px; }
+  .btn-topup { display: none; } /* em ecrãs muito pequenos, oculta "+ Comprar" */
+  .credit-pill { cursor: pointer; } /* pill fica clicável para abrir compra */
+}

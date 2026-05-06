@@ -295,24 +295,50 @@ export class SupabaseService {
     }
   }
 
-  async syncUser(userId, localCredits) {
+  async syncUser(userId) {
+    // NOTA: não aceita localCredits — o Supabase é sempre a fonte de verdade.
+    // Nunca fazer Math.max com localStorage para não repor créditos já gastos.
     if (!this._ready) return null;
     try {
-      // CORRIGIDO: tabela 'profiles' (não 'users')
       const { data, error } = await this._client
-        .from('profiles').select('credits').eq('id', userId).single();
+        .from('profiles')
+        .select('credits, plan, plan_expires_at, monthly_renewal_at')
+        .eq('id', userId)
+        .single();
 
       if (error?.code === 'PGRST116') {
-        await this._client.from('profiles').insert({ id: userId, credits: localCredits });
-        return { credits: localCredits };
+        // Perfil não existe ainda (raro — o trigger devia criá-lo)
+        return null;
       }
       if (error) throw error;
 
-      const resolved = Math.max(data.credits, localCredits);
-      if (resolved !== data.credits) {
-        await this._client.from('profiles').update({ credits: resolved, updated_at: new Date().toISOString() }).eq('id', userId);
+      // Verificar e atribuir créditos mensais se aplicável
+      const plan = data.plan || 'free';
+      const expires = data.plan_expires_at ? new Date(data.plan_expires_at) : null;
+      const planActive = plan !== 'free' && (!expires || expires > new Date());
+
+      if (planActive) {
+        const lastRenewal = data.monthly_renewal_at ? new Date(data.monthly_renewal_at) : null;
+        const now = new Date();
+        const sameMonth = lastRenewal &&
+          lastRenewal.getFullYear() === now.getFullYear() &&
+          lastRenewal.getMonth()    === now.getMonth();
+
+        if (!sameMonth) {
+          // Chamar RPC para atribuir créditos mensais (idempotente no servidor)
+          try {
+            const { data: newCredits } = await this._client
+              .rpc('grant_monthly_credits', { target_user_id: userId });
+            if (typeof newCredits === 'number') {
+              return { credits: newCredits, plan };
+            }
+          } catch (e) {
+            console.warn('[Supabase] grant_monthly_credits falhou:', e);
+          }
+        }
       }
-      return { credits: resolved };
+
+      return { credits: data.credits, plan };
     } catch (e) {
       console.warn('[Supabase] syncUser falhou:', e);
       return null;
