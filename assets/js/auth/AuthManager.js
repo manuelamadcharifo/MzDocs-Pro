@@ -108,6 +108,18 @@ export class AuthManager {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Erro ao criar conta');
+
+        // Aplicar session devolvida pelo servidor (login automático pós-registo)
+        if (data.session && this.supabase) {
+            await this.supabase.auth.setSession({
+                access_token:  data.session.access_token,
+                refresh_token: data.session.refresh_token,
+            });
+            this.session = data.session;
+            this.user    = data.session.user || data.user;
+            if (this.user?.id) await this._loadProfile(this.user.id);
+            this._notify();
+        }
         return data;
     }
 
