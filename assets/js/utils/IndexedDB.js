@@ -191,7 +191,7 @@ export class OfflineDB {
                     await this.removePending(item.id);
                     const result = await response.json();
                     await this.saveDocument({
-                        id: 'doc-' + Date.now(),
+                        id: crypto.randomUUID(),
                         ...result,
                         synced: true
                     });

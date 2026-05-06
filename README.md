@@ -227,7 +227,18 @@ vercel dev   # Frontend + funções serverless em localhost
 
 ## 📋 Changelog
 
-### v3.2 (actual)
+### v3.3 (actual)
+
+#### Correcção Crítica — UUID inválido no Supabase
+- **Bug:** ao guardar um documento, o Supabase retornava erro 400 `invalid input syntax for type uuid` porque o campo `id` era gerado como `doc-<timestamp>-<random>` (string livre), incompatível com o tipo `UUID PRIMARY KEY` definido no schema da tabela `documents`
+- **Ficheiros corrigidos:**
+  - `assets/js/controllers/DocumentController.js` — `id` passa a ser gerado com `crypto.randomUUID()` (UUID v4 nativo do browser, disponível em todos os browsers modernos e em contexto HTTPS)
+  - `assets/js/utils/IndexedDB.js` — idem para o ID gerado durante o `syncWhenOnline()` (fila offline → Supabase)
+- **Impacto:** documentos gerados após esta versão são guardados correctamente no Supabase e ficam disponíveis na sincronização multi-dispositivo; documentos guardados offline com o ID antigo continuam acessíveis localmente via IndexedDB mas não serão enviados ao Supabase (ID incompatível)
+
+---
+
+### v3.2 (anterior)
 
 #### Header e UX de Autenticação
 - **Visitantes** vêem apenas o botão 🔐 Entrar — interface limpa, sem ruído

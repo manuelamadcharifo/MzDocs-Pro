@@ -130,7 +130,7 @@ export class DocumentController {
       try {
         const userId = window.authManager?.user?.id || Storage.getUserId();
         await window.historyController?.saveDocument({
-          id: 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+          id: crypto.randomUUID(),
           user_id: userId,
           service_type: key,
           title: svc.title,
