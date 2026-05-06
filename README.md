@@ -227,7 +227,38 @@ vercel dev   # Frontend + funções serverless em localhost
 
 ## 📋 Changelog
 
-### v3.6 (actual)
+### v3.7 (actual)
+
+#### Funcionalidade — Contas Temporárias para Pagamento Avulso
+
+**Problema anterior:** o pacote Avulso era comprado por visitantes sem conta (`user_id: null`), tornando impossível atribuir os créditos a alguém.
+
+**Solução implementada — fluxo completo:**
+
+1. **Visitante** escolhe Avulso (50 MZN), insere o número e clica em "Confirmar e Abrir WhatsApp"
+2. `process-payment.js` grava a transacção com `status: pending` e `user_id: null`
+3. **Admin** recebe o comprovativo pelo WhatsApp, vai ao painel admin (`/admin.html`), vê a transacção com botão roxo **"🎫 Criar Conta"**
+4. Admin clica → `/api/admin/confirm-avulso` é chamado:
+   - Cria utilizador no Supabase Auth com email `temp_MANxxxxxx@mzdocs.temp` e password aleatória (ex: `KpRx4821`)
+   - Marca o perfil como `is_temp: true`, `temp_ref: MANxxxxxx`, `credits: 3`
+   - Liga a transacção ao novo `user_id`
+   - Devolve link WhatsApp com as credenciais para o admin enviar ao cliente
+5. **Painel admin** mostra popup com email, password, botão "📱 Enviar pelo WhatsApp" e "📋 Copiar"
+6. **Cliente** recebe as credenciais, faz login com email+password temporários
+7. Quando usa o último crédito, a função `deduct_credit()` detecta `is_temp = TRUE` e `credits = 0` → **elimina automaticamente** o utilizador do Supabase Auth (CASCADE apaga perfil e documentos)
+
+**Novos ficheiros:**
+- `api/admin/confirm-avulso.js` — endpoint exclusivo para pagamentos avulsos
+- `supabase/migration_temp_accounts.sql` — colunas `is_temp`, `temp_ref`, `temp_password` + função `deduct_credit` actualizada com auto-delete
+
+**Ficheiros modificados:**
+- `assets/js/admin/AdminTransactions.js` — botão "Confirmar" diferenciado por tipo (roxo "🎫 Criar Conta" para avulso, verde "✅ Confirmar" para os restantes); popup de credenciais após criação
+
+**⚠️ Passo obrigatório:** executar `supabase/migration_temp_accounts.sql` no SQL Editor do Supabase
+
+---
+
+### v3.6
 
 #### Correcção — Header quebrado em mobile (utilizador autenticado)
 

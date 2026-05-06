@@ -104,9 +104,14 @@ export class AdminTransactions {
                     </td>
                     <td style="padding:12px;">
                         ${isPending ? `
-                            <button class="btn-confirm" data-tx-id="${t.id}" data-user-id="${t.user_id}" data-credits="${t.credits}"
-                                style="padding:6px 14px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
-                                ✅ Confirmar
+                            <button class="btn-confirm"
+                                data-tx-id="${t.id}"
+                                data-user-id="${t.user_id || ''}"
+                                data-credits="${t.credits}"
+                                data-pkg="${t.package_id}"
+                                data-ref="${t.reference_id || ''}"
+                                style="padding:6px 14px;background:${t.package_id === 'avulso' ? '#8b5cf6' : '#10b981'};color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
+                                ${t.package_id === 'avulso' ? '🎫 Criar Conta' : '✅ Confirmar'}
                             </button>
                         ` : `<span style="font-size:12px;color:#94a3b8;">${t.confirmed_at ? new Date(t.confirmed_at).toLocaleDateString('pt-MZ') : '-'}</span>`}
                     </td>
@@ -119,47 +124,70 @@ export class AdminTransactions {
                 this.confirmPayment(
                     btn.dataset.txId,
                     btn.dataset.userId,
-                    parseInt(btn.dataset.credits)
+                    parseInt(btn.dataset.credits),
+                    btn.dataset.pkg,
+                    btn.dataset.ref
                 );
             });
         });
     }
 
-    confirmPayment(transactionId, userId, credits) {
-        this.selected = { id: transactionId, userId, credits };
+    confirmPayment(transactionId, userId, credits, packageId, referenceId) {
+        this.selected = { id: transactionId, userId, credits, packageId, referenceId };
+        const isAvulso = packageId === 'avulso';
 
         const modal = document.getElementById('confirmModal');
-        const text = document.getElementById('confirmText');
+        const text  = document.getElementById('confirmText');
         if (modal && text) {
-            text.innerHTML = `
-                <p>Confirma o pagamento da transação <strong>${transactionId.slice(0, 8)}</strong>?</p>
-                <p>Serão adicionados <strong>${credits} créditos</strong> ao utilizador.</p>
-            `;
+            text.innerHTML = isAvulso
+                ? `<p>Confirma o pagamento avulso <strong>${referenceId || transactionId.slice(0,8)}</strong>?</p>
+                   <p>Será criada uma <strong>conta temporária</strong> com <strong>${credits} créditos</strong>.</p>
+                   <p style="font-size:12px;color:#64748b;margin-top:8px;">
+                     ⚠️ A conta é eliminada automaticamente quando os créditos acabarem.<br>
+                     As credenciais serão enviadas via WhatsApp ao cliente.
+                   </p>`
+                : `<p>Confirma o pagamento da transação <strong>${transactionId.slice(0,8)}</strong>?</p>
+                   <p>Serão adicionados <strong>${credits} créditos</strong> ao utilizador.</p>`;
             modal.style.display = 'flex';
         }
     }
 
     async _confirmSelected() {
         if (!this.selected) return;
+        const { id, userId, credits, packageId, referenceId } = this.selected;
 
         try {
-            const { id, userId, credits } = this.selected;
+            // ── Avulso: criar conta temporária ───────────────────────────
+            if (packageId === 'avulso') {
+                const token = authManager.getToken();
+                const resp  = await fetch('/api/admin/confirm-avulso', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body:    JSON.stringify({ transactionId: id, referenceId }),
+                });
+                const result = await resp.json();
+                if (!resp.ok) throw new Error(result.error || 'Erro ao confirmar avulso');
+
+                document.getElementById('confirmModal').style.display = 'none';
+                this.selected = null;
+                await this.load();
+
+                // Mostrar credenciais ao admin + botão para abrir WhatsApp
+                this._showTempCredentials(result);
+                return;
+            }
+
+            // ── Pacotes normais (starter/basico/pro) ─────────────────────
             const adminId = authManager.user?.id;
 
             const { error: txErr } = await this.supabase
                 .from('transactions')
-                .update({
-                    status: 'completed',
-                    confirmed_by: adminId,
-                    confirmed_at: new Date().toISOString()
-                })
+                .update({ status: 'completed', confirmed_by: adminId, confirmed_at: new Date().toISOString() })
                 .eq('id', id);
-
             if (txErr) throw txErr;
 
             const { data: newCredits, error: rpcErr } = await this.supabase
                 .rpc('add_credits', { user_id: userId, amount: credits });
-
             if (rpcErr) throw rpcErr;
 
             document.getElementById('confirmModal').style.display = 'none';
@@ -176,6 +204,60 @@ export class AdminTransactions {
             console.error('[AdminTransactions] Erro ao confirmar:', err);
             alert('❌ Erro ao confirmar pagamento: ' + err.message);
         }
+    }
+
+    _showTempCredentials(result) {
+        // Painel com as credenciais temporárias para o admin copiar/enviar
+        const panel = document.createElement('div');
+        panel.style.cssText = `
+            position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+            background:#fff;border-radius:16px;padding:28px 32px;
+            box-shadow:0 20px 60px rgba(0,0,0,.25);z-index:9999;
+            max-width:420px;width:90%;font-family:inherit;
+        `;
+        panel.innerHTML = `
+            <div style="font-size:20px;font-weight:800;color:#065f46;margin-bottom:4px;">✅ Conta Temporária Criada</div>
+            <div style="font-size:13px;color:#64748b;margin-bottom:20px;">Envie estas credenciais ao cliente</div>
+
+            <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+                <div style="font-size:11px;color:#94a3b8;font-weight:700;letter-spacing:.5px;margin-bottom:6px;">CREDENCIAIS DE ACESSO</div>
+                <div style="font-size:13px;margin-bottom:4px;">📧 <strong>Email:</strong> <code style="background:#e2e8f0;padding:2px 6px;border-radius:4px;">${result.tempEmail}</code></div>
+                <div style="font-size:13px;margin-bottom:4px;">🔐 <strong>Password:</strong> <code style="background:#fef9c3;padding:2px 6px;border-radius:4px;font-size:15px;font-weight:700;">${result.tempPass}</code></div>
+                <div style="font-size:13px;">⚡ <strong>Créditos:</strong> ${result.credits}</div>
+            </div>
+
+            <div style="font-size:12px;color:#f59e0b;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-bottom:18px;">
+                ⚠️ A conta é eliminada automaticamente quando os créditos acabarem.
+            </div>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                ${result.waLink ? `
+                <a href="${result.waLink}" target="_blank"
+                   style="flex:1;min-width:140px;padding:10px 16px;background:#25D366;color:#fff;border-radius:10px;
+                          font-weight:700;font-size:13px;text-align:center;text-decoration:none;display:block;">
+                    📱 Enviar pelo WhatsApp
+                </a>` : ''}
+                <button onclick="
+                    navigator.clipboard?.writeText('Email: ${result.tempEmail}\nPassword: ${result.tempPass}');
+                    this.textContent='✅ Copiado!';setTimeout(()=>this.textContent='📋 Copiar',2000);
+                " style="flex:1;min-width:100px;padding:10px 16px;background:#f1f5f9;border:none;border-radius:10px;
+                         font-weight:700;font-size:13px;cursor:pointer;">
+                    📋 Copiar
+                </button>
+                <button onclick="this.closest('div[style*=fixed]').remove()"
+                    style="flex:1;min-width:80px;padding:10px 16px;background:#e2e8f0;border:none;border-radius:10px;
+                           font-weight:700;font-size:13px;cursor:pointer;">
+                    Fechar
+                </button>
+            </div>
+        `;
+
+        // Overlay de fundo
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;';
+        overlay.addEventListener('click', () => { overlay.remove(); panel.remove(); });
+        document.body.appendChild(overlay);
+        document.body.appendChild(panel);
     }
 
     _bindModalEvents() {
@@ -218,9 +300,10 @@ export class AdminTransactions {
 
     _translateType(type) {
         const map = {
+            avulso:  '🎫 Avulso (temp)',
             starter: 'Starter',
-            basico: 'Básico',
-            pro: 'Pro',
+            basico:  'Básico',
+            pro:     'Pro',
             trabalho: '📚 Trabalho Escolar',
             cv: '📋 CV',
             carta: '✉️ Carta Formal',
