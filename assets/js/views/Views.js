@@ -131,17 +131,7 @@ export const DocumentView = {
       previewContainer.innerHTML = this._markdownToHTML(content);
     }
 
-    // Garante que o botão Editar existe nas res-actions
-    const resActions = document.querySelector('.res-actions');
-    if (resActions && !document.getElementById('btnEdit')) {
-      const editBtn = document.createElement('button');
-      editBtn.id = 'btnEdit';
-      editBtn.innerHTML = '✏️ Editar';
-      editBtn.style.cssText = 'grid-column:1/-1;background:#EFF6FF;color:#1d4ed8;border:1.5px solid #bfdbfe;';
-      resActions.appendChild(editBtn);
-      // re-bind no controller
-      editBtn.onclick = () => document.dispatchEvent(new CustomEvent('result:openEditor'));
-    }
+    // btnEdit está no HTML estático — o listener usa delegação no DocumentController
   },
 
   // Converte Markdown para HTML para preview legível

@@ -46,8 +46,14 @@ export class DocumentController {
     document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
     document.getElementById('btnDl')?.addEventListener('click',   () => this.downloadDoc());
     document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
-    document.getElementById('btnEdit')?.addEventListener('click', () => this._openEditor());
+    // Delegação de evento para btnEdit — funciona mesmo quando o botão é criado dinamicamente
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btnEdit')) this._openEditor();
+    });
+    // Evento de reedição disparado pelo DocumentEditor
     document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
+    // Compatibilidade com o evento result:openEditor (disparado pelo Views.js dinâmico)
+    document.addEventListener('result:openEditor', () => this._openEditor());
   }
 
   // ── Abre formulário de serviço ─────────────────────────────────
