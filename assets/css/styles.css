@@ -291,44 +291,85 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .fab{position:fixed;bottom:22px;right:18px;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,var(--wa),var(--wa-d));color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;text-decoration:none;box-shadow:0 4px 20px rgba(37,211,102,.5);z-index:80;transition:var(--t)}
 .fab:hover{transform:scale(1.1);box-shadow:0 6px 28px rgba(37,211,102,.6)}
 
-/* ── HEADER RESPONSIVO ───────────────────────────────────────────────────── */
-@media (max-width: 480px) {
-  /* Header não quebra linha */
-  .hdr { height: auto; min-height: 54px; padding: 8px 12px; flex-wrap: nowrap; gap: 6px; }
+/* ── AVATAR COM DROPDOWN (utilizador autenticado) ────────────────────────── */
+.usr-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.usr-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 15px; flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,.25);
+  transition: border-color .2s;
+}
+.usr-avatar-wrap:hover .usr-avatar { border-color: rgba(255,255,255,.6); }
+.usr-dropdown {
+  display: none; flex-direction: column; gap: 4px;
+  position: absolute; top: calc(100% + 10px); right: 0;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(7,16,31,.18);
+  padding: 14px 16px; min-width: 200px; z-index: 200;
+  animation: ddIn .18s ease;
+}
+.usr-dropdown.open { display: flex; }
+@keyframes ddIn { from { opacity:0; transform:translateY(-6px) } to { opacity:1; transform:translateY(0) } }
+.usr-dd-name { font-size: 14px; font-weight: 700; color: #07101f; }
+.usr-dd-sub  { font-size: 11px; color: #94a3b8; word-break: break-all; }
+.usr-dd-sep  { border: none; border-top: 1px solid #f1f5f9; margin: 8px 0 4px; }
+.usr-dd-btn  {
+  background: #FEF2F2; border: none; border-radius: 8px;
+  color: #EF4444; font-size: 13px; font-weight: 600;
+  padding: 8px 12px; cursor: pointer; text-align: left;
+  transition: background .15s;
+}
+.usr-dd-btn:hover { background: #FEE2E2; }
 
-  /* Lado esquerdo: logo compacto */
-  .hdr-l { gap: 6px; flex-shrink: 0; }
+/* ── HEADER RESPONSIVO ───────────────────────────────────────────────────── */
+
+/* Base: garantir que o header nunca quebra linha */
+.hdr { flex-wrap: nowrap; overflow: hidden; }
+.hdr-l { flex-shrink: 0; }
+.hdr-r { flex-shrink: 0; }
+
+/* Ocultar sempre a ver-tag — poupa espaço em todos os tamanhos */
+.ver-tag { display: none; }
+
+@media (max-width: 520px) {
+  .hdr { height: auto; min-height: 54px; padding: 8px 12px; gap: 6px; }
+
+  /* Logo */
+  .hdr-l { gap: 6px; }
   .logo-badge { width: 28px; height: 28px; font-size: 15px; }
   .lt-name { font-size: 16px; }
-  .lt-pro { font-size: 11px; }
-  .ver-tag { display: none; } /* oculta "v3 MVC" em mobile — poupa espaço */
+  .lt-pro  { font-size: 11px; }
 
-  /* Lado direito: itens compactos, sem quebrar */
-  .hdr-r { flex-shrink: 0; gap: 6px; }
-
-  /* Botão Entrar compacto */
-  .btn-auth { padding: 6px 12px !important; font-size: 12px !important; border-radius: 8px !important; white-space: nowrap; }
-
-  /* Área autenticada: sem gap excessivo */
+  /* Direita */
+  .hdr-r { gap: 6px; }
   #userArea { gap: 6px !important; }
-  #userMenu { gap: 6px !important; }
+  #userMenu { gap: 0 !important; }  /* avatar sozinho, sem gap */
 
-  /* Pill de créditos: mais compacto */
-  .credit-pill { padding: 4px 8px; gap: 3px; }
+  /* Botão Entrar */
+  .btn-auth { padding: 6px 14px !important; font-size: 12px !important; white-space: nowrap; }
+
+  /* Pill créditos */
+  .credit-pill { padding: 5px 9px; gap: 3px; }
   .cp-val { font-size: 13px; }
-  .cp-lbl { display: none; } /* oculta "cr" — o ⚡ já comunica */
+  .cp-lbl { display: none; }
 
-  /* Botão + Comprar: texto curto */
-  .btn-topup { padding: 6px 10px; font-size: 11px; border-radius: 16px; }
-  .btn-topup::before { content: "+"; }
+  /* Botão Comprar */
+  .btn-topup { padding: 6px 11px; font-size: 11px; border-radius: 16px; }
 
-  /* Arquivo: só ícone */
-  .btn-history { padding: 6px 9px !important; font-size: 13px !important; }
+  /* Arquivo */
+  #btnHistory { padding: 6px 10px !important; font-size: 13px !important; }
+
+  /* Dropdown abre para a esquerda em mobile para não sair do ecrã */
+  .usr-dropdown { right: -8px; min-width: 180px; }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 380px) {
   .hdr { padding: 7px 10px; }
-  .lt-name { font-size: 15px; }
-  .btn-topup { display: none; } /* em ecrãs muito pequenos, oculta "+ Comprar" */
-  .credit-pill { cursor: pointer; } /* pill fica clicável para abrir compra */
+  .btn-topup { display: none; }  /* muito pequeno: esconder "+ Comprar", créditos já são clicáveis */
 }

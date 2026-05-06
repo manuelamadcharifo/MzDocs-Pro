@@ -227,7 +227,22 @@ vercel dev   # Frontend + funções serverless em localhost
 
 ## 📋 Changelog
 
-### v3.5 (actual)
+### v3.6 (actual)
+
+#### Correcção — Header quebrado em mobile (utilizador autenticado)
+
+**Problema:** com sessão iniciada, o header mostrava: nome + email + avatar + botão "Sair" + 📁 + ⚡ créditos + "+ Comprar" — demasiados elementos para uma linha de ~375px, causando overflow e compressão visível (conforme screenshot).
+
+**Solução — `assets/js/app.js` + `assets/css/styles.css`:**
+- `userMenu` redesenhado: passa a mostrar apenas o **avatar (inicial do nome)** em vez de nome + email + botão Sair separados
+- Ao clicar no avatar abre um **dropdown** elegante com: nome completo, email/telefone, e botão "Terminar sessão"
+- Dropdown fecha ao clicar fora; abre animado; em mobile posiciona-se para a esquerda para não sair do ecrã
+- Media queries revistas: `.ver-tag` ("v3 MVC") ocultada globalmente; gap e padding compactados em ≤ 520px; "+ Comprar" oculto em ≤ 380px
+- Header fica com exactamente **4 elementos** em mobile autenticado: logo · avatar · 📁 · ⚡ créditos
+
+---
+
+### v3.5
 
 #### Correcção Crítica — Créditos reiniciavam a cada limpeza de cache
 

@@ -109,18 +109,29 @@ function _setupAuthHeader() {
             const subtitle = email || phone || '';
 
             if (userMenu) {
+                // Avatar com dropdown — compacto em mobile, sem quebrar o header
                 userMenu.innerHTML = `
-                    <div style="display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;margin-right:2px;">
-                        <span style="font-size:12px;font-weight:700;color:#334155;">${name}</span>
-                        <span style="font-size:10px;color:#94a3b8;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${subtitle}</span>
+                    <div class="usr-avatar-wrap" id="usrAvatarWrap" title="${name}">
+                        <div class="usr-avatar">${initials}</div>
+                        <div class="usr-dropdown" id="usrDropdown">
+                            <div class="usr-dd-name">${name}</div>
+                            <div class="usr-dd-sub">${subtitle}</div>
+                            <hr class="usr-dd-sep">
+                            <button class="usr-dd-btn" id="btnLogout">🚪 Terminar sessão</button>
+                        </div>
                     </div>
-                    <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#3B82F6,#1D4ED8);
-                        color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;
-                        flex-shrink:0;" title="${name} · ${subtitle}">${initials}</div>
-                    <button id="btnLogout" style="padding:6px 12px;background:#f1f5f9;border:none;border-radius:8px;
-                        font-size:12px;cursor:pointer;color:#64748b;flex-shrink:0;">🚪 Sair</button>
                 `;
-                document.getElementById('btnLogout')?.addEventListener('click', () => {
+                // Toggle dropdown ao clicar no avatar
+                const wrap = document.getElementById('usrAvatarWrap');
+                const drop = document.getElementById('usrDropdown');
+                wrap?.addEventListener('click', e => {
+                    e.stopPropagation();
+                    drop.classList.toggle('open');
+                });
+                // Fechar ao clicar fora
+                document.addEventListener('click', () => drop?.classList.remove('open'), { capture: true });
+                document.getElementById('btnLogout')?.addEventListener('click', e => {
+                    e.stopPropagation();
                     authManager.signOut().then(() => location.reload());
                 });
             }
