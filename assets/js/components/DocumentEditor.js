@@ -47,7 +47,6 @@ export class DocumentEditor {
 
     document.body.appendChild(overlay);
     this.modal = overlay;
-    console.log('[DocumentEditor] modal criado e appendado ao body:', !!this.modal);
     this._bindEvents();
   }
 
@@ -77,14 +76,11 @@ export class DocumentEditor {
   }
 
   open() {
-    console.log('[DocumentEditor] open() chamado, modal:', !!this.modal);
     if (this.modal) {
       this.modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
-      console.log('[DocumentEditor] modal visível ✅');
-    } else {
-      console.error('[DocumentEditor] ERRO: this.modal é null!');
-    }
+      } else {
+      }
   }
 
   close() {

@@ -5,7 +5,6 @@ import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 import { Validator } from '../utils/Formatter.js';
 import { DocumentEditor } from '../components/DocumentEditor.js';
-import { offlineDB } from '../utils/IndexedDB.js';
 import { Storage } from '../utils/Storage.js';
 
 const WA_NUMBER = '258858695506';
@@ -127,10 +126,10 @@ export class DocumentController {
       this.docModel.setGenerated(result.document, result.model);
       this.docModel.formData = data;
 
-      // Guardar no histórico local (IndexedDB)
+      // Guardar no histórico (Supabase + IndexedDB offline)
       try {
-        const userId = Storage.getUserId();
-        await offlineDB.saveDocument({
+        const userId = window.authManager?.user?.id || Storage.getUserId();
+        await window.historyController?.saveDocument({
           id: 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
           user_id: userId,
           service_type: key,
@@ -295,27 +294,19 @@ export class DocumentController {
 
   // ── Editar documento ───────────────────────────────────────────
   _openEditor() {
-    console.log('[Editor] _openEditor chamado');
-    console.log('[Editor] docModel.content:', this.docModel?.content ? 'tem conteúdo (' + this.docModel.content.length + ' chars)' : 'VAZIO');
     if (!this.docModel.content) {
       NotificationView.warn('⚠️ Nenhum documento gerado ainda.');
       return;
     }
-    try {
-      if (window.documentEditor) {
-        try { window.documentEditor.close(); } catch(e) { console.warn('[Editor] erro ao fechar editor anterior:', e); }
-      }
-      window.documentEditor = new DocumentEditor();
-      console.log('[Editor] nova instância criada, modal:', window.documentEditor.modal);
-      const svc = SERVICES[this.docModel.service] || {};
-      window.documentEditor.loadDocument(
-        this.docModel.content,
-        svc.title || this.docModel.service || 'Documento'
-      );
-      console.log('[Editor] loadDocument chamado ✅');
-    } catch(err) {
-      console.error('[Editor] ERRO:', err);
+    if (window.documentEditor) {
+      try { window.documentEditor.close(); } catch(e) {}
     }
+    window.documentEditor = new DocumentEditor();
+    const svc = SERVICES[this.docModel.service] || {};
+    window.documentEditor.loadDocument(
+      this.docModel.content,
+      svc.title || this.docModel.service || 'Documento'
+    );
   }
 
   // ── WhatsApp resultado ─────────────────────────────────────────

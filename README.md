@@ -192,12 +192,17 @@ Após gerar, o utilizador pode clicar em **✏️ Editar** para modificar o docu
 
 ## 📁 Arquivo de Documentos
 
-Todos os documentos gerados são guardados automaticamente no **IndexedDB local**.
+Todos os documentos gerados são guardados automaticamente em **dois locais em paralelo**:
+
+- **Supabase** (nuvem) — acessível em qualquer dispositivo quando autenticado e online
+- **IndexedDB local** — disponível offline, funciona sem internet
+
+O histórico carrega do Supabase quando há ligação, sincroniza para o IndexedDB, e usa apenas o IndexedDB quando offline. Cada documento mostra um badge ☁️ (sincronizado) ou 📴 (apenas local).
 
 - Acessível via botão **📁** no header (visível apenas para utilizadores autenticados)
-- Pré-visualização, cópia para clipboard, download e eliminação individual
-- Botão "Limpar tudo" para apagar o arquivo completo
-- Funciona offline — documentos disponíveis sem internet
+- Pré-visualização, cópia, reabertura no editor e eliminação individual
+- Eliminação apaga tanto do Supabase como do IndexedDB
+- Botão "Limpar tudo" remove todos os documentos
 
 ---
 
