@@ -46,14 +46,9 @@ export class DocumentController {
     document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
     document.getElementById('btnDl')?.addEventListener('click',   () => this.downloadDoc());
     document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
-    // Delegação de evento para btnEdit — funciona mesmo quando o botão é criado dinamicamente
-    document.addEventListener('click', (e) => {
-      if (e.target.closest('#btnEdit')) this._openEditor();
-    });
+    // btnEdit — bind directo feito no momento em que o resultado é mostrado (ver _bindEditBtn)
     // Evento de reedição disparado pelo DocumentEditor
     document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
-    // Compatibilidade com o evento result:openEditor (disparado pelo Views.js dinâmico)
-    document.addEventListener('result:openEditor', () => this._openEditor());
   }
 
   // ── Abre formulário de serviço ─────────────────────────────────
@@ -149,6 +144,7 @@ export class DocumentController {
       ModalView.close('formOverlay');
       DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
       ModalView.open('resultOverlay');
+      this._bindEditBtn();
       NotificationView.success('✅ Documento gerado!');
 
     } catch (err) {
@@ -282,6 +278,19 @@ export class DocumentController {
       );
       NotificationView.success('✅ Excel descarregado!');
     } catch (err) { NotificationView.error('❌ Erro Excel: ' + err.message); }
+  }
+
+  // ── Liga o botão editar após o modal de resultado abrir ───────
+  _bindEditBtn() {
+    // Remover listener anterior para não acumular
+    const btn = document.getElementById('btnEdit');
+    if (!btn) return;
+    const fresh = btn.cloneNode(true);
+    btn.parentNode.replaceChild(fresh, btn);
+    fresh.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._openEditor();
+    });
   }
 
   // ── Editar documento ───────────────────────────────────────────
