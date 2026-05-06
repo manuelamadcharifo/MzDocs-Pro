@@ -290,9 +290,11 @@ export class DocumentController {
       NotificationView.warn('⚠️ Nenhum documento gerado ainda.');
       return;
     }
-    if (!window.documentEditor) {
-      window.documentEditor = new DocumentEditor();
+    // Criar sempre nova instância para garantir modal limpo no DOM
+    if (window.documentEditor) {
+      try { window.documentEditor.close(); } catch(e) {}
     }
+    window.documentEditor = new DocumentEditor();
     const svc = SERVICES[this.docModel.service] || {};
     window.documentEditor.loadDocument(
       this.docModel.content,
