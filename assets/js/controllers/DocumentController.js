@@ -295,20 +295,27 @@ export class DocumentController {
 
   // ── Editar documento ───────────────────────────────────────────
   _openEditor() {
+    console.log('[Editor] _openEditor chamado');
+    console.log('[Editor] docModel.content:', this.docModel?.content ? 'tem conteúdo (' + this.docModel.content.length + ' chars)' : 'VAZIO');
     if (!this.docModel.content) {
       NotificationView.warn('⚠️ Nenhum documento gerado ainda.');
       return;
     }
-    // Criar sempre nova instância para garantir modal limpo no DOM
-    if (window.documentEditor) {
-      try { window.documentEditor.close(); } catch(e) {}
+    try {
+      if (window.documentEditor) {
+        try { window.documentEditor.close(); } catch(e) { console.warn('[Editor] erro ao fechar editor anterior:', e); }
+      }
+      window.documentEditor = new DocumentEditor();
+      console.log('[Editor] nova instância criada, modal:', window.documentEditor.modal);
+      const svc = SERVICES[this.docModel.service] || {};
+      window.documentEditor.loadDocument(
+        this.docModel.content,
+        svc.title || this.docModel.service || 'Documento'
+      );
+      console.log('[Editor] loadDocument chamado ✅');
+    } catch(err) {
+      console.error('[Editor] ERRO:', err);
     }
-    window.documentEditor = new DocumentEditor();
-    const svc = SERVICES[this.docModel.service] || {};
-    window.documentEditor.loadDocument(
-      this.docModel.content,
-      svc.title || this.docModel.service || 'Documento'
-    );
   }
 
   // ── WhatsApp resultado ─────────────────────────────────────────
