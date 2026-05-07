@@ -421,6 +421,218 @@ Linguagem formal, impessoal. Inclua menção ao Estatuto/Regulamento quando pert
 
     };
 
+
+      arrendamento: () =>
+        `Redija um CONTRATO DE ARRENDAMENTO completo e juridicamente estruturado conforme o Código Civil de Moçambique e o Decreto-Lei n.º 41/2018.
+DADOS:
+- Tipo de imóvel: ${data.tipoImovel}
+- Proprietário (Senhorio): ${data.proprietario}
+- Locatário (Inquilino): ${data.locatario}
+- Localização: ${data.local}
+- Renda mensal: ${data.valor} MZN
+- Duração: ${data.duracao}
+- Caução: ${data.caucao}
+- Condições especiais: ${data.condicoes || 'Nenhuma'}${ocrBlock}
+ESTRUTURA OBRIGATÓRIA:
+CLÁUSULA 1 – Objecto (descrição do imóvel, endereço, finalidade)
+CLÁUSULA 2 – Prazo (data de início, duração, renovação)
+CLÁUSULA 3 – Renda (valor em MZN, data de pagamento, multa por atraso)
+CLÁUSULA 4 – Caução (valor, condições de devolução)
+CLÁUSULA 5 – Obrigações do Proprietário
+CLÁUSULA 6 – Obrigações do Locatário
+CLÁUSULA 7 – Rescisão (prazos de aviso prévio, causas)
+CLÁUSULA 8 – Foro (Maputo)
+ASSINATURAS: local, data, nome e BI de ambas as partes + 2 testemunhas.
+Use linguagem jurídica formal em português de Moçambique.`,
+
+      procuracao: () =>
+        `Redija uma PROCURAÇÃO / MANDATO formal e juridicamente válida em Moçambique.
+DADOS:
+- Tipo: ${data.tipoProc}
+- Outorgante: ${data.outorgante} (BI: ${data.biOutorgante})
+- Procurador: ${data.procurador} (BI: ${data.biProcurador})
+- Acto específico: ${data.acto}
+- Validade: ${data.validade}
+- Local e data: ${data.local}${ocrBlock}
+ESTRUTURA:
+1. TÍTULO: "PROCURAÇÃO" + tipo
+2. EXPOSIÇÃO: Eu, [outorgante], portador do BI n.º [BI], outorgo poderes a:
+3. NOMEAÇÃO: [procurador], portador do BI n.º [BI]
+4. PODERES CONFERIDOS: descrição detalhada (assinar, retirar, receber, dar quitação...)
+5. LIMITES: o que NÃO pode fazer
+6. VALIDADE e condição de revogação
+7. ASSINATURAS: outorgante + procurador + 2 testemunhas com BI + espaço para reconhecimento de firma
+Linguagem formal, jurídica, em português de Moçambique.`,
+
+      requerimento: () =>
+        `Redija um REQUERIMENTO OFICIAL formal para repartição pública em Moçambique.
+DADOS:
+- Entidade: ${data.entidade}
+- Assunto: ${data.assunto}
+- Requerente: ${data.remetente} | BI: ${data.bi} | Tel: ${data.contacto}
+- Endereço: ${data.endereco}
+- Fundamento: ${data.fundamento}
+- Anexos: ${data.anexos || 'Nenhum especificado'}${ocrBlock}
+ESTRUTURA:
+1. CABEÇALHO: Exmo(a). Sr(a). Director(a) da [entidade]
+2. ASSUNTO em maiúsculas
+3. IDENTIFICAÇÃO: Eu, [nome], BI n.º [BI], residente em [endereço], contacto [tel], venho REQUERER:
+4. EXPOR (3 parágrafos: contexto, necessidade, urgência)
+5. REQUERER: pedido específico e formal
+6. ANEXOS: lista
+7. FECHO: "Pela atenção, desde já agradeço" + local + data + assinatura
+Linguagem formal, respeitosa, típica da administração pública moçambicana.`,
+
+      residencia: () =>
+        `Redija uma DECLARAÇÃO DE RESIDÊNCIA formal para uso em repartições, bancos e empresas em Moçambique.
+DADOS:
+- Declarante: ${data.declarante} | BI: ${data.bi} | Nascimento: ${data.nascimento}
+- Naturalidade: ${data.naturalidade}
+- Endereço: ${data.endereco}
+- Tempo de residência: ${data.tempo}
+- Finalidade: ${data.finalidade}
+- Chefe de quarteirão: ${data.chefe || 'Não informado'}${ocrBlock}
+ESTRUTURA:
+1. TÍTULO: "DECLARAÇÃO DE RESIDÊNCIA"
+2. TEXTO: Eu, [nome], BI n.º [BI], nascido em [data] em [naturalidade], residente em [endereço] há [tempo], DECLARO:
+3. DECLARAÇÃO: confirmo que resido no endereço acima desde [data aproximada]
+4. FINALIDADE: esta declaração destina-se a [finalidade]
+5. COMPROMISSO: assumo responsabilidade pela veracidade (art. 347 Código Penal de Moçambique)
+6. ASSINATURAS: declarante + 2 testemunhas com BI + chefe de quarteirão + data
+Linguagem jurídica formal em português de Moçambique.`,
+
+      prestacao: () =>
+        `Elabore um CONTRATO DE PRESTAÇÃO DE SERVIÇOS formal para o mercado moçambicano.
+DADOS:
+- Serviço: ${data.servico}
+- Prestador: ${data.prestador} (NUIT: ${data.nuitPrestador || 'Não informado'})
+- Cliente: ${data.cliente} (BI: ${data.biCliente})
+- Valor total: ${data.valorTotal} MZN | Pagamento: ${data.pagamento}
+- Prazo: ${data.prazo} dias
+- Descrição: ${data.descricao}
+- Penalidades: ${data.penalidades || 'Não especificadas'}${ocrBlock}
+ESTRUTURA OBRIGATÓRIA:
+1. TÍTULO + PARTES (identificação completa)
+2. OBJECTO: descrição detalhada do serviço, escopo, exclusões
+3. OBRIGAÇÕES DO PRESTADOR: prazo, qualidade, materiais, garantia
+4. OBRIGAÇÕES DO CLIENTE: pagamento, acesso, colaboração
+5. PREÇO E PAGAMENTO: valor, forma, prazos, multa por atraso
+6. PRAZO E ENTREGA: data de início, entrega, cláusula de aceitação
+7. RESCISÃO: condições, aviso prévio, pagamento proporcional
+8. RESPONSABILIDADE E FORO (Maputo)
+9. ASSINATURAS: ambas as partes + 2 testemunhas + data`,
+
+      recibo: () =>
+        `Elabore um ${data.tipoDoc.toUpperCase()} formal para comércio em Moçambique.
+DADOS:
+- Emitente: ${data.emitente} (NUIT: ${data.nuitEmitente || 'Não informado'})
+- Cliente: ${data.cliente} (BI: ${data.biCliente})
+- Descrição: ${data.descricao}
+- Valor: ${data.valor} MZN | IVA: ${data.iva} | Pagamento: ${data.pagamento}
+- Local e data: ${data.local}${ocrBlock}
+ESTRUTURA:
+1. CABEÇALHO: nome, NUIT, contacto do emitente
+2. TÍTULO: "${data.tipoDoc.toUpperCase()} N.º [número]"
+3. DADOS DO CLIENTE: nome, BI
+4. TABELA Markdown: Descrição | Qtd | Preço Unit. | Total
+5. RESUMO: subtotal → IVA (16% se aplicável) → TOTAL GERAL
+6. FORMA DE PAGAMENTO e status ("Pago" / "A pagar")
+7. Se recibo: "Recebi a quantia de [valor por extenso] meticais referente a [descrição]"
+8. ASSINATURAS: emitente + cliente + data
+Nota de rodapé com referência legal se aplicável.`,
+
+      recomendacao: () =>
+        `Redija uma CARTA DE RECOMENDAÇÃO formal e convincente.
+DADOS:
+- Tipo: ${data.tipoRec}
+- Recomendador: ${data.recomendador}, ${data.cargoRec} na ${data.entidadeRec}
+- Recomendado: ${data.recomendado} | Cargo pretendido: ${data.cargoRecm}
+- Relação: ${data.relacao}
+- Qualidades: ${data.qualidades}
+- Destinatário: ${data.destinatario || 'A quem possa interessar'}${ocrBlock}
+ESTRUTURA:
+1. CABEÇALHO: dados do recomendador, contacto, data
+2. DESTINATÁRIO: Exmo. Sr. / À atenção de [destinatário]
+3. ASSUNTO: "Carta de Recomendação – [nome]"
+4. INTRODUÇÃO: quem sou, cargo, como e há quanto tempo conheço o candidato
+5. CORPO (4 parágrafos):
+   - Desempenho profissional/académico com exemplos concretos
+   - Qualidades pessoais e interpessoais específicas
+   - Realizações mensuráveis, projectos, impacto real
+   - Comparação positiva com pares (sem depreciar terceiros)
+6. CONCLUSÃO: recomendação explícita e entusiasta
+7. DISPONIBILIDADE: contacto para confirmação
+8. ASSINATURA: nome, cargo, entidade
+Tom formal mas caloroso, com exemplos específicos (nunca genérico).`,
+
+      planonegocio: () =>
+        `Elabore um PLANO DE NEGÓCIOS SIMPLIFICADO para pequenos empreendedores em Moçambique.
+DADOS:
+- Nome: ${data.nomeNegocio} | Sector: ${data.sector}
+- Proprietário: ${data.proprietario} | Local: ${data.local}
+- Descrição: ${data.descricao}
+- Investimento inicial: ${data.investimento} MZN
+- Clientes-alvo: ${data.clientes}
+- Concorrência e diferencial: ${data.concorrencia || 'A definir'}
+- Prazo de retorno: ${data.retorno}${ocrBlock}
+ESTRUTURA (máximo 6 páginas A4):
+1. RESUMO EXECUTIVO: missão, visão, investimento, retorno esperado
+2. DESCRIÇÃO DO NEGÓCIO: o que vende, como funciona, modelo de receita
+3. ANÁLISE DE MERCADO: tamanho, tendências, clientes-alvo em Moçambique
+4. PLANO DE MARKETING: preço, promoção, canais de venda (inclui M-Pesa/WhatsApp)
+5. PLANO OPERACIONAL: processos, fornecedores, equipamentos, local
+6. PLANO FINANCEIRO: tabela com investimento inicial, custos mensais, receitas projetadas (12 meses), ponto de equilíbrio
+7. EQUIPE: quem trabalha e funções
+8. RISCOS E MITIGAÇÃO: 3 riscos + soluções
+9. CONCLUSÃO: pedido de apoio/financiamento
+Use dados realistas do mercado moçambicano ${new Date().getFullYear()}.`,
+
+      licenca: () =>
+        `Redija um PEDIDO DE LICENÇA / AUTORIZAÇÃO formal para entidade pública em Moçambique.
+DADOS:
+- Tipo: ${data.tipoLicenca}
+- Requerente: ${data.requerente} (NUIT: ${data.nuit}) | Tel: ${data.contacto}
+- Entidade: ${data.entidade}
+- Objecto: ${data.objecto}
+- Local exacto: ${data.local}
+- Documentos: ${data.documentos || 'Não especificados'}${ocrBlock}
+ESTRUTURA:
+1. CABEÇALHO: Exmo. Sr. Presidente/Director da [entidade]
+2. ASSUNTO: "Pedido de [tipo de licença]"
+3. IDENTIFICAÇÃO: Eu, [nome/entidade], NUIT [n.º], contacto [tel], venho REQUERER:
+4. FUNDAMENTAÇÃO (3-4 parágrafos):
+   - Descrição do projecto/actividade
+   - Benefícios para a comunidade (emprego, economia local)
+   - Compromisso de cumprimento de normas (ambiente, segurança)
+   - Referência legal aplicável (Lei n.º 15/2013, Decreto n.º 43/2015...)
+5. PEDIDO FORMAL: emissão de [tipo de licença] para [descrição]
+6. LISTA DE ANEXOS
+7. COMPROMISSO de veracidade e cumprimento das condições
+8. ASSINATURAS: requerente + 2 testemunhas + data
+Linguagem formal com referências à legislação moçambicana aplicável.`,
+
+      acta: () =>
+        `Redija uma ACTA DE REUNIÃO formal e completa para organização moçambicana.
+DADOS:
+- Organização: ${data.organizacao} | Tipo: ${data.tipoReuniao}
+- Data: ${data.data} às ${data.hora} | Local: ${data.local}
+- Presidente de mesa: ${data.presidente} | Secretário: ${data.secretario}
+- Presentes: ${data.presentes}
+- Pauta: ${data.pauta}
+- Deliberações: ${data.deliberacoes}${ocrBlock}
+ESTRUTURA:
+1. TÍTULO: "ACTA DA [tipo] DA [organização] – [data]"
+2. CABEÇALHO: data, hora de início, local, tipo de reunião
+3. MESA: presidente e secretário com cargos
+4. PRESENTES: lista completa com cargos (se houver)
+5. ABERTURA: quem declarou aberta e hora exacta
+6. PAUTA: cada ponto numerado com discussão resumida e votação (se houver)
+7. DELIBERAÇÕES: decisão clara de cada ponto ("Foi deliberado por unanimidade...", "Aprovado por X votos...")
+8. ASSUNTOS GERAIS: informações avulsas
+9. ENCERRAMENTO: hora e quem encerrou
+10. ASSINATURAS: presidente + secretário + 2 vogais da mesa
+Linguagem formal, impessoal. Inclua menção ao Estatuto/Regulamento quando pertinente.`,
+
     return (builders[type] || builders.trabalho)();
   }
 }
