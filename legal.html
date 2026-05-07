@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="pt-MZ">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Termos & Privacidade — MzDocs Pro</title>
+  <meta name="description" content="Termos de Serviço, Política de Privacidade, Política de Reembolso e Suporte — MzDocs Pro"/>
+  <meta name="robots" content="index,follow"/>
+  <link rel="icon" href="/assets/img/icon-192.png" type="image/png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap"/>
+  <style>
+    :root{
+      --ink:#07101F;--ink2:#0F1E3B;--dim:#334155;--muted:#64748B;
+      --border:#E2E8F0;--surface:#F8FAFD;--white:#fff;
+      --green:#009A44;--blue:#3B82F6;--blue-d:#1D4ED8;
+      --gold:#F59E0B;--r:16px;
+      --sh:0 2px 12px rgba(7,16,31,.07),0 4px 20px rgba(7,16,31,.09);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);color:var(--ink);line-height:1.7;-webkit-text-size-adjust:100%}
+
+    /* ── HEADER ── */
+    .hdr{background:var(--ink);padding:0 20px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+    .hdr-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .hdr-badge{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#009A44);display:flex;align-items:center;justify-content:center;font-size:16px}
+    .hdr-name{color:#fff;font-size:17px;font-weight:800}
+    .hdr-name span{color:var(--gold);font-style:italic}
+    .hdr-back{color:rgba(255,255,255,.7);font-size:13px;text-decoration:none;display:flex;align-items:center;gap:5px;transition:color .2s}
+    .hdr-back:hover{color:#fff}
+
+    /* ── HERO ── */
+    .hero{background:var(--ink2);padding:48px 20px 36px;text-align:center}
+    .hero-eyebrow{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.7);font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:5px 12px;border-radius:20px;margin-bottom:16px}
+    .hero h1{color:#fff;font-size:clamp(24px,5vw,36px);font-weight:800;line-height:1.2;margin-bottom:10px}
+    .hero p{color:rgba(255,255,255,.6);font-size:14px;max-width:500px;margin:0 auto 24px}
+    .hero-updated{color:rgba(255,255,255,.4);font-size:12px}
+
+    /* ── NAV PILLS ── */
+    .nav-wrap{position:sticky;top:56px;z-index:40;background:var(--white);border-bottom:1px solid var(--border);padding:0 16px;overflow-x:auto;scrollbar-width:none}
+    .nav-wrap::-webkit-scrollbar{display:none}
+    .nav-pills{display:flex;gap:4px;padding:10px 0;min-width:max-content}
+    .nav-pill{padding:7px 16px;border-radius:20px;font-size:13px;font-weight:600;color:var(--muted);background:transparent;border:none;cursor:pointer;white-space:nowrap;transition:all .2s;text-decoration:none}
+    .nav-pill:hover{background:var(--surface);color:var(--ink)}
+    .nav-pill.active{background:var(--ink);color:#fff}
+
+    /* ── LAYOUT ── */
+    .wrap{max-width:780px;margin:0 auto;padding:40px 20px 80px}
+
+    /* ── SECTION ── */
+    .section{margin-bottom:64px;scroll-margin-top:110px}
+    .section-header{display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid var(--border)}
+    .section-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+    .section-icon.blue{background:#EFF6FF}
+    .section-icon.green{background:#ECFDF5}
+    .section-icon.gold{background:#FFFBEB}
+    .section-icon.red{background:#FEF2F2}
+    .section-icon.purple{background:#EDE9FE}
+    .section-icon.gray{background:#F1F5F9}
+    .section-title{font-size:20px;font-weight:800;color:var(--ink)}
+    .section-ref{font-size:11px;color:var(--muted);margin-top:2px}
+
+    /* ── PROSE ── */
+    .prose h3{font-size:15px;font-weight:700;color:var(--ink);margin:24px 0 8px}
+    .prose h3:first-child{margin-top:0}
+    .prose p{font-size:14px;color:var(--dim);margin-bottom:12px;line-height:1.75}
+    .prose ul,.prose ol{padding-left:20px;margin-bottom:12px}
+    .prose li{font-size:14px;color:var(--dim);margin-bottom:6px;line-height:1.7}
+    .prose strong{color:var(--ink);font-weight:700}
+    .prose a{color:var(--blue-d);text-decoration:underline}
+
+    /* ── INFO CARDS ── */
+    .info-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;margin-bottom:12px;box-shadow:var(--sh)}
+    .info-card h4{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px}
+    .info-card p{font-size:13px;color:var(--dim);line-height:1.6;margin:0}
+    .info-card.highlight{border-color:var(--green);background:#ECFDF5}
+    .info-card.warn{border-color:var(--gold);background:#FFFBEB}
+    .info-card.danger{border-color:#EF4444;background:#FEF2F2}
+
+    /* ── REFUND TABLE ── */
+    .rfnd-table{width:100%;border-collapse:collapse;font-size:13px;margin:16px 0}
+    .rfnd-table th{background:var(--ink);color:#fff;padding:10px 14px;text-align:left;font-weight:700}
+    .rfnd-table th:first-child{border-radius:10px 0 0 0}
+    .rfnd-table th:last-child{border-radius:0 10px 0 0}
+    .rfnd-table td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--dim);vertical-align:top}
+    .rfnd-table tr:last-child td{border-bottom:none}
+    .rfnd-table tr:nth-child(even) td{background:var(--surface)}
+    .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+    .badge.yes{background:#ECFDF5;color:#065F46}
+    .badge.no{background:#FEF2F2;color:#991B1B}
+    .badge.partial{background:#FFFBEB;color:#92400E}
+
+    /* ── CONTACT GRID ── */
+    .contact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:16px}
+    .contact-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;box-shadow:var(--sh);display:flex;flex-direction:column;gap:6px}
+    .contact-card .cc-icon{font-size:24px}
+    .contact-card .cc-label{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    .contact-card .cc-val{font-size:14px;font-weight:700;color:var(--ink)}
+    .contact-card .cc-note{font-size:12px;color:var(--muted)}
+    .contact-card a{color:var(--blue-d);text-decoration:none}
+    .contact-card a:hover{text-decoration:underline}
+
+    /* ── COMPANY BOX ── */
+    .company-box{background:var(--ink);color:#fff;border-radius:var(--r);padding:24px 24px;margin-top:24px}
+    .company-box h4{font-size:16px;font-weight:800;margin-bottom:12px;color:#fff}
+    .company-box .row{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start}
+    .company-box .lbl{font-size:12px;color:rgba(255,255,255,.5);font-weight:700;min-width:80px;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+    .company-box .val{font-size:14px;color:rgba(255,255,255,.9)}
+    .company-box .val a{color:var(--gold);text-decoration:none}
+
+    /* ── FOOTER ── */
+    .page-footer{background:var(--ink);padding:28px 20px;text-align:center;margin-top:40px}
+    .page-footer p{color:rgba(255,255,255,.4);font-size:12px;line-height:1.8}
+    .page-footer a{color:rgba(255,255,255,.6);text-decoration:none}
+    .page-footer a:hover{color:#fff}
+
+    @media(max-width:480px){
+      .hero{padding:32px 16px 28px}
+      .wrap{padding:28px 16px 60px}
+      .rfnd-table{font-size:12px}
+      .rfnd-table th,.rfnd-table td{padding:8px 10px}
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="hdr">
+  <a href="/" class="hdr-logo">
+    <div class="hdr-badge">📄</div>
+    <div class="hdr-name">MzDocs<span>Pro</span></div>
+  </a>
+  <a href="/" class="hdr-back">← Voltar ao início</a>
+</header>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow">⚖️ Documentação Legal</div>
+  <h1>Termos, Privacidade & Políticas</h1>
+  <p>Transparência total sobre como operamos, como protegemos os seus dados e quais os seus direitos como utilizador.</p>
+  <div class="hero-updated">Última actualização: Maio de 2026 · Versão 1.0</div>
+</div>
+
+<!-- NAV PILLS -->
+<nav class="nav-wrap" id="navWrap">
+  <div class="nav-pills">
+    <a href="#termos"      class="nav-pill active">📋 Termos de Serviço</a>
+    <a href="#privacidade" class="nav-pill">🔒 Privacidade</a>
+    <a href="#reembolso"   class="nav-pill">💰 Reembolsos</a>
+    <a href="#cookies"     class="nav-pill">🍪 Cookies</a>
+    <a href="#suporte"     class="nav-pill">📞 Suporte</a>
+    <a href="#empresa"     class="nav-pill">🏢 Empresa</a>
+  </div>
+</nav>
+
+<!-- CONTEÚDO -->
+<div class="wrap">
+
+  <!-- ── 1. TERMOS DE SERVIÇO ── -->
+  <section class="section" id="termos">
+    <div class="section-header">
+      <div class="section-icon blue">📋</div>
+      <div>
+        <div class="section-title">Termos de Serviço</div>
+        <div class="section-ref">Conforme Lei n.º 3/2017 e Lei n.º 58/2021 de Moçambique</div>
+      </div>
+    </div>
+    <div class="prose">
+      <p>Ao aceder e utilizar o MzDocs Pro (<strong>mz-docs-pro.vercel.app</strong>), o utilizador aceita expressamente os presentes Termos de Serviço. Caso não concorde com alguma das condições aqui descritas, deverá abster-se de utilizar a plataforma.</p>
+
+      <h3>1. O que é o MzDocs Pro</h3>
+      <p>O MzDocs Pro é uma plataforma digital de geração assistida de documentos (contratos, requerimentos, currículos, actas, entre outros) para o mercado moçambicano. Os documentos são gerados com recurso a Inteligência Artificial (IA) com base nas informações fornecidas pelo utilizador. <strong>Os documentos gerados têm carácter orientativo e não substituem aconselhamento jurídico profissional.</strong></p>
+
+      <h3>2. Elegibilidade</h3>
+      <p>O serviço destina-se a pessoas singulares e colectivas residentes em Moçambique com capacidade legal para celebrar contratos. O utilizador declara ter pelo menos 18 anos de idade ou ser representado por um responsável legal.</p>
+
+      <h3>3. Registo e Conta</h3>
+      <ul>
+        <li>O registo pode ser efectuado com número de telefone moçambicano ou endereço de email.</li>
+        <li>O utilizador é responsável pela confidencialidade das suas credenciais.</li>
+        <li>Contas temporárias (Avulso) são eliminadas automaticamente após esgotamento dos créditos.</li>
+        <li>Não é permitida a partilha, venda ou transferência de contas.</li>
+      </ul>
+
+      <h3>4. Sistema de Créditos</h3>
+      <ul>
+        <li>Os créditos são adquiridos mediante pagamento e utilizados para gerar documentos.</li>
+        <li>Novos utilizadores registados recebem <strong>3 créditos de boas-vindas</strong>, válidos por 60 dias.</li>
+        <li>Créditos mensais são atribuídos automaticamente conforme o plano activo (Starter: 1/mês · Básico: 3/mês · Pro: 8/mês).</li>
+        <li>Créditos não são transferíveis entre contas nem convertíveis em dinheiro.</li>
+        <li>Créditos não utilizados expiram 90 dias após a última actividade na conta.</li>
+      </ul>
+
+      <h3>5. Responsabilidade pelo Conteúdo</h3>
+      <p>O utilizador é o único responsável pelas informações inseridas nos formulários. O MzDocs Pro não verifica a veracidade dos dados fornecidos. Os documentos gerados reflectem exclusivamente as informações inseridas pelo utilizador. A utilização indevida dos documentos gerados (falsidade documental, fraude, etc.) é da exclusiva responsabilidade do utilizador e sujeita às penalidades previstas no Código Penal de Moçambique.</p>
+
+      <h3>6. Proibições</h3>
+      <ul>
+        <li>Utilizar a plataforma para fins ilícitos, fraudulentos ou lesivos de terceiros.</li>
+        <li>Tentar aceder a contas de outros utilizadores ou a dados não autorizados.</li>
+        <li>Fazer engenharia reversa ou copiar o código fonte da plataforma.</li>
+        <li>Automatizar pedidos em volume sem autorização expressa.</li>
+      </ul>
+
+      <h3>7. Disponibilidade do Serviço</h3>
+      <p>O MzDocs Pro opera em regime de melhor esforço. Não garantimos disponibilidade ininterrupta. Manutenções programadas serão comunicadas com antecedência mínima de 24 horas pelo WhatsApp e/ou por notificação na plataforma.</p>
+
+      <h3>8. Alterações aos Termos</h3>
+      <p>Podemos actualizar estes termos mediante notificação aos utilizadores com antecedência mínima de 15 dias. A utilização continuada da plataforma após essa data implica a aceitação dos novos termos.</p>
+
+      <h3>9. Lei Aplicável e Foro</h3>
+      <p>Os presentes termos regem-se pela lei moçambicana. Qualquer litígio será submetido ao Tribunal Judicial da Cidade de Maputo, sem prejuízo da resolução extrajudicial de conflitos.</p>
+    </div>
+  </section>
+
+  <!-- ── 2. PRIVACIDADE ── -->
+  <section class="section" id="privacidade">
+    <div class="section-header">
+      <div class="section-icon green">🔒</div>
+      <div>
+        <div class="section-title">Política de Privacidade</div>
+        <div class="section-ref">Conforme Lei n.º 58/2021 — Protecção de Dados Pessoais de Moçambique</div>
+      </div>
+    </div>
+    <div class="prose">
+      <p>O MzDocs Pro respeita e protege os seus dados pessoais em conformidade com a <strong>Lei n.º 58/2021 de Protecção de Dados Pessoais</strong> da República de Moçambique.</p>
+
+      <h3>1. Responsável pelo Tratamento</h3>
+      <p>O responsável pelo tratamento dos dados pessoais é o MzDocs Pro, contactável através do email <a href="mailto:privacidade@mzdocs.mz">privacidade@mzdocs.mz</a> ou pelo WhatsApp <a href="https://wa.me/258858695506">+258 85 869 5506</a>.</p>
+
+      <h3>2. Dados que Recolhemos</h3>
+      <ul>
+        <li><strong>Dados de registo:</strong> nome, número de telefone e/ou email.</li>
+        <li><strong>Dados de utilização:</strong> documentos gerados, tipo de serviço, data e hora, modelo de IA utilizado.</li>
+        <li><strong>Dados de pagamento:</strong> número de telefone M-Pesa, referência da transacção, valor e pacote adquirido. <strong>Não armazenamos dados de cartões bancários.</strong></li>
+        <li><strong>Dados técnicos:</strong> endereço IP, tipo de browser, sistema operativo, páginas visitadas.</li>
+      </ul>
+
+      <h3>3. Como Utilizamos os seus Dados</h3>
+      <ul>
+        <li>Prestação dos serviços contratados (geração de documentos, gestão de créditos).</li>
+        <li>Autenticação e segurança da conta.</li>
+        <li>Processamento e confirmação de pagamentos via M-Pesa.</li>
+        <li>Comunicações de serviço (notificações de créditos, actualizações).</li>
+        <li>Melhoria contínua da plataforma (análise de utilização anonimizada).</li>
+      </ul>
+
+      <h3>4. Partilha com Terceiros</h3>
+      <p>Os seus dados <strong>não são vendidos</strong> a terceiros. Partilhamos dados apenas com:</p>
+      <ul>
+        <li><strong>Supabase</strong> — infraestrutura de base de dados e autenticação (servidores na UE).</li>
+        <li><strong>Vercel</strong> — alojamento e funções serverless (servidores na UE/EUA).</li>
+        <li><strong>Groq / Gemini / OpenRouter</strong> — processamento dos prompts de IA (sem armazenamento de dados pessoais pelos fornecedores de IA).</li>
+        <li><strong>Autoridades competentes</strong> — quando exigido por lei ou ordem judicial moçambicana.</li>
+      </ul>
+
+      <h3>5. Os seus Direitos (Lei n.º 58/2021)</h3>
+      <ul>
+        <li><strong>Acesso:</strong> solicitar cópia dos seus dados pessoais.</li>
+        <li><strong>Rectificação:</strong> corrigir dados incompletos ou incorrectos.</li>
+        <li><strong>Eliminação:</strong> solicitar a eliminação da sua conta e dados associados.</li>
+        <li><strong>Oposição:</strong> opor-se ao tratamento de dados para fins de marketing.</li>
+        <li><strong>Portabilidade:</strong> receber os seus dados em formato estruturado.</li>
+      </ul>
+      <p>Para exercer qualquer um destes direitos, contacte-nos em <a href="mailto:privacidade@mzdocs.mz">privacidade@mzdocs.mz</a>. Responderemos no prazo de <strong>10 dias úteis</strong>.</p>
+
+      <h3>6. Retenção de Dados</h3>
+      <ul>
+        <li>Dados de conta: mantidos enquanto a conta estiver activa + 2 anos após encerramento.</li>
+        <li>Documentos gerados: eliminados 90 dias após a geração (podem ser exportados antes).</li>
+        <li>Contas temporárias (Avulso): eliminadas automaticamente após esgotamento dos créditos.</li>
+        <li>Dados de pagamento: mantidos por 5 anos (obrigação fiscal moçambicana).</li>
+      </ul>
+
+      <h3>7. Segurança</h3>
+      <p>Utilizamos encriptação TLS em trânsito, autenticação segura via Supabase Auth, e acesso restrito aos dados por função (RBAC). As passwords nunca são armazenadas em texto simples.</p>
+
+      <div class="info-card warn" style="margin-top:16px">
+        <h4>⚠️ Transferência Internacional de Dados</h4>
+        <p>Os seus dados são processados em servidores fora de Moçambique (UE e EUA). Estes países dispõem de legislação de protecção de dados compatível com os padrões internacionais (RGPD/GDPR).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 3. REEMBOLSOS ── -->
+  <section class="section" id="reembolso">
+    <div class="section-header">
+      <div class="section-icon gold">💰</div>
+      <div>
+        <div class="section-title">Política de Reembolso</div>
+        <div class="section-ref">Válida para todos os pacotes de créditos</div>
+      </div>
+    </div>
+
+    <div class="info-card highlight" style="margin-bottom:20px">
+      <h4>✅ Compromisso de Satisfação</h4>
+      <p>Se o documento gerado não corresponder ao solicitado por falha técnica da plataforma, <strong>reembolsamos o crédito utilizado</strong> ou oferecemos nova geração sem custo adicional.</p>
+    </div>
+
+    <div class="prose">
+      <h3>Tabela de Reembolsos por Situação</h3>
+    </div>
+
+    <div style="overflow-x:auto;margin:12px 0 24px">
+      <table class="rfnd-table">
+        <thead>
+          <tr>
+            <th>Situação</th>
+            <th>Reembolso</th>
+            <th>Prazo para Solicitar</th>
+            <th>Forma</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Falha técnica — documento não gerado</td>
+            <td><span class="badge yes">Crédito devolvido</span></td>
+            <td>Automático</td>
+            <td>Crédito na conta</td>
+          </tr>
+          <tr>
+            <td>Documento gerado com erros graves (falha da IA)</td>
+            <td><span class="badge yes">Crédito devolvido</span></td>
+            <td>48 horas após geração</td>
+            <td>Crédito na conta</td>
+          </tr>
+          <tr>
+            <td>Insatisfação com qualidade (subjectivo)</td>
+            <td><span class="badge partial">Nova geração grátis</span></td>
+            <td>24 horas após geração</td>
+            <td>Geração adicional</td>
+          </tr>
+          <tr>
+            <td>Créditos comprados e não utilizados</td>
+            <td><span class="badge partial">Parcial (50%)</span></td>
+            <td>7 dias após compra</td>
+            <td>M-Pesa (mesmo número)</td>
+          </tr>
+          <tr>
+            <td>Créditos expirados por inactividade</td>
+            <td><span class="badge no">Não aplicável</span></td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Conta temporária (Avulso) — não utilizada</td>
+            <td><span class="badge yes">Reembolso total</span></td>
+            <td>48 horas após activação</td>
+            <td>M-Pesa (número do pagamento)</td>
+          </tr>
+          <tr>
+            <td>Pagamento efectuado mas créditos não atribuídos</td>
+            <td><span class="badge yes">Créditos atribuídos</span></td>
+            <td>24 horas após comprovativo</td>
+            <td>Crédito na conta</td>
+          </tr>
+          <tr>
+            <td>Fraude / Uso indevido da conta</td>
+            <td><span class="badge no">Não aplicável</span></td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <h3>Como Solicitar Reembolso</h3>
+      <ol>
+        <li>Contacte o suporte pelo WhatsApp <a href="https://wa.me/258858695506">+258 85 869 5506</a> ou email <a href="mailto:suporte@mzdocs.mz">suporte@mzdocs.mz</a>.</li>
+        <li>Indique o seu número de telefone registado, a referência da transacção (ex: <code>MAN123456</code>) e a descrição do problema.</li>
+        <li>Aguarde a análise — respondemos em até <strong>24 horas úteis</strong>.</li>
+        <li>O reembolso em M-Pesa é processado em <strong>1–3 dias úteis</strong> após aprovação.</li>
+      </ol>
+
+      <h3>Notas Importantes</h3>
+      <ul>
+        <li>Reembolsos em dinheiro (M-Pesa) são processados apenas para o número que efectuou o pagamento original.</li>
+        <li>Créditos de boas-vindas (gratuitos) não são reembolsáveis em dinheiro.</li>
+        <li>Em caso de disputa, o MzDocs Pro reserva-se o direito de analisar os registos internos para verificar a validade do pedido.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── 4. COOKIES ── -->
+  <section class="section" id="cookies">
+    <div class="section-header">
+      <div class="section-icon purple">🍪</div>
+      <div>
+        <div class="section-title">Política de Cookies</div>
+        <div class="section-ref">Gestão de dados de sessão e preferências</div>
+      </div>
+    </div>
+    <div class="prose">
+      <p>O MzDocs Pro utiliza tecnologias de armazenamento local para garantir o funcionamento correcto da plataforma e melhorar a experiência do utilizador.</p>
+
+      <h3>O que utilizamos</h3>
+    </div>
+
+    <div class="info-card" style="margin-bottom:10px">
+      <h4>🔧 Armazenamento Essencial (localStorage)</h4>
+      <p>Guarda o estado da sessão, preferências de idioma e créditos locais para funcionamento offline. <strong>Não pode ser desactivado</strong> sem comprometer o funcionamento da plataforma.</p>
+    </div>
+    <div class="info-card" style="margin-bottom:10px">
+      <h4>🔐 Cookies de Autenticação (Supabase)</h4>
+      <p>Cookies de sessão segura (httpOnly, SameSite=Strict) para manter a sessão autenticada. Expiram ao fechar o browser ou após 7 dias de inactividade.</p>
+    </div>
+    <div class="info-card" style="margin-bottom:10px">
+      <h4>📊 IndexedDB — Histórico Offline</h4>
+      <p>Armazena localmente os documentos gerados para acesso offline (PWA). Estes dados ficam apenas no dispositivo do utilizador e não são enviados a terceiros.</p>
+    </div>
+    <div class="info-card" style="margin-bottom:24px">
+      <h4>📈 Análise de Utilização (opcional)</h4>
+      <p>Dados anonimizados de utilização (páginas visitadas, tempo de sessão) para melhorar a plataforma. Pode recusar a qualquer momento nas configurações do browser.</p>
+    </div>
+
+    <div class="prose">
+      <h3>Como Gerir</h3>
+      <p>Pode limpar todos os dados locais através das definições do seu browser (<em>Definições → Privacidade → Limpar dados de navegação</em>). Note que limpar o armazenamento local irá encerrar a sessão e remover o histórico de documentos guardado localmente.</p>
+    </div>
+  </section>
+
+  <!-- ── 5. SUPORTE ── -->
+  <section class="section" id="suporte">
+    <div class="section-header">
+      <div class="section-icon red">📞</div>
+      <div>
+        <div class="section-title">Canais de Suporte</div>
+        <div class="section-ref">Estamos disponíveis para ajudar</div>
+      </div>
+    </div>
+
+    <div class="contact-grid">
+      <div class="contact-card">
+        <div class="cc-icon">💬</div>
+        <div class="cc-label">WhatsApp (Principal)</div>
+        <div class="cc-val"><a href="https://wa.me/258858695506">+258 85 869 5506</a></div>
+        <div class="cc-note">Seg–Sex 08h–18h · Sáb 08h–13h</div>
+      </div>
+      <div class="contact-card">
+        <div class="cc-icon">📧</div>
+        <div class="cc-label">Email Geral</div>
+        <div class="cc-val"><a href="mailto:suporte@mzdocs.mz">suporte@mzdocs.mz</a></div>
+        <div class="cc-note">Resposta em até 24h úteis</div>
+      </div>
+      <div class="contact-card">
+        <div class="cc-icon">🔒</div>
+        <div class="cc-label">Privacidade & Dados</div>
+        <div class="cc-val"><a href="mailto:privacidade@mzdocs.mz">privacidade@mzdocs.mz</a></div>
+        <div class="cc-note">Exercício de direitos LGPD · 10 dias úteis</div>
+      </div>
+      <div class="contact-card">
+        <div class="cc-icon">🐛</div>
+        <div class="cc-label">Reportar Bug / Erro</div>
+        <div class="cc-val"><a href="mailto:bugs@mzdocs.mz">bugs@mzdocs.mz</a></div>
+        <div class="cc-note">Inclua screenshot e descrição</div>
+      </div>
+    </div>
+
+    <div class="info-card warn" style="margin-top:20px">
+      <h4>⏱️ Horário de Atendimento</h4>
+      <p>Segunda a Sexta: 08h00 – 18h00 (hora de Maputo, UTC+2). Sábado: 08h00 – 13h00. Domingo e feriados nacionais: sem atendimento. Pagamentos urgentes podem ser reportados pelo WhatsApp fora do horário — verificamos regularmente.</p>
+    </div>
+
+    <div class="prose" style="margin-top:24px">
+      <h3>Resolução de Disputas</h3>
+      <p>Encorajamos a resolução amigável de qualquer conflito. Em caso de impossibilidade, o utilizador pode recorrer ao <strong>Centro de Arbitragem Comercial de Moçambique (CACM)</strong> ou ao Centro de Mediação e Arbitragem, antes de recorrer aos tribunais judiciais.</p>
+      <p>Pode também apresentar queixa junto do <strong>Instituto Nacional das Comunicações de Moçambique (INCM)</strong> para questões relacionadas com serviços digitais.</p>
+    </div>
+  </section>
+
+  <!-- ── 6. EMPRESA ── -->
+  <section class="section" id="empresa">
+    <div class="section-header">
+      <div class="section-icon gray">🏢</div>
+      <div>
+        <div class="section-title">Identificação da Empresa</div>
+        <div class="section-ref">Informação comercial e legal</div>
+      </div>
+    </div>
+
+    <div class="company-box">
+      <h4>MzDocs Pro</h4>
+      <div class="row"><span class="lbl">Produto</span><span class="val">MzDocs Pro — Plataforma de Geração de Documentos</span></div>
+      <div class="row"><span class="lbl">País</span><span class="val">República de Moçambique 🇲🇿</span></div>
+      <div class="row"><span class="lbl">NUIT</span><span class="val">A definir após registo comercial</span></div>
+      <div class="row"><span class="lbl">Email</span><span class="val"><a href="mailto:suporte@mzdocs.mz">suporte@mzdocs.mz</a></span></div>
+      <div class="row"><span class="lbl">WhatsApp</span><span class="val"><a href="https://wa.me/258858695506">+258 85 869 5506</a></span></div>
+      <div class="row"><span class="lbl">Website</span><span class="val"><a href="https://mz-docs-pro.vercel.app">mz-docs-pro.vercel.app</a></span></div>
+    </div>
+
+    <div class="prose" style="margin-top:20px">
+      <p style="font-size:13px;color:var(--muted)">
+        ⚠️ <strong>Nota:</strong> O MzDocs Pro encontra-se em fase de arranque. O processo de registo comercial formal e obtenção de NUIT está em curso. Actualizaremos esta página assim que o registo for concluído. Para efeitos legais imediatos, o operador pode ser contactado pelos canais indicados acima.
+      </p>
+    </div>
+  </section>
+
+</div>
+
+<!-- FOOTER -->
+<footer class="page-footer">
+  <p>
+    © 2026 MzDocs Pro · Todos os direitos reservados<br/>
+    <a href="/legal.html">Termos & Privacidade</a> ·
+    <a href="mailto:suporte@mzdocs.mz">suporte@mzdocs.mz</a> ·
+    <a href="https://wa.me/258858695506">WhatsApp</a>
+  </p>
+</footer>
+
+<script>
+  // Nav pill active state on scroll
+  const sections = document.querySelectorAll('.section');
+  const pills    = document.querySelectorAll('.nav-pill');
+
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        pills.forEach(p => p.classList.remove('active'));
+        const active = document.querySelector(`.nav-pill[href="#${e.target.id}"]`);
+        if (active) {
+          active.classList.add('active');
+          active.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+        }
+      }
+    });
+  }, { rootMargin:'-30% 0px -60% 0px' });
+
+  sections.forEach(s => obs.observe(s));
+
+  // Smooth scroll for pill clicks
+  pills.forEach(p => {
+    p.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(p.getAttribute('href'));
+      if (target) target.scrollIntoView({ behavior:'smooth' });
+    });
+  });
+</script>
+</body>
+</html>

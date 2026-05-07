@@ -227,7 +227,58 @@ vercel dev   # Frontend + funções serverless em localhost
 
 ## 📋 Changelog
 
-### v3.7 (actual)
+### v3.9 (actual)
+
+#### Compliance Legal — Termos, Privacidade, Reembolsos, Cookies & Suporte
+
+**Novo ficheiro:** `legal.html` — página legal completa e navegável:
+
+- **Termos de Serviço** — elegibilidade, sistema de créditos, responsabilidades, proibições, lei aplicável (Lei n.º 3/2017)
+- **Política de Privacidade** — dados recolhidos, finalidade, partilha com terceiros (Supabase, Vercel, IA), direitos do utilizador conforme **Lei n.º 58/2021** (Protecção de Dados Pessoais de Moçambique)
+- **Política de Reembolso** — tabela clara com 8 cenários (falha técnica → crédito automático; insatisfação → nova geração; não utilizado → 50% M-Pesa em 7 dias; Avulso não usado → reembolso total em 48h)
+- **Política de Cookies** — distinção entre armazenamento essencial (localStorage/IndexedDB) e análise opcional
+- **Canais de Suporte** — WhatsApp, email geral, email privacidade, email bugs · horário de atendimento
+- **Identificação da Empresa** — NUIT, contactos, website (campo NUIT marcado como "em processo de registo")
+
+**Alterações em `index.html`:**
+- Footer com links para Termos, Reembolsos, Suporte e email
+- Banner de consentimento de cookies (aparece 1,5s após carregamento, guardado em localStorage `mz_cookie_ok`)
+- Modal de pagamento: links "Política de Reembolso" e "Suporte" no aviso de pagamento manual
+
+**Sem alterações** em JS de negócio, base de dados ou fluxos existentes — apenas HTML/CSS puro.
+
+---
+
+### v3.8
+
+#### Funcionalidade — 10 Novos Tipos de Documento + Custo Dinâmico por Serviço
+
+**Novos serviços adicionados** (`ServiceDefinitions.js` + `Services.js` + `index.html`):
+
+| Serviço | Ícone | Créditos |
+|---|---|---|
+| Contrato de Arrendamento | 🏠 | 1 |
+| Procuração / Mandato | 📜 | 1 |
+| Requerimento Oficial | 📄 | 1 |
+| Declaração de Residência | 🏡 | 1 |
+| Contrato de Prestação de Serviços | 🤝 | 1 |
+| Recibo / Factura | 🧾 | 1 |
+| Carta de Recomendação | ✍️ | 1 |
+| Plano de Negócios | 📊 | **2** |
+| Pedido de Licença | 📋 | 1 |
+| Acta de Reunião | 📑 | 1 |
+
+**Custo dinâmico por serviço:**
+- Campo `cost` adicionado em `ServiceDefinitions.js` (default: 1 se omitido)
+- `DocumentController.js` — `canConsume()` e `consume()` passam a usar `svc.cost || 1`
+- `Views.js` — botão "Gerar com IA" mostra "1 crédito" ou "2 créditos" conforme o serviço
+- Plano de Negócios é o único serviço com `cost: 2` (documento mais extenso e complexo)
+
+**Prompts IA:** cada serviço tem prompt optimizado para o contexto moçambicano com estrutura detalhada, referências legais locais e linguagem formal adequada.
+
+---
+
+### v3.7
 
 #### Funcionalidade — Contas Temporárias para Pagamento Avulso
 

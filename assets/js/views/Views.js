@@ -44,10 +44,12 @@ export const DocumentView = {
   renderForm(svc, formBodyEl, formFootEl) {
     formBodyEl.innerHTML = this._buildFieldsHTML(svc.fields);
     if (svc.hasAI) {
+      const cost = svc.cost || 1;
+      const costLabel = cost === 1 ? '1 crédito' : `${cost} créditos`;
       formFootEl.innerHTML = `
         <button id="btnGen" class="btn-primary btn-gen" type="button">
           <span>✨ Gerar com IA</span>
-          <small>1 crédito</small>
+          <small>${costLabel}</small>
         </button>
       `;
     } else {
