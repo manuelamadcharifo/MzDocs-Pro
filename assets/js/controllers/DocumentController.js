@@ -55,7 +55,8 @@ export class DocumentController {
     const svc = SERVICES[key];
     if (!svc) return;
 
-    if (svc.hasAI && !this.creditModel.canConsume(1)) {
+    const cost = svc.cost || 1;
+    if (svc.hasAI && !this.creditModel.canConsume(cost)) {
       const isGuest = !window.authManager?.isAuthenticated();
       window.paymentController?.showPricing(isGuest);
       NotificationView.warn(isGuest
@@ -98,7 +99,8 @@ export class DocumentController {
     const data    = DocumentView.collectData(svc.fields);
     const missing = Validator.required(svc.fields, data);
     if (missing) { NotificationView.warn(`⚠️ Campo obrigatório: ${missing}`); return; }
-    if (!this.creditModel.canConsume(1)) {
+    const cost = svc.cost || 1;
+    if (!this.creditModel.canConsume(cost)) {
       const isGuest = !window.authManager?.isAuthenticated();
       window.paymentController?.showPricing(isGuest);
       return;
@@ -121,7 +123,7 @@ export class DocumentController {
       );
 
       DocumentView.hideLoader(this._genIv);
-      await this.creditModel.consume(1);
+      await this.creditModel.consume(cost);
 
       this.docModel.setGenerated(result.document, result.model);
       this.docModel.formData = data;

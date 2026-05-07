@@ -71,6 +71,226 @@ export const SERVICES = {
     buildWA: null,
   },
 
+
+  arrendamento: {
+    icon:'🏠', bg:'#FEF3C7', title:'Contrato de Arrendamento',
+    sub:'Contrato legal para aluguer de casa ou loja conforme lei moçambicana', hasAI:true,
+    fields:[
+      { id:'tipoImovel', label:'Tipo de Imóvel', type:'select', required:true,
+        opts:['Casa Residencial','Apartamento','Loja Comercial','Escritório','Terreno'] },
+      { row:true, items:[
+        { id:'proprietario', label:'Nome do Proprietário', type:'text', required:true, ph:'António Matola' },
+        { id:'locatario',    label:'Nome do Locatário',    type:'text', required:true, ph:'Maria Tembe' },
+      ]},
+      { row:true, items:[
+        { id:'local', label:'Localização do Imóvel',  type:'text',   required:true, ph:'Bairro Polana Caniço, Maputo' },
+        { id:'valor', label:'Valor Mensal (MZN)',      type:'number', required:true, ph:'15000', min:'1' },
+      ]},
+      { id:'duracao',   label:'Duração do Contrato', type:'select', required:true,
+        opts:['6 meses','12 meses','24 meses','36 meses','Indeterminado'] },
+      { id:'caucao',    label:'Caução / Depósito',    type:'text', required:true, ph:'2 meses de renda adiantada' },
+      { id:'condicoes', label:'Condições Especiais',  type:'textarea', ph:'Quem paga água e luz? Animais permitidos? Reformas?' },
+    ],
+    buildWA: null,
+  },
+
+  procuracao: {
+    icon:'📜', bg:'#E0E7FF', title:'Procuração / Mandato',
+    sub:'Documento para representar outra pessoa em repartições, bancos ou negócios', hasAI:true,
+    fields:[
+      { id:'tipoProc', label:'Tipo de Procuração', type:'select', required:true,
+        opts:['Geral (todos os actos)','Especial (acto específico)','Judicial','Bancária','Venda de Imóvel','Herança','Matrícula Escolar'] },
+      { row:true, items:[
+        { id:'outorgante',   label:'Nome do Outorgante (quem dá poder)',    type:'text', required:true, ph:'Carlos Mabunda' },
+        { id:'biOutorgante', label:'BI do Outorgante',                      type:'text', required:true, ph:'110100123456A' },
+      ]},
+      { row:true, items:[
+        { id:'procurador',   label:'Nome do Procurador (quem recebe poder)', type:'text', required:true, ph:'Ana Rafael' },
+        { id:'biProcurador', label:'BI do Procurador',                       type:'text', required:true, ph:'110100654321B' },
+      ]},
+      { id:'acto',     label:'Acto / Finalidade Específica', type:'textarea', required:true, ph:'Retirar documentos do INSS, levantar dinheiro no BCI...' },
+      { id:'validade', label:'Validade', type:'select', required:true,
+        opts:['30 dias','90 dias','6 meses','1 ano','Até revogação','Indeterminada'] },
+      { id:'local',    label:'Local e Data', type:'text', required:true, ph:'Maputo, 6 de Maio de 2026' },
+    ],
+    buildWA: null,
+  },
+
+  requerimento: {
+    icon:'📄', bg:'#DBEAFE', title:'Requerimento Oficial',
+    sub:'Pedidos formais para repartições, escolas, hospitais e serviços públicos', hasAI:true,
+    fields:[
+      { id:'entidade', label:'Entidade Destinatária', type:'select', required:true,
+        opts:['Conservatória dos Registos','Direcção Provincial de Educação','Hospital Provincial','INSS','Direcção de Migração','Câmara Municipal','Repartição de Finanças','Outra'] },
+      { id:'assunto',    label:'Assunto / Pedido',     type:'text',     required:true, ph:'Pedido de certidão de nascimento' },
+      { id:'remetente',  label:'O seu Nome Completo',  type:'text',     required:true, ph:'Josina Machel' },
+      { row:true, items:[
+        { id:'bi',       label:'N.º do BI',  type:'text', required:true, ph:'110100789012C' },
+        { id:'contacto', label:'Telefone',   type:'tel',  required:true, ph:'84 XXX XXXX' },
+      ]},
+      { id:'endereco',    label:'Endereço Completo',        type:'textarea', required:true, ph:'Bairro Mafalala, Avenida 25 de Setembro, Casa n.º 45, Maputo' },
+      { id:'fundamento',  label:'Fundamento / Justificação',type:'textarea', required:true, ph:'Explique por que precisa deste documento/serviço...' },
+      { id:'anexos',      label:'Documentos Anexos',        type:'textarea', ph:'BI, certidão anterior, comprovativo de residência...' },
+    ],
+    buildWA: null,
+  },
+
+  residencia: {
+    icon:'🏡', bg:'#D1FAE5', title:'Declaração de Residência',
+    sub:'Modelo pronto para junta de bairro ou chefe de quarteirão', hasAI:true,
+    fields:[
+      { id:'declarante',   label:'Nome do Declarante', type:'text', required:true, ph:'Mateus Chissano' },
+      { row:true, items:[
+        { id:'bi',          label:'N.º do BI',          type:'text', required:true, ph:'110100345678D' },
+        { id:'nascimento',  label:'Data de Nascimento',  type:'text', required:true, ph:'10/05/1990' },
+      ]},
+      { id:'naturalidade', label:'Naturalidade',                type:'text',     required:true, ph:'Inhambane' },
+      { id:'endereco',     label:'Endereço Actual Completo',    type:'textarea', required:true, ph:'Bairro Urbanização, Rua dos Heróis, Casa n.º 23, Matola' },
+      { id:'tempo',        label:'Tempo de Residência',         type:'select',   required:true,
+        opts:['Menos de 1 ano','1-3 anos','3-5 anos','Mais de 5 anos'] },
+      { id:'finalidade',   label:'Finalidade da Declaração',    type:'select',   required:true,
+        opts:['Abertura de conta bancária','Candidatura a emprego','Matrícula escolar','Processo de passaporte','Contrato de serviço','Outro'] },
+      { id:'chefe',        label:'Nome do Chefe de Quarteirão / Presidente', type:'text', ph:'Sebastião Mabunda' },
+    ],
+    buildWA: null,
+  },
+
+  prestacao: {
+    icon:'🤝', bg:'#FCE7F3', title:'Contrato de Prestação de Serviços',
+    sub:'Para freelancers, técnicos e pequenos prestadores', hasAI:true,
+    fields:[
+      { id:'servico', label:'Tipo de Serviço', type:'text', required:true, ph:'Instalação de painéis solares, consultoria contábil...' },
+      { row:true, items:[
+        { id:'prestador',     label:'Nome do Prestador',  type:'text', required:true, ph:'Empresa Solar Moçambique Lda' },
+        { id:'nuitPrestador', label:'NUIT do Prestador',  type:'text', ph:'400123456' },
+      ]},
+      { row:true, items:[
+        { id:'cliente',   label:'Nome do Cliente', type:'text', required:true, ph:'Manuel Guebuza Jr.' },
+        { id:'biCliente', label:'BI do Cliente',   type:'text', ph:'110100987654E' },
+      ]},
+      { row:true, items:[
+        { id:'valorTotal', label:'Valor Total (MZN)',         type:'number', required:true, ph:'45000', min:'1' },
+        { id:'prazo',      label:'Prazo de Execução (dias)',  type:'number', required:true, ph:'30',    min:'1' },
+      ]},
+      { id:'pagamento',   label:'Condições de Pagamento', type:'select', required:true,
+        opts:['50% adiantado + 50% na entrega','30% + 40% + 30%','100% adiantado','Pagamento por etapas','A combinar'] },
+      { id:'descricao',   label:'Descrição Detalhada do Serviço', type:'textarea', required:true, ph:'O que será feito, materiais incluídos, garantia...' },
+      { id:'penalidades', label:'Penalidades por Atraso',          type:'text', ph:'1% do valor por dia de atraso' },
+    ],
+    buildWA: null,
+  },
+
+  recibo: {
+    icon:'🧾', bg:'#FFEDD5', title:'Recibo / Factura',
+    sub:'Documento de venda para pequenos negócios e prestadores', hasAI:true,
+    fields:[
+      { id:'tipoDoc', label:'Tipo de Documento', type:'select', required:true,
+        opts:['Recibo Simples','Factura','Factura Proforma','Nota de Débito'] },
+      { row:true, items:[
+        { id:'emitente',     label:'Nome do Vendedor / Empresa', type:'text', required:true, ph:'Loja Tudo Bom' },
+        { id:'nuitEmitente', label:'NUIT',                       type:'text', ph:'400789123' },
+      ]},
+      { row:true, items:[
+        { id:'cliente',   label:'Nome do Cliente', type:'text', required:true, ph:'Fernando Nhaca' },
+        { id:'biCliente', label:'BI do Cliente',   type:'text', ph:'110100456789F' },
+      ]},
+      { id:'descricao', label:'Descrição dos Bens / Serviços', type:'textarea', required:true, ph:'2 sacos de cimento, 50 tijolos, mão-de-obra de 2 dias...' },
+      { row:true, items:[
+        { id:'valor', label:'Valor Total (MZN)', type:'number', required:true, ph:'12500', min:'1' },
+        { id:'iva',   label:'IVA (16%)?',        type:'select', opts:['Sim','Não (exempto)','Não (regime simplificado)'] },
+      ]},
+      { id:'pagamento', label:'Forma de Pagamento', type:'select', required:true,
+        opts:['Dinheiro','M-Pesa','Transferência Bancária','Depósito','A prazo'] },
+      { id:'local',     label:'Local e Data', type:'text', required:true, ph:'Nampula, 6 de Maio de 2026' },
+    ],
+    buildWA: null,
+  },
+
+  recomendacao: {
+    icon:'✍️', bg:'#EDE9FE', title:'Carta de Recomendação',
+    sub:'Para emprego, bolsas de estudo ou candidaturas', hasAI:true,
+    fields:[
+      { id:'tipoRec', label:'Tipo', type:'select', required:true,
+        opts:['Recomendação Profissional','Recomendação Académica','Recomendação Pessoal','Carta de Apresentação'] },
+      { row:true, items:[
+        { id:'recomendador', label:'Nome de quem recomenda',        type:'text', required:true, ph:'Dr. Paulo Zacarias' },
+        { id:'cargoRec',     label:'Cargo / Função do Recomendador',type:'text', required:true, ph:'Director de Recursos Humanos' },
+      ]},
+      { id:'entidadeRec', label:'Entidade do Recomendador', type:'text', required:true, ph:'Banco Standard Bank Moçambique' },
+      { row:true, items:[
+        { id:'recomendado', label:'Nome de quem é recomendado', type:'text', required:true, ph:'Lucia Machel' },
+        { id:'cargoRecm',   label:'Cargo / Função pretendida',  type:'text', required:true, ph:'Analista de Crédito' },
+      ]},
+      { id:'relacao',      label:'Relação entre ambos',    type:'textarea', required:true, ph:'Trabalhou sob minha supervisão durante 2 anos como...' },
+      { id:'qualidades',   label:'Qualidades a destacar',  type:'textarea', required:true, ph:'Pontualidade, liderança, conhecimento técnico...' },
+      { id:'destinatario', label:'Destinatário (se souber)',type:'text', ph:'Comissão de Selecção da Vaga X' },
+    ],
+    buildWA: null,
+  },
+
+  planonegocio: {
+    icon:'📊', bg:'#DBEAFE', title:'Plano de Negócios',
+    sub:'Para candidaturas a financiamento, bancos ou incubadoras', hasAI:true, cost:2,
+    fields:[
+      { id:'nomeNegocio', label:'Nome do Negócio', type:'text', required:true, ph:'Mazaia Fresh' },
+      { id:'sector',      label:'Sector de Actividade', type:'select', required:true,
+        opts:['Agricultura','Comércio','Serviços','Tecnologia','Construção','Restauração','Transporte','Outro'] },
+      { row:true, items:[
+        { id:'proprietario', label:'Nome do Proprietário', type:'text',   required:true, ph:'Amélia Nhangumbe' },
+        { id:'local',        label:'Localização',          type:'text',   required:true, ph:'Chokwe, Gaza' },
+      ]},
+      { id:'descricao',    label:'Descrição do Negócio',                  type:'textarea', required:true, ph:'Venda de produtos hortícolas frescos directo do produtor...' },
+      { id:'investimento', label:'Investimento Inicial Necessário (MZN)',  type:'number',   required:true, ph:'50000', min:'1' },
+      { id:'clientes',     label:'Público-Alvo / Clientes',               type:'textarea', required:true, ph:'Restaurantes em Maputo, mercados locais, famílias...' },
+      { id:'concorrencia', label:'Concorrência e Diferencial',            type:'textarea', ph:'O que o diferencia dos concorrentes...' },
+      { id:'retorno',      label:'Prazo de Retorno Esperado',             type:'select',   required:true,
+        opts:['6 meses','1 ano','2 anos','3 anos','Indeterminado'] },
+    ],
+    buildWA: null,
+  },
+
+  licenca: {
+    icon:'📋', bg:'#FEF9C3', title:'Pedido de Licença',
+    sub:'Para abertura de negócio, eventos ou autorizações municipais', hasAI:true,
+    fields:[
+      { id:'tipoLicenca', label:'Tipo de Licença', type:'select', required:true,
+        opts:['Licença Comercial (Alvará)','Licença de Construção','Autorização de Evento','Licença de Transporte','Licença Ambiental','Outra'] },
+      { id:'requerente', label:'Nome do Requerente', type:'text', required:true, ph:'Empresa Construtora X Lda' },
+      { row:true, items:[
+        { id:'nuit',     label:'NUIT',     type:'text', required:true, ph:'400987654' },
+        { id:'contacto', label:'Telefone', type:'tel',  required:true, ph:'84 XXX XXXX' },
+      ]},
+      { id:'entidade',   label:'Entidade Destinatária',  type:'text',     required:true, ph:'Câmara Municipal da Cidade de Maputo' },
+      { id:'objecto',    label:'Objecto do Pedido',       type:'textarea', required:true, ph:'Abertura de restaurante no bairro Polana Caniço...' },
+      { id:'local',      label:'Local Exacto',            type:'textarea', required:true, ph:'Avenida 24 de Julho, edifício Y, loja n.º 3' },
+      { id:'documentos', label:'Documentos Anexos',       type:'textarea', ph:'Certidão comercial, mapa de localização, parecer técnico...' },
+    ],
+    buildWA: null,
+  },
+
+  acta: {
+    icon:'📑', bg:'#E5E7EB', title:'Acta de Reunião',
+    sub:'Para associações, cooperativas, bairros e organizações', hasAI:true,
+    fields:[
+      { id:'organizacao',  label:'Nome da Organização', type:'text', required:true, ph:'Associação de Moradores do Bairro X' },
+      { id:'tipoReuniao',  label:'Tipo de Reunião', type:'select', required:true,
+        opts:['Assembleia Geral','Reunião Ordinária','Reunião Extraordinária','Conselho Directivo','Comissão de Trabalho'] },
+      { row:true, items:[
+        { id:'data', label:'Data', type:'text', required:true, ph:'6 de Maio de 2026' },
+        { id:'hora', label:'Hora', type:'text', required:true, ph:'14:00' },
+      ]},
+      { id:'local',         label:'Local',               type:'text',     required:true, ph:'Sede da Associação, Rua dos Combatentes' },
+      { row:true, items:[
+        { id:'presidente',  label:'Presidente da Mesa', type:'text', required:true, ph:'José Machel' },
+        { id:'secretario',  label:'Secretário',          type:'text', required:true, ph:'Maria da Conceição' },
+      ]},
+      { id:'presentes',     label:'Membros Presentes',   type:'textarea', required:true, ph:'Liste os nomes dos presentes...' },
+      { id:'pauta',         label:'Pontos da Pauta',     type:'textarea', required:true, ph:'1. Aprovação da acta anterior\n2. Relatório financeiro\n3. Novo projecto...' },
+      { id:'deliberacoes',  label:'Deliberações / Decisões', type:'textarea', required:true, ph:'O que foi decidido em cada ponto...' },
+    ],
+    buildWA: null,
+  },
+
   impressao: {
     icon:'🖨️', bg:'#FDF2F8', title:'Impressão de Documentos',
     sub:'Impressão de qualidade via WhatsApp', hasAI:false,
