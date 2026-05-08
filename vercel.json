@@ -1,6 +1,11 @@
 {
   "version": 2,
   "outputDirectory": ".",
+  "functions": {
+    "api/generate-document.js": {
+      "maxDuration": 120
+    }
+  },
   "rewrites": [
     { "source": "/sw.js",  "destination": "/sw.js" },
     { "source": "/(.*)",   "destination": "/$1" }
