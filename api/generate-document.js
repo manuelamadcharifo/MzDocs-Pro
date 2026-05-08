@@ -8,11 +8,14 @@ Use Markdown. Nunca use meta-comentários como "Aqui está o documento...".
 Nunca invente dados pessoais — use [PREENCHER]. Nunca corte o documento no meio.`;
 
 // ─── GROQ ──────────────────────────────────────────────────────────────────
+// Modelos ordenados: Llama 4 primeiro (sem limite diário), depois os clássicos como fallback
 const GROQ_BASE   = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODELS = [
-    'llama-3.3-70b-versatile',
-    'llama-3.1-8b-instant',
-    'gemma2-9b-it',
+    'meta-llama/llama-4-maverick-17b-128e-instruct', // Llama 4 Maverick: sem limite TPD
+    'meta-llama/llama-4-scout-17b-16e-instruct',     // Llama 4 Scout: rápido
+    'llama-3.3-70b-versatile',                        // fallback: 100K TPD
+    'llama-3.1-8b-instant',                           // leve, sem limite diário
+    'gemma2-9b-it',                                   // Google Gemma
 ];
 
 // ─── GEMINI ────────────────────────────────────────────────────────────────
@@ -26,25 +29,29 @@ const GEMINI_MODELS = [
 // ─── OPENROUTER ────────────────────────────────────────────────────────────
 const OR_BASE   = 'https://openrouter.ai/api/v1/chat/completions';
 const OR_MODELS = [
-    'google/gemini-2.0-flash-exp:free',
-    'google/gemma-3-27b-it:free',
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'nousresearch/hermes-3-llama-3.1-405b:free',
-    'mistralai/mistral-7b-instruct:free',
+    'google/gemma-3-27b-it:free',             // estável e rápido
+    'google/gemma-3-12b-it:free',             // alternativa leve
+    'mistralai/mistral-7b-instruct:free',     // muito estável
+    'qwen/qwen3-8b:free',                     // Qwen3 grátis
+    'deepseek/deepseek-r1-0528-qwen3-8b:free', // DeepSeek R1
 ];
 
 // ─── CEREBRAS ──────────────────────────────────────────────────────────────
 // 1.5M tokens/dia grátis, 2400 t/s. Signup: cerebras.ai
 const CEREBRAS_BASE   = 'https://api.cerebras.ai/v1/chat/completions';
-const CEREBRAS_MODELS = ['qwen-3-32b', 'llama3.1-70b', 'llama3.1-8b'];
+const CEREBRAS_MODELS = [
+    'llama-3.3-70b',   // correcto: sem o "3.1", sem ponto na versão
+    'llama3.1-70b',    // fallback
+    'llama3.1-8b',     // leve
+];
 
 // ─── NVIDIA NIM ────────────────────────────────────────────────────────────
 // 40 req/min grátis. Signup: build.nvidia.com
 const NVIDIA_BASE   = 'https://integrate.api.nvidia.com/v1/chat/completions';
 const NVIDIA_MODELS = [
-    'nvidia/llama-3.1-nemotron-ultra-253b-v1',
-    'meta/llama-3.3-70b-instruct',
-    'mistralai/mistral-large',
+    'meta/llama-3.3-70b-instruct',          // estável
+    'meta/llama-3.1-70b-instruct',          // fallback
+    'mistralai/mistral-7b-instruct-v0.3',   // leve e estável
 ];
 
 // ─── RATE LIMIT ────────────────────────────────────────────────────────────
@@ -222,9 +229,17 @@ async function tryGroq(prompt, apiKey, signal, maxTokens) {
             });
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
-                const e = new Error(d?.error?.message || `Groq HTTP ${res.status}`);
+                const msg = d?.error?.message || `Groq HTTP ${res.status}`;
+                const e = new Error(msg);
                 e.status = res.status;
-                if (res.status === 429) await sleep(1000);
+                // Se for limite DIÁRIO (TPD), não adianta esperar — vai para o próximo modelo
+                if (res.status === 429 && msg.includes('per day')) {
+                    console.warn(`[Groq] TPD esgotado para ${model}, a saltar para próximo`);
+                    lastErr = e;
+                    continue; // salta imediatamente para o próximo modelo
+                }
+                // Limite por minuto (TPM) — vale a pena esperar um pouco
+                if (res.status === 429) await sleep(2000);
                 throw e;
             }
             const data    = await res.json();
