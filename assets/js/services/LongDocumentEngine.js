@@ -1,101 +1,102 @@
 // assets/js/services/LongDocumentEngine.js
-// Motor de geração em cadeia para documentos longos (20+ páginas)
-// Arquitectura: Planeamento → Geração Sequencial (alternando providers) → Consolidação
+// Motor de geração em cadeia para documentos longos (trabalhos 6+ páginas, plano de negócios)
+// Arquitectura: Planeamento → Geração Sequencial (alternando providers) → Montagem final
 
-const LONG_DOC_ENDPOINT   = '/api/generate-document';
-const CHUNK_DOC_ENDPOINT  = '/api/generate-chunk'; // novo endpoint para chunks
+const ENDPOINT = '/api/generate-document';
 
-// Serviços que activam geração longa (podem ter muitas páginas)
-const LONG_DOC_SERVICES = new Set(['trabalho', 'planonegocio', 'prestacao', 'arrendamento']);
+// Serviços que activam geração longa
+const LONG_DOC_SERVICES = new Set(['trabalho', 'planonegocio']);
 
-// Limite em páginas — acima deste valor activa o motor de cadeia
-const LONG_DOC_PAGE_THRESHOLD = 6;
+// Limite — trabalhos acima deste nº de páginas usam o motor de cadeia
+const PAGE_THRESHOLD = 6;
+
+// Delay entre chamadas para não esgotar rate limit (ms)
+const INTER_CALL_DELAY = 3500;
 
 export class LongDocumentEngine {
   constructor() {
-    this._onProgress = null; // callback de progresso
+    this._onProgress = null;
     this._aborted    = false;
   }
 
   /** Regista callback de progresso: fn({ phase, step, total, text }) */
   onProgress(fn) { this._onProgress = fn; return this; }
 
-  /** Verifica se um serviço/formulário activa geração longa */
+  /** Verifica se deve usar este motor */
   static isLongDoc(serviceType, formData) {
     if (!LONG_DOC_SERVICES.has(serviceType)) return false;
-    const pages = parseInt(formData?.paginas || formData?.paginas || 0);
-    if (serviceType === 'trabalho' && pages >= LONG_DOC_PAGE_THRESHOLD) return true;
-    if (serviceType === 'planonegocio') return true; // sempre longo
-    return false;
+    if (serviceType === 'planonegocio') return true;
+    const pages = parseInt(formData?.paginas || 0);
+    return pages >= PAGE_THRESHOLD;
   }
 
   abort() { this._aborted = true; }
 
   _emit(data) { this._onProgress?.(data); }
 
+  _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
   // ── ENTRADA PRINCIPAL ──────────────────────────────────────────
-  async generate(serviceType, prompt, formData, credits) {
+  async generate(serviceType, formData, credits) {
     this._aborted = false;
 
-    // FASE 1: Planeamento — pede ao LLM para criar o índice estruturado
-    this._emit({ phase: 'plan', step: 0, total: 3, text: '📋 A planear estrutura do documento…' });
+    // ── FASE 1: Planeamento ────────────────────────────────────
+    this._emit({ phase: 'plan', step: 0, text: '📋 A planear estrutura do documento…' });
 
     let sections;
     try {
       sections = await this._planDocument(serviceType, formData, credits);
     } catch (e) {
-      // Se o planeamento falhar, cair no fluxo normal (single-shot)
-      console.warn('[LongDocEngine] Planeamento falhou, a usar geração normal:', e.message);
-      return null; // sinal para o controller usar o fluxo padrão
+      console.warn('[LongDocEngine] Planeamento falhou:', e.message);
+      return null; // sinal → controller usa fluxo normal
     }
 
     if (this._aborted) throw new Error('Abortado pelo utilizador');
+    if (!sections?.length) return null;
 
-    // FASE 2: Geração sequencial de secções
-    this._emit({ phase: 'generate', step: 1, total: sections.length + 2, text: `✍️ A gerar ${sections.length} secções…` });
-
+    // ── FASE 2: Geração sequencial de secções ──────────────────
     const generatedSections = [];
     const summaries         = [];
+    const PROVIDERS         = ['groq', 'gemini', 'openrouter'];
 
     for (let i = 0; i < sections.length; i++) {
       if (this._aborted) throw new Error('Abortado pelo utilizador');
 
-      const section = sections[i];
+      const section  = sections[i];
+      const provider = PROVIDERS[i % PROVIDERS.length];
+
       this._emit({
         phase: 'generate',
         step:  i + 1,
-        total: sections.length + 2,
+        total: sections.length,
         text:  `✍️ Secção ${i + 1}/${sections.length}: ${section.title}…`,
-        provider: section.provider,
+        provider,
       });
 
-      const sectionContent = await this._generateSection(section, summaries, formData, credits);
-      generatedSections.push(sectionContent);
+      // Delay para não esgotar rate limit (excepto na primeira chamada)
+      if (i > 0) await this._sleep(INTER_CALL_DELAY);
+      if (this._aborted) throw new Error('Abortado pelo utilizador');
 
-      // Resumo compacto para contexto das próximas secções (max 300 palavras)
-      const summary = this._extractSummary(sectionContent, section.title);
-      summaries.push(summary);
+      const content = await this._generateSection(section, summaries, formData, credits, provider);
+      generatedSections.push(content);
+
+      // Resumo compacto (máx. 80 palavras) para contexto das próximas secções
+      const words = content.replace(/#{1,3}[^\n]*/g, '').split(/\s+/).filter(Boolean);
+      summaries.push(`[${section.title}]: ${words.slice(0, 80).join(' ')}…`);
     }
 
     if (this._aborted) throw new Error('Abortado pelo utilizador');
 
-    // FASE 3: Consolidação — une tudo e cria índice final
-    this._emit({
-      phase: 'consolidate',
-      step:  sections.length + 2,
-      total: sections.length + 2,
-      text:  '🔗 A consolidar e rever coerência…',
-    });
+    // ── FASE 3: Montagem final (sem chamada adicional à IA) ────
+    this._emit({ phase: 'assemble', text: '🔗 A montar documento final…' });
 
-    const fullDocument = await this._consolidate(
-      serviceType,
-      generatedSections,
-      sections,
-      formData,
-      credits
-    );
+    const document = this._assemble(serviceType, formData, sections, generatedSections);
 
-    return { document: fullDocument, model: 'Chain-of-Generation (multi-provider)', sections: sections.length };
+    return {
+      document,
+      model:    'Cadeia de Geração · multi-provider',
+      sections: sections.length,
+    };
   }
 
   // ── FASE 1: PLANEAMENTO ────────────────────────────────────────
@@ -103,256 +104,219 @@ export class LongDocumentEngine {
     const userId = localStorage.getItem('mz_uid') || 'anon';
     const pages  = parseInt(formData?.paginas || 10);
 
-    let planPrompt = '';
+    let planPrompt;
 
     if (serviceType === 'trabalho') {
-      planPrompt = `Crie um ÍNDICE ESTRUTURADO para um trabalho académico de ${pages} páginas sobre o tema "${formData.tema}" (${formData.disciplina}, nível ${formData.nivel}).
-Devolva APENAS um JSON válido neste formato exacto, sem comentários:
-{
-  "sections": [
-    {"id": "intro", "title": "Introdução", "words": 800, "type": "intro"},
-    {"id": "cap1",  "title": "Título do Capítulo 1 (específico ao tema)", "words": 1200, "type": "body"},
-    {"id": "cap2",  "title": "Título do Capítulo 2", "words": 1200, "type": "body"},
-    {"id": "conc",  "title": "Conclusão", "words": 600, "type": "conclusion"},
-    {"id": "refs",  "title": "Referências Bibliográficas", "words": 400, "type": "references"}
-  ]
-}
-O número de capítulos deve ser proporcional a ${pages} páginas (≈ ${Math.round(pages * 0.7)} páginas de desenvolvimento).
-Títulos dos capítulos devem ser específicos ao tema "${formData.tema}", não genéricos.`;
+      const numCaps = Math.max(2, Math.round((pages - 3) / 1.5));
+      planPrompt = `Crie um índice para um trabalho académico de ${pages} páginas sobre "${formData.tema}" (${formData.disciplina}, ${formData.nivel}).
+Responda APENAS com JSON válido, sem texto antes ou depois:
+{"sections":[
+  {"id":"intro","title":"Introdução","words":${Math.round(pages * 60)},"type":"intro"},
+  ${Array.from({length: numCaps}, (_, i) => `{"id":"cap${i+1}","title":"[Título específico do capítulo ${i+1} sobre ${formData.tema}]","words":${Math.round(pages * 80)},"type":"body"}`).join(',')},
+  {"id":"conc","title":"Conclusão","words":${Math.round(pages * 50)},"type":"conclusion"},
+  {"id":"refs","title":"Referências Bibliográficas","words":300,"type":"references"}
+]}
+IMPORTANTE: Substitua [Título específico do capítulo N] por títulos REAIS e específicos ao tema "${formData.tema}". Não use títulos genéricos.`;
 
     } else if (serviceType === 'planonegocio') {
-      planPrompt = `Crie um ÍNDICE para um Plano de Negócios completo para "${formData.nomeNegocio}" (sector: ${formData.sector}, local: ${formData.localNeg || formData.local || 'Moçambique'}).
-Devolva APENAS JSON válido:
-{
-  "sections": [
-    {"id": "exec",    "title": "Resumo Executivo",         "words": 800,  "type": "intro"},
-    {"id": "negocio", "title": "Descrição do Negócio",     "words": 1000, "type": "body"},
-    {"id": "mercado", "title": "Análise de Mercado",        "words": 1500, "type": "body"},
-    {"id": "market",  "title": "Plano de Marketing",        "words": 1200, "type": "body"},
-    {"id": "oper",    "title": "Plano Operacional",         "words": 1000, "type": "body"},
-    {"id": "fin",     "title": "Projecções Financeiras",    "words": 1500, "type": "body"},
-    {"id": "riscos",  "title": "Riscos e Mitigação",        "words": 600,  "type": "body"},
-    {"id": "conc",    "title": "Conclusão e Pedido de Apoio","words": 500, "type": "conclusion"}
-  ]
-}`;
+      planPrompt = `Crie um índice para Plano de Negócios de "${formData.nomeNegocio}" (${formData.sector}, ${formData.localNeg || formData.local || 'Moçambique'}).
+Responda APENAS com JSON válido, sem texto antes ou depois:
+{"sections":[
+  {"id":"exec","title":"Resumo Executivo","words":700,"type":"intro"},
+  {"id":"neg","title":"Descrição do Negócio","words":900,"type":"body"},
+  {"id":"merc","title":"Análise de Mercado","words":1100,"type":"body"},
+  {"id":"mkt","title":"Plano de Marketing","words":900,"type":"body"},
+  {"id":"op","title":"Plano Operacional","words":800,"type":"body"},
+  {"id":"fin","title":"Projecções Financeiras","words":1000,"type":"body"},
+  {"id":"ris","title":"Riscos e Mitigação","words":500,"type":"body"},
+  {"id":"conc","title":"Conclusão e Pedido de Apoio","words":400,"type":"conclusion"}
+]}`;
     }
 
-    const res = await fetch(LONG_DOC_ENDPOINT, {
+    await this._sleep(500); // pequena pausa antes da 1ª chamada
+
+    const res = await fetch(ENDPOINT, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         serviceType: '__plan__',
-        prompt: planPrompt,
+        prompt:      planPrompt,
         userId,
-        userCredits: credits,
-        _planMode: true,
+        userCredits: 999, // planeamento não desconta créditos
+        _planMode:   true,
       }),
     });
 
-    if (!res.ok) throw new Error(`Planeamento HTTP ${res.status}`);
-    const data = await res.json();
-    const raw  = data.document || data.content || '';
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(`Planeamento falhou: ${d.error || res.status}`);
+    }
 
-    // Extrair JSON da resposta (pode haver texto antes/depois)
+    const data = await res.json();
+    const raw  = (data.document || data.content || '').trim();
+
+    // Extrai o JSON da resposta (pode ter texto antes/depois)
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Resposta de planeamento não contém JSON');
+    if (!jsonMatch) throw new Error('Resposta de planeamento sem JSON');
 
     const plan = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(plan.sections) || plan.sections.length === 0) {
       throw new Error('Plano sem secções');
     }
 
-    // Distribui providers em round-robin pelas secções
-    const PROVIDERS = ['groq', 'gemini', 'openrouter'];
-    return plan.sections.map((s, i) => ({
-      ...s,
-      provider: PROVIDERS[i % PROVIDERS.length],
-      index:    i,
-    }));
+    return plan.sections;
   }
 
-  // ── FASE 2: GERAÇÃO DE SECÇÃO ──────────────────────────────────
-  async _generateSection(section, previousSummaries, formData, credits) {
+  // ── FASE 2: GERAR UMA SECÇÃO ───────────────────────────────────
+  async _generateSection(section, previousSummaries, formData, credits, preferProvider) {
     const userId  = localStorage.getItem('mz_uid') || 'anon';
     const context = previousSummaries.length > 0
-      ? `\n\nCONTEXTO DAS SECÇÕES ANTERIORES (para coerência):\n${previousSummaries.slice(-3).join('\n---\n')}`
+      ? `\n\nCONTEXTO DAS SECÇÕES ANTERIORES (para coerência — não repita):\n${previousSummaries.slice(-2).join('\n')}`
       : '';
 
-    const sectionPrompt = this._buildSectionPrompt(section, formData, context);
+    const prompt = this._buildSectionPrompt(section, formData, context);
 
-    const res = await fetch(LONG_DOC_ENDPOINT, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        serviceType: '__section__',
-        prompt:      sectionPrompt,
-        userId,
-        userCredits: credits,
-        _preferProvider: section.provider, // hint para o backend
-        _sectionMode: true,
-      }),
-    });
-
-    if (!res.ok) {
-      // Fallback — tenta sem provider específico
-      const res2 = await fetch(LONG_DOC_ENDPOINT, {
+    // Tentativa 1: com provider preferido
+    try {
+      const res = await fetch(ENDPOINT, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          serviceType: '__section__',
-          prompt:      sectionPrompt,
+          serviceType:     '__section__',
+          prompt,
           userId,
-          userCredits: credits,
+          userCredits:     999, // créditos debitados uma única vez pelo controller
+          _preferProvider: preferProvider,
+          _sectionMode:    true,
         }),
       });
-      if (!res2.ok) throw new Error(`Secção "${section.title}" falhou`);
-      const d2 = await res2.json();
-      return d2.document || d2.content || '';
-    }
 
-    const data = await res.json();
-    return data.document || data.content || '';
+      if (res.status === 429) {
+        // Rate limit — espera mais e tenta sem preferência de provider
+        console.warn('[LongDocEngine] 429 na secção, aguardando 6s…');
+        await this._sleep(6000);
+        throw new Error('rate_limit');
+      }
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data    = await res.json();
+      const content = (data.document || data.content || '').trim();
+      if (!content) throw new Error('Resposta vazia');
+      return content;
+
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+
+      // Tentativa 2: fallback sem preferência de provider
+      console.warn(`[LongDocEngine] Secção "${section.title}" retry sem preferência:`, err.message);
+      await this._sleep(2000);
+
+      const res2 = await fetch(ENDPOINT, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceType:  '__section__',
+          prompt,
+          userId,
+          userCredits:  999,
+          _sectionMode: true,
+        }),
+      });
+
+      if (!res2.ok) {
+        const d = await res2.json().catch(() => ({}));
+        throw new Error(d.error || `Secção "${section.title}" falhou (${res2.status})`);
+      }
+
+      const data2    = await res2.json();
+      const content2 = (data2.document || data2.content || '').trim();
+      if (!content2) throw new Error(`Secção "${section.title}" retornou vazia`);
+      return content2;
+    }
   }
 
   _buildSectionPrompt(section, formData, context) {
-    const words  = section.words || 800;
-    const isBody = section.type === 'body';
+    const tema  = formData.tema || formData.nomeNegocio || 'documento';
+    const words = section.words || 800;
 
     if (section.type === 'references') {
-      return `Gere uma secção de REFERÊNCIAS BIBLIOGRÁFICAS em formato APA 7ª edição.
-Liste MÍNIMO 8 referências reais e verificáveis incluindo:
-- Pelo menos 2 livros académicos
-- 1 artigo científico de revista indexada
-- 1 relatório de organismo internacional (ONU, Banco Mundial, UA, SADC)
-- 1 fonte moçambicana (INE, Governo, universidades moçambicanas)
-Devolva APENAS a secção de referências, sem cabeçalho "## Referências".${context}`;
+      return `Gere REFERÊNCIAS BIBLIOGRÁFICAS em formato APA 7.ª edição para um trabalho sobre "${tema}".
+Liste exatamente 8 referências reais e verificáveis. Inclua: livros académicos, artigos científicos, relatórios de organizações internacionais (ONU, Banco Mundial, SADC) e fontes moçambicanas (INE, Governo de Moçambique, UEM).
+Devolva APENAS a lista de referências, começando com "## Referências Bibliográficas".
+NÃO inclua texto introdutório.${context}`;
     }
 
-    return `Redija a secção "${section.title}" de um documento académico/profissional.
-REQUISITOS:
+    return `Redija a secção "${section.title}" de um documento profissional sobre "${tema}".
+
+REQUISITOS OBRIGATÓRIOS:
 - Mínimo ${words} palavras de conteúdo real e denso
 - Linguagem formal em português de Moçambique
-- Use Markdown (##, ###, **negrito**, listas quando pertinente)
-- Conteúdo específico ao tema: ${formData.tema || formData.nomeNegocio || 'descrito no formulário'}
-- Dados reais, exemplos concretos do contexto moçambicano/africano
-- NÃO use [PREENCHER] nem placeholders — escreva conteúdo real
-- Esta é APENAS a secção "${section.title}" — não escreva outras secções
-${isBody ? '- Inclua pelo menos 3 subsecções com ### ' : ''}
+- Use Markdown: ## para título da secção, ### para subsecções
+- Conteúdo específico ao tema "${tema}" — dados reais, exemplos concretos do contexto moçambicano/africano
+- NÃO escreva placeholders como [inserir dados] — escreva conteúdo real
+- Esta secção NÃO é o documento completo — escreva APENAS "${section.title}"
+${section.type === 'body' ? '- Inclua pelo menos 2 subsecções (###)' : ''}
 ${context}
 
-DEVOLVA APENAS o conteúdo da secção "${section.title}", começando com "## ${section.title}".`;
+COMECE DIRECTAMENTE com "## ${section.title}" — sem introdução nem comentários.`;
   }
 
-  // ── FASE 3: CONSOLIDAÇÃO ───────────────────────────────────────
-  async _consolidate(serviceType, sections, sectionMeta, formData, credits) {
-    const userId = localStorage.getItem('mz_uid') || 'anon';
-
-    // Página de rosto e índice
-    const coverPage  = this._buildCoverPage(serviceType, formData, sectionMeta);
-    const fullBody   = sections.join('\n\n---PAGE_BREAK---\n\n');
-    const totalWords = sections.join(' ').split(/\s+/).length;
-
-    // Para documentos muito longos, pular consolidação pesada e apenas montar
-    if (totalWords > 8000) {
-      return `${coverPage}\n\n${fullBody}`;
-    }
-
-    // Consolidação leve — pede ao LLM para verificar coerência
-    const consolidatePrompt = `Revisa brevemente este documento e corrige apenas:
-1. Referências cruzadas entre secções (ex: "conforme mencionado na Introdução")
-2. Inconsistências de dados (nomes, datas, números contraditórios)
-3. Tom e linguagem uniforme
-4. NÃO reescreva o documento completo — apenas pequenas correcções
-
-DOCUMENTO:
-${fullBody.slice(0, 6000)}... [continua]
-
-Devolva o documento completo corrigido em Markdown.`;
-
-    try {
-      const res = await fetch(LONG_DOC_ENDPOINT, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceType: '__consolidate__',
-          prompt:      consolidatePrompt,
-          userId,
-          userCredits: credits,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const consolidated = data.document || data.content || '';
-        if (consolidated.length > 500) {
-          return `${coverPage}\n\n${consolidated}`;
-        }
-      }
-    } catch (e) {
-      console.warn('[LongDocEngine] Consolidação falhou, usando montagem directa:', e.message);
-    }
-
-    // Fallback — montagem directa sem consolidação
-    return `${coverPage}\n\n${fullBody}`;
+  // ── FASE 3: MONTAGEM FINAL (sem chamadas à IA) ─────────────────
+  _assemble(serviceType, formData, sections, contents) {
+    const coverPage = this._buildCoverPage(serviceType, formData, sections);
+    const body      = contents.join('\n\n---PAGE_BREAK---\n\n');
+    return coverPage ? `${coverPage}\n\n---PAGE_BREAK---\n\n${body}` : body;
   }
 
-  _buildCoverPage(serviceType, formData, sectionMeta) {
+  _buildCoverPage(serviceType, formData, sections) {
     const ano = new Date().getFullYear();
 
-    if (serviceType === 'trabalho') {
-      const indexLines = sectionMeta.map((s, i) =>
-        `   ${i + 1}. ${s.title} .................................................. ${i + 3}`
-      ).join('\n');
+    const indexLines = sections
+      .map((s, i) => `   ${i + 1}. ${s.title} ${'·'.repeat(Math.max(2, 46 - s.title.length))} ${i + 3}`)
+      .join('\n');
 
+    if (serviceType === 'trabalho') {
       return `---PAGE_BREAK---
-# ${formData.tema || 'Trabalho Académico'}
+# ${formData.tema}
 
 | | |
 |---|---|
-| **Instituição:** | [Nome da Instituição] |
-| **Curso/Disciplina:** | ${formData.disciplina || '[Disciplina]'} |
-| **Nível:** | ${formData.nivel || '[Nível]'} |
-| **Aluno(a):** | [Nome Completo] |
+| **Instituição:** | [Nome da Instituição de Ensino] |
+| **Curso / Disciplina:** | ${formData.disciplina} |
+| **Nível:** | ${formData.nivel} |
+| **Autor(a):** | [Nome Completo do Aluno] |
 | **Docente:** | [Nome do Professor] |
 | **Cidade e Ano:** | Maputo, ${ano} |
 
 ---PAGE_BREAK---
+
 ## Índice
 
 ${indexLines}`;
     }
 
     if (serviceType === 'planonegocio') {
-      const indexLines = sectionMeta.map((s, i) =>
-        `   ${i + 1}. ${s.title} .................................................. ${i + 3}`
-      ).join('\n');
-
       return `---PAGE_BREAK---
 # PLANO DE NEGÓCIOS
-# ${formData.nomeNegocio || '[Nome do Negócio]'}
+## ${formData.nomeNegocio}
 
 | | |
 |---|---|
-| **Empresa/Negócio:** | ${formData.nomeNegocio || '[Nome]'} |
-| **Sector:** | ${formData.sector || '[Sector]'} |
-| **Proprietário:** | ${formData.proprietario || '[Nome]'} |
+| **Negócio / Empresa:** | ${formData.nomeNegocio} |
+| **Sector:** | ${formData.sector} |
+| **Proprietário(a):** | ${formData.proprietario} |
 | **Localização:** | ${formData.localNeg || formData.local || 'Moçambique'} |
+| **Investimento Inicial:** | ${Number(formData.investimento || 0).toLocaleString('pt-MZ')} MZN |
 | **Data:** | ${new Date().toLocaleDateString('pt-MZ')} |
-| **Investimento Inicial:** | ${formData.investimento ? formData.investimento + ' MZN' : '[Valor]'} |
 
 ---PAGE_BREAK---
+
 ## Índice
 
 ${indexLines}`;
     }
 
     return '';
-  }
-
-  // Extrai resumo compacto de uma secção (para passar como contexto às seguintes)
-  _extractSummary(content, title) {
-    const lines = content.split('\n').filter(l => l.trim() && !l.startsWith('#'));
-    const words = lines.join(' ').split(/\s+/).slice(0, 80).join(' ');
-    return `[${title}]: ${words}…`;
   }
 }

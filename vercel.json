@@ -2,9 +2,7 @@
   "version": 2,
   "outputDirectory": ".",
   "functions": {
-    "api/generate-document.js": {
-      "maxDuration": 120
-    }
+    "api/generate-document.js": { "maxDuration": 120 }
   },
   "rewrites": [
     { "source": "/sw.js",  "destination": "/sw.js" },
@@ -21,15 +19,11 @@
     },
     {
       "source": "/assets/(.*)\\.js",
-      "headers": [
-        { "key": "Content-Type", "value": "application/javascript" }
-      ]
+      "headers": [{ "key": "Content-Type", "value": "application/javascript" }]
     },
     {
       "source": "/api/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" }
-      ]
+      "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }]
     }
   ]
 }

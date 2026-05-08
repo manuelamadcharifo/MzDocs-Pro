@@ -19,8 +19,9 @@ export class DocumentController {
     this.longEngine   = new LongDocumentEngine();
     this._genIv       = null;
     this._menuOutside = null;
-    this._longRunning = false; // flag para UI de longa duração
+    this._longRunning = false;
 
+    // Garante editor disponível globalmente antes de qualquer clique
     if (!window.documentEditor) {
       window.documentEditor = new DocumentEditor();
     }
@@ -36,13 +37,19 @@ export class DocumentController {
     document.getElementById('formClose')?.addEventListener('click', () => this.closeForm());
     document.getElementById('resultClose')?.addEventListener('click', () => this.closeResult());
 
+    // Formulário fecha ao clicar fora
     document.getElementById('formOverlay')?.addEventListener('click', e => {
       if (e.target.id === 'formOverlay') this.closeForm();
     });
 
+    // Resultado NÃO fecha ao clicar fora — utilizador perderia o documento
+    // Só fecha com o botão ✕
+
     document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
     document.getElementById('btnDl')?.addEventListener('click',   () => this.downloadDoc());
     document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
+    // btnEdit — bind directo feito no momento em que o resultado é mostrado (ver _bindEditBtn)
+    // Evento de reedição disparado pelo DocumentEditor
     document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
   }
 
@@ -103,7 +110,6 @@ export class DocumentController {
     const data    = DocumentView.collectData(svc.fields);
     const missing = Validator.required(svc.fields, data);
     if (missing) { NotificationView.warn(`⚠️ Campo obrigatório: ${missing}`); return; }
-
     const cost = svc.cost || 1;
     if (!this.creditModel.canConsume(cost)) {
       const isGuest = !window.authManager?.isAuthenticated();
@@ -114,17 +120,14 @@ export class DocumentController {
     const btn = document.getElementById('btnGen');
     if (btn) btn.disabled = true;
 
-    // ── Decidir: fluxo normal ou geração em cadeia (longa)? ──────
-    const isLongDoc = LongDocumentEngine.isLongDoc(key, data);
-
-    if (isLongDoc) {
+    if (LongDocumentEngine.isLongDoc(key, data)) {
       await this._generateLong(key, svc, data, cost, btn);
     } else {
       await this._generateNormal(key, svc, data, cost, btn);
     }
   }
 
-  // ── Geração Normal (corrida paralela — documentos curtos) ──────
+  // ── Geração Normal (corrida paralela) ──────────────────────────
   async _generateNormal(key, svc, data, cost, btn) {
     const STEPS = [
       'A analisar dados do formulário…',
@@ -141,10 +144,24 @@ export class DocumentController {
 
       DocumentView.hideLoader(this._genIv);
       await this.creditModel.consume(cost);
+
       this.docModel.setGenerated(result.document, result.model);
       this.docModel.formData = data;
 
-      await this._saveHistory(key, svc, result);
+      // Guardar no histórico
+      try {
+        const userId = window.authManager?.user?.id || Storage.getUserId();
+        await window.historyController?.saveDocument({
+          id: crypto.randomUUID(),
+          user_id: userId,
+          service_type: key,
+          title: svc.title,
+          content: result.document,
+          model_used: result.model,
+          created_at: new Date().toISOString(),
+        });
+      } catch (_) { /* histórico não é crítico */ }
+
       ModalView.close('formOverlay');
       DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
       ModalView.open('resultOverlay');
@@ -162,104 +179,101 @@ export class DocumentController {
     }
   }
 
-  // ── Geração Longa (cadeia de secções — documentos longos) ──────
+  // ── Geração Longa (cadeia de secções) ──────────────────────────
   async _generateLong(key, svc, data, cost, btn) {
     this._longRunning = true;
 
-    // Passos dinâmicos: Planeamento + N secções + Consolidação
-    const pages    = parseInt(data.paginas || 10);
-    const estSecs  = key === 'planonegocio' ? 8 : Math.max(4, Math.round(pages / 2));
-
+    // Passos dinâmicos no loader
+    const estSecs = key === 'planonegocio' ? 8 : Math.max(3, Math.round((parseInt(data.paginas || 10) - 3) / 1.5));
     const STEPS = [
       '📋 A planear estrutura do documento…',
       ...Array.from({ length: estSecs }, (_, i) => `✍️ A redigir secção ${i + 1}/${estSecs}…`),
-      '🔗 A consolidar e rever coerência…',
+      '🔗 A montar documento final…',
     ];
     this._genIv = DocumentView.showLoader(STEPS);
 
-    // Liga progresso do LongDocEngine ao loader da UI
-    let stepIndex = 0;
-    this.longEngine.onProgress(({ phase, step, total, text, provider }) => {
-      // Actualiza o passo activo no loader
+    // Actualiza o loader conforme o progresso do motor
+    let stepIdx = 0;
+    this.longEngine.onProgress(({ text }) => {
       const steps = document.querySelectorAll('.lstep');
       steps.forEach((el, i) => {
         el.classList.remove('active', 'done');
-        if (i < stepIndex) el.classList.add('done');
+        if (i < stepIdx) el.classList.add('done');
       });
-      const activeEl = steps[stepIndex];
-      if (activeEl) {
-        activeEl.classList.add('active');
-        const span = activeEl.querySelector('span:last-child');
-        if (span) span.textContent = text + (provider ? ` [${provider}]` : '');
+      if (steps[stepIdx]) {
+        steps[stepIdx].classList.add('active');
+        const span = steps[stepIdx].querySelector('span:last-child');
+        if (span) span.textContent = text;
       }
-      stepIndex = Math.min(stepIndex + 1, steps.length - 1);
+      if (stepIdx < steps.length - 1) stepIdx++;
     });
 
     try {
-      // O prompt base (para fallback dentro do LongDocEngine)
-      const prompt = this.openRouter._buildPrompt(key, data, this.docModel.ocrText);
+      const result = await this.longEngine.generate(key, data, this.creditModel.value);
 
-      const result = await this.longEngine.generate(key, prompt, data, this.creditModel.value);
-
+      // null = motor de cadeia pediu fallback para geração normal
       if (!result) {
-        // LongDocEngine caiu para null → usa fluxo normal como fallback
         this._longRunning = false;
-        NotificationView.info('ℹ️ A usar geração normal como fallback…');
+        DocumentView.hideLoader(this._genIv);
+        NotificationView.info('ℹ️ A usar geração normal…');
+        if (btn) btn.disabled = false;
         await this._generateNormal(key, svc, data, cost, btn);
         return;
       }
 
       DocumentView.hideLoader(this._genIv);
+      this._longRunning = false;
       await this.creditModel.consume(cost);
+
       this.docModel.setGenerated(result.document, result.model);
       this.docModel.formData = data;
 
-      await this._saveHistory(key, svc, result);
-      ModalView.close('formOverlay');
+      // Guardar no histórico
+      try {
+        const userId = window.authManager?.user?.id || Storage.getUserId();
+        await window.historyController?.saveDocument({
+          id: crypto.randomUUID(),
+          user_id: userId,
+          service_type: key,
+          title: svc.title,
+          content: result.document,
+          model_used: result.model,
+          created_at: new Date().toISOString(),
+        });
+      } catch (_) { /* histórico não é crítico */ }
 
-      const displayModel = `⛓️ Cadeia de Geração · ${result.sections || '?'} secções`;
-      DocumentView.renderResult(result.document, svc, this.creditModel.value, displayModel);
+      ModalView.close('formOverlay');
+      DocumentView.renderResult(
+        result.document, svc, this.creditModel.value,
+        `⛓️ Cadeia ${result.sections} secções · multi-provider`
+      );
       ModalView.open('resultOverlay');
       this._bindEditBtn();
       NotificationView.success(`✅ Documento longo gerado! (${result.sections} secções)`);
 
     } catch (err) {
       DocumentView.hideLoader(this._genIv);
-      if (btn) btn.disabled = false;
       this._longRunning = false;
+      if (btn) btn.disabled = false;
 
       if (err.message === 'Abortado pelo utilizador') {
         NotificationView.warn('⚠️ Geração cancelada.');
-      } else if (err.message === 'INSUFFICIENT_CREDITS') {
-        window.paymentController?.showPricing();
-      } else {
-        // Fallback para geração normal se a cadeia falhar completamente
-        NotificationView.warn('⚠️ Geração em cadeia falhou. A tentar geração normal…');
-        try {
-          await this._generateNormal(key, svc, data, cost, btn);
-        } catch (e2) {
+        return;
+      }
+
+      // Fallback automático para geração normal se a cadeia falhar
+      console.warn('[DocController] Cadeia falhou, a tentar geração normal:', err.message);
+      NotificationView.warn('⚠️ Modo cadeia falhou — a tentar geração normal…');
+      try {
+        await this._generateNormal(key, svc, data, cost, btn);
+      } catch (e2) {
+        if (e2.message === 'INSUFFICIENT_CREDITS') {
+          window.paymentController?.showPricing();
+        } else {
           NotificationView.error('❌ ' + (e2.message || 'Erro ao gerar.'));
         }
       }
-    } finally {
-      this._longRunning = false;
     }
-  }
-
-  // ── Guarda histórico (Supabase + IndexedDB offline) ───────────
-  async _saveHistory(key, svc, result) {
-    try {
-      const userId = window.authManager?.user?.id || Storage.getUserId();
-      await window.historyController?.saveDocument({
-        id: crypto.randomUUID(),
-        user_id: userId,
-        service_type: key,
-        title: svc.title,
-        content: result.document,
-        model_used: result.model,
-        created_at: new Date().toISOString(),
-      });
-    } catch (_) { /* histórico não é crítico */ }
   }
 
   // ── Envio directo WhatsApp (serviços sem IA) ───────────────────
@@ -317,6 +331,7 @@ export class DocumentController {
       btn.onmouseleave = () => { btn.style.background = 'none'; };
       btn.onclick = () => {
         this._removeExportMenu();
+        // Feedback visual no botão principal de download
         const dlBtn = document.getElementById('btnDl');
         if (dlBtn) { dlBtn.textContent = '⏳ A preparar…'; dlBtn.disabled = true; }
         Promise.resolve(fn()).finally(() => {
@@ -383,7 +398,9 @@ export class DocumentController {
     } catch (err) { NotificationView.error('❌ Erro Excel: ' + err.message); }
   }
 
+  // ── Liga o botão editar após o modal de resultado abrir ───────
   _bindEditBtn() {
+    // Remover listener anterior para não acumular
     const btn = document.getElementById('btnEdit');
     if (!btn) return;
     const fresh = btn.cloneNode(true);
@@ -394,6 +411,7 @@ export class DocumentController {
     });
   }
 
+  // ── Editar documento ───────────────────────────────────────────
   _openEditor() {
     if (!this.docModel.content) {
       NotificationView.warn('⚠️ Nenhum documento gerado ainda.');
@@ -410,6 +428,7 @@ export class DocumentController {
     );
   }
 
+  // ── WhatsApp resultado ─────────────────────────────────────────
   sendWA() {
     if (!this.docModel.content) return;
     const svc     = SERVICES[this.docModel.service];
@@ -418,6 +437,7 @@ export class DocumentController {
     window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
   }
 
+  // ── Reedição com IA ────────────────────────────────────────────
   async handleReedit({ currentContent, instruction, serviceType }) {
     if (!this.creditModel.canConsume(1)) {
       NotificationView.warn('⚠️ Créditos insuficientes para reedição.');
