@@ -471,5 +471,29 @@
 
 <!-- APP ENTRY POINT -->
 <script type="module" src="assets/js/app.js"></script>
+
+<script>
+// Guard: se o svcGrid ficar vazio (bug de cache do SW), recarregar sem cache
+(function() {
+  function checkGrid() {
+    var grid = document.getElementById('svcGrid');
+    if (grid && grid.children.length === 0) {
+      console.warn('[MzDocs] svcGrid vazio — forçar reload sem cache');
+      if (!sessionStorage.getItem('mz_grid_retry')) {
+        sessionStorage.setItem('mz_grid_retry', '1');
+        window.location.reload(true);
+      }
+    } else if (grid) {
+      sessionStorage.removeItem('mz_grid_retry');
+    }
+  }
+  // Verificar após DOM pronto e novamente após 1s (para JS async)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(checkGrid, 500); });
+  } else {
+    setTimeout(checkGrid, 500);
+  }
+})();
+</script>
 </body>
 </html>

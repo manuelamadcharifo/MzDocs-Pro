@@ -8,7 +8,7 @@ export class AuthGuard {
         this._authPromise = null;
     }
 
-    _waitForAuth(timeoutMs = 5000) {
+    _waitForAuth(timeoutMs = 10000) {
         return new Promise((resolve) => {
             const start = Date.now();
             const check = () => {

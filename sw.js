@@ -7,42 +7,43 @@ workbox.setConfig({ debug: false });
 
 // ── PRECACHING ──────────────────────────────────────────────────────────────
 workbox.precaching.precacheAndRoute([
-    { url: '/',               revision: '3.2' },
-    { url: '/index.html',     revision: '3.2' },
-    { url: '/offline.html',   revision: '3.2' },
-    { url: '/manifest.json',  revision: '3.2' },
+    { url: '/',               revision: '3.3' },
+    { url: '/index.html',     revision: '3.3' },
+    { url: '/offline.html',   revision: '3.3' },
+    { url: '/manifest.json',  revision: '3.3' },
     // CSS
-    { url: '/assets/css/styles.css',  revision: '3.2' },
-    { url: '/assets/css/editor.css',  revision: '3.2' },
-    { url: '/assets/css/auth.css',    revision: '3.2' },
+    { url: '/assets/css/styles.css',  revision: '3.3' },
+    { url: '/assets/css/editor.css',  revision: '3.3' },
+    { url: '/assets/css/auth.css',    revision: '3.3' },
+    { url: '/assets/css/admin.css',   revision: '3.3' },
     // JS — entry point e todos os módulos
-    { url: '/assets/js/app.js',                              revision: '3.2' },
-    { url: '/assets/js/models/Models.js',                    revision: '3.2' },
-    { url: '/assets/js/views/Views.js',                      revision: '3.2' },
-    { url: '/assets/js/controllers/DocumentController.js',   revision: '3.2' },
-    { url: '/assets/js/controllers/PaymentController.js',    revision: '3.2' },
-    { url: '/assets/js/controllers/OCRController.js',        revision: '3.2' },
-    { url: '/assets/js/controllers/HistoryController.js',    revision: '3.2' },
-    { url: '/assets/js/services/Services.js',                revision: '3.2' },
-    { url: '/assets/js/services/ServiceDefinitions.js',      revision: '3.2' },
-    { url: '/assets/js/services/PaymentService.js',          revision: '3.2' },
-    { url: '/assets/js/services/MPesaService.js',            revision: '3.2' },
-    { url: '/assets/js/auth/AuthManager.js',                 revision: '3.2' },
-    { url: '/assets/js/auth/AuthUI.js',                      revision: '3.2' },
-    { url: '/assets/js/auth/AuthGuard.js',                   revision: '3.2' },
-    { url: '/assets/js/components/DocumentEditor.js',        revision: '3.2' },
-    { url: '/assets/js/components/PDFExporter.js',           revision: '3.2' },
-    { url: '/assets/js/components/WordExporter.js',          revision: '3.2' },
-    { url: '/assets/js/components/ExcelExporter.js',         revision: '3.2' },
-    { url: '/assets/js/components/SignatureCanvas.js',        revision: '3.2' },
-    { url: '/assets/js/utils/Storage.js',                    revision: '3.2' },
-    { url: '/assets/js/utils/Formatter.js',                  revision: '3.2' },
-    { url: '/assets/js/utils/IndexedDB.js',                  revision: '3.2' },
+    { url: '/assets/js/app.js',                              revision: '3.3' },
+    { url: '/assets/js/models/Models.js',                    revision: '3.3' },
+    { url: '/assets/js/views/Views.js',                      revision: '3.3' },
+    { url: '/assets/js/controllers/DocumentController.js',   revision: '3.3' },
+    { url: '/assets/js/controllers/PaymentController.js',    revision: '3.3' },
+    { url: '/assets/js/controllers/OCRController.js',        revision: '3.3' },
+    { url: '/assets/js/controllers/HistoryController.js',    revision: '3.3' },
+    { url: '/assets/js/services/Services.js',                revision: '3.3' },
+    { url: '/assets/js/services/ServiceDefinitions.js',      revision: '3.3' },
+    { url: '/assets/js/services/PaymentService.js',          revision: '3.3' },
+    { url: '/assets/js/services/MPesaService.js',            revision: '3.3' },
+    { url: '/assets/js/auth/AuthManager.js',                 revision: '3.3' },
+    { url: '/assets/js/auth/AuthUI.js',                      revision: '3.3' },
+    { url: '/assets/js/auth/AuthGuard.js',                   revision: '3.3' },
+    { url: '/assets/js/components/DocumentEditor.js',        revision: '3.3' },
+    { url: '/assets/js/components/PDFExporter.js',           revision: '3.3' },
+    { url: '/assets/js/components/WordExporter.js',          revision: '3.3' },
+    { url: '/assets/js/components/ExcelExporter.js',         revision: '3.3' },
+    { url: '/assets/js/components/SignatureCanvas.js',        revision: '3.3' },
+    { url: '/assets/js/utils/Storage.js',                    revision: '3.3' },
+    { url: '/assets/js/utils/Formatter.js',                  revision: '3.3' },
+    { url: '/assets/js/utils/IndexedDB.js',                  revision: '3.3' },
     // Ícones
-    { url: '/assets/icons/icon.svg',            revision: '3.2' },
-    { url: '/assets/icons/icon-192x192.png',    revision: '3.2' },
-    { url: '/assets/icons/icon-512x512.png',    revision: '3.2' },
-    { url: '/assets/icons/apple-touch-icon.png',revision: '3.2' },
+    { url: '/assets/icons/icon.svg',            revision: '3.3' },
+    { url: '/assets/icons/icon-192x192.png',    revision: '3.3' },
+    { url: '/assets/icons/icon-512x512.png',    revision: '3.3' },
+    { url: '/assets/icons/apple-touch-icon.png',revision: '3.3' },
 ]);
 
 // ── ESTRATÉGIAS DE CACHE ────────────────────────────────────────────────────
@@ -88,6 +89,8 @@ workbox.routing.registerRoute(
 );
 
 // ── OFFLINE FALLBACK PARA NAVEGAÇÃO ────────────────────────────────────────
+// IMPORTANTE: /admin.html é EXCLUÍDO do cache — deve sempre ir à rede
+// para que a verificação de autenticação funcione correctamente.
 const navigationHandler = async (params) => {
     try {
         return await new workbox.strategies.NetworkFirst({ cacheName: 'pages' }).handle(params);
@@ -96,7 +99,15 @@ const navigationHandler = async (params) => {
     }
 };
 workbox.routing.registerRoute(
-    new workbox.routing.NavigationRoute(navigationHandler)
+    new workbox.routing.NavigationRoute(navigationHandler, {
+        denylist: [/^\/admin\.html/]
+    })
+);
+
+// /admin.html — sempre da rede, nunca do cache
+workbox.routing.registerRoute(
+    ({ url }) => url.pathname === '/admin.html',
+    new workbox.strategies.NetworkOnly()
 );
 
 // ── BACKGROUND SYNC ─────────────────────────────────────────────────────────

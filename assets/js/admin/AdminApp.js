@@ -17,6 +17,13 @@ class AdminApp {
         await authManager.ready();
         this.supabase = authManager.supabase;
 
+        // Aguardar sessão com tolerância extra para conexões lentas (10s)
+        if (!authManager.isAuthenticated()) {
+            // Tentar uma vez mais após pequena espera (race condition Supabase)
+            await new Promise(r => setTimeout(r, 800));
+            await authManager.ready();
+        }
+
         if (!authManager.isAuthenticated()) { window.location.href = '/?auth=required'; return; }
         if (!authManager.isAdmin())         { alert('⛔ Acesso restrito a administradores.'); window.location.href = '/'; return; }
 
