@@ -24,7 +24,17 @@ export class SmartOCRService {
   // ── OCR simples (texto bruto) ─────────────────────────────────
   async extractText(imageFile, onProgress) {
     await this._loadTesseract();
-    if (!this._worker) {
+
+    // Tesseract.js v5 não aceita File directamente — precisa de URL de objecto.
+    const objectUrl = URL.createObjectURL(imageFile);
+
+    try {
+      // Recria worker a cada chamada para o logger de progresso funcionar correctamente
+      if (this._worker) {
+        try { await this._worker.terminate(); } catch (_) {}
+        this._worker = null;
+      }
+
       this._worker = await Tesseract.createWorker('por', 1, {
         logger: m => {
           if (m.status === 'recognizing text' && onProgress) {
@@ -32,12 +42,15 @@ export class SmartOCRService {
           }
         }
       });
+
+      const result = await this._worker.recognize(objectUrl);
+      return {
+        text: result.data.text.trim(),
+        confidence: Math.round(result.data.confidence)
+      };
+    } finally {
+      URL.revokeObjectURL(objectUrl);
     }
-    const result = await this._worker.recognize(imageFile);
-    return {
-      text: result.data.text.trim(),
-      confidence: Math.round(result.data.confidence)
-    };
   }
 
   // ── Pipeline inteligente: OCR + IA → campos do formulário ─────
