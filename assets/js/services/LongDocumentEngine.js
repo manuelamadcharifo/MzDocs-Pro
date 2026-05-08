@@ -11,7 +11,7 @@ const LONG_DOC_SERVICES = new Set(['trabalho', 'planonegocio']);
 const PAGE_THRESHOLD = 6;
 
 // Delay entre chamadas para não esgotar rate limit (ms)
-const INTER_CALL_DELAY = 3500;
+const INTER_CALL_DELAY = 5000; // 5s entre chamadas para respeitar RPM dos providers
 
 export class LongDocumentEngine {
   constructor() {
@@ -176,25 +176,32 @@ Responda APENAS com JSON válido, sem texto antes ou depois:
 
     const prompt = this._buildSectionPrompt(section, formData, context);
 
-    // Tentativa 1: com provider preferido
-    try {
-      const res = await fetch(ENDPOINT, {
+    // Helper: fetch com timeout de 50s (abaixo do limite 60s do Vercel hobby)
+    const fetchWithTimeout = (body) => {
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 50000);
+      return fetch(ENDPOINT, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceType:     '__section__',
-          prompt,
-          userId,
-          userCredits:     999, // créditos debitados uma única vez pelo controller
-          _preferProvider: preferProvider,
-          _sectionMode:    true,
-        }),
+        signal:  ctrl.signal,
+        body:    JSON.stringify(body),
+      }).finally(() => clearTimeout(tid));
+    };
+
+    // Tentativa 1: com provider preferido
+    try {
+      const res = await fetchWithTimeout({
+        serviceType:     '__section__',
+        prompt,
+        userId,
+        userCredits:     999,
+        _preferProvider: preferProvider,
+        _sectionMode:    true,
       });
 
       if (res.status === 429) {
-        // Rate limit — espera mais e tenta sem preferência de provider
-        console.warn('[LongDocEngine] 429 na secção, aguardando 6s…');
-        await this._sleep(6000);
+        console.warn('[LongDocEngine] 429 na secção, aguardando 8s…');
+        await this._sleep(8000);
         throw new Error('rate_limit');
       }
 
@@ -209,19 +216,15 @@ Responda APENAS com JSON válido, sem texto antes ou depois:
       if (err.name === 'AbortError') throw err;
 
       // Tentativa 2: fallback sem preferência de provider
-      console.warn(`[LongDocEngine] Secção "${section.title}" retry sem preferência:`, err.message);
-      await this._sleep(2000);
+      console.warn(`[LongDocEngine] Secção "${section.title}" retry:`, err.message);
+      await this._sleep(3000);
 
-      const res2 = await fetch(ENDPOINT, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceType:  '__section__',
-          prompt,
-          userId,
-          userCredits:  999,
-          _sectionMode: true,
-        }),
+      const res2 = await fetchWithTimeout({
+        serviceType:  '__section__',
+        prompt,
+        userId,
+        userCredits:  999,
+        _sectionMode: true,
       });
 
       if (!res2.ok) {
@@ -247,10 +250,12 @@ Devolva APENAS a lista de referências, começando com "## Referências Bibliogr
 NÃO inclua texto introdutório.${context}`;
     }
 
+    // Limitar palavras para evitar 504: max 600 por secção em modo cadeia
+    const effectiveWords = Math.min(words, 600);
     return `Redija a secção "${section.title}" de um documento profissional sobre "${tema}".
 
 REQUISITOS OBRIGATÓRIOS:
-- Mínimo ${words} palavras de conteúdo real e denso
+- Entre ${effectiveWords} e ${effectiveWords + 200} palavras de conteúdo real
 - Linguagem formal em português de Moçambique
 - Use Markdown: ## para título da secção, ### para subsecções
 - Conteúdo específico ao tema "${tema}" — dados reais, exemplos concretos do contexto moçambicano/africano

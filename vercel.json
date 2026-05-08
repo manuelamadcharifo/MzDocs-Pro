@@ -2,7 +2,7 @@
   "version": 2,
   "outputDirectory": ".",
   "functions": {
-    "api/generate-document.js": { "maxDuration": 120 }
+    "api/generate-document.js": { "maxDuration": 60 }
   },
   "rewrites": [
     { "source": "/sw.js",  "destination": "/sw.js" },

@@ -11,11 +11,11 @@ Nunca invente dados pessoais — use [PREENCHER]. Nunca corte o documento no mei
 // Modelos ordenados: Llama 4 primeiro (sem limite diário), depois os clássicos como fallback
 const GROQ_BASE   = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODELS = [
-    'meta-llama/llama-4-maverick-17b-128e-instruct', // Llama 4 Maverick: sem limite TPD
-    'meta-llama/llama-4-scout-17b-16e-instruct',     // Llama 4 Scout: rápido
-    'llama-3.3-70b-versatile',                        // fallback: 100K TPD
-    'llama-3.1-8b-instant',                           // leve, sem limite diário
-    'gemma2-9b-it',                                   // Google Gemma
+    'llama-3.3-70b-versatile',   // principal - 100K TPD
+    'llama-3.1-70b-versatile',   // fallback quando TPD esgotado
+    'llama-3.1-8b-instant',      // leve, sem limite diário
+    'gemma2-9b-it',              // Google Gemma
+    'mixtral-8x7b-32768',        // Mixtral - grande contexto
 ];
 
 // ─── GEMINI ────────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ const OR_MODELS = [
 // 1.5M tokens/dia grátis, 2400 t/s. Signup: cerebras.ai
 const CEREBRAS_BASE   = 'https://api.cerebras.ai/v1/chat/completions';
 const CEREBRAS_MODELS = [
-    'llama-3.3-70b',   // correcto: sem o "3.1", sem ponto na versão
+    'llama3.3-70b',    // nome correcto na API Cerebras
     'llama3.1-70b',    // fallback
     'llama3.1-8b',     // leve
 ];
@@ -282,9 +282,15 @@ async function tryGemini(prompt, apiKey, signal, maxTokens) {
             });
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
-                const e = new Error(d?.error?.message || `Gemini HTTP ${res.status}`);
+                const msg = d?.error?.message || `Gemini HTTP ${res.status}`;
+                const e = new Error(msg);
                 e.status = res.status;
-                if (res.status === 429) await sleep(1500);
+                // Quota esgotada por minuto — salta imediatamente, não vale esperar
+                if (res.status === 429) {
+                    console.warn(`[Gemini] Quota RPM para ${modelId}, a saltar`);
+                    lastErr = e;
+                    continue;
+                }
                 throw e;
             }
             const data    = await res.json();

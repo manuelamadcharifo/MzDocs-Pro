@@ -125,10 +125,12 @@ export class CreditModel {
     }
 
     async _syncFromServer() {
-        // syncUser não recebe localCredits — Supabase é a fonte de verdade
+        // Não sincroniza se houve um consume() nos últimos 15s (evita reverter debito optimista)
+        const lastConsume = this._lastConsumeAt || 0;
+        if (Date.now() - lastConsume < 15000) return;
+
         const data = await this.supabase.syncUser(this.userId).catch(() => null);
         if (data && typeof data.credits === 'number') {
-            // Sempre sobrescrever o localStorage com o valor do servidor
             this.credits = data.credits;
             Storage.set('credits', this.credits);
             this._emit();
@@ -144,15 +146,29 @@ export class CreditModel {
     async consume(n = 1) {
         if (!this.canConsume(n)) throw new Error('INSUFFICIENT_CREDITS');
 
-        const server = await this.supabase.deductCredit(this.userId).catch(() => null);
-        if (server !== null && server >= 0) {
-            this.credits = server;
-        } else {
-            // Fallback local — descontar dos créditos pagos
-            this.credits = Math.max(0, this.credits - n);
-            Storage.set('credits', Math.max(0, Storage.get('credits', 0) - n));
-        }
+        this._lastConsumeAt = Date.now(); // marca timestamp para bloquear autosync
+        // Debita optimisticamente no cliente PRIMEIRO (evita que autosync reverta)
+        this.credits = Math.max(0, this.credits - n);
+        Storage.set('credits', this.credits);
         this._emit();
+
+        // Depois sincroniza com Supabase (RPC ou update directo)
+        try {
+            const server = await this.supabase.deductCredit(this.userId);
+            if (server !== null && server >= 0) {
+                // Usa valor do servidor se disponível (fonte de verdade)
+                this.credits = server;
+                Storage.set('credits', server);
+                this._emit();
+            } else {
+                // RPC falhou — escreve directamente na tabela profiles
+                await this.supabase.updateCredits(this.userId, this.credits).catch(() => {});
+            }
+        } catch {
+            // Fallback: escreve o valor optimista no servidor
+            await this.supabase.updateCredits(this.userId, this.credits).catch(() => {});
+        }
+
         return this.credits;
     }
 
