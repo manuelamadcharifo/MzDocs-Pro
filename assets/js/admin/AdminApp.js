@@ -255,6 +255,7 @@ class AdminApp {
                         <td><span class="credit-badge">💎 ${u.credits ?? 0}</span></td>
                         <td>${u.total_documents ?? 0}</td>
                         <td>
+                            ${u.is_temp    ? '<span class="badge badge-orange">⏳ Avulso</span>' : ''}
                             ${u.is_admin ? '<span class="badge badge-purple">⭐ Admin</span>' : ''}
                             ${u.is_blocked ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
                         </td>
@@ -263,6 +264,7 @@ class AdminApp {
                             <div class="action-group">
                                 <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">➕</button>
                                 <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">✏️</button>
+                                ${u.is_temp ? `<button class="btn-info" onclick="adminApp.showTempCredentials('${u.id}')">🔑</button>` : ''}
                                 ${u.is_blocked
                                     ? `<button class="btn-success" onclick="adminApp.toggleBlock('${u.id}',false)">🔓</button>`
                                     : `<button class="btn-warning" onclick="adminApp.toggleBlock('${u.id}',true)">🔒</button>`}
@@ -289,12 +291,16 @@ class AdminApp {
             <div class="user-card-meta">
                 <span class="credit-badge">💎 ${u.credits ?? 0} cr</span>
                 <span class="badge badge-gray">📄 ${u.total_documents ?? 0} docs</span>
+                ${u.is_temp     ? '<span class="badge badge-orange">⏳ Avulso</span>' : ''}
                 ${u.is_admin    ? '<span class="badge badge-purple">⭐ Admin</span>' : ''}
                 ${u.is_blocked  ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
             </div>
             <div class="user-card-actions">
                 <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">➕ Créditos</button>
                 <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">✏️ Definir</button>
+                ${u.is_temp
+                    ? `<button class="btn-info" onclick="adminApp.showTempCredentials('${u.id}')">🔑 Credenciais</button>`
+                    : ''}
                 ${u.is_blocked
                     ? `<button class="btn-success" onclick="adminApp.toggleBlock('${u.id}',false)">🔓 Desbloquear</button>`
                     : `<button class="btn-warning" onclick="adminApp.toggleBlock('${u.id}',true)">🔒 Bloquear</button>`}
@@ -414,6 +420,112 @@ USING (EXISTS (
                 <button style="background:#3b82f6;color:#fff" onclick="adminApp.closeModal()">OK</button>
             </div>
         `);
+    }
+
+    // ── Ver credenciais de conta temporária ────────────────────────────
+    showTempCredentials(userId) {
+        const u = this._users.find(u => u.id === userId);
+        if (!u) return;
+        const email = u.email || '—';
+        const pass  = u.temp_password || '(não disponível — enviada por WhatsApp)';
+        const ref   = u.temp_ref || '—';
+        this.showModal(`
+            <p class="modal-title">🔑 Credenciais Avulso</p>
+            <p class="modal-sub">Conta temporária — referência: <code>${ref}</code></p>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;margin:.75rem 0;font-size:.85rem;line-height:2">
+                <div><strong>📧 Email:</strong> <code>${email}</code></div>
+                <div><strong>🔐 Password:</strong> <code style="color:#7c3aed">${pass}</code></div>
+                <div><strong>💎 Créditos actuais:</strong> ${u.credits ?? 0}</div>
+                <div><strong>📱 Telemóvel:</strong> ${u.phone || '—'}</div>
+            </div>
+            <p style="font-size:.75rem;color:#94a3b8">Partilhe as credenciais com o cliente pelo WhatsApp de forma segura.</p>
+            <div class="modal-actions">
+                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                ${u.phone ? `<button style="background:#25d366;color:#fff" onclick="adminApp._sendCredentialsWA('${userId}')">📱 Reenviar WhatsApp</button>` : ''}
+            </div>
+        `);
+    }
+
+    _sendCredentialsWA(userId) {
+        const u = this._users.find(u => u.id === userId);
+        if (!u || !u.temp_password) { this._notify('⚠ Password não disponível', 'warn'); return; }
+        const origin = window.location.origin;
+        const msg = encodeURIComponent(
+            `Olá! As suas credenciais MzDocs Pro:\n` +
+            `🌐 Acesso: ${origin}\n` +
+            `📧 Utilizador: ${u.email}\n` +
+            `🔐 Password: ${u.temp_password}\n` +
+            `💎 Créditos: ${u.credits}\n\n` +
+            `Use estas credenciais para gerar os seus documentos.`
+        );
+        const phone = (u.phone || '').replace(/\D/g, '');
+        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+    }
+
+    // ── Criar conta avulsa manualmente ──────────────────────────────────
+    createAvulsoModal() {
+        this.showModal(`
+            <p class="modal-title">➕ Criar Conta Avulsa</p>
+            <p class="modal-sub">Cria uma conta temporária com créditos avulsos para um cliente que já pagou.</p>
+            <div class="modal-field">
+                <label>Telemóvel do cliente *</label>
+                <input type="tel" id="avPhone" placeholder="84XXXXXXX ou +25884XXXXXXX" autofocus>
+            </div>
+            <div class="modal-field">
+                <label>Créditos a atribuir *</label>
+                <input type="number" id="avCredits" min="1" max="100" value="3">
+            </div>
+            <div class="modal-field">
+                <label>Referência do pagamento</label>
+                <input type="text" id="avRef" placeholder="MAN001 (ou deixe vazio para gerar automaticamente)">
+            </div>
+            <div class="modal-actions">
+                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#009A44;color:#fff" onclick="adminApp._doCreateAvulso()">✅ Criar conta</button>
+            </div>
+        `);
+        setTimeout(() => document.getElementById('avPhone')?.focus(), 100);
+    }
+
+    async _doCreateAvulso() {
+        const phone   = document.getElementById('avPhone')?.value?.trim();
+        const credits = parseInt(document.getElementById('avCredits')?.value);
+        const ref     = document.getElementById('avRef')?.value?.trim() || ('MAN' + Date.now().toString().slice(-6));
+
+        if (!phone || phone.replace(/\D/g,'').length < 8) { this._notify('⚠ Insira um telemóvel válido', 'warn'); return; }
+        if (!credits || credits < 1)                       { this._notify('⚠ Créditos inválidos', 'warn'); return; }
+
+        this.closeModal();
+        this._notify('⏳ A criar conta temporária…', 'info');
+
+        try {
+            const token = authManager.getToken();
+            const res = await fetch('/api/admin/confirm-avulso', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ phone, credits, referenceId: ref, manual: true }),
+            });
+
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || `Erro ${res.status}`);
+
+            this.showModal(`
+                <p class="modal-title" style="color:#009A44">✅ Conta criada com sucesso!</p>
+                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:1rem;margin:.75rem 0;font-size:.875rem;line-height:2">
+                    <div><strong>📧 Email:</strong> <code>${result.tempEmail}</code></div>
+                    <div><strong>🔐 Password:</strong> <code style="color:#7c3aed;font-size:1.05rem">${result.tempPass}</code></div>
+                    <div><strong>💎 Créditos:</strong> ${credits}</div>
+                    <div><strong>📱 Telemóvel:</strong> ${phone}</div>
+                </div>
+                <p style="font-size:.75rem;color:#94a3b8">Partilhe estas credenciais com o cliente.</p>
+                <div class="modal-actions">
+                    <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal();adminApp._loadUsers()">Fechar</button>
+                    ${result.waLink ? `<a href="${result.waLink}" target="_blank" style="display:inline-flex;align-items:center;gap:.4rem;background:#25d366;color:#fff;padding:.6rem 1.2rem;border-radius:8px;font-weight:700;text-decoration:none">📱 Enviar WhatsApp</a>` : ''}
+                </div>
+            `);
+        } catch (err) {
+            this._notify('❌ ' + err.message, 'error');
+        }
     }
 
     // ── Eliminar utilizador ─────────────────────────────────────────────

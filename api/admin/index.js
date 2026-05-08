@@ -114,7 +114,58 @@ async function handleConfirmAvulso(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '');
   const body = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
-  const { transactionId, referenceId } = body;
+  const { transactionId, referenceId, phone, credits, manual } = body;
+
+  // ── Modo manual: admin cria conta avulsa sem transação pré-existente ──
+  if (manual === true) {
+    if (!phone || !credits) return res.status(400).json({ error: 'phone e credits são obrigatórios no modo manual' });
+    try {
+      const supabase = await getAdminClient();
+      const auth = await validateAdmin(supabase, token);
+      if (auth.error) return res.status(auth.status).json({ error: auth.error });
+      const ref       = (referenceId || ('MAN' + Date.now().toString().slice(-6))).toUpperCase();
+      const tempEmail = `temp_${ref.toLowerCase()}@mzdocs.temp`;
+      const tempPass  = _genPassword();
+      const cleanPhone = phone.replace(/\D/g, '');
+      const normPhone  = cleanPhone.startsWith('258') ? `+${cleanPhone}` : `+258${cleanPhone}`;
+      const { data: newUser, error: createErr } = await supabase.auth.admin.createUser({
+        email: tempEmail, password: tempPass, email_confirm: true,
+        user_metadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: normPhone },
+      });
+      if (createErr) throw new Error('Erro ao criar utilizador: ' + createErr.message);
+      const tempUserId = newUser.user.id;
+      const { error: profileErr } = await supabase.from('profiles').update({
+        is_temp: true, temp_ref: ref, temp_password: tempPass,
+        credits: parseInt(credits), plan: 'free', full_name: `Avulso ${ref}`,
+        phone: normPhone, updated_at: new Date().toISOString(),
+      }).eq('id', tempUserId);
+      if (profileErr) throw profileErr;
+      // Registar transação para histórico
+      await supabase.from('transactions').insert({
+        user_id: tempUserId, package_id: 'avulso', amount: 0,
+        credits: parseInt(credits), status: 'completed', payment_method: 'manual',
+        reference_id: ref, phone_number: normPhone,
+        confirmed_by: auth.user.id, confirmed_at: new Date().toISOString(),
+      });
+      const origin  = req.headers.origin || req.headers.referer?.split('/').slice(0,3).join('/') || 'https://mz-docs-pro.vercel.app';
+      const waPhone = cleanPhone.startsWith('258') ? cleanPhone : '258' + cleanPhone;
+      const waMsg   = [
+        `✅ *Conta MzDocs Pro criada — Referência ${ref}*`, ``,
+        `💎 Créditos: ${credits}`,
+        `🔑 *Acesso:* ${origin}`,
+        `📧 *Utilizador:* ${tempEmail}`,
+        `🔐 *Password:* ${tempPass}`, ``,
+        `⚠️ Conta temporária — eliminada quando os créditos acabarem.`,
+      ].join('\n');
+      const waLink = `https://wa.me/${waPhone}?text=${encodeURIComponent(waMsg)}`;
+      return res.status(200).json({ success: true, tempEmail, tempPass, tempUserId, credits: parseInt(credits), waLink });
+    } catch (err) {
+      console.error('[admin/confirm-avulso/manual]', err);
+      return res.status(500).json({ error: err.message || 'Erro interno' });
+    }
+  }
+
+  // ── Modo normal: confirmar transação pendente ──
   if (!transactionId && !referenceId)
     return res.status(400).json({ error: 'transactionId ou referenceId obrigatório' });
   try {

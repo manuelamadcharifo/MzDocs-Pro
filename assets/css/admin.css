@@ -285,6 +285,14 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
 }
 .btn-success:hover { background: #16A34A; }
 
+.btn-info {
+  padding: .45rem .875rem;
+  background: #0EA5E9; color: #fff; border: none;
+  border-radius: 7px; cursor: pointer; font-size: .8rem; font-weight: 600;
+  font-family: inherit; transition: all .15s;
+}
+.btn-info:hover { background: #0284C7; }
+
 .btn-danger {
   padding: .45rem .875rem;
   background: var(--danger); color: #fff; border: none;
@@ -408,6 +416,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
 .badge-red { background: #FEE2E2; color: #991B1B; }
 .badge-gray { background: #F1F5F9; color: #475569; }
 .badge-purple { background: #EDE9FE; color: #5B21B6; }
+.badge-orange { background: #FFF7ED; color: #C2410C; }
 
 .credit-badge {
   display: inline-flex; align-items: center;
