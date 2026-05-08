@@ -184,14 +184,33 @@ class AdminApp {
     async _loadUsers() {
         if (!this.supabase) return;
         try {
-            const { data, error } = await this.supabase
+            // Tentar com is_blocked; se coluna não existir (erro 42703), tentar sem ela
+            let data, error;
+            ({ data, error } = await this.supabase
                 .from('profiles')
                 .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, created_at')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false }));
+
+            if (error && error.code === '42703') {
+                console.warn('[Admin] is_blocked ausente — a carregar sem ela. Execute a migração SQL.');
+                this._isBlockedMissing = true;
+                ({ data, error } = await this.supabase
+                    .from('profiles')
+                    .select('id, full_name, phone, email, credits, total_documents, is_admin, created_at')
+                    .order('created_at', { ascending: false }));
+            } else {
+                this._isBlockedMissing = false;
+            }
 
             if (error) throw error;
-            this._users = data || [];
+            // Normalizar: garantir is_blocked=false se coluna ausente
+            this._users = (data || []).map(u => ({ ...u, is_blocked: u.is_blocked ?? false }));
             this._renderUsers(this._users);
+
+            if (this._isBlockedMissing && !this._blockWarnShown) {
+                this._blockWarnShown = true;
+                this._notify('⚠ Execute a migração SQL para activar o bloqueio de utilizadores.', 'warn');
+            }
         } catch (err) { console.error('[Admin] Utilizadores:', err); this._notify('❌ Erro ao carregar utilizadores', 'error'); }
     }
 
