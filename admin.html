@@ -2,226 +2,281 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <meta name="robots" content="noindex, nofollow"/>
   <title>Admin — MzDocs Pro</title>
-  <link rel="stylesheet" href="assets/css/styles.css"/>
   <link rel="stylesheet" href="assets/css/admin.css"/>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⚙️%3C/text%3E%3C/svg%3E" type="image/svg+xml"/>
 </head>
 <body>
-  <div id="adminApp">
 
-    <!-- Sidebar -->
-    <aside class="admin-sidebar">
-      <div class="admin-brand">
-        <span class="flag">🇲🇿</span>
-        <h1>MzDocs Pro</h1>
-        <span class="badge">Admin</span>
+<!-- Overlay sidebar mobile -->
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="adminApp.closeSidebar()"></div>
+
+<div id="adminApp" class="admin-app">
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
+  <aside class="admin-sidebar" id="adminSidebar">
+    <div class="sidebar-brand">
+      <span>🇲🇿</span>
+      <div>
+        <div class="brand-name">MzDocs Pro</div>
+        <span class="brand-badge">Admin</span>
       </div>
-      <nav class="admin-nav">
-        <a href="#dashboard"    class="nav-item active" data-section="dashboard">📊 Dashboard</a>
-        <a href="#transactions" class="nav-item"        data-section="transactions">
-          💳 Transações <span id="pendingCount" class="nav-badge">0</span>
-        </a>
-        <a href="#users"        class="nav-item"        data-section="users">👥 Utilizadores</a>
-        <a href="#documents"    class="nav-item"        data-section="documents">📄 Documentos</a>
-        <a href="#settings"     class="nav-item"        data-section="settings">⚙️ Configurações</a>
-      </nav>
-      <div class="admin-footer">
-        <button id="adminLogout" class="btn btn-danger btn-block">🚪 Sair</button>
-      </div>
-    </aside>
-
-    <!-- Main -->
-    <main class="admin-main">
-      <header class="admin-header">
-        <h2 id="pageTitle">Dashboard</h2>
-        <div class="admin-actions">
-          <span id="adminDate"></span>
-          <div class="admin-user"><span id="adminName">Admin</span></div>
-        </div>
-      </header>
-
-      <!-- DASHBOARD -->
-      <section id="section-dashboard" class="admin-section">
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon">💰</div>
-            <div class="stat-info">
-              <span class="stat-value" id="statRevenue">0 MZN</span>
-              <span class="stat-label">Receita Hoje</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">📄</div>
-            <div class="stat-info">
-              <span class="stat-value" id="statDocuments">0</span>
-              <span class="stat-label">Documentos Hoje</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">👤</div>
-            <div class="stat-info">
-              <span class="stat-value" id="statUsers">0</span>
-              <span class="stat-label">Novos Utilizadores</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">⏳</div>
-            <div class="stat-info">
-              <span class="stat-value" id="statPending">0</span>
-              <span class="stat-label">Pagamentos Pendentes</span>
-            </div>
-          </div>
-        </div>
-        <div class="charts-row">
-          <div class="chart-card">
-            <h3>📈 Receita — Últimos 7 Dias</h3>
-            <canvas id="revenueChart"></canvas>
-          </div>
-          <div class="chart-card">
-            <h3>📊 Documentos por Tipo</h3>
-            <canvas id="documentsChart"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <!-- TRANSAÇÕES -->
-      <section id="section-transactions" class="admin-section" style="display:none;">
-        <div class="section-header">
-          <h3>Gestão de Pagamentos</h3>
-          <div class="filters">
-            <select id="filterStatus">
-              <option value="all">Todos</option>
-              <option value="pending">Pendentes</option>
-              <option value="completed">Confirmados</option>
-              <option value="failed">Falhados</option>
-            </select>
-            <input type="date" id="filterDate"/>
-            <button id="btnRefresh" class="btn btn-primary">🔄 Atualizar</button>
-          </div>
-        </div>
-        <div class="table-container">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>Referência</th><th>Utilizador</th><th>Pacote</th>
-                <th>Valor</th><th>Créditos</th><th>Telemóvel</th>
-                <th>Estado</th><th>Data</th><th>Ações</th>
-              </tr>
-            </thead>
-            <tbody id="transactionsTable"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- UTILIZADORES -->
-      <section id="section-users" class="admin-section" style="display:none;">
-        <div class="section-header">
-          <h3>Utilizadores</h3>
-          <input type="search" id="searchUsers" placeholder="Pesquisar por nome ou telemóvel…"/>
-        </div>
-        <div class="table-container">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>Nome</th><th>Telemóvel</th><th>Email</th><th>Créditos</th>
-                <th>Documentos</th><th>Tipo</th><th>Registo</th><th>Ações</th>
-              </tr>
-            </thead>
-            <tbody id="usersTable"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- DOCUMENTOS -->
-      <section id="section-documents" class="admin-section" style="display:none;">
-        <div class="section-header">
-          <h3>Documentos Gerados</h3>
-        </div>
-        <div class="table-container">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>Tipo</th><th>Utilizador</th><th>Modelo IA</th><th>Data</th><th>Ações</th>
-              </tr>
-            </thead>
-            <tbody id="documentsTable"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- CONFIGURAÇÕES -->
-      <section id="section-settings" class="admin-section" style="display:none;">
-        <div class="settings-grid">
-          <div class="settings-card">
-            <h3>💳 Configuração M-Pesa</h3>
-            <form id="mpesaConfigForm">
-              <div class="form-group">
-                <label>Ambiente</label>
-                <select id="mpesaEnv">
-                  <option value="sandbox">Sandbox (Teste)</option>
-                  <option value="production">Produção</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>API Key</label>
-                <input type="password" id="mpesaApiKey" placeholder="Chave API M-Pesa"/>
-              </div>
-              <div class="form-group">
-                <label>Service Code</label>
-                <input type="text" id="mpesaServiceCode" placeholder="Código de serviço"/>
-              </div>
-              <button type="submit" class="btn btn-primary">💾 Guardar</button>
-            </form>
-          </div>
-          <div class="settings-card">
-            <h3>📦 Preços dos Pacotes</h3>
-            <form id="pricingForm">
-              <div class="form-group">
-                <label>Starter — Créditos / Preço (MZN)</label>
-                <div style="display:flex;gap:.5rem;">
-                  <input type="number" id="pkgStarterCredits" value="10" min="1" placeholder="Créditos"/>
-                  <input type="number" id="pkgStarterPrice"   value="150" min="1" placeholder="MZN"/>
-                </div>
-              </div>
-              <div class="form-group">
-                <label>Básico — Créditos / Preço (MZN)</label>
-                <div style="display:flex;gap:.5rem;">
-                  <input type="number" id="pkgBasicoCredits" value="25" min="1" placeholder="Créditos"/>
-                  <input type="number" id="pkgBasicoPrice"   value="350" min="1" placeholder="MZN"/>
-                </div>
-              </div>
-              <div class="form-group">
-                <label>Pro — Créditos / Preço (MZN)</label>
-                <div style="display:flex;gap:.5rem;">
-                  <input type="number" id="pkgProCredits" value="60" min="1" placeholder="Créditos"/>
-                  <input type="number" id="pkgProPrice"   value="750" min="1" placeholder="MZN"/>
-                </div>
-              </div>
-              <button type="submit" class="btn btn-primary">💾 Atualizar Preços</button>
-            </form>
-          </div>
-        </div>
-      </section>
-
-    </main>
-  </div>
-
-  <!-- Modal Confirmação de Pagamento -->
-  <div id="confirmModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:9999;">
-    <div class="modal-content" style="background:#fff;border-radius:16px;padding:2rem;max-width:400px;width:90vw;">
-      <h3 style="margin:0 0 .75rem">✅ Confirmar Pagamento</h3>
-      <p id="confirmText" style="color:#6b7280;margin-bottom:1.5rem;">Deseja confirmar este pagamento?</p>
-      <div class="modal-actions" style="display:flex;gap:.75rem;">
-        <button id="btnCancelConfirm"  class="btn btn-ghost"   style="flex:1;">Cancelar</button>
-        <button id="btnConfirmPayment" class="btn btn-success" style="flex:1;">✅ Confirmar</button>
-      </div>
+      <button class="sidebar-close" onclick="adminApp.closeSidebar()">✕</button>
     </div>
-  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script type="module" src="assets/js/admin/AdminApp.js"></script>
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-section="dashboard">
+        <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
+      </a>
+      <a class="nav-item" data-section="users">
+        <span class="nav-icon">👥</span><span class="nav-label">Utilizadores</span>
+        <span class="nav-badge" id="navBadgeUsers">0</span>
+      </a>
+      <a class="nav-item" data-section="transactions">
+        <span class="nav-icon">💳</span><span class="nav-label">Transações</span>
+        <span class="nav-badge danger" id="navBadgePending">0</span>
+      </a>
+      <a class="nav-item" data-section="documents">
+        <span class="nav-icon">📄</span><span class="nav-label">Documentos</span>
+      </a>
+      <a class="nav-item" data-section="settings">
+        <span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="admin-user-info">
+        <span class="admin-avatar">👤</span>
+        <span id="adminName" class="admin-name">Admin</span>
+      </div>
+      <button id="adminLogout" class="btn-logout">🚪 Sair</button>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ───────────────────────────────────────────────── -->
+  <main class="admin-main">
+
+    <!-- Top bar (mobile) -->
+    <header class="admin-topbar">
+      <button class="hamburger" id="hamburgerBtn" onclick="adminApp.openSidebar()">☰</button>
+      <h2 class="topbar-title" id="pageTitle">Dashboard</h2>
+      <div class="topbar-right">
+        <span id="adminDate" class="topbar-date"></span>
+        <button class="btn-refresh-top" onclick="adminApp.refresh()" title="Actualizar">🔄</button>
+      </div>
+    </header>
+
+    <!-- ── DASHBOARD ─────────────────────────────────────────── -->
+    <section id="section-dashboard" class="admin-section active">
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon bg-blue">👥</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statTotalUsers">—</div>
+            <div class="stat-label">Total Utilizadores</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon bg-green">📄</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statTotalDocs">—</div>
+            <div class="stat-label">Documentos Gerados</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon bg-yellow">💰</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statRevenue">—</div>
+            <div class="stat-label">Receita Confirmada</div>
+          </div>
+        </div>
+        <div class="stat-card alert">
+          <div class="stat-icon bg-red">⏳</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statPending">—</div>
+            <div class="stat-label">Pagamentos Pendentes</div>
+            <button class="stat-action" onclick="adminApp.nav('transactions')">Ver →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <h3 class="chart-title">📈 Receita — Últimos 7 Dias</h3>
+          <canvas id="revenueChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">📊 Documentos por Tipo</h3>
+          <canvas id="documentsChart"></canvas>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ── UTILIZADORES ──────────────────────────────────────── -->
+    <section id="section-users" class="admin-section">
+      <div class="section-toolbar">
+        <div class="search-wrap">
+          <input type="search" id="searchUsers" class="search-input"
+            placeholder="🔍 Nome, telemóvel ou email…"
+            oninput="adminApp.filterUsers(this.value)">
+        </div>
+        <div class="toolbar-right">
+          <select id="userTypeFilter" class="filter-select" onchange="adminApp.filterUsers()">
+            <option value="all">Todos</option>
+            <option value="admin">Admins</option>
+            <option value="blocked">Bloqueados</option>
+          </select>
+          <button class="btn-primary" onclick="adminApp.refresh()">🔄</button>
+        </div>
+      </div>
+
+      <!-- Cards em mobile, tabela em desktop -->
+      <div class="users-cards" id="usersCards"></div>
+
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Utilizador</th>
+              <th>Telemóvel</th>
+              <th>Email</th>
+              <th>Créditos</th>
+              <th>Docs</th>
+              <th>Estado</th>
+              <th>Registo</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="usersTable"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="usersEmpty" style="display:none">
+        <p>👥 Nenhum utilizador encontrado</p>
+      </div>
+    </section>
+
+    <!-- ── TRANSAÇÕES ────────────────────────────────────────── -->
+    <section id="section-transactions" class="admin-section">
+      <div class="section-toolbar">
+        <div class="toolbar-filters">
+          <select id="filterStatus" class="filter-select" onchange="adminApp._loadTransactions()">
+            <option value="all">Todos os estados</option>
+            <option value="pending">⏳ Pendentes</option>
+            <option value="completed">✅ Confirmados</option>
+            <option value="failed">❌ Falhados</option>
+          </select>
+          <input type="date" id="filterDate" class="filter-select" onchange="adminApp._loadTransactions()">
+        </div>
+        <button class="btn-primary" onclick="adminApp._loadTransactions()">🔄</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Referência</th><th>Utilizador</th><th>Pacote</th>
+              <th>Valor</th><th>Créditos</th><th>Estado</th><th>Data</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="transactionsTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── DOCUMENTOS ────────────────────────────────────────── -->
+    <section id="section-documents" class="admin-section">
+      <div class="section-toolbar">
+        <input type="search" id="searchDocs" class="search-input"
+          placeholder="🔍 Tipo, utilizador…" oninput="adminApp.filterDocs(this.value)">
+        <button class="btn-primary" onclick="adminApp._loadDocuments()">🔄</button>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Tipo</th><th>Utilizador</th><th>Modelo IA</th><th>Data</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="documentsTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── CONFIGURAÇÕES ─────────────────────────────────────── -->
+    <section id="section-settings" class="admin-section">
+      <div class="settings-grid">
+        <div class="settings-card">
+          <h3>📦 Preços dos Pacotes</h3>
+          <form id="pricingForm">
+            <div class="form-row">
+              <label>Starter — Créditos</label>
+              <input type="number" id="pkgStarterCredits" value="10" min="1">
+            </div>
+            <div class="form-row">
+              <label>Starter — Preço (MZN)</label>
+              <input type="number" id="pkgStarterPrice" value="150" min="1">
+            </div>
+            <div class="form-row">
+              <label>Básico — Créditos</label>
+              <input type="number" id="pkgBasicoCredits" value="25" min="1">
+            </div>
+            <div class="form-row">
+              <label>Básico — Preço (MZN)</label>
+              <input type="number" id="pkgBasicoPrice" value="350" min="1">
+            </div>
+            <div class="form-row">
+              <label>Pro — Créditos</label>
+              <input type="number" id="pkgProCredits" value="60" min="1">
+            </div>
+            <div class="form-row">
+              <label>Pro — Preço (MZN)</label>
+              <input type="number" id="pkgProPrice" value="750" min="1">
+            </div>
+            <button type="submit" class="btn-primary" style="width:100%;margin-top:.75rem">💾 Guardar Preços</button>
+          </form>
+        </div>
+        <div class="settings-card">
+          <h3>💳 M-Pesa</h3>
+          <form id="mpesaConfigForm">
+            <div class="form-row">
+              <label>Ambiente</label>
+              <select id="mpesaEnv">
+                <option value="sandbox">Sandbox</option>
+                <option value="production">Produção</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>API Key</label>
+              <input type="password" id="mpesaApiKey" placeholder="Chave API M-Pesa">
+            </div>
+            <button type="submit" class="btn-primary" style="width:100%;margin-top:.75rem">💾 Guardar M-Pesa</button>
+          </form>
+        </div>
+        <div class="settings-card danger-card">
+          <h3>⚠️ Diagnóstico</h3>
+          <p style="font-size:.85rem;color:#64748b;margin-bottom:1rem">Utilizadores sem telemóvel gravado na BD</p>
+          <button class="btn-danger-outline" onclick="adminApp.diagnoseMissingPhones()">🔍 Ver perfis sem phone</button>
+          <button class="btn-danger-outline" style="margin-top:.5rem" onclick="adminApp.fixMissingPhones()">🔧 Reparar automaticamente</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ── MODAL GENÉRICO ─────────────────────────────────────────────── -->
+<div id="globalModal" class="modal-overlay" style="display:none" onclick="adminApp.closeModal(event)">
+  <div class="modal-box" id="modalBox">
+    <button class="modal-close" onclick="adminApp.closeModal()">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script type="module" src="assets/js/admin/AdminApp.js"></script>
 </body>
 </html>

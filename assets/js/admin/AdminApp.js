@@ -1,155 +1,141 @@
-// assets/js/admin/AdminApp.js
-// Painel Admin — corrigido: race condition, viewDocument, settings, addCredits UI
+// assets/js/admin/AdminApp.js — v4.1
+// Mobile-first · Sync real · Bloquear/Deletar utilizadores · Total correcto
 
 import { authManager } from '../auth/AuthManager.js';
 
 class AdminApp {
     constructor() {
-        // CORRIGIDO: NÃO usar supabase aqui — ainda é null no construtor
-        this.supabase = null;
-        this.currentSection = 'dashboard';
-        this.selectedTransaction = null;
-        this.charts = {};
-
-        // Aguardar auth antes de tudo
+        this.supabase  = null;
+        this._users    = [];
+        this._docs     = [];
+        this._section  = 'dashboard';
+        this.charts    = {};
         this._boot();
     }
 
     async _boot() {
-        await authManager.ready(); // aguarda init async completo
-
-        // Agora o supabase está disponível
+        await authManager.ready();
         this.supabase = authManager.supabase;
 
-        if (!authManager.isAuthenticated()) {
-            window.location.href = '/?auth=required';
-            return;
-        }
-        if (!authManager.isAdmin()) {
-            alert('⛔ Acesso restrito a administradores.');
-            window.location.href = '/';
-            return;
-        }
+        if (!authManager.isAuthenticated()) { window.location.href = '/?auth=required'; return; }
+        if (!authManager.isAdmin())         { alert('⛔ Acesso restrito a administradores.'); window.location.href = '/'; return; }
 
-        const name = authManager.user?.user_metadata?.full_name ||
-                     authManager.user?.phone || 'Admin';
-        const nameEl = document.getElementById('adminName');
-        if (nameEl) nameEl.textContent = name;
+        // Nome do admin
+        const name = authManager.user?._profile?.full_name
+                  || authManager.user?.user_metadata?.full_name
+                  || authManager.user?._profile?.phone
+                  || 'Admin';
+        const el = id => document.getElementById(id);
+        if (el('adminName')) el('adminName').textContent = name;
+        if (el('adminDate')) el('adminDate').textContent = new Date().toLocaleDateString('pt-MZ', {
+            weekday: 'short', day: 'numeric', month: 'short'
+        });
 
+        this._bindNav();
         this._bindEvents();
         await this._loadDashboard();
     }
 
-    _bindEvents() {
+    // ── NAVEGAÇÃO ───────────────────────────────────────────────────────
+    _bindNav() {
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', e => {
                 e.preventDefault();
-                this._switchSection(item.dataset.section);
+                const sec = item.dataset.section;
+                if (sec) { this.nav(sec); this.closeSidebar(); }
             });
         });
+    }
 
+    nav(section) {
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        document.querySelector(`[data-section="${section}"]`)?.classList.add('active');
+        document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+        document.getElementById(`section-${section}`)?.classList.add('active');
+
+        const titles = {
+            dashboard: 'Dashboard', users: 'Utilizadores',
+            transactions: 'Transações', documents: 'Documentos', settings: 'Configurações'
+        };
+        document.getElementById('pageTitle').textContent = titles[section] || section;
+        this._section = section;
+
+        if (section === 'dashboard')    this._loadDashboard();
+        if (section === 'users')        this._loadUsers();
+        if (section === 'transactions') this._loadTransactions();
+        if (section === 'documents')    this._loadDocuments();
+        if (section === 'settings')     this._loadSettings();
+    }
+
+    refresh() { this.nav(this._section); }
+
+    // ── SIDEBAR mobile ──────────────────────────────────────────────────
+    openSidebar() {
+        document.getElementById('adminSidebar')?.classList.add('open');
+        document.getElementById('sidebarOverlay')?.classList.add('show');
+    }
+    closeSidebar() {
+        document.getElementById('adminSidebar')?.classList.remove('open');
+        document.getElementById('sidebarOverlay')?.classList.remove('show');
+    }
+
+    // ── EVENTS ──────────────────────────────────────────────────────────
+    _bindEvents() {
         document.getElementById('adminLogout')?.addEventListener('click', () => {
             authManager.signOut().then(() => { window.location.href = '/'; });
         });
-
         document.getElementById('filterStatus')?.addEventListener('change', () => this._loadTransactions());
         document.getElementById('filterDate')?.addEventListener('change', () => this._loadTransactions());
-        document.getElementById('btnRefresh')?.addEventListener('click', () => this._loadTransactions());
-
-        document.getElementById('btnCancelConfirm')?.addEventListener('click', () => this._closeModal());
-        document.getElementById('btnConfirmPayment')?.addEventListener('click', () => this._confirmSelectedPayment());
-
-        // CORRIGIDO: settings forms agora têm listeners
-        document.getElementById('mpesaConfigForm')?.addEventListener('submit', e => {
-            e.preventDefault();
-            this._saveSettings();
-        });
-        document.getElementById('pricingForm')?.addEventListener('submit', e => {
-            e.preventDefault();
-            this._savePricing();
-        });
-
-        // Pesquisa de utilizadores
-        document.getElementById('searchUsers')?.addEventListener('input', e => {
-            this._filterUsers(e.target.value);
-        });
-
-        const dateEl = document.getElementById('adminDate');
-        if (dateEl) dateEl.textContent = new Date().toLocaleDateString('pt-MZ', {
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-        });
+        document.getElementById('pricingForm')?.addEventListener('submit', e => { e.preventDefault(); this._savePricing(); });
+        document.getElementById('mpesaConfigForm')?.addEventListener('submit', e => { e.preventDefault(); this._saveSettings(); });
     }
 
-    _switchSection(section) {
-        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-        document.querySelector(`[data-section="${section}"]`)?.classList.add('active');
-        document.querySelectorAll('.admin-section').forEach(s => s.style.display = 'none');
-        const sec = document.getElementById(`section-${section}`);
-        if (sec) sec.style.display = 'block';
-        const titles = {
-            dashboard: 'Dashboard', transactions: 'Gestão de Pagamentos',
-            users: 'Utilizadores', documents: 'Documentos Gerados', settings: 'Configurações'
-        };
-        const titleEl = document.getElementById('pageTitle');
-        if (titleEl) titleEl.textContent = titles[section] || section;
-
-        if (section === 'transactions') this._loadTransactions();
-        if (section === 'users') this._loadUsers();
-        if (section === 'documents') this._loadDocuments();
-        if (section === 'settings') this._loadSettings();
-        this.currentSection = section;
-    }
-
-    // ── DASHBOARD ──────────────────────────────────────────────────────────
+    // ── DASHBOARD ───────────────────────────────────────────────────────
     async _loadDashboard() {
         if (!this.supabase) return;
         try {
-            const today = new Date().toISOString().slice(0, 10);
+            // Totais REAIS (sem filtro de data — todos os registos)
+            const [
+                { count: totalUsers },
+                { count: totalDocs },
+                { data: revenue },
+                { count: pending }
+            ] = await Promise.all([
+                this.supabase.from('profiles').select('*', { count: 'exact', head: true }),
+                this.supabase.from('documents').select('*', { count: 'exact', head: true }),
+                this.supabase.from('transactions').select('amount').eq('status', 'completed'),
+                this.supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+            ]);
 
-            const { data: revenue } = await this.supabase
-                .from('transactions').select('amount').eq('status', 'completed')
-                .gte('created_at', today);
-            const totalRevenue = (revenue || []).reduce((s, t) => s + t.amount, 0);
+            const totalRevenue = (revenue || []).reduce((s, t) => s + (t.amount || 0), 0);
 
-            const { count: docCount } = await this.supabase
-                .from('documents').select('*', { count: 'exact', head: true }).gte('created_at', today);
+            const e = id => document.getElementById(id);
+            if (e('statTotalUsers')) e('statTotalUsers').textContent = totalUsers ?? '—';
+            if (e('statTotalDocs'))  e('statTotalDocs').textContent  = totalDocs ?? '—';
+            if (e('statRevenue'))    e('statRevenue').textContent    = totalRevenue.toLocaleString('pt-MZ') + ' MZN';
+            if (e('statPending'))    e('statPending').textContent    = pending ?? '—';
+            if (e('navBadgeUsers'))  e('navBadgeUsers').textContent  = totalUsers ?? 0;
+            if (e('navBadgePending')) e('navBadgePending').textContent = pending ?? 0;
 
-            const { count: userCount } = await this.supabase
-                .from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', today);
-
-            const { count: pendingCount } = await this.supabase
-                .from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending');
-
-            const el = id => document.getElementById(id);
-            if (el('statRevenue')) el('statRevenue').textContent = `${totalRevenue.toLocaleString('pt-MZ')} MZN`;
-            if (el('statDocuments')) el('statDocuments').textContent = docCount || 0;
-            if (el('statUsers')) el('statUsers').textContent = userCount || 0;
-            if (el('statPending')) el('statPending').textContent = pendingCount || 0;
-            if (el('pendingCount')) el('pendingCount').textContent = pendingCount || 0;
-
-            this._loadCharts();
-        } catch (e) {
-            console.error('[Admin] Dashboard erro:', e);
-        }
+            await this._loadCharts();
+        } catch (err) { console.error('[Admin] Dashboard:', err); }
     }
 
     async _loadCharts() {
         if (!this.supabase || typeof Chart === 'undefined') return;
         try {
             const sevenDays = new Date(Date.now() - 7 * 86400000).toISOString();
-            const { data: revenueData } = await this.supabase
-                .from('transactions').select('amount, created_at')
-                .eq('status', 'completed').gte('created_at', sevenDays);
+            const [{ data: txData }, { data: docData }] = await Promise.all([
+                this.supabase.from('transactions').select('amount,created_at').eq('status','completed').gte('created_at', sevenDays),
+                this.supabase.from('documents').select('service_type').gte('created_at', sevenDays),
+            ]);
 
             const days = Array.from({ length: 7 }, (_, i) => {
                 const d = new Date(Date.now() - (6 - i) * 86400000);
                 return d.toISOString().slice(0, 10);
             });
-            const revenueByDay = days.map(day =>
-                (revenueData || []).filter(t => t.created_at.slice(0, 10) === day)
-                    .reduce((s, t) => s + t.amount, 0)
-            );
 
+            // Revenue chart
             const rc = document.getElementById('revenueChart');
             if (rc) {
                 if (this.charts.revenue) this.charts.revenue.destroy();
@@ -157,207 +143,368 @@ class AdminApp {
                     type: 'line',
                     data: {
                         labels: days.map(d => d.slice(5)),
-                        datasets: [{ label: 'Receita (MZN)', data: revenueByDay,
-                            borderColor: '#3B82F6', backgroundColor: 'rgba(59,130,246,0.1)',
-                            tension: 0.4, fill: true }]
+                        datasets: [{
+                            label: 'MZN',
+                            data: days.map(day => (txData||[]).filter(t=>t.created_at.slice(0,10)===day).reduce((s,t)=>s+t.amount,0)),
+                            borderColor: '#3B82F6', backgroundColor: 'rgba(59,130,246,.1)',
+                            tension: .4, fill: true, pointRadius: 4
+                        }]
                     },
-                    options: { responsive: true, plugins: { legend: { display: false } } }
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
                 });
             }
 
-            const { data: docsByType } = await this.supabase
-                .from('documents').select('service_type').gte('created_at', sevenDays);
+            // Docs chart
             const typeMap = {};
-            (docsByType || []).forEach(d => { typeMap[d.service_type] = (typeMap[d.service_type] || 0) + 1; });
-
+            (docData||[]).forEach(d => { typeMap[d.service_type] = (typeMap[d.service_type]||0) + 1; });
             const dc = document.getElementById('documentsChart');
-            if (dc) {
-                if (this.charts.documents) this.charts.documents.destroy();
-                this.charts.documents = new Chart(dc, {
+            if (dc && Object.keys(typeMap).length) {
+                if (this.charts.docs) this.charts.docs.destroy();
+                this.charts.docs = new Chart(dc, {
                     type: 'doughnut',
                     data: {
-                        labels: Object.keys(typeMap).map(k => this._translateType(k)),
+                        labels: Object.keys(typeMap).map(k => this._typeLabel(k)),
                         datasets: [{ data: Object.values(typeMap),
                             backgroundColor: ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6'] }]
                     },
-                    options: { responsive: true }
+                    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
                 });
             }
-        } catch (e) { console.warn('[Admin] Charts erro:', e); }
+        } catch (err) { console.warn('[Admin] Charts:', err); }
     }
 
-    // ── TRANSAÇÕES ─────────────────────────────────────────────────────────
-    async _loadTransactions() {
-        if (!this.supabase) return;
-        try {
-            const status = document.getElementById('filterStatus')?.value;
-            const date = document.getElementById('filterDate')?.value;
-
-            let query = this.supabase
-                .from('transactions')
-                .select('*, profiles(full_name, phone)')
-                .order('created_at', { ascending: false })
-                .limit(100);
-
-            if (status && status !== 'all') query = query.eq('status', status);
-            if (date) query = query.gte('created_at', date).lte('created_at', date + 'T23:59:59');
-
-            const { data, error } = await query;
-            if (error) throw error;
-
-            const tbody = document.getElementById('transactionsTable');
-            if (!tbody) return;
-            tbody.innerHTML = (data || []).map(t => `
-                <tr>
-                    <td><code style="font-size:12px">${t.reference_id || t.id.slice(0,8)}</code></td>
-                    <td>${t.profiles?.full_name || t.profiles?.phone || 'Anónimo'}</td>
-                    <td>${t.package_id?.toUpperCase() || '-'}</td>
-                    <td>${(t.amount || 0).toLocaleString('pt-MZ')} MZN</td>
-                    <td>${t.credits} cr</td>
-                    <td>${t.phone_number || '-'}</td>
-                    <td><span class="status-badge status-${t.status}">${this._translateStatus(t.status)}</span></td>
-                    <td>${new Date(t.created_at).toLocaleDateString('pt-MZ')}</td>
-                    <td>
-                        ${t.status === 'pending' ? `<button class="btn btn-sm btn-success" onclick="adminApp.confirmPayment('${t.id}','${t.user_id}',${t.credits})">✅ Confirmar</button>` : ''}
-                    </td>
-                </tr>
-            `).join('') || '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#9ca3af">Nenhuma transação</td></tr>';
-        } catch (e) { console.error('[Admin] Transações erro:', e); }
-    }
-
-    confirmPayment(txId, userId, credits) {
-        this.selectedTransaction = { id: txId, userId, credits };
-        const txt = document.getElementById('confirmText');
-        if (txt) txt.textContent = `Confirmar ${credits} créditos para o utilizador?`;
-        const modal = document.getElementById('confirmModal');
-        if (modal) modal.style.display = 'flex';
-    }
-
-    _closeModal() {
-        const modal = document.getElementById('confirmModal');
-        if (modal) modal.style.display = 'none';
-        this.selectedTransaction = null;
-    }
-
-    async _confirmSelectedPayment() {
-        if (!this.selectedTransaction) return;
-        const { id, userId, credits } = this.selectedTransaction;
-        const btn = document.getElementById('btnConfirmPayment');
-        if (btn) { btn.disabled = true; btn.textContent = '⏳ A confirmar…'; }
-
-        try {
-            const token = authManager.getToken();
-            const res = await fetch('/api/admin/confirm-payment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ transactionId: id, userId, credits })
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
-
-            this._closeModal();
-            this._notify('✅ ' + credits + ' créditos adicionados com sucesso!');
-            this._loadTransactions();
-            this._loadDashboard();
-        } catch (err) {
-            this._notify('❌ Erro: ' + err.message, 'error');
-        } finally {
-            if (btn) { btn.disabled = false; btn.textContent = 'Confirmar'; }
-        }
-    }
-
-    // ── UTILIZADORES ───────────────────────────────────────────────────────
-    _allUsers = [];
-
+    // ── UTILIZADORES ────────────────────────────────────────────────────
     async _loadUsers() {
         if (!this.supabase) return;
         try {
             const { data, error } = await this.supabase
                 .from('profiles')
-                .select('id, full_name, phone, email, credits, total_documents, is_admin, created_at')
+                .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, created_at')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            this._allUsers = data || [];
-            this._renderUsers(this._allUsers);
-        } catch (e) { console.error('[Admin] Utilizadores erro:', e); }
+            this._users = data || [];
+            this._renderUsers(this._users);
+        } catch (err) { console.error('[Admin] Utilizadores:', err); this._notify('❌ Erro ao carregar utilizadores', 'error'); }
     }
 
-    _filterUsers(query) {
-        const q = query.toLowerCase();
-        const filtered = this._allUsers.filter(u =>
+    filterUsers(query) {
+        const q = (query || document.getElementById('searchUsers')?.value || '').toLowerCase();
+        const type = document.getElementById('userTypeFilter')?.value || 'all';
+        let filtered = this._users.filter(u =>
             (u.full_name || '').toLowerCase().includes(q) ||
             (u.phone || '').includes(q) ||
             (u.email || '').toLowerCase().includes(q)
         );
+        if (type === 'admin')   filtered = filtered.filter(u => u.is_admin);
+        if (type === 'blocked') filtered = filtered.filter(u => u.is_blocked);
         this._renderUsers(filtered);
     }
 
     _renderUsers(users) {
+        // ── MOBILE CARDS ──
+        const cards = document.getElementById('usersCards');
+        if (cards) {
+            if (!users.length) {
+                cards.innerHTML = '<div class="empty-state"><p>👥 Nenhum utilizador encontrado</p></div>';
+            } else {
+                cards.innerHTML = users.map(u => this._userCard(u)).join('');
+            }
+        }
+
+        // ── DESKTOP TABLE ──
         const tbody = document.getElementById('usersTable');
-        if (!tbody) return;
-        tbody.innerHTML = users.map(u => `
-            <tr>
-                <td>${u.full_name || '—'}</td>
-                <td>${u.phone || '<span style="color:#f59e0b;font-size:.8rem">⚠ sem phone</span>'}</td>
-                <td style="font-size:.8rem;color:#64748b">${u.email || '—'}</td>
-                <td><span class="credit-badge">💎 ${u.credits}</span></td>
-                <td>${u.total_documents || 0}</td>
-                <td>${u.is_admin ? '⭐ Admin' : 'Utilizador'}</td>
-                <td>${new Date(u.created_at).toLocaleDateString('pt-MZ')}</td>
-                <td>
-                    <button class="btn btn-sm btn-primary" onclick="adminApp.addCreditsModal('${u.id}', '${u.full_name || u.phone || u.id.slice(0,8)}')">
-                        ➕ Créditos
-                    </button>
-                </td>
-            </tr>
-        `).join('') || '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#9ca3af">Nenhum utilizador</td></tr>';
+        if (tbody) {
+            if (!users.length) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:#94a3b8">Nenhum utilizador</td></tr>';
+            } else {
+                tbody.innerHTML = users.map(u => `
+                    <tr>
+                        <td>
+                            <div style="font-weight:700;font-size:.9rem">${u.full_name || '—'}</div>
+                            <div style="font-size:.75rem;color:#64748b">${u.id.slice(0,8)}…</div>
+                        </td>
+                        <td>${u.phone ? u.phone : '<span style="color:#f59e0b;font-size:.8rem">⚠ sem phone</span>'}</td>
+                        <td style="font-size:.8rem;color:#64748b;max-width:160px;overflow:hidden;text-overflow:ellipsis">${u.email || '—'}</td>
+                        <td><span class="credit-badge">💎 ${u.credits ?? 0}</span></td>
+                        <td>${u.total_documents ?? 0}</td>
+                        <td>
+                            ${u.is_admin ? '<span class="badge badge-purple">⭐ Admin</span>' : ''}
+                            ${u.is_blocked ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
+                        </td>
+                        <td style="font-size:.8rem">${new Date(u.created_at).toLocaleDateString('pt-MZ')}</td>
+                        <td>
+                            <div class="action-group">
+                                <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">➕</button>
+                                <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">✏️</button>
+                                ${u.is_blocked
+                                    ? `<button class="btn-success" onclick="adminApp.toggleBlock('${u.id}',false)">🔓</button>`
+                                    : `<button class="btn-warning" onclick="adminApp.toggleBlock('${u.id}',true)">🔒</button>`}
+                                <button class="btn-danger" onclick="adminApp.deleteUser('${u.id}','${(u.full_name||u.phone||'').replace(/'/g,'')}')">🗑️</button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
     }
 
-    // CORRIGIDO: addCredits usa modal inline, não prompt()
-    addCreditsModal(userId, userName) {
-        const existing = document.getElementById('addCreditsModal');
-        if (existing) existing.remove();
-
-        const modal = document.createElement('div');
-        modal.id = 'addCreditsModal';
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
-        modal.innerHTML = `
-            <div style="background:#fff;border-radius:16px;padding:2rem;width:360px;max-width:90vw;">
-                <h3 style="margin:0 0 .5rem">➕ Adicionar Créditos</h3>
-                <p style="color:#6b7280;font-size:.875rem;margin-bottom:1.5rem">Utilizador: <strong>${userName}</strong></p>
-                <div style="display:flex;flex-direction:column;gap:.75rem;">
-                    <input type="number" id="creditsAmount" min="1" max="999" value="10"
-                        style="padding:.75rem;border:2px solid #e5e7eb;border-radius:10px;font-size:1rem;"
-                        placeholder="Quantidade de créditos">
-                    <div style="display:flex;gap:.5rem;">
-                        <button onclick="document.getElementById('addCreditsModal').remove()"
-                            style="flex:1;padding:.75rem;background:#f3f4f6;border:none;border-radius:10px;cursor:pointer;font-weight:600;">Cancelar</button>
-                        <button onclick="adminApp._doAddCredits('${userId}')"
-                            style="flex:1;padding:.75rem;background:#3b82f6;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:600;">Confirmar</button>
-                    </div>
+    _userCard(u) {
+        const initials = (u.full_name || u.email || '?')[0].toUpperCase();
+        return `<div class="user-card">
+            <div class="user-card-header">
+                <div class="user-card-avatar">${initials}</div>
+                <div class="user-card-info">
+                    <div class="user-card-name">${u.full_name || '(sem nome)'}</div>
+                    <div class="user-card-phone">${u.phone || '⚠ sem telemóvel'}</div>
+                    <div class="user-card-email">${u.email || '—'}</div>
                 </div>
-            </div>`;
-        document.body.appendChild(modal);
-        document.getElementById('creditsAmount')?.focus();
+            </div>
+            <div class="user-card-meta">
+                <span class="credit-badge">💎 ${u.credits ?? 0} cr</span>
+                <span class="badge badge-gray">📄 ${u.total_documents ?? 0} docs</span>
+                ${u.is_admin    ? '<span class="badge badge-purple">⭐ Admin</span>' : ''}
+                ${u.is_blocked  ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
+            </div>
+            <div class="user-card-actions">
+                <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">➕ Créditos</button>
+                <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">✏️ Definir</button>
+                ${u.is_blocked
+                    ? `<button class="btn-success" onclick="adminApp.toggleBlock('${u.id}',false)">🔓 Desbloquear</button>`
+                    : `<button class="btn-warning" onclick="adminApp.toggleBlock('${u.id}',true)">🔒 Bloquear</button>`}
+                <button class="btn-danger" onclick="adminApp.deleteUser('${u.id}','${(u.full_name||u.phone||'').replace(/'/g,'')}')">🗑️ Eliminar</button>
+            </div>
+        </div>`;
+    }
+
+    // ── Adicionar créditos (incremento) ─────────────────────────────────
+    addCreditsModal(userId, userName, current) {
+        this.showModal(`
+            <p class="modal-title">➕ Adicionar Créditos</p>
+            <p class="modal-sub">Utilizador: <strong>${userName}</strong> · Actual: <strong>${current} cr</strong></p>
+            <div class="modal-field">
+                <label>Créditos a adicionar</label>
+                <input type="number" id="mCredits" min="1" max="9999" value="10" autofocus>
+            </div>
+            <div class="modal-actions">
+                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#3b82f6;color:#fff" onclick="adminApp._doAddCredits('${userId}')">✅ Confirmar</button>
+            </div>
+        `);
+        setTimeout(() => document.getElementById('mCredits')?.focus(), 100);
     }
 
     async _doAddCredits(userId) {
-        const amount = parseInt(document.getElementById('creditsAmount')?.value);
+        const amount = parseInt(document.getElementById('mCredits')?.value);
         if (!amount || amount < 1) return;
-        document.getElementById('addCreditsModal')?.remove();
-
+        this.closeModal();
         try {
             const { error } = await this.supabase.rpc('add_credits', { user_id: userId, amount });
             if (error) throw error;
             this._notify(`✅ ${amount} créditos adicionados!`);
             this._loadUsers();
         } catch (err) {
-            this._notify('❌ Erro: ' + err.message, 'error');
+            // Fallback se a RPC não existir: update directo
+            try {
+                const user = this._users.find(u => u.id === userId);
+                const newCredits = (user?.credits || 0) + amount;
+                const { error: e2 } = await this.supabase
+                    .from('profiles').update({ credits: newCredits }).eq('id', userId);
+                if (e2) throw e2;
+                this._notify(`✅ ${amount} créditos adicionados!`);
+                this._loadUsers();
+            } catch (err2) {
+                this._notify('❌ ' + err2.message, 'error');
+            }
         }
     }
 
-    // ── DOCUMENTOS ─────────────────────────────────────────────────────────
+    // ── Definir créditos (valor absoluto) ───────────────────────────────
+    editCreditsModal(userId, userName, current) {
+        this.showModal(`
+            <p class="modal-title">✏️ Definir Créditos</p>
+            <p class="modal-sub">Utilizador: <strong>${userName}</strong></p>
+            <div class="modal-field">
+                <label>Novo total de créditos</label>
+                <input type="number" id="mCreditsSet" min="0" max="9999" value="${current}" autofocus>
+            </div>
+            <div class="modal-actions">
+                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f59e0b;color:#000" onclick="adminApp._doSetCredits('${userId}')">✅ Guardar</button>
+            </div>
+        `);
+        setTimeout(() => document.getElementById('mCreditsSet')?.focus(), 100);
+    }
+
+    async _doSetCredits(userId) {
+        const credits = parseInt(document.getElementById('mCreditsSet')?.value);
+        if (isNaN(credits) || credits < 0) return;
+        this.closeModal();
+        try {
+            const { error } = await this.supabase.from('profiles').update({ credits }).eq('id', userId);
+            if (error) throw error;
+            this._notify(`✅ Créditos definidos para ${credits}!`);
+            this._loadUsers();
+        } catch (err) { this._notify('❌ ' + err.message, 'error'); }
+    }
+
+    // ── Bloquear / Desbloquear ──────────────────────────────────────────
+    async toggleBlock(userId, block) {
+        const action = block ? 'bloquear' : 'desbloquear';
+        if (!confirm(`Tem a certeza que deseja ${action} este utilizador?`)) return;
+        try {
+            // is_blocked: se a coluna não existir no schema, usar um workaround via credits = -1
+            const { error } = await this.supabase
+                .from('profiles')
+                .update({ is_blocked: block })
+                .eq('id', userId);
+
+            if (error) {
+                // Coluna is_blocked não existe — avisar o admin
+                this._notify('⚠ A coluna is_blocked não existe no schema. Execute o SQL de migração.', 'error');
+                this._showMigrationHint();
+                return;
+            }
+            this._notify(`✅ Utilizador ${block ? 'bloqueado' : 'desbloqueado'} com sucesso!`);
+            this._loadUsers();
+        } catch (err) { this._notify('❌ ' + err.message, 'error'); }
+    }
+
+    _showMigrationHint() {
+        this.showModal(`
+            <p class="modal-title">📋 Migração SQL Necessária</p>
+            <p class="modal-sub">Execute este SQL no Supabase Dashboard → SQL Editor:</p>
+            <pre style="background:#f1f5f9;padding:1rem;border-radius:8px;font-size:.75rem;overflow-x:auto;margin:.75rem 0;white-space:pre-wrap">ALTER TABLE public.profiles
+ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE;
+
+-- Política RLS para admin actualizar qualquer perfil
+CREATE POLICY IF NOT EXISTS "Admin can update profiles"
+ON public.profiles FOR UPDATE TO authenticated
+USING (EXISTS (
+  SELECT 1 FROM public.profiles
+  WHERE id = auth.uid() AND is_admin = TRUE
+));</pre>
+            <div class="modal-actions">
+                <button style="background:#3b82f6;color:#fff" onclick="adminApp.closeModal()">OK</button>
+            </div>
+        `);
+    }
+
+    // ── Eliminar utilizador ─────────────────────────────────────────────
+    deleteUser(userId, userName) {
+        this.showModal(`
+            <p class="modal-title" style="color:#ef4444">🗑️ Eliminar Utilizador</p>
+            <p class="modal-sub">Esta acção é <strong>irreversível</strong>. Todos os documentos e dados serão apagados.</p>
+            <p style="font-size:.9rem;margin:.75rem 0"><strong>Utilizador:</strong> ${userName}</p>
+            <div class="modal-actions">
+                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#ef4444;color:#fff" onclick="adminApp._doDeleteUser('${userId}')">🗑️ Eliminar definitivamente</button>
+            </div>
+        `);
+    }
+
+    async _doDeleteUser(userId) {
+        this.closeModal();
+        try {
+            // Eliminar documentos primeiro (evitar violação FK)
+            await this.supabase.from('documents').delete().eq('user_id', userId);
+            // Eliminar transações
+            await this.supabase.from('transactions').delete().eq('user_id', userId);
+            // Eliminar perfil
+            const { error } = await this.supabase.from('profiles').delete().eq('id', userId);
+            if (error) throw error;
+            this._notify('✅ Utilizador eliminado com sucesso!');
+            this._loadUsers();
+            this._loadDashboard();
+        } catch (err) {
+            this._notify('❌ Erro ao eliminar: ' + err.message + ' (pode precisar de service_role para eliminar do Auth)', 'error');
+        }
+    }
+
+    // ── TRANSAÇÕES ──────────────────────────────────────────────────────
+    async _loadTransactions() {
+        if (!this.supabase) return;
+        try {
+            const status = document.getElementById('filterStatus')?.value;
+            const date   = document.getElementById('filterDate')?.value;
+
+            let q = this.supabase
+                .from('transactions')
+                .select('*, profiles(full_name, phone, email)')
+                .order('created_at', { ascending: false })
+                .limit(200);
+
+            if (status && status !== 'all') q = q.eq('status', status);
+            if (date) q = q.gte('created_at', date).lte('created_at', date + 'T23:59:59');
+
+            const { data, error } = await q;
+            if (error) throw error;
+
+            const tbody = document.getElementById('transactionsTable');
+            if (!tbody) return;
+            tbody.innerHTML = (data || []).map(t => `
+                <tr>
+                    <td><code style="font-size:.75rem">${t.reference_id || t.id.slice(0,8)}</code></td>
+                    <td>
+                        <div style="font-size:.85rem">${t.profiles?.full_name || t.profiles?.phone || 'Anónimo'}</div>
+                        <div style="font-size:.72rem;color:#64748b">${t.profiles?.email || ''}</div>
+                    </td>
+                    <td>${(t.package_id||'-').toUpperCase()}</td>
+                    <td style="font-weight:700">${(t.amount||0).toLocaleString('pt-MZ')} MZN</td>
+                    <td><span class="credit-badge">${t.credits} cr</span></td>
+                    <td><span class="status-badge status-${t.status}">${this._statusLabel(t.status)}</span></td>
+                    <td style="font-size:.78rem">${new Date(t.created_at).toLocaleString('pt-MZ')}</td>
+                    <td>
+                        ${t.status === 'pending' ? `
+                            <div class="action-group">
+                                <button class="btn-success" onclick="adminApp._confirmPayment('${t.id}','${t.user_id}',${t.credits})">✅</button>
+                                <button class="btn-danger" onclick="adminApp._rejectPayment('${t.id}')">❌</button>
+                            </div>` : '—'}
+                    </td>
+                </tr>
+            `).join('') || '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:#94a3b8">Nenhuma transação</td></tr>';
+        } catch (err) { console.error('[Admin] Transações:', err); }
+    }
+
+    _confirmPayment(txId, userId, credits) {
+        this.showModal(`
+            <p class="modal-title">✅ Confirmar Pagamento</p>
+            <p class="modal-sub">Adicionar <strong>${credits} créditos</strong> ao utilizador?</p>
+            <div class="modal-actions">
+                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#22c55e;color:#fff" onclick="adminApp._doConfirm('${txId}','${userId}',${credits})">✅ Confirmar</button>
+            </div>
+        `);
+    }
+
+    async _doConfirm(txId, userId, credits) {
+        this.closeModal();
+        try {
+            const token = authManager.getToken();
+            const res = await fetch('/api/admin/confirm-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ transactionId: txId, userId, credits })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            this._notify(`✅ ${credits} créditos confirmados!`);
+            this._loadTransactions();
+            this._loadDashboard();
+        } catch (err) { this._notify('❌ ' + err.message, 'error'); }
+    }
+
+    async _rejectPayment(txId) {
+        if (!confirm('Rejeitar este pagamento?')) return;
+        try {
+            const { error } = await this.supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
+            if (error) throw error;
+            this._notify('✅ Pagamento rejeitado');
+            this._loadTransactions();
+        } catch (err) { this._notify('❌ ' + err.message, 'error'); }
+    }
+
+    // ── DOCUMENTOS ──────────────────────────────────────────────────────
     async _loadDocuments() {
         if (!this.supabase) return;
         try {
@@ -365,105 +512,161 @@ class AdminApp {
                 .from('documents')
                 .select('id, service_type, title, model_used, created_at, content, profiles(full_name, phone)')
                 .order('created_at', { ascending: false })
-                .limit(100);
-
+                .limit(200);
             if (error) throw error;
-            this._docsData = data || [];
-
-            const tbody = document.getElementById('documentsTable');
-            if (!tbody) return;
-            tbody.innerHTML = this._docsData.map(d => `
-                <tr>
-                    <td>${this._translateType(d.service_type)}</td>
-                    <td>${d.profiles?.full_name || d.profiles?.phone || 'Anónimo'}</td>
-                    <td><code style="font-size:12px">${d.model_used || '—'}</code></td>
-                    <td>${new Date(d.created_at).toLocaleString('pt-MZ')}</td>
-                    <td>
-                        <button class="btn btn-sm btn-ghost" onclick="adminApp.viewDocument('${d.id}')">👁 Ver</button>
-                    </td>
-                </tr>
-            `).join('') || '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#9ca3af">Nenhum documento</td></tr>';
-        } catch (e) { console.error('[Admin] Documentos erro:', e); }
+            this._docs = data || [];
+            this._renderDocs(this._docs);
+        } catch (err) { console.error('[Admin] Documentos:', err); }
     }
 
-    // CORRIGIDO: viewDocument agora existe e funciona
-    viewDocument(docId) {
-        const doc = (this._docsData || []).find(d => d.id === docId);
+    filterDocs(query) {
+        const q = query.toLowerCase();
+        const filtered = this._docs.filter(d =>
+            this._typeLabel(d.service_type).toLowerCase().includes(q) ||
+            (d.profiles?.full_name || '').toLowerCase().includes(q) ||
+            (d.profiles?.phone || '').includes(q)
+        );
+        this._renderDocs(filtered);
+    }
+
+    _renderDocs(docs) {
+        const tbody = document.getElementById('documentsTable');
+        if (!tbody) return;
+        tbody.innerHTML = docs.map(d => `
+            <tr>
+                <td>${this._typeLabel(d.service_type)}</td>
+                <td>${d.profiles?.full_name || d.profiles?.phone || 'Anónimo'}</td>
+                <td><code style="font-size:.75rem">${d.model_used || '—'}</code></td>
+                <td style="font-size:.78rem">${new Date(d.created_at).toLocaleString('pt-MZ')}</td>
+                <td>
+                    <div class="action-group">
+                        <button class="btn-ghost" onclick="adminApp._viewDoc('${d.id}')">👁 Ver</button>
+                        <button class="btn-danger" onclick="adminApp._deleteDoc('${d.id}')">🗑️</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" style="text-align:center;padding:2.5rem;color:#94a3b8">Nenhum documento</td></tr>';
+    }
+
+    _viewDoc(docId) {
+        const doc = this._docs.find(d => d.id === docId);
         if (!doc) return;
-
-        const existing = document.getElementById('docViewModal');
-        if (existing) existing.remove();
-
-        const modal = document.createElement('div');
-        modal.id = 'docViewModal';
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999;padding:1rem;';
-        modal.innerHTML = `
-            <div style="background:#fff;border-radius:16px;padding:2rem;width:700px;max-width:95vw;max-height:85vh;overflow-y:auto;position:relative;">
-                <button onclick="document.getElementById('docViewModal').remove()"
-                    style="position:absolute;top:1rem;right:1rem;background:#f3f4f6;border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:1.2rem;">×</button>
-                <h3 style="margin:0 0 .5rem">${this._translateType(doc.service_type)}</h3>
-                <p style="color:#6b7280;font-size:.8rem;margin-bottom:1rem">
-                    ${doc.profiles?.full_name || doc.profiles?.phone || 'Anónimo'} · ${new Date(doc.created_at).toLocaleString('pt-MZ')}
-                </p>
-                <div style="background:#f8fafc;border-radius:10px;padding:1rem;white-space:pre-wrap;font-family:monospace;font-size:.85rem;max-height:60vh;overflow-y:auto;">
-                    ${(doc.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-                </div>
-            </div>`;
-        document.body.appendChild(modal);
-        modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+        this.showModal(`
+            <p class="modal-title">${this._typeLabel(doc.service_type)}</p>
+            <p class="modal-sub">${doc.profiles?.full_name || doc.profiles?.phone || 'Anónimo'} · ${new Date(doc.created_at).toLocaleString('pt-MZ')}</p>
+            <div style="background:#f8fafc;border-radius:8px;padding:.875rem;white-space:pre-wrap;font-family:monospace;font-size:.75rem;max-height:50vh;overflow-y:auto;border:1px solid #e2e8f0">
+                ${(doc.content || '').replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0, 3000)}${doc.content?.length > 3000 ? '\n\n[…truncado]' : ''}
+            </div>
+            <div class="modal-actions" style="margin-top:.75rem">
+                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                <button style="background:#ef4444;color:#fff" onclick="adminApp._deleteDoc('${doc.id}')">🗑️ Eliminar</button>
+            </div>
+        `);
     }
 
-    // ── CONFIGURAÇÕES ──────────────────────────────────────────────────────
+    async _deleteDoc(docId) {
+        if (!confirm('Eliminar este documento?')) return;
+        this.closeModal();
+        try {
+            const { error } = await this.supabase.from('documents').delete().eq('id', docId);
+            if (error) throw error;
+            this._notify('✅ Documento eliminado');
+            this._loadDocuments();
+        } catch (err) { this._notify('❌ ' + err.message, 'error'); }
+    }
+
+    // ── CONFIGURAÇÕES ────────────────────────────────────────────────────
     _loadSettings() {
-        // Preencher com valores actuais guardados (localStorage admin)
         const saved = JSON.parse(localStorage.getItem('mz_admin_settings') || '{}');
-        const el = id => document.getElementById(id);
-        if (saved.mpesaEnv && el('mpesaEnv')) el('mpesaEnv').value = saved.mpesaEnv;
-        if (el('pkgStarterCredits')) el('pkgStarterCredits').value = saved.starterCredits || 10;
-        if (el('pkgStarterPrice')) el('pkgStarterPrice').value = saved.starterPrice || 150;
-        if (el('pkgBasicoCredits')) el('pkgBasicoCredits').value = saved.basicoCredits || 25;
-        if (el('pkgBasicoPrice')) el('pkgBasicoPrice').value = saved.basicoPrice || 350;
-        if (el('pkgProCredits')) el('pkgProCredits').value = saved.proCredits || 60;
-        if (el('pkgProPrice')) el('pkgProPrice').value = saved.proPrice || 750;
+        const e = id => document.getElementById(id);
+        if (saved.mpesaEnv && e('mpesaEnv')) e('mpesaEnv').value = saved.mpesaEnv;
+        if (e('pkgStarterCredits')) e('pkgStarterCredits').value = saved.starterCredits || 10;
+        if (e('pkgStarterPrice'))   e('pkgStarterPrice').value   = saved.starterPrice   || 150;
+        if (e('pkgBasicoCredits'))  e('pkgBasicoCredits').value  = saved.basicoCredits  || 25;
+        if (e('pkgBasicoPrice'))    e('pkgBasicoPrice').value    = saved.basicoPrice    || 350;
+        if (e('pkgProCredits'))     e('pkgProCredits').value     = saved.proCredits     || 60;
+        if (e('pkgProPrice'))       e('pkgProPrice').value       = saved.proPrice       || 750;
     }
-
-    _saveSettings() {
-        const el = id => document.getElementById(id)?.value;
-        const saved = JSON.parse(localStorage.getItem('mz_admin_settings') || '{}');
-        saved.mpesaEnv = el('mpesaEnv') || 'sandbox';
-        localStorage.setItem('mz_admin_settings', JSON.stringify(saved));
-        this._notify('✅ Configuração M-Pesa guardada (reinicie o servidor para aplicar).');
-    }
-
     _savePricing() {
-        const el = id => parseInt(document.getElementById(id)?.value) || 0;
-        const settings = JSON.parse(localStorage.getItem('mz_admin_settings') || '{}');
-        settings.starterCredits = el('pkgStarterCredits');
-        settings.starterPrice = el('pkgStarterPrice');
-        settings.basicoCredits = el('pkgBasicoCredits');
-        settings.basicoPrice = el('pkgBasicoPrice');
-        settings.proCredits = el('pkgProCredits');
-        settings.proPrice = el('pkgProPrice');
-        localStorage.setItem('mz_admin_settings', JSON.stringify(settings));
-        this._notify('✅ Preços actualizados localmente.');
+        const v = id => parseInt(document.getElementById(id)?.value) || 0;
+        const s = JSON.parse(localStorage.getItem('mz_admin_settings') || '{}');
+        s.starterCredits = v('pkgStarterCredits'); s.starterPrice = v('pkgStarterPrice');
+        s.basicoCredits  = v('pkgBasicoCredits');  s.basicoPrice  = v('pkgBasicoPrice');
+        s.proCredits     = v('pkgProCredits');      s.proPrice     = v('pkgProPrice');
+        localStorage.setItem('mz_admin_settings', JSON.stringify(s));
+        this._notify('✅ Preços guardados localmente');
+    }
+    _saveSettings() {
+        const s = JSON.parse(localStorage.getItem('mz_admin_settings') || '{}');
+        s.mpesaEnv = document.getElementById('mpesaEnv')?.value || 'sandbox';
+        localStorage.setItem('mz_admin_settings', JSON.stringify(s));
+        this._notify('✅ Configuração M-Pesa guardada');
     }
 
-    // ── HELPERS ────────────────────────────────────────────────────────────
+    // ── DIAGNÓSTICO ─────────────────────────────────────────────────────
+    async diagnoseMissingPhones() {
+        const { data } = await this.supabase.from('profiles').select('id,email,phone,full_name').or('phone.is.null,phone.eq.');
+        if (!data?.length) { this._notify('✅ Todos os utilizadores têm telemóvel!', 'info'); return; }
+        this.showModal(`
+            <p class="modal-title">🔍 Perfis sem telemóvel: ${data.length}</p>
+            <div style="max-height:40vh;overflow-y:auto;margin:.75rem 0">
+                ${data.map(u => `<div style="padding:.5rem;border-bottom:1px solid #e2e8f0;font-size:.83rem">
+                    <strong>${u.email || u.id.slice(0,8)}</strong>
+                    <span style="color:#94a3b8"> · ${u.id.slice(0,8)}</span>
+                </div>`).join('')}
+            </div>
+            <div class="modal-actions">
+                <button style="background:#3b82f6;color:#fff" onclick="adminApp.fixMissingPhones()">🔧 Reparar</button>
+                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+            </div>
+        `);
+    }
+
+    async fixMissingPhones() {
+        this.closeModal();
+        try {
+            const token = authManager.getToken();
+            const res = await fetch('/api/admin/fix-profiles', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await res.json();
+            this._notify(data.message || '✅ Reparação concluída', res.ok ? 'success' : 'error');
+        } catch (err) {
+            this._notify('❌ ' + err.message, 'error');
+        }
+    }
+
+    // ── MODAL ────────────────────────────────────────────────────────────
+    showModal(html) {
+        const overlay = document.getElementById('globalModal');
+        const content = document.getElementById('modalContent');
+        if (content) content.innerHTML = html;
+        if (overlay) overlay.style.display = 'flex';
+    }
+
+    closeModal(e) {
+        if (e && e.target !== document.getElementById('globalModal')) return;
+        document.getElementById('globalModal').style.display = 'none';
+    }
+
+    // ── NOTIFY ───────────────────────────────────────────────────────────
     _notify(msg, type = 'success') {
+        document.querySelectorAll('.notify-toast').forEach(n => n.remove());
         const n = document.createElement('div');
-        n.style.cssText = `position:fixed;bottom:1.5rem;right:1.5rem;padding:.875rem 1.25rem;border-radius:12px;font-weight:600;font-size:.9rem;z-index:99999;animation:slideUp .3s ease;background:${type === 'error' ? '#fef2f2' : '#f0fdf4'};color:${type === 'error' ? '#dc2626' : '#166534'};border:1px solid ${type === 'error' ? '#fca5a5' : '#86efac'};box-shadow:0 4px 12px rgba(0,0,0,.1)`;
+        n.className = `notify-toast notify-${type}`;
         n.textContent = msg;
         document.body.appendChild(n);
-        setTimeout(() => n.remove(), 4000);
+        setTimeout(() => { n.style.opacity = '0'; n.style.transition = 'opacity .3s'; setTimeout(() => n.remove(), 300); }, 3500);
     }
 
-    _translateStatus(status) {
-        return { pending: '⏳ Pendente', completed: '✅ Confirmado', failed: '❌ Falhado', refunded: '↩️ Reembolsado' }[status] || status;
+    // ── HELPERS ──────────────────────────────────────────────────────────
+    _statusLabel(s) {
+        return { pending:'⏳ Pendente', completed:'✅ Confirmado', failed:'❌ Falhado', refunded:'↩️ Reembolsado' }[s] || s;
     }
-
-    _translateType(type) {
-        return { trabalho: '📚 Trabalho', cv: '📋 CV', carta: '✉️ Carta', orcamento: '🏗️ Orçamento',
-            impressao: '🖨️ Impressão', foto: '📷 Foto', conversao: '🔄 Conversão' }[type] || type;
+    _typeLabel(t) {
+        return { trabalho:'📚 Trabalho', cv:'📋 CV', carta:'✉️ Carta', orcamento:'🏗️ Orçamento',
+                 impressao:'🖨️ Impressão', foto:'📷 Foto', conversao:'🔄 Conversão' }[t] || (t || '—');
     }
 }
 
