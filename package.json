@@ -4,6 +4,7 @@
   "description": "MzDocs Pro v3 — Documentos profissionais com IA gratuita para Moçambique",
   "main": "index.html",
   "homepage": "./",
+  "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo \"Static site - Vercel auto-detection enabled\"",
@@ -13,6 +14,6 @@
   "author": "MzDocs Pro",
   "license": "MIT",
   "engines": {
-    "node": ">=20.0.0"
+    "node": "20.x"
   }
 }

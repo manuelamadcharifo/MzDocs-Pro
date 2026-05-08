@@ -2,19 +2,21 @@
   "version": 2,
   "outputDirectory": ".",
   "functions": {
-    "api/generate-document.js": { "maxDuration": 60 }
+    "api/generate-document.js": { "maxDuration": 120 }
   },
   "rewrites": [
-    { "source": "/sw.js",  "destination": "/sw.js" },
-    { "source": "/(.*)",   "destination": "/$1" }
+    { "source": "/api/admin/:action", "destination": "/api/admin/index" },
+    { "source": "/api/auth/:action",  "destination": "/api/auth/index"  },
+    { "source": "/sw.js",             "destination": "/sw.js"           },
+    { "source": "/(.*)",              "destination": "/$1"              }
   ],
   "headers": [
     {
       "source": "/sw.js",
       "headers": [
-        { "key": "Content-Type",  "value": "application/javascript" },
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
-        { "key": "Service-Worker-Allowed", "value": "/" }
+        { "key": "Content-Type",           "value": "application/javascript"             },
+        { "key": "Cache-Control",          "value": "no-cache, no-store, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/"                                  }
       ]
     },
     {
