@@ -1,10 +1,70 @@
-# MzDocs Pro v3.2 🇲🇿
+# MzDocs Pro v4.0 🇲🇿
 
 Plataforma de geração inteligente de documentos para Moçambique — PWA completo com IA gratuita, pagamentos M-Pesa, OCR, editor Markdown, histórico local e painel administrativo.
 
 **Stack:** Arquitectura MVC · Groq + Gemini + OpenRouter (IA em corrida paralela) · Supabase Auth (Phone) + PostgreSQL · Vercel Serverless Functions · Tesseract.js OCR · Workbox PWA
 
 ---
+---
+
+## 📋 Changelog
+
+### v4.0 — Bugs Críticos de Auth + Admin + OCR Inteligente
+
+#### 🔴 BUG CRÍTICO RESOLVIDO — Telemóvel não gravava na base de dados
+
+**Causa raiz (frontend/backend):**
+O endpoint `api/auth/signup.js` tentava gravar o telemóvel no perfil apenas em duas condições:
+1. Se `userData.session` existisse (não existe quando "Email confirmation" está activo no Supabase)
+2. Se não havia session, usava a `SUPABASE_SERVICE_ROLE_KEY` — mas sem try/catch robusto, falhava silenciosamente
+
+O resultado: utilizadores registados sem telemóvel na tabela `profiles`, impossibilitando login por número.
+
+**Ficheiros corrigidos:**
+
+- **`api/auth/signup.js`** — reescrito com três camadas de resiliência:
+  1. **Primário:** `upsert` via `service_role` com delay de 400ms (garante que o trigger SQL criou o registo antes)
+  2. **Fallback:** `update` via token do utilizador (quando `service_role` indisponível mas email confirmation desligado)
+  3. **Log de aviso:** se ambos falharem, regista o problema sem bloquear o signup — o utilizador vê a conta criada e pode contactar suporte
+
+- **`api/admin/fix-profiles.js`** *(NOVO)* — endpoint administrativo para reparar utilizadores existentes sem telemóvel:
+  - `GET /api/admin/fix-profiles` — lista perfis com `phone IS NULL`
+  - `POST /api/admin/fix-profiles` — sincroniza phone do `user_metadata` do Supabase Auth para a tabela `profiles`
+
+**Para reparar utilizadores existentes sem phone:**
+```bash
+# 1. Fazer login como admin no painel e abrir a consola do browser:
+const token = (await supabase.auth.getSession()).data.session.access_token;
+const r = await fetch('/api/admin/fix-profiles', {
+  method: 'POST',
+  headers: { Authorization: 'Bearer ' + token }
+});
+console.log(await r.json()); // mostra quantos foram corrigidos
+```
+
+**Requisito:** `SUPABASE_SERVICE_ROLE_KEY` configurada nas variáveis de ambiente do Vercel (essencial para este e outros endpoints admin).
+
+---
+
+#### 🟡 Painel Admin — Melhorias
+
+- **`assets/js/admin/AdminApp.js`** — tabela de utilizadores agora mostra coluna `Email`; alerta visual (⚠) para utilizadores sem telemóvel
+- **`admin.html`** — cabeçalho da tabela de utilizadores actualizado com coluna Email
+- **`assets/js/admin/AdminApp.js`** — pesquisa de utilizadores agora filtra também por email
+
+---
+
+#### 🟡 OCR — Auto-preenchimento Inteligente (v5)
+
+- **`assets/js/services/SmartOCRService.js`** *(NOVO)* — Tesseract.js + Claude Vision: extrai campos do formulário automaticamente a partir de uma foto de documento
+- **`assets/js/controllers/OCRController.js`** — integrado com SmartOCRService; mostra banner de confirmação com campos preenchidos
+- **`assets/js/components/DocumentEditor.js`** — preview em A4 real (210×297mm) com tabs PDF/Word/Excel
+- **`assets/js/views/Views.js`** — modal de resultado com preview iframe fiel ao formato
+
+**Correcção crítica OCR (v5.1):** Tesseract.js v5 não aceita `File` directamente — convertido para `URL.createObjectURL()` antes do `recognize()`, com `URL.revokeObjectURL()` no `finally`.
+
+---
+
 
 ## 📁 Estrutura do Projecto
 

@@ -274,7 +274,7 @@ class AdminApp {
         try {
             const { data, error } = await this.supabase
                 .from('profiles')
-                .select('id, full_name, phone, credits, total_documents, is_admin, created_at')
+                .select('id, full_name, phone, email, credits, total_documents, is_admin, created_at')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -287,7 +287,8 @@ class AdminApp {
         const q = query.toLowerCase();
         const filtered = this._allUsers.filter(u =>
             (u.full_name || '').toLowerCase().includes(q) ||
-            (u.phone || '').includes(q)
+            (u.phone || '').includes(q) ||
+            (u.email || '').toLowerCase().includes(q)
         );
         this._renderUsers(filtered);
     }
@@ -298,7 +299,8 @@ class AdminApp {
         tbody.innerHTML = users.map(u => `
             <tr>
                 <td>${u.full_name || '—'}</td>
-                <td>${u.phone || '—'}</td>
+                <td>${u.phone || '<span style="color:#f59e0b;font-size:.8rem">⚠ sem phone</span>'}</td>
+                <td style="font-size:.8rem;color:#64748b">${u.email || '—'}</td>
                 <td><span class="credit-badge">💎 ${u.credits}</span></td>
                 <td>${u.total_documents || 0}</td>
                 <td>${u.is_admin ? '⭐ Admin' : 'Utilizador'}</td>
