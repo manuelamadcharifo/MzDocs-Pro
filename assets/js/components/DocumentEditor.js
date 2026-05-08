@@ -1,45 +1,74 @@
 // assets/js/components/DocumentEditor.js
-// Editor Markdown interativo com exportação multi-formato
+// Editor com preview fiel A4 e tabs por formato (PDF / Word / Excel / Texto)
 
 export class DocumentEditor {
   constructor() {
-    this.content = '';
+    this.content     = '';
     this.serviceType = '';
-    this.modal = null;
-    this.onReedit = null;
+    this.modal       = null;
+    this.onReedit    = null;
+    this._previewFmt = 'pdf'; // formato activo no preview
     this._createModal();
   }
 
   _createModal() {
-    // Remover overlay anterior se existir (garante estado limpo)
-    const existing = document.getElementById('editorOverlay');
-    if (existing) existing.remove();
+    document.getElementById('editorOverlay')?.remove();
 
     const overlay = document.createElement('div');
     overlay.id = 'editorOverlay';
     overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;padding:20px;';
 
     overlay.innerHTML = `
-      <div style="background:#fff;border-radius:16px;width:100%;max-width:900px;height:90vh;display:flex;flex-direction:column;overflow:hidden;">
-        <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
-          <h3 style="margin:0;font-size:18px;">✏️ Editor de Documento</h3>
-          <button id="editorClose" style="background:none;border:none;font-size:24px;cursor:pointer;line-height:1;">&times;</button>
-        </div>
-        <div style="flex:1;display:flex;overflow:hidden;">
-          <div style="flex:1;display:flex;flex-direction:column;border-right:1px solid #e5e7eb;">
-            <div style="padding:8px 12px;background:#f9fafb;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;flex-wrap:wrap;">
-              <button id="editorBtnCopy"    style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">📋 Copiar</button>
-              <button id="editorBtnMd"      style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">📝 Markdown</button>
-              <button id="editorBtnPdf"     style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">📄 PDF</button>
-              <button id="editorBtnWord"    style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">📃 Word</button>
-              <button id="editorBtnPreview" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">👁️ Preview</button>
-              <button id="editorBtnReedit"  style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;background:#1d4ed8;color:#fff;cursor:pointer;font-size:13px;">🤖 Reeditar</button>
-            </div>
-            <textarea id="editorTextarea" style="flex:1;width:100%;padding:16px;border:none;resize:none;font-family:'Courier New',monospace;font-size:14px;line-height:1.6;outline:none;box-sizing:border-box;" placeholder="O documento aparecerá aqui..."></textarea>
-            <div id="editorStats" style="padding:8px 16px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;">0 palavras | 0 caracteres</div>
+      <div class="ed-shell">
+        <!-- HEADER -->
+        <div class="ed-header">
+          <h3 class="ed-title">✏️ Editor de Documento</h3>
+          <div class="ed-fmt-tabs" id="edFmtTabs">
+            <button class="ed-tab active" data-fmt="preview" title="Preview do documento">👁️ Preview</button>
+            <button class="ed-tab" data-fmt="edit" title="Editar em texto">📝 Editar</button>
           </div>
-          <div id="editorPreviewPane" style="width:50%;padding:20px;overflow-y:auto;background:#f9fafb;display:none;">
-            <div id="editorPreviewContent" style="background:#fff;padding:24px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);min-height:100%;"></div>
+          <button id="editorClose" class="ed-close" title="Fechar">✕</button>
+        </div>
+
+        <!-- SUB-TOOLBAR (preview formats) -->
+        <div class="ed-subtoolbar" id="edSubtoolbar">
+          <div class="ed-fmt-group">
+            <span class="ed-fmt-label">Formato:</span>
+            <button class="ed-fmtbtn active" data-preview="pdf">📄 PDF</button>
+            <button class="ed-fmtbtn" data-preview="word">📃 Word</button>
+            <button class="ed-fmtbtn" data-preview="excel">📊 Excel</button>
+          </div>
+          <div class="ed-fmt-group" style="margin-left:auto;">
+            <button id="edBtnDownload" class="ed-action-btn primary">⬇️ Download</button>
+            <button id="edBtnWa" class="ed-action-btn wa">💬 WhatsApp</button>
+            <button id="edBtnCopy" class="ed-action-btn">📋 Copiar</button>
+            <button id="edBtnReedit" class="ed-action-btn ai">🤖 Reeditar</button>
+          </div>
+        </div>
+
+        <!-- EDIT TOOLBAR (só no modo edição) -->
+        <div class="ed-subtoolbar" id="edEditToolbar" style="display:none;">
+          <div class="ed-fmt-group">
+            <button class="ed-action-btn" id="edBtnCopy2">📋 Copiar</button>
+            <button class="ed-action-btn" id="edBtnMd">📥 Markdown</button>
+            <button class="ed-action-btn ai" id="edBtnReedit2">🤖 Reeditar</button>
+          </div>
+          <div id="editorStats" class="ed-stats">0 palavras</div>
+        </div>
+
+        <!-- BODY -->
+        <div class="ed-body">
+          <!-- PREVIEW A4 -->
+          <div class="ed-preview-wrap" id="edPreviewWrap">
+            <div class="ed-a4-bg">
+              <div class="ed-a4-label">A4 · 210×297 mm</div>
+              <iframe id="edPreviewFrame" class="ed-a4-frame" sandbox="allow-same-origin"></iframe>
+            </div>
+          </div>
+
+          <!-- EDITOR TEXTO -->
+          <div class="ed-edit-wrap" id="edEditWrap" style="display:none;">
+            <textarea id="editorTextarea" class="ed-textarea" placeholder="O documento aparecerá aqui…"></textarea>
           </div>
         </div>
       </div>
@@ -52,35 +81,372 @@ export class DocumentEditor {
 
   _bindEvents() {
     this.modal.querySelector('#editorClose')?.addEventListener('click', () => this.close());
-    this.modal.querySelector('#editorBtnCopy')?.addEventListener('click', () => this._copyContent());
-    this.modal.querySelector('#editorBtnMd')?.addEventListener('click', () => this._downloadMarkdown());
-    this.modal.querySelector('#editorBtnPdf')?.addEventListener('click', () => this._exportPDF());
-    this.modal.querySelector('#editorBtnWord')?.addEventListener('click', () => this._exportWord());
-    this.modal.querySelector('#editorBtnPreview')?.addEventListener('click', () => this._togglePreview());
-    this.modal.querySelector('#editorBtnReedit')?.addEventListener('click', () => this._showReeditDialog());
-    this.modal.querySelector('#editorTextarea')?.addEventListener('input', (e) => {
+
+    // Tabs principais (preview / editar)
+    this.modal.querySelectorAll('[data-fmt]').forEach(btn => {
+      btn.addEventListener('click', () => this._switchMode(btn.dataset.fmt));
+    });
+
+    // Tabs de formato de preview
+    this.modal.querySelectorAll('[data-preview]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.modal.querySelectorAll('[data-preview]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this._previewFmt = btn.dataset.preview;
+        this._renderPreview(this._previewFmt);
+        this.modal.querySelector('#edBtnDownload').textContent = `⬇️ ${btn.dataset.preview.toUpperCase()}`;
+      });
+    });
+
+    // Acções
+    this.modal.querySelector('#edBtnDownload')?.addEventListener('click',  () => this._download());
+    this.modal.querySelector('#edBtnWa')?.addEventListener('click',        () => this._sendWA());
+    this.modal.querySelector('#edBtnCopy')?.addEventListener('click',      () => this._copy());
+    this.modal.querySelector('#edBtnCopy2')?.addEventListener('click',     () => this._copy());
+    this.modal.querySelector('#edBtnMd')?.addEventListener('click',        () => this._downloadMd());
+    this.modal.querySelector('#edBtnReedit')?.addEventListener('click',    () => this._reedit());
+    this.modal.querySelector('#edBtnReedit2')?.addEventListener('click',   () => this._reedit());
+
+    this.modal.querySelector('#editorTextarea')?.addEventListener('input', e => {
       this.content = e.target.value;
       this._updateStats();
     });
   }
 
+  // ── Muda entre modo preview e edição ──────────────────────────
+  _switchMode(mode) {
+    const previewWrap   = this.modal.querySelector('#edPreviewWrap');
+    const editWrap      = this.modal.querySelector('#edEditWrap');
+    const subtoolbar    = this.modal.querySelector('#edSubtoolbar');
+    const editToolbar   = this.modal.querySelector('#edEditToolbar');
+
+    this.modal.querySelectorAll('[data-fmt]').forEach(b => {
+      b.classList.toggle('active', b.dataset.fmt === mode);
+    });
+
+    if (mode === 'preview') {
+      previewWrap.style.display  = 'flex';
+      editWrap.style.display     = 'none';
+      subtoolbar.style.display   = 'flex';
+      editToolbar.style.display  = 'none';
+      this._renderPreview(this._previewFmt);
+    } else {
+      previewWrap.style.display  = 'none';
+      editWrap.style.display     = 'flex';
+      subtoolbar.style.display   = 'none';
+      editToolbar.style.display  = 'flex';
+      this.modal.querySelector('#editorTextarea').value = this.content;
+    }
+  }
+
+  // ── Renderiza preview fiel no iframe ──────────────────────────
+  _renderPreview(format) {
+    const frame = this.modal.querySelector('#edPreviewFrame');
+    if (!frame) return;
+
+    const html = this._buildPreviewHTML(format);
+    frame.srcdoc = html;
+  }
+
+  _buildPreviewHTML(format) {
+    const css = this._getFormatCSS(format);
+    const body = this._markdownToHTML(this.content);
+
+    return `<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <style>${css}</style>
+</head>
+<body>
+  <div class="doc-page">
+    ${body}
+  </div>
+</body>
+</html>`;
+  }
+
+  _getFormatCSS(format) {
+    const base = `
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body { background: #fff; }
+      .doc-page {
+        width: 210mm;
+        min-height: 297mm;
+        padding: 25mm 22mm 20mm 25mm;
+        background: #fff;
+        font-size: 12pt;
+        line-height: 1.5;
+        color: #000;
+      }
+      h1 { font-size: 18pt; font-weight: bold; text-align: center; margin-bottom: 16pt; }
+      h2 { font-size: 14pt; font-weight: bold; margin-top: 14pt; margin-bottom: 8pt; border-bottom: 1px solid #ccc; padding-bottom: 3pt; }
+      h3 { font-size: 12pt; font-weight: bold; margin-top: 10pt; margin-bottom: 6pt; }
+      p  { margin-bottom: 8pt; text-align: justify; }
+      ul, ol { margin: 6pt 0 6pt 18pt; }
+      li { margin-bottom: 3pt; }
+      table { width: 100%; border-collapse: collapse; margin: 10pt 0; font-size: 11pt; }
+      td, th { border: 1px solid #000; padding: 5pt 7pt; }
+      th { background: #f0f0f0; font-weight: bold; }
+      strong { font-weight: bold; }
+      em { font-style: italic; }
+      hr { border: none; border-top: 1px solid #888; margin: 12pt 0; }
+      .sig-line { border-top: 1px solid #000; width: 55%; margin-top: 28pt; padding-top: 4pt; font-size: 10pt; }
+    `;
+
+    if (format === 'word') {
+      return base + `
+        body, .doc-page { font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; font-size: 11pt; }
+        h1 { color: #2E74B5; font-size: 16pt; }
+        h2 { color: #2E74B5; font-size: 13pt; border-bottom-color: #2E74B5; }
+        td, th { border-color: #BFBFBF; }
+        th { background: #D9E2F3; color: #1F3864; }
+      `;
+    }
+
+    if (format === 'excel') {
+      return `
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Calibri', Arial, sans-serif; font-size: 11pt; background: #fff; }
+        .doc-page { padding: 0; width: 100%; min-height: 100vh; }
+        .excel-sheet-tab {
+          background: #E7E6E6; border-bottom: 3px solid #4472C4;
+          padding: 6px 16px; font-weight: bold; font-size: 12pt;
+          display: inline-block; color: #333;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #4472C4; color: #fff; font-weight: bold; padding: 6pt 8pt; border: 1px solid #2F5597; }
+        td { padding: 5pt 8pt; border: 1px solid #B4B4B4; }
+        tr:nth-child(even) td { background: #F2F2F2; }
+        h1, h2, h3 { padding: 8pt; font-size: 13pt; }
+        p { padding: 4pt 8pt; }
+        ul, ol { padding: 4pt 8pt 4pt 24pt; }
+      `;
+    }
+
+    // PDF (padrão)
+    return base + `
+      body, .doc-page { font-family: 'Times New Roman', Georgia, serif; }
+    `;
+  }
+
+  // ── Converte Markdown → HTML estruturado ──────────────────────
+  _markdownToHTML(md) {
+    if (!md) return '<p><em>Sem conteúdo</em></p>';
+
+    // Excel: envolve em tab falso
+    if (this._previewFmt === 'excel') {
+      const tableHTML = this._mdToHTMLBasic(md);
+      return `<div class="excel-sheet-tab">📊 Folha 1</div>${tableHTML}`;
+    }
+
+    return this._mdToHTMLBasic(md);
+  }
+
+  _mdToHTMLBasic(md) {
+    let html = md
+      // Escapar XSS
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      // Quebras de página
+      .replace(/---PAGE_BREAK---/g, '<hr class="page-break">')
+      // Headings
+      .replace(/^######\s(.+)$/gm, '<h6>$1</h6>')
+      .replace(/^#####\s(.+)$/gm,  '<h5>$1</h5>')
+      .replace(/^####\s(.+)$/gm,   '<h4>$1</h4>')
+      .replace(/^###\s(.+)$/gm,    '<h3>$1</h3>')
+      .replace(/^##\s(.+)$/gm,     '<h2>$1</h2>')
+      .replace(/^#\s(.+)$/gm,      '<h1>$1</h1>')
+      // Bold / Italic
+      .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replace(/\*\*(.+?)\*\*/g,     '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g,         '<em>$1</em>')
+      // HR
+      .replace(/^---+$/gm, '<hr>')
+      // Listas
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+      // Parágrafos (dupla linha em branco)
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+
+    // Envolver listas <li> em <ul>
+    html = html.replace(/(<li>.*?<\/li>)+/gs, match => `<ul>${match}</ul>`);
+
+    // Tabelas Markdown
+    html = html.replace(/(\|.+\|\n)+/g, match => this._mdTableToHTML(match));
+
+    return `<p>${html}</p>`;
+  }
+
+  _mdTableToHTML(tableStr) {
+    const rows = tableStr.trim().split('\n').filter(r => !/^[\|\s\-:]+$/.test(r));
+    if (rows.length === 0) return tableStr;
+
+    const headers = rows[0].split('|').map(c => c.trim()).filter(Boolean);
+    const body    = rows.slice(1);
+
+    const thead = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+    const tbody = body.map(row => {
+      const cells = row.split('|').map(c => c.trim()).filter(Boolean);
+      return `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
+    }).join('');
+
+    return `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+  }
+
+  // ── Download no formato activo ────────────────────────────────
+  async _download() {
+    const fmt = this._previewFmt;
+    const btn = this.modal.querySelector('#edBtnDownload');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳…';
+
+    try {
+      if (fmt === 'pdf')   await this._downloadPDF();
+      if (fmt === 'word')  await this._downloadWord();
+      if (fmt === 'excel') await this._downloadExcel();
+    } catch (err) {
+      alert('❌ Erro ao exportar: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  }
+
+  async _downloadPDF() {
+    const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const lines = doc.splitTextToSize(this.content, 170);
+    let y = 25;
+    const lineH = 7;
+    lines.forEach(line => {
+      if (y > 270) { doc.addPage(); y = 25; }
+      const isH1 = line.startsWith('# ');
+      const isH2 = line.startsWith('## ');
+      if (isH1) {
+        doc.setFontSize(18); doc.setFont('times','bold');
+        doc.text(line.replace(/^#+ /, ''), 105, y, { align: 'center' });
+        y += 10;
+      } else if (isH2) {
+        doc.setFontSize(14); doc.setFont('times','bold');
+        doc.text(line.replace(/^#+ /, ''), 25, y);
+        y += 9;
+      } else {
+        doc.setFontSize(12); doc.setFont('times','normal');
+        doc.text(line, 25, y);
+        y += lineH;
+      }
+    });
+    doc.save(`mzdocs-${this.serviceType}-${Date.now()}.pdf`);
+  }
+
+  async _downloadWord() {
+    const html = `<html><head><meta charset="UTF-8">
+      <style>body{font-family:Calibri,sans-serif;font-size:11pt;margin:2.5cm;line-height:1.5;}
+      h1{font-size:16pt;color:#2E74B5;}h2{font-size:13pt;color:#2E74B5;}
+      table{border-collapse:collapse;width:100%;}td,th{border:1px solid #BFBFBF;padding:5pt;}</style>
+    </head><body>${this._mdToHTMLBasic(this.content)}</body></html>`;
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `mzdocs-${this.serviceType}-${Date.now()}.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async _downloadExcel() {
+    const html = `<html><head><meta charset="UTF-8"></head>
+      <body>${this._mdToHTMLBasic(this.content)}</body></html>`;
+    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `mzdocs-${this.serviceType}-${Date.now()}.xls`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  _downloadMd() {
+    const blob = new Blob([this.content], { type: 'text/markdown;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `mzdocs-${this.serviceType}-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  _copy() {
+    navigator.clipboard.writeText(this.content)
+      .then(() => alert('✅ Copiado!'))
+      .catch(() => {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = this.content;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        alert('✅ Copiado!');
+      });
+  }
+
+  _sendWA() {
+    const preview = this.content.slice(0, 800).replace(/#{1,3} /g, '*');
+    const msg = `📄 *${this.serviceType || 'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`;
+    window.open(`https://wa.me/258858695506?text=${encodeURIComponent(msg)}`, '_blank');
+  }
+
+  _reedit() {
+    const instruction = prompt('💡 O que deseja alterar no documento?\n\nExemplo: "Adicione mais detalhes na introdução"');
+    if (!instruction) return;
+    if (this.onReedit) {
+      this.onReedit({ currentContent: this.content, instruction, serviceType: this.serviceType });
+    } else {
+      document.dispatchEvent(new CustomEvent('document:reedit', {
+        detail: { currentContent: this.content, instruction, serviceType: this.serviceType }
+      }));
+    }
+  }
+
+  _updateStats() {
+    const words = this.content.trim().split(/\s+/).filter(w => w.length > 0).length;
+    const el = this.modal?.querySelector('#editorStats');
+    if (el) el.textContent = `${words} palavras | ${this.content.length} caracteres`;
+  }
+
+  // ── API pública ────────────────────────────────────────────────
   loadDocument(content, serviceType) {
-    this.content = content;
+    this.content     = content;
     this.serviceType = serviceType;
+    this._previewFmt = 'pdf';
 
     const textarea = this.modal?.querySelector('#editorTextarea');
     if (textarea) textarea.value = content;
 
     this._updateStats();
     this.open();
+
+    // Activa modo preview por defeito
+    this._switchMode('preview');
+
+    // Reset tabs de formato
+    this.modal.querySelectorAll('[data-preview]').forEach(b => {
+      b.classList.toggle('active', b.dataset.preview === 'pdf');
+    });
+    const dlBtn = this.modal.querySelector('#edBtnDownload');
+    if (dlBtn) dlBtn.textContent = '⬇️ PDF';
   }
 
   open() {
     if (this.modal) {
       this.modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
-      } else {
-      }
+    }
   }
 
   close() {
@@ -90,119 +456,5 @@ export class DocumentEditor {
     }
   }
 
-  async _exportPDF() {
-    const btn = this.modal.querySelector('#editorBtnPdf');
-    btn.disabled = true;
-    btn.textContent = '⏳...';
-
-    try {
-      const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
-      const doc = new jsPDF();
-      const lines = doc.splitTextToSize(this.content, 180);
-      doc.text(lines, 15, 20);
-      doc.save(`mzdocs-${this.serviceType}-${Date.now()}.pdf`);
-    } catch (err) {
-      alert('❌ Erro ao gerar PDF: ' + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '📄 PDF';
-    }
-  }
-
-  async _exportWord() {
-    const btn = this.modal.querySelector('#editorBtnWord');
-    btn.disabled = true;
-    btn.textContent = '⏳...';
-
-    try {
-      const html = `<html><body><pre>${this.content.replace(/</g, '&lt;')}</pre></body></html>`;
-      const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `mzdocs-${this.serviceType}-${Date.now()}.doc`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert('❌ Erro ao gerar Word: ' + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '📃 Word';
-    }
-  }
-
-  _downloadMarkdown() {
-    const blob = new Blob([this.content], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mzdocs-${this.serviceType}-${Date.now()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  _copyContent() {
-    navigator.clipboard.writeText(this.content)
-      .then(() => alert('✅ Copiado!'))
-      .catch(() => alert('❌ Não foi possível copiar'));
-  }
-
-  _togglePreview() {
-    const previewPane = this.modal.querySelector('#editorPreviewPane');
-    const isVisible = previewPane.style.display !== 'none';
-    previewPane.style.display = isVisible ? 'none' : 'block';
-    if (!isVisible) this._renderPreview();
-  }
-
-  _renderPreview() {
-    const preview = this.modal.querySelector('#editorPreviewContent');
-    let html = this.content
-      .replace(/#{6}\s(.+)/g, '<h6>$1</h6>')
-      .replace(/#{5}\s(.+)/g, '<h5>$1</h5>')
-      .replace(/#{4}\s(.+)/g, '<h4>$1</h4>')
-      .replace(/#{3}\s(.+)/g, '<h3>$1</h3>')
-      .replace(/#{2}\s(.+)/g, '<h2>$1</h2>')
-      .replace(/#{1}\s(.+)/g, '<h1>$1</h1>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`(.+?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>');
-
-    preview.innerHTML = html;
-  }
-
-  _showReeditDialog() {
-    const instruction = prompt('💡 O que deseja alterar no documento?\n\nExemplo: "Adicione mais detalhes na introdução"');
-    if (!instruction) return;
-
-    if (this.onReedit) {
-      this.onReedit({
-        currentContent: this.content,
-        instruction,
-        serviceType: this.serviceType
-      });
-    } else {
-      document.dispatchEvent(new CustomEvent('document:reedit', {
-        detail: {
-          currentContent: this.content,
-          instruction,
-          serviceType: this.serviceType
-        }
-      }));
-    }
-  }
-
-  _updateStats() {
-    const words = this.content.trim().split(/\s+/).filter(w => w.length > 0).length;
-    const chars = this.content.length;
-    const el = this.modal?.querySelector('#editorStats');
-    if (el) el.textContent = `${words} palavras | ${chars} caracteres`;
-  }
-
-  getContent() {
-    return this.content;
-  }
+  getContent() { return this.content; }
 }
-
-// DocumentEditor é instanciado pelo DocumentController quando necessário
-// Não instanciar aqui para evitar problemas de timing com o DOM

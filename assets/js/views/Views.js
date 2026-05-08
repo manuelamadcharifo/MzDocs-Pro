@@ -129,11 +129,74 @@ export const DocumentView = {
       `📄 ${svc.title} &nbsp;|&nbsp; ⚡ ${credits} créditos restantes &nbsp;|&nbsp; 🕐 ${new Date().toLocaleTimeString('pt')}`;
 
     const previewContainer = document.getElementById('resPreview');
-    if (previewContainer) {
-      previewContainer.innerHTML = this._markdownToHTML(content);
+    if (!previewContainer) return;
+
+    // Preview em iframe com estilos A4 reais
+    const words = content.trim().split(/\s+/).length;
+    const pages = Math.max(1, Math.ceil(content.length / 2800));
+
+    previewContainer.innerHTML = `
+      <div class="res-preview-header">
+        <div class="res-preview-tabs" id="resPreviewTabs">
+          <button class="res-tab active" data-rfmt="pdf">📄 PDF</button>
+          <button class="res-tab" data-rfmt="word">📃 Word</button>
+          <button class="res-tab" data-rfmt="text">📝 Texto</button>
+        </div>
+        <div class="res-preview-stats">${words} palavras · ~${pages} pág.</div>
+      </div>
+      <div class="res-a4-wrap">
+        <iframe id="resPreviewFrame" class="res-a4-frame" sandbox="allow-same-origin"></iframe>
+      </div>
+    `;
+
+    // Renderiza preview inicial (PDF)
+    this._renderResultFrame('pdf', content);
+
+    // Bind tabs
+    previewContainer.querySelectorAll('.res-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        previewContainer.querySelectorAll('.res-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this._renderResultFrame(btn.dataset.rfmt, content);
+      });
+    });
+  },
+
+  _renderResultFrame(format, content) {
+    const frame = document.getElementById('resPreviewFrame');
+    if (!frame) return;
+
+    const bodyHTML = this._markdownToHTML(content).replace('<div class="md-preview">', '').replace('</div>', '');
+
+    let css = '';
+    if (format === 'pdf') {
+      css = `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:18mm 18mm 14mm;}
+        h1{font-size:17pt;text-align:center;margin-bottom:14pt;font-weight:bold;}
+        h2{font-size:13pt;font-weight:bold;margin-top:12pt;margin-bottom:6pt;border-bottom:1px solid #bbb;padding-bottom:2pt;}
+        h3{font-size:12pt;font-weight:bold;margin-top:8pt;}
+        p{margin-bottom:8pt;text-align:justify;}
+        ul,ol{margin:6pt 0 6pt 18pt;}li{margin-bottom:2pt;}
+        table{width:100%;border-collapse:collapse;margin:8pt 0;}
+        td,th{border:1px solid #000;padding:4pt 6pt;font-size:11pt;}
+        th{background:#f0f0f0;font-weight:bold;}
+        strong{font-weight:bold;}em{font-style:italic;}hr{border:none;border-top:1px solid #888;margin:10pt 0;}`;
+    } else if (format === 'word') {
+      css = `body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.15;color:#000;padding:18mm;}
+        h1{font-size:16pt;color:#2E74B5;margin-bottom:12pt;}
+        h2{font-size:13pt;color:#2E74B5;margin-top:10pt;margin-bottom:6pt;}
+        h3{font-size:12pt;font-weight:bold;margin-top:8pt;}
+        p{margin-bottom:7pt;}
+        ul,ol{margin:5pt 0 5pt 18pt;}li{margin-bottom:2pt;}
+        table{width:100%;border-collapse:collapse;margin:8pt 0;}
+        td,th{border:1px solid #BFBFBF;padding:4pt 6pt;}
+        th{background:#D9E2F3;color:#1F3864;font-weight:bold;}
+        strong{font-weight:bold;}em{font-style:italic;}`;
+    } else {
+      css = `body{font-family:monospace;font-size:11pt;line-height:1.6;color:#1e293b;padding:16px;white-space:pre-wrap;}
+        h1,h2,h3{font-weight:bold;}`;
     }
 
-    // btnEdit está no HTML estático — o listener usa delegação no DocumentController
+    frame.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}${css}</style></head><body>${bodyHTML}</body></html>`;
   },
 
   // Converte Markdown para HTML para preview legível

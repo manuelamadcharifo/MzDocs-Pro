@@ -1,19 +1,20 @@
 // assets/js/controllers/OCRController.js
+// Versão melhorada: usa SmartOCRService para auto-preenchimento inteligente
 import { NotificationView } from '../views/Views.js';
+import { SmartOCRService } from '../services/SmartOCRService.js';
 
 export class OCRController {
   constructor(docModel) {
-    this.docModel = docModel;
-    this._worker = null;
-    this._loaded = false;
+    this.docModel   = docModel;
+    this.smartOCR   = new SmartOCRService();
     this._bindEvents();
   }
 
   _bindEvents() {
-    document.getElementById('btnCam')?.addEventListener('click', () => this.trigger('cam'));
-    document.getElementById('btnFile')?.addEventListener('click', () => this.trigger('file'));
+    document.getElementById('btnCam')?.addEventListener('click',    () => this.trigger('cam'));
+    document.getElementById('btnFile')?.addEventListener('click',   () => this.trigger('file'));
     document.getElementById('ocrInput')?.addEventListener('change', e => this.processFile(e));
-    document.getElementById('btnUseOcr')?.addEventListener('click', () => this.use());
+    document.getElementById('btnUseOcr')?.addEventListener('click',     () => this.use());
     document.getElementById('btnDiscardOcr')?.addEventListener('click', () => this.discard());
   }
 
@@ -28,55 +29,104 @@ export class OCRController {
   async processFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { NotificationView.error('Imagem muito grande (máx. 5MB)'); return; }
+    if (file.size > 5 * 1024 * 1024) {
+      NotificationView.error('Imagem muito grande (máx. 5MB)');
+      return;
+    }
 
-    document.getElementById('ocrBar').style.display = 'block';
-    document.getElementById('ocrResultBox').style.display = 'none';
-    document.getElementById('ocrFill').style.width = '0%';
-    document.getElementById('ocrStatusTxt').textContent = 'A inicializar OCR…';
+    const ocrBar       = document.getElementById('ocrBar');
+    const ocrResultBox = document.getElementById('ocrResultBox');
+    const ocrFill      = document.getElementById('ocrFill');
+    const ocrStatusTxt = document.getElementById('ocrStatusTxt');
+
+    if (ocrBar) ocrBar.style.display = 'block';
+    if (ocrResultBox) ocrResultBox.style.display = 'none';
+    if (ocrFill) ocrFill.style.width = '0%';
+    if (ocrStatusTxt) ocrStatusTxt.textContent = 'A inicializar OCR…';
 
     try {
-      if (!this._loaded) await this._loadTesseract();
-      if (!this._worker) {
-        document.getElementById('ocrStatusTxt').textContent = 'A carregar modelo de linguagem…';
-        this._worker = await Tesseract.createWorker('por', 1, {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              const p = Math.round(m.progress * 100);
-              document.getElementById('ocrFill').style.width = p + '%';
-              document.getElementById('ocrStatusTxt').textContent = `A reconhecer… ${p}%`;
-            }
-          }
-        });
+      const serviceType = this.docModel?.service || '';
+
+      const result = await this.smartOCR.extractFields(
+        file,
+        serviceType,
+        (pct, msg) => {
+          if (ocrFill) ocrFill.style.width = pct + '%';
+          if (ocrStatusTxt) ocrStatusTxt.textContent = msg || `A reconhecer… ${pct}%`;
+        }
+      );
+
+      if (ocrBar) ocrBar.style.display = 'none';
+
+      const text   = result.rawText || '';
+      const conf   = result.confidence || 0;
+      const fields = result.fields || {};
+      const missing = result.missing || [];
+
+      if (this.docModel) this.docModel.ocrText = text;
+
+      const ocrTxt  = document.getElementById('ocrTxt');
+      const ocrConf = document.getElementById('ocrConf');
+      if (ocrTxt) ocrTxt.value = text;
+      if (ocrConf) ocrConf.textContent = `Confiança: ${conf}%`;
+
+      const fieldCount = Object.keys(fields).length;
+      if (fieldCount > 0) {
+        const formBody = document.getElementById('formBody');
+        if (formBody) {
+          const applied = this.smartOCR.applyToForm(fields, formBody);
+          this._showSmartFillBanner(applied, missing.length);
+        }
       }
 
-      const result = await this._worker.recognize(file);
-      const text = result.data.text.trim();
-      const conf = Math.round(result.data.confidence);
+      if (ocrResultBox) ocrResultBox.style.display = 'block';
 
-      document.getElementById('ocrBar').style.display = 'none';
-      document.getElementById('ocrTxt').value = text;
-      document.getElementById('ocrConf').textContent = `Confiança: ${conf}%`;
-      document.getElementById('ocrResultBox').style.display = 'block';
-
-      if (conf < 50) NotificationView.warn('⚠️ Reconhecimento com baixa confiança. Revise o texto.');
+      if (conf < 50) {
+        NotificationView.warn('⚠️ Reconhecimento com baixa confiança. Revise o texto.');
+      } else if (fieldCount > 0) {
+        NotificationView.success(`✅ ${fieldCount} campo(s) preenchido(s) automaticamente!`);
+      }
 
     } catch (err) {
-      document.getElementById('ocrBar').style.display = 'none';
+      if (ocrBar) ocrBar.style.display = 'none';
       NotificationView.error('❌ Erro no OCR: ' + err.message);
     }
     e.target.value = '';
   }
 
-  _loadTesseract() {
-    return new Promise((res, rej) => {
-      if (window.Tesseract) { this._loaded = true; res(); return; }
-      const s = document.createElement('script');
-      s.src = 'https://unpkg.com/tesseract.js@5.0.2/dist/tesseract.min.js';
-      s.onload = () => { this._loaded = true; res(); };
-      s.onerror = rej;
-      document.head.appendChild(s);
-    });
+  _showSmartFillBanner(applied, missing) {
+    document.getElementById('smartFillBanner')?.remove();
+    if (!applied) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'smartFillBanner';
+    banner.style.cssText = [
+      'margin:12px 0 4px',
+      'padding:10px 14px',
+      'background:linear-gradient(135deg,#ecfdf5,#d1fae5)',
+      'border:1.5px solid #6ee7b7',
+      'border-radius:10px',
+      'font-size:13px',
+      'color:#065f46',
+      'font-weight:600',
+      'display:flex',
+      'align-items:center',
+      'gap:8px'
+    ].join(';');
+
+    let msg = `✨ ${applied} campo(s) preenchido(s) automaticamente pela IA`;
+    if (missing > 0) msg += ` · ${missing} campo(s) precisam revisão`;
+
+    banner.innerHTML = `
+      <span>${msg}</span>
+      <div style="margin-left:auto;display:flex;gap:10px;font-size:11px;opacity:0.85;">
+        <span><span style="display:inline-block;width:8px;height:8px;background:#22c55e;border-radius:50%;margin-right:4px;"></span>Do doc.</span>
+        <span><span style="display:inline-block;width:8px;height:8px;background:#f59e0b;border-radius:50%;margin-right:4px;"></span>Inferido</span>
+      </div>
+    `;
+
+    const ocrZone = document.getElementById('ocrZone');
+    if (ocrZone) ocrZone.insertAdjacentElement('afterend', banner);
   }
 
   use() {
@@ -88,12 +138,20 @@ export class OCRController {
 
   discard() {
     if (this.docModel) this.docModel.ocrText = null;
+    document.getElementById('smartFillBanner')?.remove();
+    document.querySelectorAll('#formBody input, #formBody textarea, #formBody select').forEach(el => {
+      el.style.borderColor = '';
+      el.title = '';
+    });
     this.reset();
   }
 
   reset() {
-    document.getElementById('ocrBar').style.display = 'none';
-    document.getElementById('ocrResultBox').style.display = 'none';
+    const ocrBar = document.getElementById('ocrBar');
+    const ocrResultBox = document.getElementById('ocrResultBox');
+    if (ocrBar) ocrBar.style.display = 'none';
+    if (ocrResultBox) ocrResultBox.style.display = 'none';
+    document.getElementById('smartFillBanner')?.remove();
     const input = document.getElementById('ocrInput');
     if (input) input.value = '';
     const txt = document.getElementById('ocrTxt');
