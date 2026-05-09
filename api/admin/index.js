@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 // api/admin/index.js
 // Router único para todas as funções admin.
 // Elimina a necessidade de 5 funções separadas (Vercel Hobby limit = 12).

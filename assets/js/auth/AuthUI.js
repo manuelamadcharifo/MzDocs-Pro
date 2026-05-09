@@ -180,7 +180,7 @@ export class AuthUI {
             this.close();
             this._toast('✅ Bem-vindo de volta!', 'success');
         } catch (err) {
-            this._showError(err.message);
+            this._showError(err.message || err.toString());
         } finally {
             btn.disabled    = false;
             btn.textContent = 'Entrar';
@@ -208,7 +208,7 @@ export class AuthUI {
             this._switchView('success');
             this._toast('✅ Conta criada com sucesso!', 'success');
         } catch (err) {
-            this._showError(err.message);
+            this._showError(err.message || err.toString());
         } finally {
             btn.disabled    = false;
             btn.textContent = 'Criar Conta';
@@ -255,12 +255,42 @@ export class AuthUI {
         this.overlay.querySelectorAll('.auth-error').forEach(e => e.remove());
     }
 
+    _friendlyError(raw) {
+        // Mapear erros técnicos do Supabase/rede para mensagens amigáveis
+        const msg = (raw || '').toLowerCase();
+        if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('email not confirmed'))
+            return 'E-mail ou password incorrectos. Verifique e tente novamente.';
+        if (msg.includes('user already registered') || msg.includes('already been registered') || msg.includes('duplicate'))
+            return 'Este e-mail ou telemóvel já tem conta. Use "Entrar" ou recupere a password.';
+        if (msg.includes('password should be') || msg.includes('password must'))
+            return 'A password deve ter pelo menos 6 caracteres.';
+        if (msg.includes('rate limit') || msg.includes('too many requests') || msg.includes('429'))
+            return 'Demasiadas tentativas. Aguarde alguns minutos e tente novamente.';
+        if (msg.includes('network') || msg.includes('fetch') || msg.includes('websocket') || msg.includes('ws') || msg.includes('500') || msg.includes('failed to fetch'))
+            return 'Sem ligação ao servidor. Verifique a sua internet e tente novamente.';
+        if (msg.includes('email') && msg.includes('invalid'))
+            return 'Endereço de e-mail inválido.';
+        if (msg.includes('timeout') || msg.includes('timed out'))
+            return 'O servidor demorou muito a responder. Tente novamente.';
+        if (msg.includes('not found') || msg.includes('404'))
+            return 'Conta não encontrada. Verifique os dados ou crie uma conta nova.';
+        if (msg.includes('signup') || msg.includes('sign up') || msg.includes('register'))
+            return 'Não foi possível criar a conta. Tente novamente ou contacte o suporte.';
+        if (msg.includes('token') || msg.includes('jwt') || msg.includes('session'))
+            return 'Sessão expirada. Por favor faça login novamente.';
+        if (msg.includes('module') || msg.includes('package') || msg.includes('cannot find'))
+            return 'Erro temporário no servidor. Tente novamente em instantes.';
+        // Fallback genérico — não mostrar stack traces ou erros técnicos
+        if (raw && raw.length > 120) return 'Ocorreu um erro inesperado. Tente novamente ou contacte o suporte.';
+        return raw || 'Ocorreu um erro inesperado. Tente novamente.';
+    }
+
     _showError(msg) {
         this.overlay.querySelectorAll('.auth-error').forEach(e => e.remove());
         const el = document.createElement('div');
         el.className = 'auth-error';
         el.style.cssText = 'background:#fef2f2;border:1px solid #fca5a5;color:#dc2626;padding:.75rem 1rem;border-radius:10px;font-size:.875rem;margin-top:.5rem;';
-        el.textContent = '⚠️ ' + msg;
+        el.textContent = '⚠️ ' + this._friendlyError(msg);
         const activeView = this.overlay.querySelector('.auth-view:not([style*="none"])') ||
                            this.overlay.querySelector('.auth-view');
         activeView?.appendChild(el);

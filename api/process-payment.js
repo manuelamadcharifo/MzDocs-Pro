@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 // api/process-payment.js — M-Pesa C2B + Manual (WhatsApp)
 
 const PACKAGES = {

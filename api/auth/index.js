@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 // api/auth/index.js
 // Router único para todas as funções de autenticação.
 // Elimina a necessidade de 4 funções separadas (Vercel Hobby limit = 12).

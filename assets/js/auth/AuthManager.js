@@ -45,7 +45,10 @@ export class AuthManager {
                 }
             }
 
-            this.supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
+            this.supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+                realtime: { transport: typeof WebSocket !== 'undefined' ? WebSocket : null },
+                global:   { headers: { 'x-client-info': 'mzdocs-pro/6.0' } },
+            });
 
             const { data: { session } } = await this.supabase.auth.getSession();
             if (session) {
