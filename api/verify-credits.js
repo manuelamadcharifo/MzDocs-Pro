@@ -1,9 +1,10 @@
+const { createClient } = require('@supabase/supabase-js');
 // api/verify-credits.js
 // Verificação de saldo de créditos — tabela profiles (corrigido)
 
 const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -21,7 +22,6 @@ export default async function handler(req, res) {
 
   if (supabaseUrl && supabaseKey) {
     try {
-      const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(supabaseUrl, supabaseKey);
 
       // CORRIGIDO: usar tabela 'profiles' (não 'users')

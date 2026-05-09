@@ -1,19 +1,26 @@
 {
   "name": "mzdocs-pro",
-  "version": "3.1.0",
-  "description": "MzDocs Pro v3 — Documentos profissionais com IA gratuita para Moçambique",
+  "version": "6.0.0",
+  "description": "MzDocs Pro v6 — Documentos profissionais com IA gratuita para Moçambique",
   "main": "index.html",
   "homepage": "./",
-  "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo \"Static site - Vercel auto-detection enabled\"",
     "start": "vercel dev"
   },
-  "keywords": ["pwa", "ai", "documents", "mozambique"],
+  "keywords": [
+    "pwa",
+    "ai",
+    "documents",
+    "mozambique"
+  ],
   "author": "MzDocs Pro",
   "license": "MIT",
   "engines": {
     "node": "20.x"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4"
   }
 }

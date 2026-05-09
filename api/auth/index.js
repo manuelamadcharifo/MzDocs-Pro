@@ -1,3 +1,4 @@
+const { createClient } = require('@supabase/supabase-js');
 // api/auth/index.js
 // Router único para todas as funções de autenticação.
 // Elimina a necessidade de 4 funções separadas (Vercel Hobby limit = 12).
@@ -10,7 +11,7 @@
 
 const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -52,7 +53,6 @@ async function handleSignin(req, res) {
   const clean = phone.replace(/\D/g, '');
   const normalized = clean.startsWith('258') ? `+${clean}` : `+258${clean}`;
   try {
-    const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
     const { data, error } = await supabase.auth.signInWithPassword({ phone: normalized, password });
     if (error) {
@@ -94,7 +94,6 @@ async function handleSignup(req, res) {
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedName  = (fullName || '').trim();
   try {
-    const { createClient } = await import('@supabase/supabase-js');
     const supabaseUrl = process.env.SUPABASE_URL;
     const anonKey     = process.env.SUPABASE_ANON_KEY;
     const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -171,7 +170,6 @@ async function handleResetPassword(req, res) {
   if (!email) return res.status(400).json({ error: 'E-mail é obrigatório' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido' });
   try {
-    const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
     await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
       redirectTo: `${origin}/?reset=true`,
@@ -183,4 +181,3 @@ async function handleResetPassword(req, res) {
   return res.status(200).json({ success: true, message: 'Se o e-mail estiver registado, receberá um link de recuperação em breve.' });
 }
 
-export const config = { maxDuration: 30 };

@@ -1,3 +1,4 @@
+const { createClient } = require('@supabase/supabase-js');
 // api/admin/index.js
 // Router único para todas as funções admin.
 // Elimina a necessidade de 5 funções separadas (Vercel Hobby limit = 12).
@@ -11,7 +12,7 @@
 
 const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Action');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -46,7 +47,6 @@ export default async function handler(req, res) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function getAdminClient() {
-  const { createClient } = await import('@supabase/supabase-js');
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -353,4 +353,3 @@ async function handleTransactions(req, res) {
   }
 }
 
-export const config = { maxDuration: 60 };

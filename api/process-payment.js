@@ -1,3 +1,4 @@
+const { createClient } = require('@supabase/supabase-js');
 // api/process-payment.js — M-Pesa C2B + Manual (WhatsApp)
 
 const PACKAGES = {
@@ -9,7 +10,7 @@ const PACKAGES = {
 
 const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -82,7 +83,6 @@ async function processMPesaPayment(phone, amount, packageId) {
 async function saveTransaction(userId, packageId, pkg, method, receipt, referenceId, phone) {
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return;
     try {
-        const { createClient } = await import('@supabase/supabase-js');
         const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
         await supabase.from('transactions').insert({
             user_id:        userId || null,
@@ -98,4 +98,3 @@ async function saveTransaction(userId, packageId, pkg, method, receipt, referenc
     } catch (e) { console.warn('[process-payment] Falha ao guardar transação:', e.message); }
 }
 
-export const config = { maxDuration: 30 };

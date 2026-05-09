@@ -82,7 +82,7 @@ function checkRateLimit(req, isChainCall) {
 
 const SITE_URL = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', SITE_URL);
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -438,4 +438,3 @@ async function tryNvidia(prompt, apiKey, signal, maxTokens) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-export const config = { maxDuration: 120 };
