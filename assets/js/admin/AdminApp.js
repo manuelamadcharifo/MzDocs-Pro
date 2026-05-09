@@ -186,20 +186,28 @@ class AdminApp {
         try {
             // Tentar com is_blocked; se coluna não existir (erro 42703), tentar sem ela
             let data, error;
+            // Tentativa 1: select completo
             ({ data, error } = await this.supabase
                 .from('profiles')
                 .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, is_temp, temp_ref, temp_password, created_at')
                 .order('created_at', { ascending: false }));
 
-            if (error && error.code === '42703') {
-                console.warn('[Admin] Colunas ausentes — a carregar versão reduzida. Execute as migrações SQL.');
+            // Tentativa 2: sem is_blocked
+            if (error?.code === '42703') {
                 this._isBlockedMissing = true;
                 ({ data, error } = await this.supabase
                     .from('profiles')
                     .select('id, full_name, phone, email, credits, total_documents, is_admin, is_temp, temp_ref, temp_password, created_at')
                     .order('created_at', { ascending: false }));
-            } else {
-                this._isBlockedMissing = false;
+            }
+
+            // Tentativa 3: sem colunas temporárias (BD ainda não migrada)
+            if (error?.code === '42703') {
+                console.warn('[Admin] Colunas temp ausentes — execute EXECUTAR_AGORA_completo.sql no Supabase.');
+                ({ data, error } = await this.supabase
+                    .from('profiles')
+                    .select('id, full_name, phone, email, credits, total_documents, is_admin, created_at')
+                    .order('created_at', { ascending: false }));
             }
 
             if (error) throw error;
