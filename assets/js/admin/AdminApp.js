@@ -188,15 +188,15 @@ class AdminApp {
             let data, error;
             ({ data, error } = await this.supabase
                 .from('profiles')
-                .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, created_at')
+                .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, is_temp, temp_ref, temp_password, created_at')
                 .order('created_at', { ascending: false }));
 
             if (error && error.code === '42703') {
-                console.warn('[Admin] is_blocked ausente — a carregar sem ela. Execute a migração SQL.');
+                console.warn('[Admin] Colunas ausentes — a carregar versão reduzida. Execute as migrações SQL.');
                 this._isBlockedMissing = true;
                 ({ data, error } = await this.supabase
                     .from('profiles')
-                    .select('id, full_name, phone, email, credits, total_documents, is_admin, created_at')
+                    .select('id, full_name, phone, email, credits, total_documents, is_admin, is_temp, temp_ref, temp_password, created_at')
                     .order('created_at', { ascending: false }));
             } else {
                 this._isBlockedMissing = false;
@@ -568,7 +568,7 @@ USING (EXISTS (
 
             let q = this.supabase
                 .from('transactions')
-                .select('*, profiles(full_name, phone, email)')
+                .select('*, user_profile:profiles!transactions_user_id_fkey(full_name, phone, email)')
                 .order('created_at', { ascending: false })
                 .limit(200);
 
@@ -584,8 +584,8 @@ USING (EXISTS (
                 <tr>
                     <td><code style="font-size:.75rem">${t.reference_id || t.id.slice(0,8)}</code></td>
                     <td>
-                        <div style="font-size:.85rem">${t.profiles?.full_name || t.profiles?.phone || 'Anónimo'}</div>
-                        <div style="font-size:.72rem;color:#64748b">${t.profiles?.email || ''}</div>
+                        <div style="font-size:.85rem">${t.user_profile?.full_name || t.user_profile?.phone || 'Anónimo'}</div>
+                        <div style="font-size:.72rem;color:#64748b">${t.user_profile?.email || ''}</div>
                     </td>
                     <td>${(t.package_id||'-').toUpperCase()}</td>
                     <td style="font-weight:700">${(t.amount||0).toLocaleString('pt-MZ')} MZN</td>

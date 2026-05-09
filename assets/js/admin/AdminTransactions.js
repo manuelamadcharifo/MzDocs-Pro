@@ -30,7 +30,7 @@ export class AdminTransactions {
                     confirmed_by,
                     confirmed_at,
                     created_at,
-                    profiles:user_id (full_name, email, phone)
+                    user_profile:profiles!transactions_user_id_fkey(full_name, email, phone)
                 `)
                 .order('created_at', { ascending: false });
 
@@ -70,7 +70,7 @@ export class AdminTransactions {
         }
 
         tbody.innerHTML = transactions.map(t => {
-            const profile = t.profiles || {};
+            const profile = t.user_profile || {};
             const isPending = t.status === 'pending';
             const date = new Date(t.created_at).toLocaleDateString('pt-MZ');
             const time = new Date(t.created_at).toLocaleTimeString('pt-MZ', { hour: '2-digit', minute: '2-digit' });

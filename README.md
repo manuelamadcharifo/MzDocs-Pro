@@ -1,13 +1,131 @@
-# MzDocs Pro v4.0 🇲🇿
+# MzDocs Pro v6.0 🇲🇿
 
 Plataforma de geração inteligente de documentos para Moçambique — PWA completo com IA gratuita, pagamentos M-Pesa, OCR, editor Markdown, histórico local e painel administrativo.
 
 **Stack:** Arquitectura MVC · Groq + Gemini + OpenRouter (IA em corrida paralela) · Supabase Auth (Phone) + PostgreSQL · Vercel Serverless Functions · Tesseract.js OCR · Workbox PWA
 
 ---
----
 
 ## 📋 Changelog
+### v6.0 — Admin: Contas Avulsas, Utilizadores Temporários e Correcções de BD
+
+#### 🔴 BUG CRÍTICO — Transações falhavam com erro PGRST201 (FK ambígua)
+
+**Causa raiz:**
+A tabela `transactions` tem **duas chaves estrangeiras para `profiles`**: `user_id` e `confirmed_by`. O PostgREST não sabia qual usar no embed `profiles(full_name, phone, email)` e retornava `PGRST201 — more than one relationship found`.
+
+**Ficheiros corrigidos:**
+- `assets/js/admin/AdminApp.js` — embed alterado de `profiles(...)` para `user_profile:profiles!transactions_user_id_fkey(full_name, phone, email)` com alias explícito
+- `assets/js/admin/AdminTransactions.js` — idem; referências a `t.profiles` actualizadas para `t.user_profile`
+
+---
+
+#### 🔴 BUG CRÍTICO — Admin via `/admin.html` redirecionava para `/` após login
+
+**Causa raiz:**
+Race condition entre o Service Worker e o Supabase Auth. O SW interceptava `/admin.html` via `NavigationRoute` e servia uma versão cacheada antes da sessão estar carregada. O `AdminApp` via `isAuthenticated() = false` e redirecionava.
+
+**Ficheiros corrigidos:**
+- `sw.js` — `/admin.html` excluído do `NavigationRoute` via `denylist`; adicionada rota `NetworkOnly` explícita para `/admin.html`; revisão bumped de `3.2` → `3.3`
+- `assets/js/admin/AdminApp.js` — retry de 800ms antes de desistir da autenticação
+- `assets/js/auth/AuthGuard.js` — timeout de auth aumentado de 5s para 10s
+- `vercel.json` — header `Cache-Control: no-cache, no-store, must-revalidate` adicionado para `/index.html` e `/admin.html`
+
+---
+
+#### 🔴 BUG CRÍTICO — Serviços desapareciam no reload da página
+
+**Causa raiz:**
+Workbox servia o `index.html` do cache com revisão desactualizada; o `#svcGrid` ficava vazio.
+
+**Ficheiros corrigidos:**
+- `sw.js` — revisão bumped para `3.3`; `admin.css` adicionado ao precache
+- `index.html` — guard JavaScript que detecta `#svcGrid` vazio e força `reload(true)` sem cache (máximo 1 vez por sessão via `sessionStorage`)
+
+---
+
+#### 🔴 BUG — Admin só mostrava 1 utilizador em vez de todos
+
+**Causa raiz:**
+A política RLS `admin_all_profiles` era do tipo `FOR ALL` mas conflituava com a política de utilizador normal em SELECT, fazendo com que o PostgREST aplicasse a política mais restritiva.
+
+**Correcção:**
+- `supabase/migration_fix_rls_admin.sql` *(NOVO)* — recria as políticas RLS com separação explícita por operação (SELECT/UPDATE/DELETE), garantindo que admin vê todos os perfis sem excepção
+
+**⚠️ Execute no Supabase Dashboard → SQL Editor:**
+```
+supabase/migration_fix_rls_admin.sql
+```
+
+---
+
+#### 🟡 BUG — Coluna `is_blocked` não existia na BD
+
+**Causa raiz:**
+O código fazia `SELECT is_blocked` mas a coluna nunca foi adicionada ao schema, retornando erro `42703`.
+
+**Correcções:**
+- `assets/js/admin/AdminApp.js` — `_loadUsers` com fallback tolerante: tenta com `is_blocked`; se retornar `42703`, tenta sem ela e mostra aviso ao admin
+- `supabase/migration_add_is_blocked.sql` *(NOVO)* — adiciona coluna `is_blocked BOOLEAN NOT NULL DEFAULT FALSE` com índice e política RLS
+
+**⚠️ Execute no Supabase Dashboard → SQL Editor:**
+```
+supabase/migration_add_is_blocked.sql
+```
+
+---
+
+#### 🟢 FUNCIONALIDADE — Criar Conta Avulsa manualmente pelo painel Admin
+
+O admin agora pode criar uma conta avulsa directamente, sem precisar de uma transação pré-existente no sistema (útil quando o cliente já pagou fora da app).
+
+**Painel Admin → secção Utilizadores:**
+- Botão verde **➕ Avulso** na toolbar
+- Formulário: telemóvel do cliente, créditos a atribuir, referência de pagamento
+- Após criar: popup com email e password temporários + botão directo para enviar pelo WhatsApp
+- A conta é `is_temp: true` e auto-eliminada quando os créditos chegam a zero
+
+**Ficheiros alterados:**
+- `assets/js/admin/AdminApp.js` — métodos `createAvulsoModal()`, `_doCreateAvulso()`, `showTempCredentials()`, `_sendCredentialsWA()`
+- `admin.html` — botão ➕ Avulso na toolbar + opção **⏳ Temporários** no filtro de utilizadores
+- `assets/css/admin.css` — estilos `.badge-orange` e `.btn-info`
+- `api/admin/index.js` — endpoint `confirm-avulso` suporta novo modo `manual: true`
+
+---
+
+#### 🟢 FUNCIONALIDADE — Identificação visual de contas temporárias
+
+- Badge laranja **⏳ Avulso** em todos os utilizadores com `is_temp: true` (tabela e cards mobile)
+- Botão **🔑** para ver credenciais (email + password + telemóvel) de cada conta temporária
+- Botão **📱 Reenviar WhatsApp** para re-enviar as credenciais ao cliente
+
+---
+
+#### 🟢 MELHORIA — `_loadUsers` mais robusto
+
+- Selecciona agora `is_temp`, `temp_ref` e `temp_password` para identificação completa de contas avulsas
+- Fallback em dois níveis: tenta select completo → se erro de schema, tenta versão reduzida → normaliza campos ausentes como `false`/`null`
+
+---
+
+### Ordem de execução das migrações SQL (Supabase SQL Editor)
+
+Execute **pela primeira vez** nesta ordem se ainda não o fez:
+
+```
+1. supabase/schema.sql
+2. supabase/polices.sql
+3. supabase/migration_monthly_credits.sql
+4. supabase/migration_temp_accounts.sql
+5. supabase/migration_add_email.sql
+6. supabase/migration_add_is_blocked.sql    ← NOVO v6
+7. supabase/migration_fix_rls_admin.sql     ← NOVO v6
+```
+
+Se já tem versões anteriores, execute apenas os ficheiros **NOVO v6** acima.
+
+---
+
 
 ### v4.0 — Bugs Críticos de Auth + Admin + OCR Inteligente
 
@@ -97,7 +215,8 @@ MzDocs-Pro/
 │   ├── css/
 │   │   ├── styles.css
 │   │   ├── editor.css
-│   │   └── auth.css
+│   │   ├── auth.css
+│   │   └── admin.css
 │   ├── icons/
 │   │   ├── icon.svg
 │   │   ├── icon-192x192.png
@@ -134,7 +253,12 @@ MzDocs-Pro/
 │
 └── supabase/
     ├── schema.sql
-    └── polices.sql
+    ├── polices.sql
+    ├── migration_monthly_credits.sql
+    ├── migration_temp_accounts.sql
+    ├── migration_add_email.sql
+    ├── migration_add_is_blocked.sql       ← NOVO v6
+    └── migration_fix_rls_admin.sql        ← NOVO v6
 ```
 
 ---
