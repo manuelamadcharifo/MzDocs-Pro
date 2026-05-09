@@ -84,7 +84,10 @@ async function processMPesaPayment(phone, amount, packageId) {
 async function saveTransaction(userId, packageId, pkg, method, receipt, referenceId, phone) {
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return;
     try {
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+            auth: { autoRefreshToken: false, persistSession: false },
+            realtime: { transport: ws },
+        });
         await supabase.from('transactions').insert({
             user_id:        userId || null,
             package_id:     packageId,

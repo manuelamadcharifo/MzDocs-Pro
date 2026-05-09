@@ -81,14 +81,18 @@ export class AuthManager {
     async _loadProfile(userId) {
         if (!this.supabase || !userId) return;
         try {
-            const { data } = await this.supabase
+            const { data, error } = await this.supabase
                 .from('profiles')
                 .select('is_admin, credits, full_name, email, phone')
                 .eq('id', userId)
                 .single();
+            if (error && error.code !== 'PGRST116') {
+                console.warn('[AuthManager] _loadProfile erro:', error.message);
+            }
             this._isAdmin = data?.is_admin === true;
-            if (this.user) this.user._profile = data;
-        } catch {
+            if (this.user) this.user._profile = data || null;
+        } catch (err) {
+            console.warn('[AuthManager] _loadProfile excepção:', err.message);
             this._isAdmin = false;
         }
     }
@@ -119,8 +123,12 @@ export class AuthManager {
                 refresh_token: data.session.refresh_token,
             });
             this.session = data.session;
-            this.user    = data.session.user || data.user;
+            this.user    = data.session?.user || data.user || null;
             if (this.user?.id) await this._loadProfile(this.user.id);
+            this._notify();
+        } else if (data.user) {
+            // Supabase requer confirmação de email — sem sessão imediata
+            this.user = null;
             this._notify();
         }
         return data;
@@ -144,7 +152,16 @@ export class AuthManager {
         }
 
         const { data, error } = await this.supabase.auth.signInWithPassword(credentials);
-        if (error) throw new Error('Credenciais incorrectas. Verifique o número/email e password.');
+        if (error) {
+            const msg = error.message?.toLowerCase() || '';
+            if (msg.includes('email not confirmed') || msg.includes('not confirmed'))
+                throw new Error('E-mail ainda não confirmado. Verifique a sua caixa de entrada e clique no link de confirmação.');
+            if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('wrong password'))
+                throw new Error('Credenciais incorrectas. Verifique o número/email e password.');
+            if (msg.includes('too many requests') || msg.includes('rate limit'))
+                throw new Error('Demasiadas tentativas. Aguarde alguns minutos e tente novamente.');
+            throw new Error(error.message || 'Credenciais incorrectas. Verifique o número/email e password.');
+        }
         this.session = data.session;
         this.user    = data.user;
         await this._loadProfile(data.user.id);

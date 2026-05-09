@@ -1,6 +1,11 @@
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 // api/auth/index.js
+// ws é passado explicitamente ao RealtimeClient para compatibilidade com Node.js 20
+
+// Opções base que suprimem o erro de WebSocket em Node < 22
+const SUPABASE_OPTS_ANON    = () => ({ realtime: { transport: ws } });
+const SUPABASE_OPTS_SERVICE = () => ({ auth: { autoRefreshToken: false, persistSession: false }, realtime: { transport: ws } });
 // Router único para todas as funções de autenticação.
 // Elimina a necessidade de 4 funções separadas (Vercel Hobby limit = 12).
 //
@@ -54,7 +59,7 @@ async function handleSignin(req, res) {
   const clean = phone.replace(/\D/g, '');
   const normalized = clean.startsWith('258') ? `+${clean}` : `+258${clean}`;
   try {
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, SUPABASE_OPTS_ANON());
     const { data, error } = await supabase.auth.signInWithPassword({ phone: normalized, password });
     if (error) {
       if (error.message?.toLowerCase().includes('invalid'))
@@ -101,7 +106,7 @@ async function handleSignup(req, res) {
     if (!anonKey)     throw new Error('SUPABASE_ANON_KEY não configurada');
     if (!supabaseUrl) throw new Error('SUPABASE_URL não configurada');
     const supabaseAdmin = serviceKey
-      ? createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } })
+      ? createClient(supabaseUrl, serviceKey, SUPABASE_OPTS_SERVICE())
       : null;
     if (supabaseAdmin) {
       const [{ data: byEmail }, { data: byPhone }] = await Promise.all([
@@ -111,7 +116,7 @@ async function handleSignup(req, res) {
       if (byEmail) return res.status(409).json({ error: 'Este e-mail já está registado' });
       if (byPhone) return res.status(409).json({ error: 'Este número de telemóvel já está registado' });
     }
-    const supabaseAnon = createClient(supabaseUrl, anonKey);
+    const supabaseAnon = createClient(supabaseUrl, anonKey, SUPABASE_OPTS_ANON());
     const { data: userData, error: userErr } = await supabaseAnon.auth.signUp({
       email: normalizedEmail, password,
       options: { data: { full_name: normalizedName, phone: normalized, email: normalizedEmail } },
@@ -139,6 +144,7 @@ async function handleSignup(req, res) {
     }
     if (!profileSaved && userData.session) {
       const supabaseUser = createClient(supabaseUrl, anonKey, {
+        ...SUPABASE_OPTS_ANON(),
         global: { headers: { Authorization: `Bearer ${userData.session.access_token}` } },
       });
       const { error: updateErr } = await supabaseUser.from('profiles')
@@ -171,7 +177,7 @@ async function handleResetPassword(req, res) {
   if (!email) return res.status(400).json({ error: 'E-mail é obrigatório' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido' });
   try {
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, SUPABASE_OPTS_ANON());
     await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
       redirectTo: `${origin}/?reset=true`,
     });

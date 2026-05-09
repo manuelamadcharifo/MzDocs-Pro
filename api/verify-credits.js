@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 // api/verify-credits.js
 // Verificação de saldo de créditos — tabela profiles (corrigido)
 
@@ -11,7 +12,8 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { userId } = req.method === 'GET' ? req.query : req.body;
+  const body = req.method === 'GET' ? {} : (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {}));
+  const { userId } = req.method === 'GET' ? req.query : body;
 
   if (!userId) {
     return res.status(400).json({ error: 'userId é obrigatório' });
@@ -22,7 +24,10 @@ module.exports = async function handler(req, res) {
 
   if (supabaseUrl && supabaseKey) {
     try {
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const supabase = createClient(supabaseUrl, supabaseKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+        realtime: { transport: ws },
+      });
 
       // CORRIGIDO: usar tabela 'profiles' (não 'users')
       const { data, error } = await supabase
@@ -57,7 +62,7 @@ module.exports = async function handler(req, res) {
   }
 
   // Fallback offline
-  const localCredits = parseInt(req.body?.localCredits) || 0;
+  const localCredits = parseInt(body?.localCredits) || 0;
   return res.status(200).json({
     success: true,
     credits: localCredits,
@@ -66,4 +71,4 @@ module.exports = async function handler(req, res) {
   });
 }
 
-export const config = { maxDuration: 10 };
+// maxDuration configurado em vercel.json se necessário

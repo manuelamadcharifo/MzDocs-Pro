@@ -79,7 +79,7 @@ async function bootstrap() {
             .catch(e => console.warn('[MzDocs] SW erro:', e));
     }
 
-    console.log('[MzDocs Pro v3.1] Iniciado ✅ | Créditos:', creditModel.value);
+    console.log('[MzDocs Pro v6.0] Iniciado ✅ | Créditos:', creditModel.value);
 }
 
 // ─── Header Auth UI ──────────────────────────────────────────────────────────

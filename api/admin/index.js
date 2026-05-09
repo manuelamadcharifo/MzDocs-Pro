@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 // api/admin/index.js
+// ws é passado explicitamente para compatibilidade com Node.js 20
 // Router único para todas as funções admin.
 // Elimina a necessidade de 5 funções separadas (Vercel Hobby limit = 12).
 //
@@ -48,8 +49,11 @@ module.exports = async function handler(req, res) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function getAdminClient() {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY)
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada — operações admin impossíveis');
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
+    realtime: { transport: ws },
   });
 }
 
