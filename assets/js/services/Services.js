@@ -122,7 +122,7 @@ export class OpenRouterService {
       throw new Error(d.error || 'Erro ao verificar créditos. Tente novamente.');
     }
 
-    const { credits: creditsAfterDeduct } = await deductRes.json(); 
+    const { credits: creditsAfterDeduct } = await deductRes.json();
 
     // ── PASSO 2: Gerar documento ─────────────────────────────────────────
     const res = await fetch(this.endpoint, {
@@ -252,7 +252,7 @@ INSTRUÇÃO CRÍTICA PARA AS REFERÊNCIAS:
 - Após a lista de referências reais, adiciona SEMPRE esta nota: "[O autor deve completar com referências específicas consultadas durante a pesquisa]"
 - NUNCA adiciona aviso de que as referências são fictícias — em vez disso, só lista referências reais ou deixa a nota acima
 `;
-
+      },
 
       cv: () =>
         `Crie um CURRÍCULO VITAE PROFISSIONAL em Markdown para o mercado moçambicano.
