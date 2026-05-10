@@ -1,4 +1,7 @@
-// assets/js/services/OpenRouterService.js — IA gratuita com fallback automático
+// services/Services.js — OpenRouterService + MPesaService + SupabaseService
+import { Validator } from '../utils/Formatter.js';
+import { Formatter } from '../utils/Formatter.js';
+
 export class OpenRouterService {
   constructor() {
     this.endpoint = '/api/generate-document';
@@ -661,8 +664,6 @@ Linguagem formal, impessoal. Inclua menção ao Estatuto/Regulamento quando pert
 }
 
 // services/MPesaService.js — Integração M-Pesa com detecção de ambiente
-import { Validator } from '../utils/Formatter.js';
-import { Formatter } from '../utils/Formatter.js';
 
 export class MPesaService {
   constructor() {

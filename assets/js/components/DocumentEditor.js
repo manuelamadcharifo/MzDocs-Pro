@@ -119,6 +119,7 @@ export class DocumentEditor {
     const editWrap      = this.modal.querySelector('#edEditWrap');
     const subtoolbar    = this.modal.querySelector('#edSubtoolbar');
     const editToolbar   = this.modal.querySelector('#edEditToolbar');
+    const textarea      = this.modal.querySelector('#editorTextarea');
 
     this.modal.querySelectorAll('[data-fmt]').forEach(b => {
       b.classList.toggle('active', b.dataset.fmt === mode);
@@ -129,14 +130,40 @@ export class DocumentEditor {
       editWrap.style.display     = 'none';
       subtoolbar.style.display   = 'flex';
       editToolbar.style.display  = 'none';
+      // Sync content from textarea before switching back to preview
+      if (textarea) this.content = textarea.value;
       this._renderPreview(this._previewFmt);
+      this._updateA4Scale();
     } else {
       previewWrap.style.display  = 'none';
       editWrap.style.display     = 'flex';
       subtoolbar.style.display   = 'none';
       editToolbar.style.display  = 'flex';
-      this.modal.querySelector('#editorTextarea').value = this.content;
+      // Always sync latest content to textarea
+      if (textarea) {
+        textarea.value = this.content;
+        // Focus and place cursor at start for usability
+        setTimeout(() => { textarea.focus(); textarea.setSelectionRange(0, 0); }, 50);
+      }
+      this._updateStats();
     }
+  }
+
+  // ── Calcula e aplica escala A4 para mobile ─────────────────────
+  _updateA4Scale() {
+    const frame = this.modal.querySelector('.ed-a4-frame');
+    if (!frame) return;
+    const wrap = this.modal.querySelector('.ed-preview-wrap');
+    if (!wrap) return;
+    const availW = wrap.clientWidth - 32; // padding
+    const a4Px = 210 * 3.7795; // 210mm em px a 96dpi ≈ 794px
+    const scale = Math.min(1, availW / a4Px);
+    frame.style.setProperty('--a4-scale', scale);
+    // Override inline via CSS variable on the element
+    frame.style.transform = `scale(${scale})`;
+    frame.style.transformOrigin = 'top center';
+    const a4HeightPx = 297 * 3.7795;
+    frame.style.marginBottom = `${(a4HeightPx * scale) - a4HeightPx}px`;
   }
 
   // ── Renderiza preview fiel no iframe ──────────────────────────
@@ -440,6 +467,15 @@ export class DocumentEditor {
     });
     const dlBtn = this.modal.querySelector('#edBtnDownload');
     if (dlBtn) dlBtn.textContent = '⬇️ PDF';
+
+    // Actualiza escala A4 após render
+    setTimeout(() => this._updateA4Scale(), 100);
+
+    // Recalcula ao redimensionar janela
+    if (!this._resizeHandler) {
+      this._resizeHandler = () => this._updateA4Scale();
+      window.addEventListener('resize', this._resizeHandler);
+    }
   }
 
   open() {
