@@ -104,6 +104,16 @@ export class LongDocumentEngine {
     const userId = localStorage.getItem('mz_uid') || 'anon';
     const pages  = parseInt(formData?.paginas || 10);
 
+    // Obter token JWT para autenticação no servidor
+    let authToken = null;
+    try {
+      const { authManager } = await import('../auth/AuthManager.js');
+      authToken = await authManager.getValidToken();
+    } catch { /* sem token */ }
+
+    const chainHeaders = { 'Content-Type': 'application/json' };
+    if (authToken) chainHeaders['Authorization'] = `Bearer ${authToken}`;
+
     let planPrompt;
 
     if (serviceType === 'trabalho') {
@@ -137,12 +147,12 @@ Responda APENAS com JSON válido, sem texto antes ou depois:
 
     const res = await fetch(ENDPOINT, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: chainHeaders,
       body: JSON.stringify({
         serviceType: '__plan__',
         prompt:      planPrompt,
         userId,
-        userCredits: 999, // planeamento não desconta créditos
+        // _planMode=true → isChainCall=true no servidor → não deduz crédito
         _planMode:   true,
       }),
     });
@@ -176,13 +186,23 @@ Responda APENAS com JSON válido, sem texto antes ou depois:
 
     const prompt = this._buildSectionPrompt(section, formData, context);
 
+    // Obter token JWT (reutilizar se disponível)
+    let authToken = null;
+    try {
+      const { authManager } = await import('../auth/AuthManager.js');
+      authToken = await authManager.getValidToken();
+    } catch { /* sem token */ }
+
+    const chainHeaders = { 'Content-Type': 'application/json' };
+    if (authToken) chainHeaders['Authorization'] = `Bearer ${authToken}`;
+
     // Helper: fetch com timeout de 50s (abaixo do limite 60s do Vercel hobby)
     const fetchWithTimeout = (body) => {
       const ctrl = new AbortController();
       const tid  = setTimeout(() => ctrl.abort(), 50000);
       return fetch(ENDPOINT, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: chainHeaders,
         signal:  ctrl.signal,
         body:    JSON.stringify(body),
       }).finally(() => clearTimeout(tid));
@@ -194,7 +214,7 @@ Responda APENAS com JSON válido, sem texto antes ou depois:
         serviceType:     '__section__',
         prompt,
         userId,
-        userCredits:     999,
+        // _sectionMode=true → isChainCall=true no servidor → não deduz crédito
         _preferProvider: preferProvider,
         _sectionMode:    true,
       });
@@ -223,7 +243,6 @@ Responda APENAS com JSON válido, sem texto antes ou depois:
         serviceType:  '__section__',
         prompt,
         userId,
-        userCredits:  999,
         _sectionMode: true,
       });
 

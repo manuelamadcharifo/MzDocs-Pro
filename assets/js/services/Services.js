@@ -17,15 +17,24 @@ export class OpenRouterService {
 
 
   async generateRaw(prompt, reeditData = null, credits = null) {
-    const userId      = localStorage.getItem('mz_uid') || 'anon';
-    const userCredits = credits !== null ? credits : 0;
+    const userId = localStorage.getItem('mz_uid') || 'anon';
 
+    // Obter token JWT para autenticação no servidor
+    let authToken = null;
+    try {
+      const { authManager } = await import('../auth/AuthManager.js');
+      authToken = await authManager.getValidToken();
+    } catch { /* sem token */ }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    // NOTA: userCredits removido — créditos geridos no servidor via JWT
     const body = reeditData
       ? {
           serviceType: reeditData.serviceType || 'reedit',
           prompt: prompt,
           userId,
-          userCredits: userCredits,
           _reedit: true,
           _currentContent: reeditData.currentContent,
           _instruction: reeditData.instruction,
@@ -34,12 +43,11 @@ export class OpenRouterService {
           serviceType: 'reedit',
           prompt,
           userId,
-          userCredits: credits
         };
 
     const res = await fetch(this.endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
 
@@ -56,13 +64,23 @@ export class OpenRouterService {
   }
 
   async _callBackend(serviceType, prompt, credits = null) {
-    const userId       = localStorage.getItem('mz_uid') || 'anon';
-    const userCredits  = credits !== null ? credits : 0;
+    const userId = localStorage.getItem('mz_uid') || 'anon';
+
+    // Obter token JWT para autenticação no servidor
+    let authToken = null;
+    try {
+      const { authManager } = await import('../auth/AuthManager.js');
+      authToken = await authManager.getValidToken();
+    } catch { /* sem token */ }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
     const res = await fetch(this.endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serviceType, prompt, userId, userCredits: userCredits }),
+      headers,
+      // NOTA: userCredits removido — créditos são geridos exclusivamente no servidor
+      body: JSON.stringify({ serviceType, prompt, userId }),
     });
 
     if (res.status === 429) { const e = new Error('RATE_LIMIT'); e.status = 429; throw e; }

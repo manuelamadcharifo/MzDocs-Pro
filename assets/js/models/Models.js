@@ -125,15 +125,20 @@ export class CreditModel {
     }
 
     async _syncFromServer() {
-        // Não sincroniza se houve um consume() nos últimos 15s (evita reverter debito optimista)
+        // Protecção: se debitámos há menos de 20s, não sincronizar
+        // (evita que o autosync leia um valor desactualizado do Supabase antes de o RPC propagar)
         const lastConsume = this._lastConsumeAt || 0;
-        if (Date.now() - lastConsume < 15000) return;
+        if (Date.now() - lastConsume < 20000) return;
 
         const data = await this.supabase.syncUser(this.userId).catch(() => null);
         if (data && typeof data.credits === 'number') {
-            this.credits = data.credits;
-            Storage.set('credits', this.credits);
-            this._emit();
+            // Nunca repor um valor MAIOR que o actual sem verificação
+            // (protege contra sincronização fora de ordem)
+            if (data.credits !== this.credits) {
+                this.credits = data.credits;
+                Storage.set('credits', this.credits);
+                this._emit();
+            }
         }
     }
 
@@ -146,30 +151,20 @@ export class CreditModel {
     async consume(n = 1) {
         if (!this.canConsume(n)) throw new Error('INSUFFICIENT_CREDITS');
 
-        this._lastConsumeAt = Date.now(); // marca timestamp para bloquear autosync
-        // Debita optimisticamente no cliente PRIMEIRO (evita que autosync reverta)
-        this.credits = Math.max(0, this.credits - n);
-        Storage.set('credits', this.credits);
-        this._emit();
-
-        // Depois sincroniza com Supabase (RPC ou update directo)
-        try {
-            const server = await this.supabase.deductCredit(this.userId);
-            if (server !== null && server >= 0) {
-                // Usa valor do servidor se disponível (fonte de verdade)
-                this.credits = server;
-                Storage.set('credits', server);
-                this._emit();
-            } else {
-                // RPC falhou — escreve directamente na tabela profiles
-                await this.supabase.updateCredits(this.userId, this.credits).catch(() => {});
-            }
-        } catch {
-            // Fallback: escreve o valor optimista no servidor
-            await this.supabase.updateCredits(this.userId, this.credits).catch(() => {});
-        }
-
+        // NÃO debitamos optimisticamente aqui — o servidor já debitou dentro de generate-document.
+        // Este método agora apenas sincroniza o estado local com o valor já retornado pelo servidor.
+        // Chamado APÓS o generate com o creditsRemaining vindo do servidor.
+        // Assinatura mantida para compatibilidade com DocumentController.
         return this.credits;
+    }
+
+    // Chamado pelo DocumentController com o valor real do servidor após geração
+    applyServerDeduction(serverCredits) {
+        if (typeof serverCredits !== 'number' || serverCredits < 0) return;
+        this.credits = serverCredits;
+        Storage.set('credits', serverCredits);
+        this._lastConsumeAt = Date.now(); // bloquear autosync por 15s
+        this._emit();
     }
 
     async add(n) {

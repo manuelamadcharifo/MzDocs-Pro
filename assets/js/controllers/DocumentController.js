@@ -143,6 +143,11 @@ export class DocumentController {
       );
 
       DocumentView.hideLoader(this._genIv);
+      // Usar o valor de créditos retornado pelo SERVIDOR (nunca calcular no cliente)
+      if (typeof result.creditsRemaining === 'number') {
+        this.creditModel.applyServerDeduction(result.creditsRemaining);
+      }
+      // consume() mantido para compatibilidade, mas já não debita — só verifica
       await this.creditModel.consume(cost);
 
       this.docModel.setGenerated(result.document, result.model);
@@ -223,6 +228,10 @@ export class DocumentController {
 
       DocumentView.hideLoader(this._genIv);
       this._longRunning = false;
+      // Usar o valor de créditos retornado pelo SERVIDOR
+      if (typeof result.creditsRemaining === 'number') {
+        this.creditModel.applyServerDeduction(result.creditsRemaining);
+      }
       await this.creditModel.consume(cost);
 
       this.docModel.setGenerated(result.document, result.model);

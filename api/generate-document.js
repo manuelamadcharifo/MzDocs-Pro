@@ -94,7 +94,8 @@ module.exports = async function handler(req, res) {
     catch { return res.status(400).json({ error: 'Body JSON inválido' }); }
 
     const {
-        serviceType, prompt, userId, userCredits,
+        serviceType, prompt, userId,
+        // NOTA: userCredits foi removido intencionalmente — créditos vêm sempre do servidor
         _reedit, _currentContent, _instruction,
         _preferProvider,
         _planMode,    // planeamento (retorna JSON de secções)
@@ -131,9 +132,86 @@ module.exports = async function handler(req, res) {
 
     if (!finalPrompt) return res.status(400).json({ error: 'prompt obrigatório' });
 
-    // Verificação de créditos apenas para chamadas normais (não cadeia)
-    if (!isChainCall && typeof userCredits === 'number' && userCredits < 1) {
-        return res.status(402).json({ error: 'INSUFFICIENT_CREDITS', code: 'INSUFFICIENT_CREDITS' });
+    // ── Verificação e dedução de créditos NO SERVIDOR (não no cliente) ───────
+    // Créditos NUNCA vêm do body — lemos e debitamos directamente no Supabase via JWT.
+    // Chamadas de cadeia interna (_planMode / _sectionMode) não deduzem crédito.
+    let creditsAfterDeduction = null;
+    let verifiedUserId = userId; // fallback; sobrescrito pelo JWT abaixo
+
+    if (!isChainCall) {
+        const authHeader = req.headers['authorization'] || '';
+        const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+
+        if (!token) {
+            return res.status(401).json({
+                error: 'Autenticação obrigatória para gerar documentos.',
+                code: 'AUTH_REQUIRED',
+            });
+        }
+
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (!supabaseUrl || !serviceKey) {
+            // Supabase não configurado: modo degradado (sem dedução)
+            console.warn('[generate-document] Supabase não configurado — prosseguindo sem dedução de créditos');
+        } else {
+            try {
+                const { createClient } = require('@supabase/supabase-js');
+                const ws = require('ws');
+                const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
+                    auth: { autoRefreshToken: false, persistSession: false },
+                    realtime: { transport: ws },
+                });
+
+                // 1. Verificar JWT → obter userId real do servidor (nunca confiar no body)
+                const { data: { user: jwtUser }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+                if (authErr || !jwtUser) {
+                    return res.status(401).json({
+                        error: 'Sessão inválida ou expirada. Inicie sessão novamente.',
+                        code: 'AUTH_REQUIRED',
+                    });
+                }
+                verifiedUserId = jwtUser.id;
+
+                // 2. Dedução atómica via RPC (inclui auto-eliminação de contas temp a 0 créditos)
+                const { data: remaining, error: rpcErr } = await supabaseAdmin
+                    .rpc('deduct_credit', { user_id: verifiedUserId });
+
+                if (rpcErr) {
+                    // Fallback: ler perfil e decrementar directamente
+                    const { data: profile } = await supabaseAdmin
+                        .from('profiles').select('credits, is_temp').eq('id', verifiedUserId).single();
+
+                    if (!profile || profile.credits < 1) {
+                        return res.status(402).json({
+                            error: 'Créditos insuficientes.',
+                            code: 'INSUFFICIENT_CREDITS',
+                            credits: 0,
+                        });
+                    }
+                    const newCred = profile.credits - 1;
+                    await supabaseAdmin.from('profiles')
+                        .update({ credits: newCred, updated_at: new Date().toISOString() })
+                        .eq('id', verifiedUserId);
+                    if (newCred === 0 && profile.is_temp) {
+                        supabaseAdmin.auth.admin.deleteUser(verifiedUserId).catch(() => {});
+                    }
+                    creditsAfterDeduction = newCred;
+                } else if (remaining === -1 || remaining === null) {
+                    return res.status(402).json({
+                        error: 'Créditos insuficientes.',
+                        code: 'INSUFFICIENT_CREDITS',
+                        credits: 0,
+                    });
+                } else {
+                    creditsAfterDeduction = remaining; // valor real do servidor
+                }
+            } catch (e) {
+                console.error('[generate-document] Erro ao verificar/deduzir créditos:', e.message);
+                return res.status(500).json({ error: 'Erro ao verificar créditos. Tente novamente.' });
+            }
+        }
     }
 
     const maxTokens = _sectionMode ? 8192 : (_planMode ? 1024 : 8192);
@@ -148,7 +226,7 @@ module.exports = async function handler(req, res) {
                 event: 'doc_generated', serviceType,
                 provider: result.provider, model: result.model,
                 ms: result.ms,
-                userId: userId ? userId.slice(0, 8) + '***' : 'anon',
+                userId: verifiedUserId ? verifiedUserId.slice(0, 8) + '***' : 'anon',
                 ts: new Date().toISOString(),
             }));
         }
@@ -156,14 +234,17 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({
             document: result.content,
             model: `${result.provider} · ${result.model}`,
-            creditsRemaining: (!isChainCall && typeof userCredits === 'number')
-                ? Math.max(0, userCredits - 1)
-                : null,
+            // creditsRemaining vem sempre do servidor — nunca calculado no cliente
+            creditsRemaining: creditsAfterDeduction,
             usage: result.usage,
         });
 
     } catch (err) {
         console.error('[generate-document] Todos os providers falharam:', err?.message);
+        // IMPORTANTE: crédito já foi debitado antes de tentar gerar.
+        // Se a geração falhar, o crédito foi consumido — comportamento intencional
+        // (o servidor processou o pedido; a falha é do provider de IA, não do utilizador).
+        // Para restituir, seria necessário um sistema de reembolso separado.
         return res.status(503).json({
             error: 'Serviço de IA temporariamente indisponível. Tente novamente.',
             code: 'SERVICE_UNAVAILABLE',
