@@ -95,11 +95,12 @@ module.exports = async function handler(req, res) {
 
     const {
         serviceType, prompt, userId,
-        // NOTA: userCredits foi removido intencionalmente — créditos vêm sempre do servidor
         _reedit, _currentContent, _instruction,
         _preferProvider,
         _planMode,    // planeamento (retorna JSON de secções)
         _sectionMode, // geração de uma secção individual
+        // creditsRemaining enviado pelo cliente após /api/deduct-credit ter debitado com sucesso
+        creditsRemaining: preDeductedCredits,
     } = body;
 
     // Chamadas de cadeia (_planMode ou _sectionMode) têm rate-limit próprio
@@ -132,39 +133,30 @@ module.exports = async function handler(req, res) {
 
     if (!finalPrompt) return res.status(400).json({ error: 'prompt obrigatório' });
 
-    // ── Verificação e dedução de créditos NO SERVIDOR (não no cliente) ───────
-    // Créditos NUNCA vêm do body — lemos e debitamos directamente no Supabase via JWT.
-    // Chamadas de cadeia interna (_planMode / _sectionMode) não deduzem crédito.
-    let creditsAfterDeduction = null;
-    let verifiedUserId = userId; // fallback; sobrescrito pelo JWT abaixo
-
+    // ── Autenticação obrigatória para chamadas normais (não-chain) ───────────
+    // A DEDUÇÃO DE CRÉDITOS é feita ANTES desta chamada pelo cliente via /api/deduct-credit.
+    // Este endpoint apenas verifica o JWT (para logging) e gera o documento.
+    // Chamadas de cadeia interna (_planMode / _sectionMode) não requerem token.
+    let verifiedUserId = userId;
     if (!isChainCall) {
         const authHeader = req.headers['authorization'] || '';
         const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
-
         if (!token) {
             return res.status(401).json({
                 error: 'Autenticação obrigatória para gerar documentos.',
                 code: 'AUTH_REQUIRED',
             });
         }
-
-        const supabaseUrl = process.env.SUPABASE_URL;
-        const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-        if (!supabaseUrl || !serviceKey) {
-            // Supabase não configurado: modo degradado (sem dedução)
-            console.warn('[generate-document] Supabase não configurado — prosseguindo sem dedução de créditos');
-        } else {
-            try {
-                const { createClient } = require('@supabase/supabase-js');
-                const ws = require('ws');
+        try {
+            const { createClient } = require('@supabase/supabase-js');
+            const ws = require('ws');
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (supabaseUrl && serviceKey) {
                 const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
                     auth: { autoRefreshToken: false, persistSession: false },
                     realtime: { transport: ws },
                 });
-
-                // 1. Verificar JWT → obter userId real do servidor (nunca confiar no body)
                 const { data: { user: jwtUser }, error: authErr } = await supabaseAdmin.auth.getUser(token);
                 if (authErr || !jwtUser) {
                     return res.status(401).json({
@@ -173,46 +165,15 @@ module.exports = async function handler(req, res) {
                     });
                 }
                 verifiedUserId = jwtUser.id;
-
-                // 2. Dedução atómica via RPC (inclui auto-eliminação de contas temp a 0 créditos)
-                const { data: remaining, error: rpcErr } = await supabaseAdmin
-                    .rpc('deduct_credit', { user_id: verifiedUserId });
-
-                if (rpcErr) {
-                    // Fallback: ler perfil e decrementar directamente
-                    const { data: profile } = await supabaseAdmin
-                        .from('profiles').select('credits, is_temp').eq('id', verifiedUserId).single();
-
-                    if (!profile || profile.credits < 1) {
-                        return res.status(402).json({
-                            error: 'Créditos insuficientes.',
-                            code: 'INSUFFICIENT_CREDITS',
-                            credits: 0,
-                        });
-                    }
-                    const newCred = profile.credits - 1;
-                    await supabaseAdmin.from('profiles')
-                        .update({ credits: newCred, updated_at: new Date().toISOString() })
-                        .eq('id', verifiedUserId);
-                    if (newCred === 0 && profile.is_temp) {
-                        supabaseAdmin.auth.admin.deleteUser(verifiedUserId).catch(() => {});
-                    }
-                    creditsAfterDeduction = newCred;
-                } else if (remaining === -1 || remaining === null) {
-                    return res.status(402).json({
-                        error: 'Créditos insuficientes.',
-                        code: 'INSUFFICIENT_CREDITS',
-                        credits: 0,
-                    });
-                } else {
-                    creditsAfterDeduction = remaining; // valor real do servidor
-                }
-            } catch (e) {
-                console.error('[generate-document] Erro ao verificar/deduzir créditos:', e.message);
-                return res.status(500).json({ error: 'Erro ao verificar créditos. Tente novamente.' });
             }
+        } catch (e) {
+            console.error('[generate-document] Erro ao verificar JWT:', e.message);
+            return res.status(401).json({ error: 'Erro ao verificar sessão.' });
         }
     }
+
+    // creditsAfterDeduction: valor já debitado pelo /api/deduct-credit — apenas reenviado ao cliente
+    const creditsAfterDeduction = typeof preDeductedCredits === 'number' ? preDeductedCredits : null;
 
     const maxTokens = _sectionMode ? 8192 : (_planMode ? 1024 : 8192);
 

@@ -10,10 +10,10 @@ export class OpenRouterService {
     this.currentModel = this.models.primary;
   }
 
-  async generate(serviceType, formData, ocrText = null, credits = null) {
+  async generate(serviceType, formData, ocrText = null, credits = null, cost = 1) {
     const prompt = this._buildPrompt(serviceType, formData, ocrText);
-    return await this._callBackend(serviceType, prompt, credits);
-}
+    return await this._callBackend(serviceType, prompt, credits, cost);
+  }
 
 
   async generateRaw(prompt, reeditData = null, credits = null) {
@@ -26,10 +26,26 @@ export class OpenRouterService {
       authToken = await authManager.getValidToken();
     } catch { /* sem token */ }
 
-    const headers = { 'Content-Type': 'application/json' };
-    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (!authToken) {
+      throw Object.assign(new Error('Sessão expirada. Inicie sessão novamente.'), { code: 'AUTH_REQUIRED' });
+    }
 
-    // NOTA: userCredits removido — créditos geridos no servidor via JWT
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` };
+
+    // Deduzir 1 crédito antes da reedição
+    const deductRes = await fetch('/api/deduct-credit', {
+      method: 'POST', headers,
+      body: JSON.stringify({ cost: 1 }),
+    });
+    if (deductRes.status === 402) {
+      const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e;
+    }
+    if (!deductRes.ok) {
+      const d = await deductRes.json().catch(() => ({}));
+      throw new Error(d.error || 'Erro ao verificar créditos.');
+    }
+    const { credits: creditsAfterDeduct } = await deductRes.json();
+
     const body = reeditData
       ? {
           serviceType: reeditData.serviceType || 'reedit',
@@ -63,7 +79,7 @@ export class OpenRouterService {
     return await res.json();
   }
 
-  async _callBackend(serviceType, prompt, credits = null) {
+  async _callBackend(serviceType, prompt, credits = null, cost = 1) {
     const userId = localStorage.getItem('mz_uid') || 'anon';
 
     // Obter token JWT para autenticação no servidor
@@ -73,18 +89,51 @@ export class OpenRouterService {
       authToken = await authManager.getValidToken();
     } catch { /* sem token */ }
 
-    const headers = { 'Content-Type': 'application/json' };
-    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (!authToken) {
+      throw Object.assign(new Error('Sessão expirada. Inicie sessão novamente.'), { code: 'AUTH_REQUIRED' });
+    }
 
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+    };
+
+    // ── PASSO 1: Deduzir créditos via /api/deduct-credit ────────────────
+    // Feito ANTES da geração para garantir que os créditos são consumidos
+    // mesmo que a geração falhe (o servidor de IA pode falhar, o crédito foi usado).
+    const deductRes = await fetch('/api/deduct-credit', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ cost }),
+    });
+
+    if (deductRes.status === 401) {
+      const e = new Error('Sessão inválida. Inicie sessão novamente.'); e.status = 401;
+      throw e;
+    }
+    if (deductRes.status === 402) {
+      const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e;
+    }
+    if (!deductRes.ok) {
+      const d = await deductRes.json().catch(() => ({}));
+      throw new Error(d.error || 'Erro ao verificar créditos. Tente novamente.');
+    }
+
+    const { credits: creditsAfterDeduct } = await deductRes.json();
+
+    // ── PASSO 2: Gerar documento ─────────────────────────────────────────
     const res = await fetch(this.endpoint, {
       method: 'POST',
-      headers,
-      // NOTA: userCredits removido — créditos são geridos exclusivamente no servidor
-      body: JSON.stringify({ serviceType, prompt, userId }),
+      headers: authHeaders,
+      body: JSON.stringify({
+        serviceType,
+        prompt,
+        userId,
+        creditsRemaining: creditsAfterDeduct, // enviado de volta para o cliente via resposta
+      }),
     });
 
     if (res.status === 429) { const e = new Error('RATE_LIMIT'); e.status = 429; throw e; }
-    if (res.status === 402) { const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e; }
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       const e = new Error(data.error || `HTTP ${res.status}`);
@@ -92,7 +141,12 @@ export class OpenRouterService {
       throw e;
     }
 
-    return await res.json();
+    const result = await res.json();
+    // Garantir que creditsRemaining está sempre presente (vem do /api/deduct-credit)
+    if (typeof result.creditsRemaining !== 'number') {
+      result.creditsRemaining = creditsAfterDeduct;
+    }
+    return result;
   }
 
   _buildPrompt(type, data, ocr) {

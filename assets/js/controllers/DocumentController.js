@@ -139,7 +139,7 @@ export class DocumentController {
 
     try {
       const result = await this.queue.add(() =>
-        this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value)
+        this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost)
       );
 
       DocumentView.hideLoader(this._genIv);
@@ -214,7 +214,7 @@ export class DocumentController {
     });
 
     try {
-      const result = await this.longEngine.generate(key, data, this.creditModel.value);
+      const result = await this.longEngine.generate(key, data, this.creditModel.value, cost);
 
       // null = motor de cadeia pediu fallback para geração normal
       if (!result) {

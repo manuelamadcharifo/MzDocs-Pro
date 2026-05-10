@@ -37,8 +37,43 @@ export class LongDocumentEngine {
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   // ── ENTRADA PRINCIPAL ──────────────────────────────────────────
-  async generate(serviceType, formData, credits) {
+  async generate(serviceType, formData, credits, cost = 1) {
     this._aborted = false;
+
+    // ── FASE 0: Deduzir créditos ANTES de iniciar a cadeia ─────
+    // Os créditos são debitados aqui (antes das chamadas chain _planMode/_sectionMode)
+    // porque as chamadas de cadeia têm isChainCall=true e não debitam no servidor.
+    let creditsAfterDeduct = null;
+    try {
+      const { authManager } = await import('../auth/AuthManager.js');
+      const authToken = await authManager.getValidToken();
+      if (!authToken) throw new Error('AUTH_REQUIRED');
+
+      const deductRes = await fetch('/api/deduct-credit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ cost }),
+      });
+
+      if (deductRes.status === 402) {
+        const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e;
+      }
+      if (deductRes.status === 401) {
+        const e = new Error('Sessão expirada. Inicie sessão novamente.'); e.status = 401; throw e;
+      }
+      if (!deductRes.ok) {
+        const d = await deductRes.json().catch(() => ({}));
+        throw new Error(d.error || 'Erro ao verificar créditos.');
+      }
+      const deductData = await deductRes.json();
+      creditsAfterDeduct = deductData.credits;
+    } catch (e) {
+      // Relançar erros de crédito/auth para o controller tratar
+      throw e;
+    }
 
     // ── FASE 1: Planeamento ────────────────────────────────────
     this._emit({ phase: 'plan', step: 0, text: '📋 A planear estrutura do documento…' });
@@ -94,8 +129,9 @@ export class LongDocumentEngine {
 
     return {
       document,
-      model:    'Cadeia de Geração · multi-provider',
-      sections: sections.length,
+      model:            'Cadeia de Geração · multi-provider',
+      sections:         sections.length,
+      creditsRemaining: creditsAfterDeduct, // valor real do servidor
     };
   }
 
