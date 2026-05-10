@@ -357,6 +357,47 @@ export class DocumentController {
     }, 100);
   }
 
+
+  // Mapeamento de serviço → tipo de capa
+  _getDocType(serviceKey) {
+    const map = {
+      trabalho:      'trabalho',
+      planonegocio:  'planonegocio',
+      requerimento:  'requerimento',
+      licenca:       'requerimento',
+      acta:          'generic',
+      cv:            'none',          // CV não tem capa separada
+      carta:         'none',
+      arrendamento:  'generic',
+      procuracao:    'generic',
+      residencia:    'generic',
+      prestacao:     'generic',
+      recibo:        'none',
+      recomendacao:  'none',
+      orcamento:     'generic',
+    };
+    return map[serviceKey] || 'generic';
+  }
+
+
+  _buildExportMetadata(svc) {
+    const data = this.docModel.formData || {};
+    const base = {
+      title:    svc?.title || 'Documento',
+      docType:  this._getDocType(this.docModel.service),
+      cidade:   data.local || data.cidade || 'Maputo',
+      ano:      new Date().getFullYear(),
+    };
+    // Metadata específica por tipo
+    const extra = {
+      trabalho:     { disciplina: data.disciplina, nivel: data.nivel, aluno: data.aluno || data.nome, docente: data.docente, subtitulo: data.tema },
+      planonegocio: { nomeNegocio: data.nomeNegocio, sector: data.sector, proprietario: data.proprietario, local: data.local, investimento: data.investimento, retorno: data.retorno },
+      requerimento: { subtitulo: data.assunto },
+      licenca:      { subtitulo: data.tipoLicenca },
+    };
+    return { ...base, ...(extra[this.docModel.service] || {}) };
+  }
+
   _removeExportMenu() {
     document.getElementById('exportMenu')?.remove();
     if (this._menuOutside) {
@@ -373,7 +414,7 @@ export class DocumentController {
       await new PDFExporter().export(
         this.docModel.content,
         `mzdocs-${this.docModel.service}-${Date.now()}.pdf`,
-        { title: svc?.title || 'Documento' }
+        this._buildExportMetadata(svc)
       );
       NotificationView.success('✅ PDF descarregado!');
     } catch (err) { NotificationView.error('❌ Erro PDF: ' + err.message); }
@@ -387,7 +428,7 @@ export class DocumentController {
       await new WordExporter().export(
         this.docModel.content,
         `mzdocs-${this.docModel.service}-${Date.now()}.docx`,
-        { title: svc?.title || 'Documento' }
+        this._buildExportMetadata(svc)
       );
       NotificationView.success('✅ Word descarregado!');
     } catch (err) { NotificationView.error('❌ Erro Word: ' + err.message); }

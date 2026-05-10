@@ -199,20 +199,17 @@ REGRAS ABSOLUTAS DE CONTEÚDO:
 5. Corrija ortografia e acentuação em português europeu/moçambicano
 6. Títulos e subtítulos em **negrito** e bem hierarquizados
 
+REGRAS DE QUALIDADE (violações tornam o documento inaceitável):
+- NUNCA repita o mesmo parágrafo ou ideia em secções diferentes — cada secção deve trazer conteúdo NOVO
+- NUNCA use linguagem genérica: "crescimento sustentável", "uma das principais", "de extrema importância" são proibidas
+- NUNCA inclua referências bibliográficas fictícias — se não tens referências reais, usa a fórmula indicada no fim
+- SEMPRE escreve texto académico denso, com dados, datas, nomes e exemplos concretos
+- Cada parágrafo tem EXACTAMENTE 1 ideia principal desenvolvida em 6-8 linhas
+
 ESTRUTURA OBRIGATÓRIA (copie exactamente incluindo ---PAGE_BREAK---):
 
 ---PAGE_BREAK---
 # ${data.tema}
-
-| | |
-|---|---|
-| **Instituição:** | [Nome da Instituição] |
-| **Curso/Disciplina:** | ${data.disciplina} |
-| **Nível:** | ${data.nivel} |
-| **Aluno(a):** | [Nome Completo] |
-| **Número de Estudante:** | [Número] |
-| **Docente:** | [Nome do Professor] |
-| **Cidade e Ano:** | Maputo, ${ano} |
 
 ---PAGE_BREAK---
 ## Índice
@@ -244,17 +241,14 @@ Parágrafo 4 — Recomendações: proponha acções concretas para gestores, pol
 ---PAGE_BREAK---
 ## ${numCaps + 3}. Referências Bibliográficas
 
-[Liste MÍNIMO 7 referências reais e verificáveis em formato APA 7ª edição, incluindo obrigatoriamente:
-- Pelo menos 2 livros académicos publicados sobre o tema
-- Pelo menos 1 artigo científico de revista indexada
-- Pelo menos 1 relatório de organismo internacional (ONU, Banco Mundial, UA, SADC)
-- Pelo menos 1 fonte moçambicana (INE, Governo de Moçambique, universidades moçambicanas)
-
-Exemplo de formato:
-Apelido, A. B. (Ano). *Título do livro em itálico*. Editora.
-Apelido, A. B., & Apelido, C. D. (Ano). Título do artigo. *Nome da Revista*, Volume(Número), páginas. https://doi.org/xxxxx]
+INSTRUÇÃO CRÍTICA PARA AS REFERÊNCIAS:
+- Lista apenas referências que EXISTEM REALMENTE e são verificáveis
+- Formato APA 7ª edição obrigatório
+- Se não tens certeza de uma referência, NÃO a incluas
+- No mínimo: 1 livro académico real + 1 relatório de organismo oficial (ONU, Banco Mundial, INE Moçambique, SADC)
+- Após a lista de referências reais, adiciona SEMPRE esta nota: "[O autor deve completar com referências específicas consultadas durante a pesquisa]"
+- NUNCA adiciona aviso de que as referências são fictícias — em vez disso, só lista referências reais ou deixa a nota acima
 `;
-      },
 
 
       cv: () =>
@@ -322,24 +316,70 @@ ESTRUTURA:
 7. ASSINATURAS: outorgante + procurador + 2 testemunhas com BI + espaço para reconhecimento de firma
 Linguagem formal, jurídica, em português de Moçambique.`,
 
-      requerimento: () =>
-        `Redija um REQUERIMENTO OFICIAL formal para repartição pública em Moçambique.
+      requerimento: () => {
+        const hoje = new Date();
+        const dataFormatada = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
+        return `Redija um REQUERIMENTO OFICIAL completo e juridicamente estruturado para repartição pública em Moçambique.
+
 DADOS:
-- Entidade: ${data.entidade}
+- Entidade destinatária: ${data.entidade}
 - Assunto: ${data.assunto}
-- Requerente: ${data.remetente} | BI: ${data.bi} | Tel: ${data.contacto}
-- Endereço: ${data.endereco}
-- Fundamento: ${data.fundamento}
-- Anexos: ${data.anexos || 'Nenhum especificado'}${ocrBlock}
-ESTRUTURA:
-1. CABEÇALHO: Exmo(a). Sr(a). Director(a) da [entidade]
-2. ASSUNTO em maiúsculas
-3. IDENTIFICAÇÃO: Eu, [nome], BI n.º [BI], residente em [endereço], contacto [tel], venho REQUERER:
-4. EXPOR (3 parágrafos: contexto, necessidade, urgência)
-5. REQUERER: pedido específico e formal
-6. ANEXOS: lista
-7. FECHO: "Pela atenção, desde já agradeço" + local + data + assinatura
-Linguagem formal, respeitosa, típica da administração pública moçambicana.`,
+- Requerente: ${data.remetente} | BI n.º: ${data.bi} | Tel: ${data.contacto}
+- Endereço do requerente: ${data.endereco}
+- Fundamento do pedido: ${data.fundamento}
+- Documentos anexos: ${data.anexos || 'Ver lista abaixo'}${ocrBlock}
+
+ESTRUTURA LEGAL MOÇAMBICANA OBRIGATÓRIA:
+
+Exmo(a). Sr(a). [Cargo e nome do responsável, ex: Director(a) dos Serviços de...]
+${data.entidade}
+[Cidade]
+
+**ASSUNTO: ${data.assunto.toUpperCase()}**
+
+**N.º de Processo:** ___/____/____ *(a preencher pela repartição)*
+
+Eu, **${data.remetente}**, portador(a) do Bilhete de Identidade n.º **${data.bi}**, residente em **${data.endereco}**, contacto **${data.contacto}**, nos termos da legislação moçambicana em vigor, venho, respeitosamente, expor e requerer o seguinte:
+
+**I. EXPOSIÇÃO DOS FACTOS**
+
+[Parágrafo 1 — Contextualização (4-5 linhas): apresenta quem é o requerente, a sua situação actual e o contexto que motiva o pedido. Seja específico e factual.]
+
+[Parágrafo 2 — Necessidade e justificação (4-5 linhas): explica com precisão por que é necessário o que está a pedir, quais as consequências de não obter o pedido, e como isso afecta os seus direitos ou obrigações legais.]
+
+[Parágrafo 3 — Fundamento legal (3-4 linhas): cita a base legal aplicável — por exemplo, "ao abrigo do disposto no artigo [X] da Lei n.º [Y]/[ano], de [data]" — ou fundamenta no direito administrativo geral.]
+
+**II. DO PEDIDO**
+
+Face ao exposto, e nos termos legais aplicáveis, vem o(a) requerente REQUERER a V.ª Ex.ª que se digne:
+
+1. [Pedido principal específico e concreto — use linguagem formal: "...determinar", "...autorizar", "...emitir", "...deferir"]
+2. [Pedido secundário, se aplicável]
+3. Que seja notificado(a) do resultado do presente requerimento através do contacto ${data.contacto} ou por escrito no endereço acima indicado.
+
+**III. ANEXOS**
+
+Junta-se ao presente requerimento os seguintes documentos:
+
+${data.anexos ? data.anexos.split(/[,;]/).map((a, i) => (i+1) + '. ' + a.trim()).join('\n') : '1. Cópia do Bilhete de Identidade\n2. [Outros documentos relevantes]'}
+
+**IV. COMPROMISSO**
+
+O(A) requerente declara, sob compromisso de honra, que todos os factos expostos são verdadeiros e que os documentos juntos são autênticos, ficando ciente das responsabilidades legais decorrentes de falsas declarações, nos termos do Código Penal de Moçambique.
+
+Pede deferimento.
+
+${data.endereco || 'Maputo'}, ${dataFormatada}
+
+_________________________________________
+**${data.remetente}**
+*(Assinatura)*
+
+---
+
+*Para uso da repartição:*
+Data de entrada: ____/____/______ | N.º de Processo: _______ | Recebido por: _____________`;
+      },
 
       residencia: () =>
         `Redija uma DECLARAÇÃO DE RESIDÊNCIA formal para uso em repartições, bancos e empresas em Moçambique.
@@ -423,27 +463,150 @@ ESTRUTURA:
 8. ASSINATURA: nome, cargo, entidade
 Tom formal mas caloroso, com exemplos específicos (nunca genérico).`,
 
-      planonegocio: () =>
-        `Elabore um PLANO DE NEGÓCIOS SIMPLIFICADO para pequenos empreendedores em Moçambique.
-DADOS:
+      planonegocio: () => {
+        const anoActual = new Date().getFullYear();
+        return `Elabore um PLANO DE NEGÓCIOS PROFISSIONAL para o seguinte empreendimento em Moçambique.
+
+DADOS DO NEGÓCIO:
 - Nome: ${data.nomeNegocio} | Sector: ${data.sector}
 - Proprietário: ${data.proprietario} | Local: ${data.local}
 - Descrição: ${data.descricao}
 - Investimento inicial: ${data.investimento} MZN
 - Clientes-alvo: ${data.clientes}
-- Concorrência e diferencial: ${data.concorrencia || 'A definir'}
-- Prazo de retorno: ${data.retorno}${ocrBlock}
-ESTRUTURA (máximo 6 páginas A4):
-1. RESUMO EXECUTIVO: missão, visão, investimento, retorno esperado
-2. DESCRIÇÃO DO NEGÓCIO: o que vende, como funciona, modelo de receita
-3. ANÁLISE DE MERCADO: tamanho, tendências, clientes-alvo em Moçambique
-4. PLANO DE MARKETING: preço, promoção, canais de venda (inclui M-Pesa/WhatsApp)
-5. PLANO OPERACIONAL: processos, fornecedores, equipamentos, local
-6. PLANO FINANCEIRO: tabela com investimento inicial, custos mensais, receitas projetadas (12 meses), ponto de equilíbrio
-7. EQUIPE: quem trabalha e funções
-8. RISCOS E MITIGAÇÃO: 3 riscos + soluções
-9. CONCLUSÃO: pedido de apoio/financiamento
-Use dados realistas do mercado moçambicano ${new Date().getFullYear()}.`,
+- Concorrência e diferencial: ${data.concorrencia || 'A definir pelo proprietário'}
+- Prazo de retorno esperado: ${data.retorno}${ocrBlock}
+
+REGRAS DE QUALIDADE OBRIGATÓRIAS:
+1. NUNCA use frases genéricas: "uma das principais marcas", "crescimento sustentável e rentável", "qualidade e inovação" — estas são proibidas
+2. CADA secção deve ser específica ao negócio "${data.nomeNegocio}" — nunca genérica
+3. Se um dado não foi fornecido, apresenta campo "[A preencher pelo empreendedor]" — NUNCA inventa valores
+4. Projectões financeiras: se não há dados de base, apresenta tabela com fórmulas e instruções de preenchimento
+5. Use dados reais do mercado moçambicano ${anoActual} (inflação, taxa de câmbio, tendências do sector ${data.sector})
+6. Sem repetições — cada secção traz informação NOVA e ESPECÍFICA
+
+ESTRUTURA OBRIGATÓRIA (use ---PAGE_BREAK--- entre cada secção principal):
+
+---PAGE_BREAK---
+# ${data.nomeNegocio}
+**Plano de Negócios ${anoActual}**
+
+---PAGE_BREAK---
+## Índice
+
+1. Resumo Executivo .................................................. 3
+2. Descrição do Negócio .............................................. 4
+3. Análise de Mercado ................................................. 5
+4. Plano de Marketing ................................................. 6
+5. Plano Operacional .................................................. 7
+6. Plano Financeiro ................................................... 8
+7. Equipa e Estrutura ................................................. 9
+8. Riscos e Mitigação ................................................. 10
+9. Conclusão e Pedido de Apoio ........................................ 11
+
+---PAGE_BREAK---
+## 1. Resumo Executivo
+
+[Escreve 3-4 parágrafos concisos e específicos sobre "${data.nomeNegocio}":
+- Parágrafo 1: O que é o negócio, o que vende/oferece, em que contexto do sector ${data.sector} se insere em ${data.local}
+- Parágrafo 2: Modelo de receita específico, proposta de valor diferenciada face à concorrência (${data.concorrencia || 'mercado local'})
+- Parágrafo 3: Investimento de ${data.investimento} MZN — como será utilizado (percentagem por categoria)
+- Parágrafo 4: Retorno esperado em ${data.retorno} com base nas condições do mercado moçambicano]
+
+---PAGE_BREAK---
+## 2. Descrição do Negócio
+
+[Descreve em 4-5 parágrafos específicos:
+- História e motivação: por que ${data.proprietario} criou este negócio, problema que resolve em ${data.local}
+- Produtos/serviços: lista detalhada com preços de referência em MZN
+- Modelo de operação: como funciona no dia-a-dia (horário, processos, equipa)
+- Vantagem competitiva: o que torna ${data.nomeNegocio} diferente dos concorrentes em ${data.local}
+- Fase actual e próximos passos nos primeiros 6 meses]
+
+---PAGE_BREAK---
+## 3. Análise de Mercado
+
+[4 parágrafos específicos ao sector ${data.sector} em Moçambique:
+- Tamanho do mercado: dados reais do INE ou Banco de Moçambique sobre o sector ${data.sector}
+- Clientes-alvo: perfil detalhado de ${data.clientes} (localização, rendimento médio, comportamento de compra)
+- Concorrência directa em ${data.local}: nomeia concorrentes reais se possível, analisa pontos fracos
+- Tendências ${anoActual}-${anoActual+2}: oportunidades e ameaças específicas ao sector em Moçambique]
+
+---PAGE_BREAK---
+## 4. Plano de Marketing
+
+[3-4 parágrafos + estratégia específica:
+- Preços: tabela comparativa com concorrência, justificação da margem
+- Canais de venda: presença física em ${data.local}, WhatsApp Business, M-Pesa, redes sociais — com plano de acção concreto
+- Promoção: estratégia de captação dos primeiros 50 clientes (orçamento específico, canais, mensagem)
+- Fidelização: como manter clientes recorrentes no contexto de ${data.local}]
+
+---PAGE_BREAK---
+## 5. Plano Operacional
+
+[Descreve com detalhe:
+- Localização e instalações: endereço exacto em ${data.local}, custos de renda/espaço
+- Equipamentos e fornecedores: lista de equipamentos necessários com preços MZN, fornecedores locais preferidos
+- Processos diários: fluxo de trabalho do negócio hora a hora
+- Cadeia de abastecimento: de onde vêm os produtos/materiais, prazo de entrega, condições de pagamento]
+
+---PAGE_BREAK---
+## 6. Plano Financeiro
+
+[Apresenta as seguintes tabelas com valores em MZN:]
+
+### 6.1 Investimento Inicial — Total: ${data.investimento} MZN
+
+| Item | Valor (MZN) | % do Total |
+|---|---|---|
+| Equipamentos | [A preencher] | [%] |
+| Stock inicial | [A preencher] | [%] |
+| Renda (3 meses) | [A preencher] | [%] |
+| Marketing inicial | [A preencher] | [%] |
+| Licenças e taxas | [A preencher] | [%] |
+| Reserva de emergência | [A preencher] | [%] |
+| **TOTAL** | **${data.investimento} MZN** | **100%** |
+
+### 6.2 Projecção Financeira — 12 Meses
+
+| Mês | Receita Prevista (MZN) | Custos Fixos (MZN) | Custos Variáveis (MZN) | Lucro/Prejuízo (MZN) |
+|---|---|---|---|---|
+| Mês 1 | [A preencher] | [A preencher] | [A preencher] | [Fórmula: Receita - Custos] |
+| Mês 2-3 | [A preencher] | [A preencher] | [A preencher] | [A preencher] |
+| Mês 4-6 | [A preencher] | [A preencher] | [A preencher] | [A preencher] |
+| Mês 7-12 | [A preencher] | [A preencher] | [A preencher] | [A preencher] |
+
+**Ponto de Equilíbrio:** [Calcule: Custos Fixos Mensais ÷ Margem de Contribuição (%)]
+**Prazo de Retorno do Investimento:** ${data.retorno}
+
+---PAGE_BREAK---
+## 7. Equipa e Estrutura
+
+[Descreve quem trabalha no negócio:
+- ${data.proprietario}: função, experiência, dedicação (tempo integral/parcial)
+- Outros colaboradores previstos: número, funções, custo mensal em MZN
+- Organograma simples se aplicável
+- Plano de formação se necessário]
+
+---PAGE_BREAK---
+## 8. Riscos e Mitigação
+
+| Risco | Probabilidade | Impacto | Estratégia de Mitigação |
+|---|---|---|---|
+| Baixa procura inicial | [Alta/Média/Baixa] | Alto | [Acção específica] |
+| Aumento de custos (inflação MZN) | Alta | Médio | Contratos de fornecimento a preço fixo; revisão trimestral |
+| Concorrência agressiva | [A avaliar] | [A avaliar] | [Acção específica] |
+| Problemas de liquidez | Média | Alto | Reserva de emergência de [X] MZN; crédito pré-aprovado |
+
+---PAGE_BREAK---
+## 9. Conclusão e Pedido de Apoio
+
+[2-3 parágrafos:
+- Síntese do potencial de ${data.nomeNegocio} para o mercado de ${data.local}
+- Pedido específico: tipo de apoio/financiamento pretendido, valor, condições propostas
+- Compromisso do empreendedor: o que oferece em troca (garantias, relatórios, transparência)]
+
+Use dados realistas do mercado moçambicano ${anoActual}.`;
+      },
 
       licenca: () =>
         `Redija um PEDIDO DE LICENÇA / AUTORIZAÇÃO formal para entidade pública em Moçambique.
