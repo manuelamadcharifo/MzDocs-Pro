@@ -507,7 +507,7 @@ USING (EXISTS (
         this._notify('⏳ A criar conta temporária…', 'info');
 
         try {
-            const token = authManager.getToken();
+            const token = await authManager.getValidToken();
             const res = await fetch('/api/admin/confirm-avulso', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -626,7 +626,7 @@ USING (EXISTS (
     async _doConfirm(txId, userId, credits) {
         this.closeModal();
         try {
-            const token = authManager.getToken();
+            const token = await authManager.getValidToken();
             const res = await fetch('/api/admin/confirm-payment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -771,7 +771,7 @@ USING (EXISTS (
     async fixMissingPhones() {
         this.closeModal();
         try {
-            const token = authManager.getToken();
+            const token = await authManager.getValidToken();
             const res = await fetch('/api/admin/fix-profiles', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` }

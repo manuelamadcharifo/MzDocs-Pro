@@ -50,11 +50,21 @@ export class AuthManager {
                 global:   { headers: { 'x-client-info': 'mzdocs-pro/6.0' } },
             });
 
-            const { data: { session } } = await this.supabase.auth.getSession();
+            const { data: { session }, error: sessErr } = await this.supabase.auth.getSession();
             if (session) {
-                this.session = session;
-                this.user = session.user;
-                await this._loadProfile(session.user.id); // carregar is_admin da tabela profiles
+                // Verificar se o token expira em menos de 60 segundos e refrescar preventivamente
+                const expiresAt   = session.expires_at; // unix timestamp (segundos)
+                const nowSecs     = Math.floor(Date.now() / 1000);
+                const needRefresh = expiresAt && (expiresAt - nowSecs) < 60;
+
+                if (needRefresh) {
+                    const { data: refreshed } = await this.supabase.auth.refreshSession();
+                    this.session = refreshed?.session || session;
+                } else {
+                    this.session = session;
+                }
+                this.user = this.session.user;
+                await this._loadProfile(this.session.user.id); // carregar is_admin da tabela profiles
             } else {
                 this.user = null;
             }
@@ -209,6 +219,21 @@ export class AuthManager {
     }
 
     getToken() { return this.session?.access_token || null; }
+
+    // Devolve sempre um token válido — refresca automaticamente se expirado ou prestes a expirar
+    async getValidToken() {
+        if (!this.supabase) return null;
+        const expiresAt = this.session?.expires_at;
+        const nowSecs   = Math.floor(Date.now() / 1000);
+        if (!this.session || (expiresAt && (expiresAt - nowSecs) < 60)) {
+            const { data } = await this.supabase.auth.refreshSession();
+            if (data?.session) {
+                this.session = data.session;
+                this.user    = data.session.user;
+            }
+        }
+        return this.session?.access_token || null;
+    }
 
     onChange(callback) {
         this._listeners.push(callback);

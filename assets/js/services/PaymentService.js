@@ -32,7 +32,7 @@ export class PaymentService {
       }
     }
 
-    return await this._payManual(packageId, userId);
+    return await this._payManual(packageId, phoneNumber, userId);
   }
 
   async _payMpesa(packageId, phoneNumber, userId) {
@@ -56,13 +56,14 @@ export class PaymentService {
     return { success: true, mode: 'mpesa', ...data };
   }
 
-  async _payManual(packageId, userId) {
+  async _payManual(packageId, phoneNumber, userId) {
     const res = await fetch(this.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'manual',
         packageId,
+        phoneNumber: phoneNumber ? this._formatPhone(phoneNumber) : null,
         userId,
       }),
     });

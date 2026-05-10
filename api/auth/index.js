@@ -137,10 +137,25 @@ async function handleSignup(req, res) {
     };
     let profileSaved = false;
     if (supabaseAdmin) {
-      await new Promise(r => setTimeout(r, 400));
-      const { error: upsertErr } = await supabaseAdmin.from('profiles').upsert(profilePayload, { onConflict: 'id' });
-      if (upsertErr) console.error('[auth/signup] Erro ao gravar perfil (admin):', upsertErr.message);
-      else profileSaved = true;
+      // Aguardar o trigger do Supabase criar o registo base em profiles
+      // (race condition: o trigger on auth.users pode ainda não ter corrido)
+      await new Promise(r => setTimeout(r, 800));
+      let upsertErr;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error } = await supabaseAdmin.from('profiles').upsert(profilePayload, { onConflict: 'id' });
+        upsertErr = error;
+        if (!error) { profileSaved = true; break; }
+        // Se for violação RLS em "new row", o trigger ainda não criou o registo — esperar mais
+        if (error.message?.includes('row-level security') || error.code === '42501') {
+          console.warn(`[auth/signup] RLS ao gravar perfil (tentativa ${attempt + 1}/3):`, error.message);
+          await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+        } else {
+          // Outro erro — não vale fazer retry
+          console.error('[auth/signup] Erro ao gravar perfil (admin):', error.message);
+          break;
+        }
+      }
+      if (!profileSaved && upsertErr) console.error('[auth/signup] Erro final ao gravar perfil:', upsertErr.message);
     }
     if (!profileSaved && userData.session) {
       const supabaseUser = createClient(supabaseUrl, anonKey, {
