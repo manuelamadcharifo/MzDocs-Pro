@@ -122,7 +122,7 @@ export class OpenRouterService {
       throw new Error(d.error || 'Erro ao verificar créditos. Tente novamente.');
     }
 
-    const { credits: creditsAfterDeduct } = await deductRes.json();
+    const { credits: creditsAfterDeduct } = await deductRes.json(); 
 
     // ── PASSO 2: Gerar documento ─────────────────────────────────────────
     const res = await fetch(this.endpoint, {
