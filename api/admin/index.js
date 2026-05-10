@@ -59,10 +59,41 @@ async function getAdminClient() {
 
 async function validateAdmin(supabase, token) {
   if (!token) return { error: 'Token obrigatório', status: 401 };
+
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
-  if (authErr || !user) return { error: 'Token inválido ou expirado', status: 401 };
-  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
-  if (!profile?.is_admin) return { error: 'Acesso negado — apenas admins', status: 403 };
+  if (authErr || !user) {
+    console.error('[validateAdmin] getUser falhou:', authErr?.message);
+    return { error: 'Token inválido ou expirado', status: 401 };
+  }
+
+  // 1ª verificação: app_metadata.is_admin no JWT (zero query à DB, zero recursão RLS)
+  //    Populado pelo EMERGENCIA_fix_recursion.sql ou pelo trigger de promoção de admin
+  const isAdminJwt = user.app_metadata?.is_admin === true;
+  if (isAdminJwt) return { user };
+
+  // 2ª verificação: query directa à tabela profiles com service role (bypassa RLS)
+  //    Fallback para quem ainda não tem app_metadata actualizado
+  const { data: profile, error: profileErr } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single();
+
+  if (profileErr) {
+    console.error('[validateAdmin] Erro ao ler perfil:', profileErr.message);
+    return { error: 'Erro ao verificar permissões', status: 500 };
+  }
+
+  if (!profile?.is_admin) {
+    console.warn('[validateAdmin] Utilizador não é admin:', user.id);
+    return { error: 'Acesso negado — apenas admins', status: 403 };
+  }
+
+  // Admin confirmado pela DB — sincronizar app_metadata para futuras chamadas (fire-and-forget)
+  supabase.auth.admin.updateUserById(user.id, {
+    app_metadata: { ...user.app_metadata, is_admin: true },
+  }).catch(e => console.warn('[validateAdmin] Falha ao sincronizar app_metadata:', e.message));
+
   return { user };
 }
 
