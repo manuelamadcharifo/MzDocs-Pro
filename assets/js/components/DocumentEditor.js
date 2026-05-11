@@ -176,7 +176,7 @@ export class DocumentEditor {
   }
 
   _buildPreviewHTML(format) {
-    const css = this._getFormatCSS(format);
+    const css  = this._getFormatCSS(format);
     const body = this._markdownToHTML(this.content);
 
     return `<!DOCTYPE html>
@@ -193,67 +193,335 @@ export class DocumentEditor {
 </html>`;
   }
 
+  _getDocCategory() {
+    const cats = {
+      academico:    ['trabalho','monografia','tcc'],
+      profissional: ['cv','carta','recomendacao'],
+      legal:        ['arrendamento','procuracao','requerimento','residencia','prestacao','licenca'],
+      comercial:    ['orcamento','recibo','factura','planonegocio'],
+      administrativo: ['acta'],
+    };
+    for (const [cat, types] of Object.entries(cats)) {
+      if (types.some(t => this.serviceType?.toLowerCase().includes(t))) return cat;
+    }
+    return 'academico';
+  }
+
   _getFormatCSS(format) {
-    const base = `
+    const cat = this._getDocCategory();
+
+    // ── BASE RESET ─────────────────────────────────────────────────
+    const reset = `
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       body { background: #fff; }
+    `;
+
+    // ── ANTI-ÓRFÃOS (títulos nunca ficam sozinhos no fim da página) ─
+    const antiOrphans = `
+      h1, h2, h3, h4 {
+        page-break-after: avoid;
+        break-after: avoid;
+        orphans: 3;
+        widows: 3;
+      }
+      p { orphans: 3; widows: 3; }
+      table { page-break-inside: avoid; break-inside: avoid; }
+      thead { display: table-header-group; }
+      tr { page-break-inside: avoid; break-inside: avoid; }
+      .sig-block { page-break-inside: avoid; break-inside: avoid; }
+    `;
+
+    // ── PÁGINA A4 base ─────────────────────────────────────────────
+    const pageBase = `
       .doc-page {
         width: 210mm;
         min-height: 297mm;
         padding: 25mm 22mm 20mm 25mm;
         background: #fff;
-        font-size: 12pt;
-        line-height: 1.5;
         color: #000;
       }
-      h1 { font-size: 18pt; font-weight: bold; text-align: center; margin-bottom: 16pt; }
-      h2 { font-size: 14pt; font-weight: bold; margin-top: 14pt; margin-bottom: 8pt; border-bottom: 1px solid #ccc; padding-bottom: 3pt; }
-      h3 { font-size: 12pt; font-weight: bold; margin-top: 10pt; margin-bottom: 6pt; }
-      p  { margin-bottom: 8pt; text-align: justify; }
-      ul, ol { margin: 6pt 0 6pt 18pt; }
-      li { margin-bottom: 3pt; }
-      table { width: 100%; border-collapse: collapse; margin: 10pt 0; font-size: 11pt; }
-      td, th { border: 1px solid #000; padding: 5pt 7pt; }
-      th { background: #f0f0f0; font-weight: bold; }
-      strong { font-weight: bold; }
-      em { font-style: italic; }
-      hr { border: none; border-top: 1px solid #888; margin: 12pt 0; }
-      .sig-line { border-top: 1px solid #000; width: 55%; margin-top: 28pt; padding-top: 4pt; font-size: 10pt; }
     `;
 
-    if (format === 'word') {
-      return base + `
-        body, .doc-page { font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; font-size: 11pt; }
-        h1 { color: #2E74B5; font-size: 16pt; }
-        h2 { color: #2E74B5; font-size: 13pt; border-bottom-color: #2E74B5; }
-        td, th { border-color: #BFBFBF; }
-        th { background: #D9E2F3; color: #1F3864; }
-      `;
-    }
+    // ── CSS POR CATEGORIA ──────────────────────────────────────────
 
     if (format === 'excel') {
       return `
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        ${reset}
         body { font-family: 'Calibri', Arial, sans-serif; font-size: 11pt; background: #fff; }
         .doc-page { padding: 0; width: 100%; min-height: 100vh; }
         .excel-sheet-tab {
           background: #E7E6E6; border-bottom: 3px solid #4472C4;
           padding: 6px 16px; font-weight: bold; font-size: 12pt;
-          display: inline-block; color: #333;
+          display: inline-block; color: #333; margin-bottom: 8px;
         }
-        table { width: 100%; border-collapse: collapse; }
+        table { width: 100%; border-collapse: collapse; page-break-inside: avoid; }
         th { background: #4472C4; color: #fff; font-weight: bold; padding: 6pt 8pt; border: 1px solid #2F5597; }
         td { padding: 5pt 8pt; border: 1px solid #B4B4B4; }
         tr:nth-child(even) td { background: #F2F2F2; }
+        tr:last-child td { background: #E8F5E9; font-weight: bold; border-top: 2px solid #4472C4; }
         h1, h2, h3 { padding: 8pt; font-size: 13pt; }
         p { padding: 4pt 8pt; }
         ul, ol { padding: 4pt 8pt 4pt 24pt; }
+        strong { font-weight: bold; }
       `;
     }
 
-    // PDF (padrão)
-    return base + `
-      body, .doc-page { font-family: 'Times New Roman', Georgia, serif; }
+    // ── ACADÉMICO (Trabalho Escolar, Monografia, TCC) ──────────────
+    if (cat === 'academico') {
+      const fontFamily = format === 'word'
+        ? "'Calibri', 'Segoe UI', Arial, sans-serif"
+        : "'Times New Roman', Georgia, serif";
+      const h1Color = format === 'word' ? '#1F3864' : '#000';
+      const h2Color = format === 'word' ? '#2E74B5' : '#000';
+
+      return `
+        ${reset}${antiOrphans}${pageBase}
+        .doc-page {
+          font-family: ${fontFamily};
+          font-size: 12pt;
+          line-height: 1.5;
+        }
+        /* Capa académica */
+        .capa-academica {
+          display: flex; flex-direction: column; align-items: center;
+          justify-content: space-between; min-height: 247mm;
+          text-align: center; padding: 10mm 0;
+        }
+        .capa-inst { font-size: 13pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        .capa-titulo { font-size: 16pt; font-weight: bold; margin: 20mm 0 8mm; line-height: 1.4; }
+        .capa-subtitulo { font-size: 12pt; margin-bottom: 6mm; }
+        .capa-autor { font-size: 12pt; margin: 4mm 0; }
+        .capa-local { font-size: 11pt; color: #444; }
+
+        h1 {
+          font-size: 16pt; font-weight: bold; text-align: center;
+          color: ${h1Color}; margin: 16pt 0 10pt;
+          text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        h2 {
+          font-size: 13pt; font-weight: bold; color: ${h2Color};
+          margin-top: 18pt; margin-bottom: 8pt;
+          border-bottom: 1.5px solid ${h2Color}; padding-bottom: 3pt;
+          page-break-after: avoid;
+        }
+        h3 {
+          font-size: 12pt; font-weight: bold; color: #222;
+          margin-top: 12pt; margin-bottom: 6pt;
+          page-break-after: avoid;
+        }
+        h4 { font-size: 11pt; font-weight: bold; margin-top: 8pt; margin-bottom: 4pt; }
+        p {
+          margin-bottom: 8pt; text-align: justify;
+          text-indent: 1.25cm;
+        }
+        /* Primeiro parágrafo após título sem indent */
+        h1 + p, h2 + p, h3 + p { text-indent: 0; }
+        ul, ol { margin: 6pt 0 6pt 18pt; }
+        li { margin-bottom: 3pt; text-align: justify; }
+        table {
+          width: 100%; border-collapse: collapse;
+          margin: 10pt 0; font-size: 11pt;
+          page-break-inside: avoid;
+        }
+        td, th { border: 1px solid #555; padding: 5pt 7pt; }
+        th { background: #D9E2F3; font-weight: bold; text-align: center; }
+        strong { font-weight: bold; }
+        em { font-style: italic; }
+        hr { border: none; border-top: 1px solid #aaa; margin: 14pt 0; }
+        .page-break { border: none; page-break-after: always; margin: 0; }
+        /* Bloco de assinatura */
+        .sig-block {
+          margin-top: 24pt; display: flex; gap: 24pt; flex-wrap: wrap;
+          page-break-inside: avoid;
+        }
+        .sig-line {
+          border-top: 1px solid #000; width: 55%;
+          padding-top: 4pt; font-size: 10pt; margin-top: 28pt;
+        }
+        /* Índice */
+        .toc-entry { display: flex; justify-content: space-between; padding: 2pt 0; }
+        .toc-dots { flex: 1; border-bottom: 1px dotted #888; margin: 0 4pt; position: relative; top: -4pt; }
+      `;
+    }
+
+    // ── PROFISSIONAL (CV, Carta, Recomendação) ─────────────────────
+    if (cat === 'profissional') {
+      const isCV = this.serviceType?.toLowerCase().includes('cv');
+      return `
+        ${reset}${antiOrphans}${pageBase}
+        .doc-page {
+          font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+          font-size: 11pt; line-height: 1.45;
+        }
+        ${isCV ? `
+        /* CV — Header profissional */
+        h1 {
+          font-size: 22pt; font-weight: 700; color: #1a1a2e;
+          margin-bottom: 2pt; letter-spacing: 0.5px;
+        }
+        h1 + p, h1 + em { font-size: 13pt; color: #4a4a8a; margin-top: 0; }
+        hr { border: none; border-top: 2px solid #1a1a2e; margin: 8pt 0; }
+        h2 {
+          font-size: 11pt; font-weight: 700; text-transform: uppercase;
+          color: #1a1a2e; letter-spacing: 1.5px;
+          border-bottom: 1px solid #ddd; padding-bottom: 3pt;
+          margin-top: 12pt; margin-bottom: 5pt;
+        }
+        h3 { font-size: 11pt; font-weight: 700; margin-top: 7pt; margin-bottom: 1pt; }
+        p { margin-bottom: 5pt; text-indent: 0; }
+        ul { margin: 3pt 0 6pt 16pt; }
+        li { margin-bottom: 2pt; }
+        strong { font-weight: 700; }
+        ` : `
+        /* Carta / Recomendação */
+        h1 { font-size: 14pt; font-weight: bold; color: #1a1a2e; margin-bottom: 10pt; }
+        h2 { font-size: 12pt; font-weight: bold; color: #1a1a2e; margin-top: 10pt; margin-bottom: 5pt; }
+        p { margin-bottom: 8pt; text-align: justify; }
+        hr { border: none; border-top: 1px solid #ccc; margin: 10pt 0; }
+        .sig-block { margin-top: 24pt; }
+        .sig-line { border-top: 1px solid #000; width: 55%; padding-top: 4pt; font-size: 10pt; margin-top: 28pt; }
+        `}
+        table { width: 100%; border-collapse: collapse; margin: 8pt 0; page-break-inside: avoid; }
+        td, th { border: 1px solid #ddd; padding: 4pt 7pt; font-size: 10.5pt; }
+        th { background: #f0f0f0; font-weight: bold; }
+        strong { font-weight: bold; }
+        em { font-style: italic; }
+      `;
+    }
+
+    // ── LEGAL (Contratos, Requerimentos, Procurações) ──────────────
+    if (cat === 'legal') {
+      return `
+        ${reset}${antiOrphans}${pageBase}
+        .doc-page {
+          font-family: 'Times New Roman', Georgia, serif;
+          font-size: 12pt; line-height: 1.6;
+        }
+        h1 {
+          font-size: 14pt; font-weight: bold; text-align: center;
+          text-transform: uppercase; letter-spacing: 1px;
+          margin-bottom: 14pt; margin-top: 8pt;
+        }
+        h2 {
+          font-size: 12pt; font-weight: bold; text-align: center;
+          text-transform: uppercase; margin-top: 14pt; margin-bottom: 6pt;
+          page-break-after: avoid;
+        }
+        h3 {
+          font-size: 12pt; font-weight: bold;
+          margin-top: 10pt; margin-bottom: 4pt;
+          page-break-after: avoid;
+        }
+        p { margin-bottom: 8pt; text-align: justify; }
+        /* Cláusulas com numeração clara */
+        ol { margin: 6pt 0 8pt 20pt; counter-reset: clausula; }
+        ol li {
+          margin-bottom: 6pt; text-align: justify;
+          list-style-type: decimal;
+        }
+        ul { margin: 4pt 0 8pt 18pt; }
+        li { margin-bottom: 3pt; }
+        strong { font-weight: bold; }
+        em { font-style: italic; }
+        hr { border: none; border-top: 1px solid #888; margin: 14pt 0; }
+        table { width: 100%; border-collapse: collapse; margin: 10pt 0; page-break-inside: avoid; }
+        td, th { border: 1px solid #555; padding: 5pt 8pt; }
+        th { background: #e8e8e8; font-weight: bold; }
+        /* Bloco de assinaturas */
+        .sig-block {
+          margin-top: 28pt; page-break-inside: avoid;
+          display: flex; gap: 24pt; flex-wrap: wrap;
+        }
+        .sig-line {
+          border-top: 1px solid #000; min-width: 45%;
+          padding-top: 4pt; font-size: 10pt; margin-top: 24pt;
+        }
+        .nota-rodape {
+          margin-top: 20pt; font-size: 10pt; color: #555;
+          border-top: 1px solid #ccc; padding-top: 8pt;
+        }
+      `;
+    }
+
+    // ── COMERCIAL (Orçamento, Recibo, Factura, Plano de Negócios) ──
+    if (cat === 'comercial') {
+      const isPlano = this.serviceType?.toLowerCase().includes('plano') || this.serviceType?.toLowerCase().includes('negocio');
+      return `
+        ${reset}${antiOrphans}${pageBase}
+        .doc-page {
+          font-family: 'Calibri', Arial, sans-serif;
+          font-size: 11pt; line-height: 1.45;
+        }
+        ${isPlano ? `
+        /* Plano de Negócios */
+        h1 {
+          font-size: 20pt; font-weight: 700; color: #1a3c5e;
+          text-align: center; margin: 12pt 0 4pt;
+        }
+        h2 {
+          font-size: 13pt; font-weight: 700; color: #1a3c5e;
+          border-left: 4px solid #1a3c5e; padding-left: 8pt;
+          margin-top: 16pt; margin-bottom: 6pt;
+          page-break-after: avoid;
+        }
+        h3 { font-size: 11pt; font-weight: 700; margin-top: 10pt; margin-bottom: 4pt; }
+        p { margin-bottom: 7pt; text-align: justify; }
+        ` : `
+        /* Orçamento / Recibo / Factura */
+        h1 {
+          font-size: 16pt; font-weight: 700; color: #1a3c5e;
+          margin-bottom: 4pt;
+        }
+        h2 { font-size: 12pt; font-weight: 700; color: #1a3c5e; margin-top: 12pt; margin-bottom: 4pt; }
+        p { margin-bottom: 6pt; }
+        `}
+        table {
+          width: 100%; border-collapse: collapse;
+          margin: 10pt 0; page-break-inside: avoid; font-size: 10.5pt;
+        }
+        thead { display: table-header-group; }
+        th {
+          background: #1a3c5e; color: #fff;
+          font-weight: bold; padding: 6pt 8pt;
+          border: 1px solid #0d2640; text-align: left;
+        }
+        td { padding: 5pt 8pt; border: 1px solid #c8d4e0; }
+        tr:nth-child(even) td { background: #f0f5fa; }
+        /* Linha de total destacada */
+        tr:last-child td, .total-row td {
+          background: #e8f0f8; font-weight: bold;
+          border-top: 2px solid #1a3c5e; font-size: 11pt;
+        }
+        strong { font-weight: bold; }
+        em { font-style: italic; }
+        hr { border: none; border-top: 1px solid #c8d4e0; margin: 10pt 0; }
+        .sig-block { margin-top: 20pt; display: flex; gap: 24pt; flex-wrap: wrap; page-break-inside: avoid; }
+        .sig-line { border-top: 1px solid #000; min-width: 40%; padding-top: 4pt; font-size: 10pt; margin-top: 24pt; }
+      `;
+    }
+
+    // ── ADMINISTRATIVO (Acta) ───────────────────────────────────────
+    return `
+      ${reset}${antiOrphans}${pageBase}
+      .doc-page {
+        font-family: 'Times New Roman', Georgia, serif;
+        font-size: 12pt; line-height: 1.5;
+      }
+      h1 { font-size: 14pt; font-weight: bold; text-align: center; text-transform: uppercase; margin-bottom: 12pt; }
+      h2 { font-size: 12pt; font-weight: bold; margin-top: 14pt; margin-bottom: 6pt; border-bottom: 1px solid #ccc; padding-bottom: 2pt; page-break-after: avoid; }
+      h3 { font-size: 11pt; font-weight: bold; margin-top: 8pt; margin-bottom: 3pt; page-break-after: avoid; }
+      p { margin-bottom: 7pt; text-align: justify; }
+      table { width: 100%; border-collapse: collapse; margin: 8pt 0; page-break-inside: avoid; }
+      thead { display: table-header-group; }
+      td, th { border: 1px solid #555; padding: 5pt 7pt; }
+      th { background: #e0e0e0; font-weight: bold; text-align: center; }
+      ol, ul { margin: 5pt 0 8pt 20pt; }
+      li { margin-bottom: 4pt; text-align: justify; }
+      strong { font-weight: bold; }
+      em { font-style: italic; }
+      hr { border: none; border-top: 1px solid #999; margin: 12pt 0; }
+      .sig-block { margin-top: 28pt; display: flex; gap: 20pt; flex-wrap: wrap; page-break-inside: avoid; }
+      .sig-line { border-top: 1px solid #000; min-width: 42%; padding-top: 4pt; font-size: 10pt; margin-top: 24pt; }
     `;
   }
 
@@ -371,11 +639,10 @@ export class DocumentEditor {
   }
 
   async _downloadWord() {
+    const css = this._getFormatCSS('word');
     const html = `<html><head><meta charset="UTF-8">
-      <style>body{font-family:Calibri,sans-serif;font-size:11pt;margin:2.5cm;line-height:1.5;}
-      h1{font-size:16pt;color:#2E74B5;}h2{font-size:13pt;color:#2E74B5;}
-      table{border-collapse:collapse;width:100%;}td,th{border:1px solid #BFBFBF;padding:5pt;}</style>
-    </head><body>${this._mdToHTMLBasic(this.content)}</body></html>`;
+      <style>${css}</style>
+    </head><body><div class="doc-page">${this._mdToHTMLBasic(this.content)}</div></body></html>`;
     const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');

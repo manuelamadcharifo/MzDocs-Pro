@@ -255,19 +255,119 @@ INSTRUÇÃO CRÍTICA PARA AS REFERÊNCIAS:
       },
 
       cv: () =>
-        `Crie um CURRÍCULO VITAE PROFISSIONAL em Markdown para o mercado moçambicano.
-Nome: ${data.nome}. Cargo: ${data.cargo}. Nascimento: ${data.nascimento || '-'}.
-Contacto: ${data.contacto || '-'}. Email: ${data.email || '-'}.
-Formação: ${data.formacao}. Experiência: ${data.experiencia || 'Recém-formado'}.
-Habilidades: ${data.habilidades || '-'}. Objectivo: ${data.objectivo || '-'}${ocrBlock}
-Formato Europass: Dados Pessoais → Objectivo → Formação → Experiência (verbos de acção) → Competências → Referências.`,
+        `Você é um especialista em recursos humanos e redacção de CVs para o mercado moçambicano. Crie um CURRÍCULO VITAE PROFISSIONAL completo em Markdown.
+
+DADOS DO CANDIDATO:
+- Nome completo: ${data.nome}
+- Cargo/função pretendida: ${data.cargo}
+- Data de nascimento: ${data.nascimento || '[a completar]'}
+- Contacto: ${data.contacto || '[a completar]'}
+- Email: ${data.email || '[a completar]'}
+- Formação académica: ${data.formacao}
+- Experiência profissional: ${data.experiencia || 'Recém-formado, sem experiência formal'}
+- Habilidades/competências: ${data.habilidades || '[a completar]'}
+- Objectivo profissional: ${data.objectivo || '[a completar]'}${ocrBlock}
+
+REGRAS DE QUALIDADE OBRIGATÓRIAS:
+1. NUNCA use frases genéricas como "profissional dedicado", "trabalho em equipa", "orientado para resultados" — use exemplos concretos e mensuráveis
+2. Experiência profissional: use VERBOS DE ACÇÃO no passado (gerenciei, desenvolvi, implementei, reduzi, aumentei, coordenei) com resultados quantificáveis sempre que possível
+3. Máximo 2 páginas A4 — seja conciso mas impactante
+4. NUNCA inclua: foto (discriminação), estado civil, religião, afiliação política
+5. Formação: lista do mais recente para o mais antigo, com instituição, curso, ano de conclusão
+6. Habilidades: divida em Técnicas (software, línguas, ferramentas) e Interpessoais (mínimo de adjectivos genéricos)
+
+ESTRUTURA OBRIGATÓRIA (formato Europass adaptado a Moçambique):
+
+# ${data.nome}
+**${data.cargo}**
+
+---
+
+## Contacto
+[Tabela ou linha: Telemóvel | Email | Localização | LinkedIn se houver]
+
+---
+
+## Objectivo Profissional
+[2-3 frases específicas: quem sou + o que ofereço + o que procuro. NUNCA "pessoa dedicada". SIM "Técnico de [área] com X anos em [sector], especializado em [competência específica], a procurar oportunidade em [tipo de empresa/função] onde possa [contribuição concreta]"]
+
+---
+
+## Formação Académica
+[Cada entrada: **Grau — Curso** | Instituição | Ano de conclusão ou Previsto em XXXX]
+
+---
+
+## Experiência Profissional
+[Cada entrada:
+**Cargo** | Empresa | Período (mês/ano – mês/ano ou Presente)
+- Acção específica + resultado mensurável
+- Acção específica + resultado mensurável
+- Acção específica + resultado mensurável]
+
+---
+
+## Competências Técnicas
+[Lista estruturada: Informática | Línguas | Ferramentas específicas]
+
+---
+
+## Competências Interpessoais
+[Máximo 5, cada uma com exemplo de contexto em que foi demonstrada]
+
+---
+
+## Referências
+Disponíveis mediante solicitação. | [Ou: Nome, Cargo, Empresa, Contacto]`,
 
       carta: () =>
-        `Redija uma CARTA FORMAL COMPLETA do tipo "${data.tipo}".
-Remetente: ${data.remetenteNome}, ${data.remetenteLocal || 'Maputo'}.
-Destinatário: ${data.destinatarioNome} — ${data.destinatarioEnti}.
-Assunto: ${data.assunto}. Pontos: ${data.pontos}.${ocrBlock}
-Estrutura: cabeçalho com data/local → dados de remetente e destinatário → assunto → saudação formal → 3-4 parágrafos → fecho → assinatura.`,
+        `Você é um especialista em comunicação empresarial e jurídica para Moçambique. Redija uma CARTA FORMAL COMPLETA do tipo "${data.tipo}".
+
+DADOS:
+- Remetente: ${data.remetenteNome}, ${data.remetenteLocal || 'Maputo'}
+- Destinatário: ${data.destinatarioNome} — ${data.destinatarioEnti}
+- Assunto: ${data.assunto}
+- Pontos a abordar: ${data.pontos}${ocrBlock}
+
+REGRAS DE QUALIDADE OBRIGATÓRIAS:
+1. NUNCA use "Venho por este meio" mais de uma vez — é redundante e amador
+2. NUNCA repita a mesma ideia em parágrafos diferentes
+3. Tom adaptado ao tipo "${data.tipo}": formal e respeitoso para repartições públicas, cordial e profissional para empresas, caloroso mas correcto para pessoal
+4. Máximo 1 página A4 (±400 palavras de corpo)
+5. Data por extenso: [cidade], [dia] de [mês] de [ano]
+6. Saudação adequada ao destinatário (Exmo. Sr. para superior, Caro Dr./Dra. para pares académicos)
+7. Cada parágrafo do corpo tem UMA única ideia, 3-5 linhas
+
+ESTRUTURA OBRIGATÓRIA:
+
+[Nome do Remetente]
+[Morada/Cargo se aplicável]
+[Contacto/Email]
+
+${data.remetenteLocal || 'Maputo'}, [data por extenso]
+
+Exmo(a). Sr(a). ${data.destinatarioNome}
+${data.destinatarioEnti}
+[Cidade]
+
+**Assunto: ${data.assunto}**
+
+[Saudação adequada],
+
+[Parágrafo 1 — Identificação e propósito: quem sou e o motivo da carta em 2-3 linhas directas. Sem "venho por este meio".]
+
+[Parágrafo 2 — Desenvolvimento do ponto principal de "${data.pontos}": factos, fundamentos, contexto. 4-5 linhas.]
+
+[Parágrafo 3 — Desenvolvimento de pontos complementares se existirem. 3-4 linhas.]
+
+[Parágrafo final — Pedido claro ou próximo passo esperado: "Solicito a V.ª Ex.ª que..." ou "Aguardo a vossa resposta até..." com prazo se aplicável.]
+
+Com os melhores cumprimentos,
+
+_______________________________
+**${data.remetenteNome}**
+[Cargo, se aplicável]
+[Contacto]`,
 
       orcamento: () =>
         `Elabore um ORÇAMENTO DE CONSTRUÇÃO DETALHADO em Markdown com tabelas.
@@ -443,28 +543,57 @@ ESTRUTURA:
 Nota de rodapé com referência legal se aplicável.`,
 
       recomendacao: () =>
-        `Redija uma CARTA DE RECOMENDAÇÃO formal e convincente.
+        `Você é ${data.recomendador}, ${data.cargoRec} na ${data.entidadeRec}. Redija uma CARTA DE RECOMENDAÇÃO formal, convincente e altamente específica.
+
 DADOS:
 - Tipo: ${data.tipoRec}
-- Recomendador: ${data.recomendador}, ${data.cargoRec} na ${data.entidadeRec}
-- Recomendado: ${data.recomendado} | Cargo pretendido: ${data.cargoRecm}
-- Relação: ${data.relacao}
-- Qualidades: ${data.qualidades}
+- Recomendado: ${data.recomendado} | Cargo/vaga pretendida: ${data.cargoRecm}
+- Relação profissional/académica: ${data.relacao}
+- Qualidades a destacar: ${data.qualidades}
 - Destinatário: ${data.destinatario || 'A quem possa interessar'}${ocrBlock}
-ESTRUTURA:
-1. CABEÇALHO: dados do recomendador, contacto, data
-2. DESTINATÁRIO: Exmo. Sr. / À atenção de [destinatário]
-3. ASSUNTO: "Carta de Recomendação – [nome]"
-4. INTRODUÇÃO: quem sou, cargo, como e há quanto tempo conheço o candidato
-5. CORPO (4 parágrafos):
-   - Desempenho profissional/académico com exemplos concretos
-   - Qualidades pessoais e interpessoais específicas
-   - Realizações mensuráveis, projectos, impacto real
-   - Comparação positiva com pares (sem depreciar terceiros)
-6. CONCLUSÃO: recomendação explícita e entusiasta
-7. DISPONIBILIDADE: contacto para confirmação
-8. ASSINATURA: nome, cargo, entidade
-Tom formal mas caloroso, com exemplos específicos (nunca genérico).`,
+
+REGRAS DE QUALIDADE OBRIGATÓRIAS:
+1. NUNCA use frases genéricas: "pessoa dedicada", "trabalha bem em equipa", "grande potencial" — PROIBIDAS sem exemplo concreto que as suporte
+2. CADA qualidade mencionada deve ter um exemplo específico: "demonstrou liderança quando [situação concreta]"
+3. Tom: caloroso e entusiasta mas credível — não exagere a ponto de parecer falso
+4. Máximo 1.5 páginas A4
+5. NUNCA deprecie outros candidatos — foque nas virtudes do recomendado
+6. A conclusão deve ser uma recomendação EXPLÍCITA e INCONDICIONAL, não vaga
+
+ESTRUTURA OBRIGATÓRIA:
+
+**${data.recomendador}**
+${data.cargoRec} — ${data.entidadeRec}
+[Contacto/Email]
+
+[Cidade], [data por extenso]
+
+${data.destinatario || 'A quem possa interessar'}
+
+**Assunto: Carta de Recomendação — ${data.recomendado}**
+
+Exmo(a). Sr(a),
+
+[Parágrafo 1 — CREDENCIAL DO RECOMENDADOR (2-3 linhas): Apresento-me brevemente e estabeleço a minha autoridade para recomendar — cargo, anos de experiência, área de actuação em ${data.entidadeRec}.]
+
+[Parágrafo 2 — CONTEXTO DA RELAÇÃO (3-4 linhas): Como, quando e em que contexto conheci ${data.recomendado}. Duração da relação. Tipo de trabalho/estudo partilhado. Seja específico: "trabalhamos juntos durante X anos no projecto Y".]
+
+[Parágrafo 3 — DESEMPENHO PROFISSIONAL/ACADÉMICO (4-5 linhas): Descreva com exemplos concretos como ${data.recomendado} se destacou. Mencione um projecto ou situação específica, o papel que desempenhou, e o resultado que obteve. Use dados mensuráveis se possível.]
+
+[Parágrafo 4 — QUALIDADES PESSOAIS COM EXEMPLOS (4-5 linhas): Para cada qualidade de "${data.qualidades}", dê um exemplo de situação real em que foi demonstrada. NUNCA liste apenas adjectivos.]
+
+[Parágrafo 5 — REALIZAÇÕES E IMPACTO (3-4 linhas): Mencione uma realização específica de ${data.recomendado} que teve impacto positivo na ${data.entidadeRec} ou no trabalho em equipa.]
+
+[Parágrafo 6 — RECOMENDAÇÃO EXPLÍCITA (2-3 linhas): "Recomendo ${data.recomendado} sem reservas para o cargo de ${data.cargoRecm}. Tenho a certeza de que trará valor significativo à vossa organização." Seja directo e entusiasta.]
+
+Estou disponível para qualquer esclarecimento adicional.
+
+Com os melhores cumprimentos,
+
+_______________________________
+**${data.recomendador}**
+${data.cargoRec}
+${data.entidadeRec}`,
 
       planonegocio: () => {
         const anoActual = new Date().getFullYear();
