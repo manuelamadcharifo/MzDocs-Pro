@@ -137,17 +137,30 @@ export class DocumentController {
     ];
     this._genIv = DocumentView.showLoader(STEPS);
 
+    // Timeout de 90s para não deixar o utilizador sem resposta
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('A geração demorou demasiado. Verifique a sua ligação e tente novamente.')), 90000)
+    );
+
     try {
-      const result = await this.queue.add(() =>
-        this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost)
-      );
+      const result = await Promise.race([
+        this.queue.add(() =>
+          this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost)
+        ),
+        timeout,
+      ]);
 
       DocumentView.hideLoader(this._genIv);
+
+      // Validar que o resultado tem conteúdo útil
+      if (!result?.document || result.document.trim().length < 20) {
+        throw new Error('A IA devolveu uma resposta vazia. Tente novamente.');
+      }
+
       // Usar o valor de créditos retornado pelo SERVIDOR (nunca calcular no cliente)
       if (typeof result.creditsRemaining === 'number') {
         this.creditModel.applyServerDeduction(result.creditsRemaining);
       }
-      // consume() mantido para compatibilidade, mas já não debita — só verifica
       await this.creditModel.consume(cost);
 
       this.docModel.setGenerated(result.document, result.model);
@@ -176,10 +189,20 @@ export class DocumentController {
     } catch (err) {
       DocumentView.hideLoader(this._genIv);
       if (btn) btn.disabled = false;
-      if (err.message === 'INSUFFICIENT_CREDITS') {
+
+      const msg = err.message || '';
+      if (msg === 'INSUFFICIENT_CREDITS' || err.status === 402) {
         window.paymentController?.showPricing();
+        NotificationView.warn('⚠️ Créditos insuficientes.');
+      } else if (err.status === 401 || msg.includes('Sessão')) {
+        NotificationView.error('🔒 Sessão expirada. Inicie sessão novamente.');
+        setTimeout(() => window.authUI?.open('login'), 1500);
+      } else if (err.status === 429 || msg === 'RATE_LIMIT') {
+        NotificationView.warn('⏳ Demasiados pedidos. Aguarde 30 segundos e tente novamente.');
+      } else if (msg.includes('demorou') || msg.includes('fetch') || msg.includes('network') || msg.includes('Failed to fetch')) {
+        NotificationView.error('🌐 Erro de ligação. Verifique o internet e tente novamente.');
       } else {
-        NotificationView.error('❌ ' + (err.message || 'Erro ao gerar. Tente novamente.'));
+        NotificationView.error('❌ ' + (msg || 'Erro ao gerar. Tente novamente.'));
       }
     }
   }

@@ -102,6 +102,17 @@ function _setupAuthHeader() {
             if (userArea) userArea.style.display  = 'flex';
             if (guestBar) guestBar.style.display  = 'none';
 
+            // Botão sair mobile (FAB)
+            const fabLogout = document.getElementById('fabLogout');
+            if (fabLogout) {
+                fabLogout.style.display = 'flex';
+                fabLogout.onclick = () => {
+                    if (confirm('Terminar sessão?')) {
+                        authManager.signOut().then(() => location.reload());
+                    }
+                };
+            }
+
             const phone    = user.phone || user._profile?.phone || '';
             const email    = user.email || user._profile?.email || '';
             const name     = user._profile?.full_name || user.user_metadata?.full_name || (phone ? phone.slice(-4) : 'Utilizador');
@@ -140,6 +151,8 @@ function _setupAuthHeader() {
             if (authBtn)  { authBtn.style.display = 'block'; authBtn.textContent = '🔐 Entrar'; authBtn.onclick = () => authUI.open('login'); }
             if (userArea) userArea.style.display  = 'none';
             if (guestBar) guestBar.style.display  = 'flex';
+            const fabLogout = document.getElementById('fabLogout');
+            if (fabLogout) fabLogout.style.display = 'none';
         }
     });
 }

@@ -165,6 +165,52 @@ export class CreditModel {
         Storage.set('credits', serverCredits);
         this._lastConsumeAt = Date.now(); // bloquear autosync por 15s
         this._emit();
+
+        // Auto-deletar conta temporária quando créditos chegam a zero
+        if (serverCredits <= 0) {
+            this._checkAndDeleteTempAccount();
+        }
+    }
+
+    async _checkAndDeleteTempAccount() {
+        try {
+            const user = window.authManager?.user;
+            if (!user) return;
+
+            // Conta temporária: sem email real (gerado automaticamente) e sem telefone
+            const email = user.email || '';
+            const phone = user.phone || '';
+            const isTemp = (
+                email.includes('@temp.mzdocs') ||
+                email.includes('@guest.mzdocs') ||
+                (!phone && email.startsWith('guest_')) ||
+                user.user_metadata?.is_temp === true
+            );
+
+            if (!isTemp) return;
+
+            // Aguardar 3s para garantir que o utilizador viu a mensagem de créditos zerados
+            await new Promise(r => setTimeout(r, 3000));
+
+            // Chamar endpoint de limpeza da conta temporária
+            const { authManager } = await import('../auth/AuthManager.js');
+            const token = await authManager.getValidToken().catch(() => null);
+            if (token) {
+                await fetch('/api/delete-temp-account', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ userId: user.id }),
+                }).catch(() => {});
+            }
+
+            // Fazer sign out e redirecionar
+            await authManager.signOut().catch(() => {});
+            Storage.clear();
+            location.reload();
+        } catch (_) { /* falha silenciosa — não é crítico */ }
     }
 
     async add(n) {

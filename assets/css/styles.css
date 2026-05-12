@@ -300,6 +300,15 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 /* FAB */
 .fab{position:fixed;bottom:22px;right:18px;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,var(--wa),var(--wa-d));color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;text-decoration:none;box-shadow:0 4px 20px rgba(37,211,102,.5);z-index:80;transition:var(--t)}
 .fab:hover{transform:scale(1.1);box-shadow:0 6px 28px rgba(37,211,102,.6)}
+/* FAB Logout — aparece só em mobile quando autenticado */
+.fab-logout{
+  bottom:86px; /* acima do FAB WhatsApp */
+  background:linear-gradient(135deg,#EF4444,#B91C1C);
+  box-shadow:0 4px 20px rgba(239,68,68,.45);
+  border:none;cursor:pointer;font-size:22px;
+}
+.fab-logout:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(239,68,68,.6)}
+@media(min-width:520px){.fab-logout{display:none !important;}}
 
 /* ── AVATAR COM DROPDOWN (utilizador autenticado) ────────────────────────── */
 .usr-avatar-wrap {
