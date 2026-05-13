@@ -490,15 +490,19 @@ export class DocumentController {
       NotificationView.warn('⚠️ Nenhum documento gerado ainda.');
       return;
     }
-    if (window.documentEditor) {
-      try { window.documentEditor.close(); } catch(e) {}
+    const svc     = SERVICES[this.docModel.service] || {};
+    const content = this.docModel.content;
+    const title   = svc.title || this.docModel.service || 'Documento';
+
+    // Reutilizar instância existente — recriar o DOM limpa o conteúdo
+    if (!window.documentEditor) {
+      window.documentEditor = new DocumentEditor();
     }
-    window.documentEditor = new DocumentEditor();
-    const svc = SERVICES[this.docModel.service] || {};
-    window.documentEditor.loadDocument(
-      this.docModel.content,
-      svc.title || this.docModel.service || 'Documento'
-    );
+
+    // Garantir que o browser terminou de pintar antes de injectar conteúdo
+    requestAnimationFrame(() => {
+      window.documentEditor.loadDocument(content, title);
+    });
   }
 
   // ── WhatsApp resultado ─────────────────────────────────────────
