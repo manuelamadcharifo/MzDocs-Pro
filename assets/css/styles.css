@@ -392,3 +392,72 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
   .hdr { padding: 7px 10px; }
   .btn-topup { display: none; }  /* muito pequeno: esconder "+ Comprar", créditos já são clicáveis */
 }
+
+
+/* ── PRINT / EXPORT — CSS unificado screen + print ───────────────────────────
+   Resolve divergência entre preview em ecrã (Inter/Bricolage) e PDF exportado (Times/Calibri)
+   Todas as variáveis de documento definidas aqui para consistência total
+──────────────────────────────────────────────────────────────────────────────*/
+:root {
+  /* Fontes de documento — usadas em preview iframe E no export Word/PDF */
+  --doc-font-serif:  'Times New Roman', Georgia, serif;
+  --doc-font-sans:   'Calibri', 'Segoe UI', Arial, sans-serif;
+  --doc-font-mono:   'Courier New', Courier, monospace;
+
+  /* Tipografia de documento */
+  --doc-size-base:   12pt;
+  --doc-size-h1:     18pt;
+  --doc-size-h2:     14pt;
+  --doc-size-h3:     12pt;
+  --doc-line-height: 1.5;
+
+  /* Página A4 */
+  --doc-page-w:      210mm;
+  --doc-page-h:      297mm;
+  --doc-margin-top:  25mm;
+  --doc-margin-side: 22mm;
+  --doc-margin-bot:  20mm;
+  --doc-margin-left: 25mm;
+
+  /* Cores de documento */
+  --doc-color-title: #1F3864;
+  --doc-color-h2:    #2E74B5;
+  --doc-color-body:  #000000;
+  --doc-color-muted: #555555;
+  --doc-border:      #BFBFBF;
+  --doc-table-head:  #D9E2F3;
+}
+
+/* Aplicar consistência ao preview A4 dentro do iframe */
+@media screen {
+  .ed-a4-frame { border: none; display: block; }
+}
+
+/* Estilos de impressão globais — quando o utilizador manda imprimir a página */
+@media print {
+  /* Esconder UI da aplicação */
+  .hdr, .fab, .fab-logout, .notif-stack,
+  #editorOverlay, #resultOverlay, #historyOverlay,
+  #cookieBanner, #guestBar, footer { display: none !important; }
+
+  /* A4 */
+  @page {
+    size: 210mm 297mm;
+    margin: 25mm 22mm 20mm 25mm;
+  }
+
+  body {
+    font-family: var(--doc-font-serif);
+    font-size: var(--doc-size-base);
+    line-height: var(--doc-line-height);
+    color: var(--doc-color-body);
+    background: white;
+  }
+
+  h1, h2, h3, h4 { page-break-after: avoid; break-after: avoid; }
+  table { page-break-inside: avoid; break-inside: avoid; }
+  p { orphans: 3; widows: 3; }
+
+  /* Forçar cores de texto em preto para impressão */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

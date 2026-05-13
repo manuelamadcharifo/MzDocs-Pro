@@ -13,6 +13,56 @@ const SERVICE_ICONS = {
 export class HistoryController {
   constructor() {
     this._bindEvents();
+    this._registerOnlineSync();
+  }
+
+  // ── Sync automático ao voltar online ────────────────────────────
+  _registerOnlineSync() {
+    window.addEventListener('online', () => this._syncPendingToSupabase());
+    // Tentar sincronizar também no arranque (caso haja docs offline pendentes)
+    if (navigator.onLine) {
+      setTimeout(() => this._syncPendingToSupabase(), 3000);
+    }
+  }
+
+  async _syncPendingToSupabase() {
+    const supabase = window.authManager?.supabase;
+    const userId   = window.authManager?.user?.id;
+    if (!supabase || !userId || !navigator.onLine) return;
+
+    try {
+      const allDocs = await offlineDB.getDocuments(userId);
+      const pending = allDocs.filter(d => d.synced === false);
+      if (pending.length === 0) return;
+
+      console.log(`[History] A sincronizar ${pending.length} doc(s) offline com Supabase…`);
+
+      let synced = 0;
+      for (const doc of pending) {
+        try {
+          const { error } = await supabase.from('documents').upsert({
+            id:           doc.id,
+            user_id:      userId,
+            service_type: doc.service_type,
+            title:        doc.title,
+            content:      doc.content,
+            model_used:   doc.model_used,
+            created_at:   doc.created_at,
+          }, { onConflict: 'id' });
+
+          if (!error) {
+            await offlineDB.saveDocument({ ...doc, synced: true });
+            synced++;
+          }
+        } catch (_) { /* continua para o próximo */ }
+      }
+
+      if (synced > 0) {
+        NotificationView.success(`☁️ ${synced} documento${synced > 1 ? 's' : ''} sincronizado${synced > 1 ? 's' : ''} com a nuvem.`);
+      }
+    } catch (e) {
+      console.warn('[History] Sync falhou:', e.message);
+    }
   }
 
   _bindEvents() {

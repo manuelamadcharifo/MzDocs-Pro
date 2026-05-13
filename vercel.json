@@ -2,12 +2,13 @@
   "version": 2,
   "outputDirectory": ".",
   "functions": {
-    "api/generate-document.js": { "maxDuration": 120 },
-    "api/verify-credits.js":    { "maxDuration": 10  },
-    "api/deduct-credit.js":     { "maxDuration": 10  },
-    "api/process-payment.js":   { "maxDuration": 30  },
-    "api/auth/index.js":        { "maxDuration": 30  },
-    "api/admin/index.js":       { "maxDuration": 30  }
+    "api/generate-document.js":    { "maxDuration": 120 },
+    "api/verify-credits.js":       { "maxDuration": 10  },
+    "api/deduct-credit.js":        { "maxDuration": 10  },
+    "api/process-payment.js":      { "maxDuration": 30  },
+    "api/delete-temp-account.js":  { "maxDuration": 10  },
+    "api/auth/index.js":           { "maxDuration": 30  },
+    "api/admin/index.js":          { "maxDuration": 30  }
   },
   "rewrites": [
     { "source": "/api/admin/:action", "destination": "/api/admin/index" },

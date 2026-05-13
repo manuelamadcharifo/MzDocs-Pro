@@ -54,31 +54,54 @@ const NVIDIA_MODELS = [
     'mistralai/mistral-7b-instruct-v0.3',   // leve e estável
 ];
 
-// ─── RATE LIMIT ────────────────────────────────────────────────────────────
-// Rate limits separados: chamadas normais vs. chamadas de cadeia (_planMode / _sectionMode)
-// Em Vercel serverless cada instância tem o seu próprio Map (sem persistência entre instâncias)
-const rateMap = new Map();
+// ─── RATE LIMIT (Upstash Redis — persiste entre instâncias Vercel) ──────────
+// Se UPSTASH_REDIS_REST_URL não estiver configurado, cai no Map local (sem persistência)
+// Setup: vercel.com/integrations/upstash → cria DB grátis → cola as env vars no Vercel
 
-function checkRateLimit(req, isChainCall) {
+async function checkRateLimit(req, isChainCall) {
     const auth = req.headers['authorization'];
     const ip   = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
-    const key  = (auth ? `auth:${auth.slice(-16)}` : `ip:${ip}`) + (isChainCall ? ':chain' : '');
+    const key  = 'rl:' + (auth ? `u:${auth.slice(-16)}` : `i:${ip}`) + (isChainCall ? ':c' : '');
+    const limit = isChainCall ? (auth ? 60 : 20) : (auth ? 20 : 8);
+    const windowSec = isChainCall ? 10 : 60;
 
+    // ── Upstash Redis (persistente entre instâncias) ──────────────────────────
+    const redisUrl   = process.env.UPSTASH_REDIS_REST_URL;
+    const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+    if (redisUrl && redisToken) {
+        try {
+            const headers = {
+                Authorization: `Bearer ${redisToken}`,
+                'Content-Type': 'application/json',
+            };
+            // Pipeline: INCR + EXPIRE em duas chamadas (REST API Upstash)
+            const incrRes  = await fetch(`${redisUrl}/incr/${encodeURIComponent(key)}`, { method: 'POST', headers });
+            const incrData = await incrRes.json();
+            const count    = incrData.result;
+
+            // Definir expiração só no primeiro request da janela (count === 1)
+            if (count === 1) {
+                await fetch(`${redisUrl}/expire/${encodeURIComponent(key)}/${windowSec}`, { method: 'POST', headers });
+            }
+            return count <= limit;
+        } catch (redisErr) {
+            // Redis indisponível — fallback para Map local com aviso
+            console.warn('[rate-limit] Redis unavailable, using local Map:', redisErr.message);
+        }
+    }
+
+    // ── Fallback: Map local (sem persistência entre cold starts, mas funcional) ─
     const now   = Date.now();
-    const entry = rateMap.get(key) || { count: 0, reset: now + 60_000 };
-    if (now > entry.reset) { entry.count = 0; entry.reset = now + 60_000; }
+    const entry = _localRateMap.get(key) || { count: 0, reset: now + windowSec * 1000 };
+    if (now > entry.reset) { entry.count = 0; entry.reset = now + windowSec * 1000; }
     entry.count++;
-    rateMap.set(key, entry);
-
-    // Chamadas de cadeia têm limite próprio mais alto (muitas chamadas por documento)
-    // Chamadas normais: autenticados 20/min | guests 8/min
-    // Chamadas de cadeia: autenticados 60/min | guests 20/min
-    const limit = isChainCall
-        ? (auth ? 60 : 20)
-        : (auth ? 20 : 8);
-
+    _localRateMap.set(key, entry);
     return entry.count <= limit;
 }
+
+// Map local apenas como fallback quando Redis não está configurado
+const _localRateMap = new Map();
 
 const SITE_URL = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
@@ -106,7 +129,7 @@ module.exports = async function handler(req, res) {
     // Chamadas de cadeia (_planMode ou _sectionMode) têm rate-limit próprio
     const isChainCall = !!(_planMode || _sectionMode);
 
-    if (!checkRateLimit(req, isChainCall)) {
+    if (!await checkRateLimit(req, isChainCall)) {
         const retryAfter = isChainCall ? 10 : 60;
         res.setHeader('Retry-After', String(retryAfter));
         return res.status(429).json({
