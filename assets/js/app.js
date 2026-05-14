@@ -1,4 +1,4 @@
-// assets/js/app.js — MVC Entry Point
+// assets/js/app.js — MVC Entry Point v7.0
 
 import { Storage } from './utils/Storage.js';
 import { CreditModel, DocumentModel } from './models/Models.js';
@@ -72,14 +72,42 @@ async function bootstrap() {
         if (sandboxBar) sandboxBar.style.display = cfg.isSandbox ? 'flex' : 'none';
     } catch { /* não crítico */ }
 
-    // 9. Service Worker
+    // 9. Service Worker + Push Notifications
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js')
-            .then(() => console.log('[MzDocs] SW registado ✅'))
-            .catch(e => console.warn('[MzDocs] SW erro:', e));
+        try {
+            const registration = await navigator.serviceWorker.register('/sw.js');
+            console.log('[MzDocs] SW registado ✅');
+
+            // Pedir permissão de notificações após login (não bloqueia o arranque)
+            authManager.onChange(user => {
+                if (user && !user.is_anonymous) {
+                    _setupPushNotifications(registration).catch(() => {/* não crítico */});
+                }
+            });
+        } catch (e) {
+            console.warn('[MzDocs] SW erro:', e);
+        }
     }
 
-    console.log('[MzDocs Pro v6.0] Iniciado ✅ | Créditos:', creditModel.value);
+    console.log('[MzDocs Pro v7.0] Iniciado ✅ | Créditos:', creditModel.value);
+}
+
+// ─── Push Notifications ───────────────────────────────────────────────────
+async function _setupPushNotifications(registration) {
+    if (!('Notification' in window) || !('PushManager' in window)) return;
+    // Já tem permissão — não pedir de novo
+    if (Notification.permission === 'granted') return;
+    // Utilizador já recusou explicitamente — não insistir
+    if (Notification.permission === 'denied') return;
+
+    // Pedir permissão apenas uma vez (quando ainda é 'default')
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    console.log('[MzDocs] Notificações push activadas ✅');
+    // Nota: para envio real de push server-side, subscrever aqui com
+    // registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: VAPID_PUBLIC_KEY })
+    // e guardar o endpoint no Supabase (profiles.push_endpoint).
 }
 
 // ─── Header Auth UI ──────────────────────────────────────────────────────────
@@ -120,7 +148,6 @@ function _setupAuthHeader() {
             const subtitle = email || phone || '';
 
             if (userMenu) {
-                // Avatar com dropdown — compacto em mobile, sem quebrar o header
                 userMenu.innerHTML = `
                     <div class="usr-avatar-wrap" id="usrAvatarWrap" title="${name}">
                         <div class="usr-avatar">${initials}</div>
@@ -132,14 +159,12 @@ function _setupAuthHeader() {
                         </div>
                     </div>
                 `;
-                // Toggle dropdown ao clicar no avatar
                 const wrap = document.getElementById('usrAvatarWrap');
                 const drop = document.getElementById('usrDropdown');
                 wrap?.addEventListener('click', e => {
                     e.stopPropagation();
                     drop.classList.toggle('open');
                 });
-                // Fechar ao clicar fora
                 document.addEventListener('click', () => drop?.classList.remove('open'), { capture: true });
                 document.getElementById('btnLogout')?.addEventListener('click', e => {
                     e.stopPropagation();

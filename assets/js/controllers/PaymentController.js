@@ -20,7 +20,6 @@ export class PaymentController {
         document.querySelectorAll('.pkg').forEach(el => {
             el.addEventListener('click', () => this.selectPkg(el, el.dataset.pkg));
         });
-        // Pacote avulso (botão inline na secção de visitante)
         document.querySelector('.pkg-avulso-btn')?.addEventListener('click', (e) => {
             this.selectPkg(e.currentTarget, 'avulso');
         });
@@ -28,7 +27,6 @@ export class PaymentController {
         document.getElementById('btnPay')?.addEventListener('click', () => this.pay());
     }
 
-    // Abrir modal em modo visitante — mostra secção avulso em destaque
     showPricing(guestMode = false) {
         const avulsoSec = document.getElementById('avulsoSection');
         const payTitle  = document.getElementById('payTitle');
@@ -53,7 +51,6 @@ export class PaymentController {
         const sec = document.getElementById('mpesaSection');
         if (sec) sec.style.display = 'none';
         document.querySelectorAll('.pkg').forEach(el => el.classList.remove('sel'));
-        // Resetar aviso manual
         const mpNote = document.getElementById('mpNote');
         const manualInfo = document.getElementById('payManualInfo');
         const btnPay = document.getElementById('btnPay');
@@ -76,7 +73,6 @@ export class PaymentController {
         if (summary) summary.innerHTML =
             `<span>Pacote <strong>${pkg.name}</strong></span><strong>MZN ${pkg.price} → ${pkg.credits} créditos</strong>`;
 
-        // Mostrar aviso de pagamento manual e ajustar nota/botão
         const mpNote = document.getElementById('mpNote');
         const manualInfo = document.getElementById('payManualInfo');
         const btnPay = document.getElementById('btnPay');
@@ -106,15 +102,16 @@ export class PaymentController {
             const result = await this.payment.processPayment(this.selectedPkg, phone, Storage.getUserId());
 
             if (result.mode === 'manual') {
-                // CORRIGIDO: pagamento manual → NÃO adicionar créditos agora.
-                // Créditos só são adicionados pelo admin após confirmação.
+                // Pagamento manual → créditos adicionados APENAS pelo admin após confirmação.
+                // NÃO tocar nos créditos do cliente aqui.
                 NotificationView.info('📱 Envie o comprovativo pelo WhatsApp para receber os créditos.');
                 if (result.whatsappLink) window.open(result.whatsappLink, '_blank');
                 NotificationView.warn(`🆔 Referência: ${result.referenceId} — guarde este número`);
             } else if (result.mode === 'automatic') {
-                // M-Pesa automático confirmado — adicionar créditos
-                await this.creditModel.add(pkg.credits);
-                NotificationView.success(`✅ ${pkg.credits} créditos adicionados!`);
+                // M-Pesa automático confirmado pelo servidor.
+                // Segurança: buscar os créditos actualizados DO SERVIDOR — nunca somar no cliente.
+                await this.creditModel._syncFromServer();
+                NotificationView.success(`✅ Pagamento confirmado! Créditos adicionados.`);
             }
 
             this.close();

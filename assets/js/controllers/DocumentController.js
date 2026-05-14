@@ -7,6 +7,7 @@ import { LongDocumentEngine } from '../services/LongDocumentEngine.js';
 import { Validator } from '../utils/Formatter.js';
 import { DocumentEditor } from '../components/DocumentEditor.js';
 import { Storage } from '../utils/Storage.js';
+import { offlineDB } from '../utils/IndexedDB.js';
 
 const WA_NUMBER = '258858695506';
 
@@ -21,7 +22,6 @@ export class DocumentController {
     this._menuOutside = null;
     this._longRunning = false;
 
-    // Garante editor disponível globalmente antes de qualquer clique
     if (!window.documentEditor) {
       window.documentEditor = new DocumentEditor();
     }
@@ -37,23 +37,16 @@ export class DocumentController {
     document.getElementById('formClose')?.addEventListener('click', () => this.closeForm());
     document.getElementById('resultClose')?.addEventListener('click', () => this.closeResult());
 
-    // Formulário fecha ao clicar fora
     document.getElementById('formOverlay')?.addEventListener('click', e => {
       if (e.target.id === 'formOverlay') this.closeForm();
     });
 
-    // Resultado NÃO fecha ao clicar fora — utilizador perderia o documento
-    // Só fecha com o botão ✕
-
     document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
     document.getElementById('btnDl')?.addEventListener('click',   () => this.downloadDoc());
     document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
-    // btnEdit — bind directo feito no momento em que o resultado é mostrado (ver _bindEditBtn)
-    // Evento de reedição disparado pelo DocumentEditor
     document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
   }
 
-  // ── Abre formulário de serviço ─────────────────────────────────
   open(key) {
     const svc = SERVICES[key];
     if (!svc) return;
@@ -101,7 +94,6 @@ export class DocumentController {
   }
   closeResult() { ModalView.close('resultOverlay'); this._removeExportMenu(); }
 
-  // ── Gera documento ─────────────────────────────────────────────
   async generate() {
     const key = this.docModel.service;
     const svc  = SERVICES[key];
@@ -127,7 +119,6 @@ export class DocumentController {
     }
   }
 
-  // ── Geração Normal (corrida paralela) ──────────────────────────
   async _generateNormal(key, svc, data, cost, btn) {
     const STEPS = [
       'A analisar dados do formulário…',
@@ -137,7 +128,6 @@ export class DocumentController {
     ];
     this._genIv = DocumentView.showLoader(STEPS);
 
-    // Timeout de 90s para não deixar o utilizador sem resposta
     const timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('A geração demorou demasiado. Verifique a sua ligação e tente novamente.')), 90000)
     );
@@ -152,12 +142,10 @@ export class DocumentController {
 
       DocumentView.hideLoader(this._genIv);
 
-      // Validar que o resultado tem conteúdo útil
       if (!result?.document || result.document.trim().length < 20) {
         throw new Error('A IA devolveu uma resposta vazia. Tente novamente.');
       }
 
-      // Usar o valor de créditos retornado pelo SERVIDOR (nunca calcular no cliente)
       if (typeof result.creditsRemaining === 'number') {
         this.creditModel.applyServerDeduction(result.creditsRemaining);
       }
@@ -166,7 +154,6 @@ export class DocumentController {
       this.docModel.setGenerated(result.document, result.model);
       this.docModel.formData = data;
 
-      // Guardar no histórico
       try {
         const userId = window.authManager?.user?.id || Storage.getUserId();
         await window.historyController?.saveDocument({
@@ -191,6 +178,13 @@ export class DocumentController {
       if (btn) btn.disabled = false;
 
       const msg = err.message || '';
+
+      // Sem ligação — guardar na fila offline para Background Sync
+      if (!navigator.onLine || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        await this._queueOffline(key, data, cost);
+        return;
+      }
+
       if (msg === 'INSUFFICIENT_CREDITS' || err.status === 402) {
         window.paymentController?.showPricing();
         NotificationView.warn('⚠️ Créditos insuficientes.');
@@ -199,7 +193,7 @@ export class DocumentController {
         setTimeout(() => window.authUI?.open('login'), 1500);
       } else if (err.status === 429 || msg === 'RATE_LIMIT') {
         NotificationView.warn('⏳ Demasiados pedidos. Aguarde 30 segundos e tente novamente.');
-      } else if (msg.includes('demorou') || msg.includes('fetch') || msg.includes('network') || msg.includes('Failed to fetch')) {
+      } else if (msg.includes('demorou') || msg.includes('fetch') || msg.includes('network')) {
         NotificationView.error('🌐 Erro de ligação. Verifique o internet e tente novamente.');
       } else {
         NotificationView.error('❌ ' + (msg || 'Erro ao gerar. Tente novamente.'));
@@ -207,11 +201,41 @@ export class DocumentController {
     }
   }
 
-  // ── Geração Longa (cadeia de secções) ──────────────────────────
+  // ── Guardar na fila offline (Background Sync) ─────────────────
+  async _queueOffline(key, data, cost) {
+    try {
+      // Obter token JWT actual para incluir no pedido quando o sync acontecer
+      let authToken = null;
+      try {
+        const { authManager } = await import('../auth/AuthManager.js');
+        authToken = await authManager.getValidToken();
+      } catch { /* sem token */ }
+
+      await offlineDB.addPending({
+        serviceType: key,
+        formData: data,
+        cost,
+        _authToken: authToken,
+        queuedAt: new Date().toISOString(),
+      });
+
+      // Registar o sync tag no Service Worker
+      if ('serviceWorker' in navigator && 'sync' in ServiceWorkerRegistration.prototype) {
+        const sw = await navigator.serviceWorker.ready;
+        await sw.sync.register('document-sync');
+        NotificationView.info('📶 Sem ligação. O documento será gerado automaticamente quando a internet voltar.');
+      } else {
+        NotificationView.warn('🌐 Sem ligação. Verifique o internet e tente novamente.');
+      }
+    } catch (e) {
+      console.error('[DocController] Falha ao guardar offline:', e);
+      NotificationView.error('🌐 Sem ligação. Verifique o internet e tente novamente.');
+    }
+  }
+
   async _generateLong(key, svc, data, cost, btn) {
     this._longRunning = true;
 
-    // Passos dinâmicos no loader
     const estSecs = key === 'planonegocio' ? 8 : Math.max(3, Math.round((parseInt(data.paginas || 10) - 3) / 1.5));
     const STEPS = [
       '📋 A planear estrutura do documento…',
@@ -220,7 +244,6 @@ export class DocumentController {
     ];
     this._genIv = DocumentView.showLoader(STEPS);
 
-    // Actualiza o loader conforme o progresso do motor
     let stepIdx = 0;
     this.longEngine.onProgress(({ text }) => {
       const steps = document.querySelectorAll('.lstep');
@@ -239,7 +262,6 @@ export class DocumentController {
     try {
       const result = await this.longEngine.generate(key, data, this.creditModel.value, cost);
 
-      // null = motor de cadeia pediu fallback para geração normal
       if (!result) {
         this._longRunning = false;
         DocumentView.hideLoader(this._genIv);
@@ -251,7 +273,7 @@ export class DocumentController {
 
       DocumentView.hideLoader(this._genIv);
       this._longRunning = false;
-      // Usar o valor de créditos retornado pelo SERVIDOR
+
       if (typeof result.creditsRemaining === 'number') {
         this.creditModel.applyServerDeduction(result.creditsRemaining);
       }
@@ -260,7 +282,6 @@ export class DocumentController {
       this.docModel.setGenerated(result.document, result.model);
       this.docModel.formData = data;
 
-      // Guardar no histórico
       try {
         const userId = window.authManager?.user?.id || Storage.getUserId();
         await window.historyController?.saveDocument({
@@ -293,7 +314,6 @@ export class DocumentController {
         return;
       }
 
-      // Fallback automático para geração normal se a cadeia falhar
       console.warn('[DocController] Cadeia falhou, a tentar geração normal:', err.message);
       NotificationView.warn('⚠️ Modo cadeia falhou — a tentar geração normal…');
       try {
@@ -308,7 +328,6 @@ export class DocumentController {
     }
   }
 
-  // ── Envio directo WhatsApp (serviços sem IA) ───────────────────
   sendDirect() {
     const key = this.docModel.service;
     const svc  = SERVICES[key];
@@ -321,7 +340,6 @@ export class DocumentController {
     NotificationView.success('✅ A abrir WhatsApp…');
   }
 
-  // ── Copiar ─────────────────────────────────────────────────────
   copyDoc() {
     if (!this.docModel.content) return;
     navigator.clipboard?.writeText(this.docModel.content)
@@ -329,7 +347,6 @@ export class DocumentController {
       .catch(()  => NotificationView.error('Não foi possível copiar'));
   }
 
-  // ── Download — menu com 3 opções ───────────────────────────────
   downloadDoc() {
     if (!this.docModel.content) return;
     this._removeExportMenu();
@@ -363,7 +380,6 @@ export class DocumentController {
       btn.onmouseleave = () => { btn.style.background = 'none'; };
       btn.onclick = () => {
         this._removeExportMenu();
-        // Feedback visual no botão principal de download
         const dlBtn = document.getElementById('btnDl');
         if (dlBtn) { dlBtn.textContent = '⏳ A preparar…'; dlBtn.disabled = true; }
         Promise.resolve(fn()).finally(() => {
@@ -380,8 +396,6 @@ export class DocumentController {
     }, 100);
   }
 
-
-  // Mapeamento de serviço → tipo de capa
   _getDocType(serviceKey) {
     const map = {
       trabalho:      'trabalho',
@@ -389,7 +403,7 @@ export class DocumentController {
       requerimento:  'requerimento',
       licenca:       'requerimento',
       acta:          'generic',
-      cv:            'none',          // CV não tem capa separada
+      cv:            'none',
       carta:         'none',
       arrendamento:  'generic',
       procuracao:    'generic',
@@ -402,7 +416,6 @@ export class DocumentController {
     return map[serviceKey] || 'generic';
   }
 
-
   _buildExportMetadata(svc) {
     const data = this.docModel.formData || {};
     const base = {
@@ -411,7 +424,6 @@ export class DocumentController {
       cidade:   data.local || data.cidade || 'Maputo',
       ano:      new Date().getFullYear(),
     };
-    // Metadata específica por tipo
     const extra = {
       trabalho:     { disciplina: data.disciplina, nivel: data.nivel, aluno: data.aluno || data.nome, docente: data.docente, subtitulo: data.tema },
       planonegocio: { nomeNegocio: data.nomeNegocio, sector: data.sector, proprietario: data.proprietario, local: data.local, investimento: data.investimento, retorno: data.retorno },
@@ -471,9 +483,7 @@ export class DocumentController {
     } catch (err) { NotificationView.error('❌ Erro Excel: ' + err.message); }
   }
 
-  // ── Liga o botão editar após o modal de resultado abrir ───────
   _bindEditBtn() {
-    // Remover listener anterior para não acumular
     const btn = document.getElementById('btnEdit');
     if (!btn) return;
     const fresh = btn.cloneNode(true);
@@ -484,7 +494,6 @@ export class DocumentController {
     });
   }
 
-  // ── Editar documento ───────────────────────────────────────────
   _openEditor() {
     if (!this.docModel.content) {
       NotificationView.warn('⚠️ Nenhum documento gerado ainda.');
@@ -494,18 +503,15 @@ export class DocumentController {
     const content = this.docModel.content;
     const title   = svc.title || this.docModel.service || 'Documento';
 
-    // Reutilizar instância existente — recriar o DOM limpa o conteúdo
     if (!window.documentEditor) {
       window.documentEditor = new DocumentEditor();
     }
 
-    // Garantir que o browser terminou de pintar antes de injectar conteúdo
     requestAnimationFrame(() => {
       window.documentEditor.loadDocument(content, title);
     });
   }
 
-  // ── WhatsApp resultado ─────────────────────────────────────────
   sendWA() {
     if (!this.docModel.content) return;
     const svc     = SERVICES[this.docModel.service];
@@ -514,7 +520,6 @@ export class DocumentController {
     window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
   }
 
-  // ── Reedição com IA ────────────────────────────────────────────
   async handleReedit({ currentContent, instruction, serviceType }) {
     if (!this.creditModel.canConsume(1)) {
       NotificationView.warn('⚠️ Créditos insuficientes para reedição.');

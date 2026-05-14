@@ -1,12 +1,73 @@
-# MzDocs Pro v6.0 🇲🇿
+# MzDocs Pro v7.0 🇲🇿
 
 Plataforma de geração inteligente de documentos para Moçambique — PWA completo com IA gratuita, pagamentos M-Pesa, OCR, editor Markdown, histórico local e painel administrativo.
 
-**Stack:** Arquitectura MVC · Groq + Gemini + OpenRouter (IA em corrida paralela) · Supabase Auth (Phone) + PostgreSQL · Vercel Serverless Functions · Tesseract.js OCR · Workbox PWA
+**Stack:** Arquitectura MVC · Groq + Gemini + OpenRouter (IA em corrida paralela) · Supabase Auth (Phone) + PostgreSQL · Vercel Serverless Functions · Upstash Redis · Tesseract.js OCR · Workbox PWA
 
 ---
 
 ## 📋 Changelog
+
+### v7.0 — Rate Limit Persistente, Sync Offline→Nuvem, Endpoint em Falta e CSS Print
+
+#### 🟢 Fix 1 — Rate limit persistente com Upstash Redis (`api/generate-document.js`)
+
+**Problema:** o rate limit era guardado num `Map()` em memória. Cada instância serverless da Vercel tem a sua própria memória — um utilizador que fizesse 10 pedidos em paralelo poderia contornar o limite se os pedidos fossem roteados para instâncias diferentes.
+
+**Solução:** o `Map` em memória foi substituído por chamadas REST ao **Upstash Redis** (`INCR` + `EXPIRE`). O Redis é partilhado entre todas as instâncias. Se as variáveis de ambiente do Upstash não estiverem configuradas, o sistema cai automaticamente para o `Map` local como fallback, sem erro.
+
+**Como activar (gratuito, 5 minutos):**
+
+1. Aceder a [vercel.com/integrations/upstash](https://vercel.com/integrations/upstash)
+2. Clicar em **Add Integration** → seleccionar o projecto `MzDocs-Pro`
+3. Criar uma nova base de dados Redis (plano **Free** é suficiente — 10 000 req/dia)
+4. A integração injcta automaticamente duas variáveis no Vercel:
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+5. Fazer novo deploy (ou aguardar o próximo deploy automático)
+
+> Não é necessário alterar qualquer ficheiro de código — o `generate-document.js` já detecta as variáveis e activa o Redis automaticamente.
+
+---
+
+#### 🟢 Fix 2 — Sync IndexedDB → Supabase ao voltar online (`HistoryController.js`)
+
+**Problema:** documentos gerados offline ficavam no IndexedDB com `synced: false` mas nunca eram enviados ao Supabase quando a ligação voltava — a sincronização automática não existia.
+
+**Solução:** adicionado listener `window.addEventListener('online', ...)` que, ao detectar ligação, percorre todos os documentos com `synced: false` no IndexedDB e faz `upsert` no Supabase. A sincronização também é tentada 3 segundos após o arranque da app. Quando termina, notifica o utilizador com `☁️ N documentos sincronizados com a nuvem.`
+
+---
+
+#### 🟢 Fix 3 — `/api/delete-temp-account.js` (endpoint que faltava)
+
+**Problema:** o `Models.js` chamava `POST /api/delete-temp-account` após detectar saldo zero numa conta temporária — mas o endpoint não existia, causando erro `404` silencioso. As contas temporárias esgotadas não eram eliminadas.
+
+**Solução:** criado `api/delete-temp-account.js`. O endpoint:
+- Valida o JWT do utilizador
+- Confirma que o perfil tem `is_temp = true` e `credits = 0` (protecção contra eliminação acidental de contas reais)
+- Chama `supabaseAdmin.auth.admin.deleteUser()` — que elimina também o perfil via `CASCADE`
+- Registado em `vercel.json` com `maxDuration: 10`
+
+---
+
+#### 🟢 Fix 4 — CSS unificado screen/print (`assets/css/styles.css`)
+
+**Problema:** o preview em ecrã e o PDF impresso usavam fontes e margens diferentes — documentos com cabeçalho centrado em ecrã apareciam desalinhados no papel.
+
+**Solução:** adicionadas variáveis CSS globais (`--doc-font-serif`, `--doc-font-sans`, `--doc-font-mono`, `--doc-page-w`, `--doc-page-h`, etc.) e um bloco `@media print` completo que:
+- Oculta toda a UI da app (header, modais, botões)
+- Aplica margens A4 correctas (`@page { margin: 20mm }`)
+- Força as variáveis de fonte de documento
+- Garante que o conteúdo impresso é fiel ao preview em ecrã
+
+---
+
+#### 🟢 Fix 5 — `vercel.json` actualizado
+
+Adicionada entrada para `api/delete-temp-account.js` (Fix 3) nas `functions` do `vercel.json`. Sem esta entrada, a Vercel usava o timeout padrão de 10s, o que era adequado, mas a entrada torna a configuração explícita e consistente com os outros endpoints.
+
+---
+
 ### v6.0 — Admin: Contas Avulsas, Utilizadores Temporários e Correcções de BD
 
 #### 🔴 BUG CRÍTICO — Transações falhavam com erro PGRST201 (FK ambígua)
@@ -201,6 +262,8 @@ MzDocs-Pro/
 │   ├── generate-document.js
 │   ├── process-payment.js
 │   ├── verify-credits.js
+│   ├── deduct-credit.js
+│   └── delete-temp-account.js        ← NOVO v7
 │   ├── auth/
 │   │   ├── signup.js
 │   │   ├── signin.js
@@ -289,6 +352,8 @@ Configure no **Vercel Dashboard → Settings → Environment Variables**:
 | `WHATSAPP_NUMBER` | ✅ | Número de suporte (ex: `258848XXXXXX`) |
 | `MPESA_API_KEY` | Opcional | API M-Pesa automático |
 | `MPESA_SERVICE_CODE` | Opcional | Código do serviço M-Pesa |
+| `UPSTASH_REDIS_REST_URL` | Opcional | Injectada automaticamente pela integração Upstash (rate limit persistente) |
+| `UPSTASH_REDIS_REST_TOKEN` | Opcional | Injectada automaticamente pela integração Upstash |
 
 > **Nota:** Basta uma das 3 chaves de IA para o sistema funcionar. Com todas as 3, o documento é gerado pelo provider mais rápido a responder.
 
@@ -395,7 +460,7 @@ O histórico carrega do Supabase quando há ligação, sincroniza para o Indexed
 - **RLS activado** em todas as tabelas — utilizadores só acedem aos seus dados
 - **Supabase Phone Auth** — autenticação por telemóvel + password (sem email)
 - **CORS restrito** — API aceita pedidos apenas de `SITE_URL`
-- **Rate limiting** — 10 req/min por IP no endpoint de geração (em memória)
+- **Rate limiting** — 10 req/min por IP no endpoint de geração (Upstash Redis persistente entre instâncias; fallback para Map local se Redis não configurado)
 - **Chaves separadas** — `anon key` no frontend; `service_role key` apenas em serverless
 
 ---

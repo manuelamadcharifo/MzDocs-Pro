@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /admin.html
+Disallow: /api/
+Allow: /
+
+Sitemap: https://mz-docs-pro.vercel.app/sitemap.xml

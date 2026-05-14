@@ -44,6 +44,7 @@ export class DocumentEditor {
             <button id="edBtnWa"       class="ed-action-btn wa">💬 WhatsApp</button>
             <button id="edBtnCopy"     class="ed-action-btn">📋 Copiar</button>
             <button id="edBtnReedit"   class="ed-action-btn ai">🤖 Reeditar</button>
+            <button id="edBtnSign"    class="ed-action-btn" title="Inserir assinatura digital no documento">✍️ Assinar</button>
           </div>
         </div>
 
@@ -175,6 +176,7 @@ export class DocumentEditor {
     this.modal.querySelector('#edBtnCopy2')?.addEventListener('click',    () => this._copy());
     this.modal.querySelector('#edBtnReedit')?.addEventListener('click',   () => this._reedit());
     this.modal.querySelector('#edBtnReedit2')?.addEventListener('click',  () => this._reedit());
+    this.modal.querySelector('#edBtnSign')?.addEventListener('click',     () => this._openSignature());
 
     // Toolbar Word — botões execCommand
     this.modal.querySelectorAll('[data-cmd]').forEach(btn => {
@@ -586,6 +588,116 @@ export class DocumentEditor {
         detail: { currentContent: this.content, instruction, serviceType: this.serviceType }
       }));
     }
+  }
+
+
+  // ── Assinatura Digital ─────────────────────────────────────────
+  _openSignature() {
+    // Criar modal de assinatura inline
+    const existing = document.getElementById('signatureModal');
+    if (existing) existing.remove();
+
+    const sigModal = document.createElement('div');
+    sigModal.id = 'signatureModal';
+    sigModal.style.cssText = [
+      'position:fixed','inset:0','z-index:99999',
+      'background:rgba(0,0,0,0.7)','display:flex',
+      'align-items:center','justify-content:center','padding:20px'
+    ].join(';');
+
+    sigModal.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:24px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="font-size:16px;font-weight:700;color:#07101f;">✍️ Assinatura Digital</h3>
+          <button id="sigModalClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:4px;">✕</button>
+        </div>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:12px;">Desenhe a sua assinatura com o dedo ou rato:</p>
+        <canvas id="sigCanvas" width="420" height="160"
+          style="border:2px dashed #d1d5db;border-radius:8px;width:100%;touch-action:none;cursor:crosshair;background:#fafafa;display:block;"></canvas>
+        <p id="sigHint" style="font-size:11px;color:#9ca3af;text-align:center;margin-top:6px;">Toque e arraste para assinar</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button id="sigClear" style="flex:1;padding:10px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:#374151;">🗑 Limpar</button>
+          <button id="sigInsert" style="flex:2;padding:10px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✅ Inserir no Documento</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(sigModal);
+
+    const canvas = document.getElementById('sigCanvas');
+    const ctx    = canvas.getContext('2d');
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth   = 2.5;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    let drawing     = false;
+    let hasSig      = false;
+
+    const getPos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width  / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const src = e.touches ? e.touches[0] : e;
+      return {
+        x: (src.clientX - rect.left) * scaleX,
+        y: (src.clientY - rect.top)  * scaleY,
+      };
+    };
+
+    canvas.addEventListener('mousedown',  e => { drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+    canvas.addEventListener('mousemove',  e => { if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; });
+    canvas.addEventListener('mouseup',    () => { drawing = false; ctx.beginPath(); });
+    canvas.addEventListener('mouseleave', () => { drawing = false; ctx.beginPath(); });
+    canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, { passive: false });
+    canvas.addEventListener('touchmove',  e => { e.preventDefault(); if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; }, { passive: false });
+    canvas.addEventListener('touchend',   () => { drawing = false; ctx.beginPath(); });
+
+    document.getElementById('sigClear').addEventListener('click', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      hasSig = false;
+    });
+
+    document.getElementById('sigModalClose').addEventListener('click', () => sigModal.remove());
+    sigModal.addEventListener('click', e => { if (e.target === sigModal) sigModal.remove(); });
+
+    document.getElementById('sigInsert').addEventListener('click', () => {
+      if (!hasSig) { alert('⚠️ Desenhe uma assinatura primeiro.'); return; }
+      const dataUrl = canvas.toDataURL('image/png');
+      const sigHTML = `
+        <div style="margin-top:24pt;border-top:1px solid #333;padding-top:8pt;display:inline-block;text-align:center;">
+          <img src="${dataUrl}" style="max-width:200px;height:60px;object-fit:contain;display:block;margin-bottom:4pt;" alt="Assinatura">
+          <div style="font-size:9pt;color:#555;">Assinado digitalmente via MzDocs Pro</div>
+          <div style="font-size:9pt;color:#555;">${new Date().toLocaleDateString('pt-MZ')}</div>
+        </div>
+      `;
+
+      // Inserir no editor: se estiver em modo edição, insere no cursor; senão appenda ao markdown
+      const wordDoc = this.modal.querySelector('#edWordDoc');
+      if (wordDoc && document.activeElement === wordDoc) {
+        document.execCommand('insertHTML', false, sigHTML);
+        this._syncContentFromEditor();
+      } else {
+        // Modo preview — appenda representação markdown e passa para edição
+        this.content += `\n\n---\n**Assinatura Digital** — ${new Date().toLocaleDateString('pt-MZ')}`;
+        // Guardar dataUrl para reapor no HTML rico do editor
+        this._pendingSignatureImg = dataUrl;
+        this._switchMode('edit');
+        setTimeout(() => {
+          const doc = this.modal.querySelector('#edWordDoc');
+          if (doc) {
+            doc.innerHTML += sigHTML;
+            this._syncContentFromEditor();
+          }
+        }, 100);
+      }
+
+      sigModal.remove();
+      // Feedback
+      const hint = document.createElement('div');
+      hint.textContent = '✍️ Assinatura inserida!';
+      hint.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:8px 20px;border-radius:20px;font-size:13px;font-weight:700;z-index:99999;';
+      document.body.appendChild(hint);
+      setTimeout(() => hint.remove(), 2500);
+    });
   }
 
   _updateStats() {
