@@ -155,10 +155,33 @@ export class AuthManager {
             // Login directo por email
             credentials = { email: identifier.trim(), password };
         } else {
-            // Normalizar telemóvel moçambicano
+            // Normalizar telemóvel moçambicano e procurar o email associado no perfil.
+            // As contas são criadas com email no Supabase Auth; o telemóvel fica no perfil.
+            // Por isso, ao usar telemóvel, procuramos o email correspondente primeiro.
             const clean = identifier.replace(/\D/g, '');
             const normalized = clean.startsWith('258') ? `+${clean}` : `+258${clean}`;
-            credentials = { phone: normalized, password };
+
+            // Tentar login por telemóvel directamente (caso a conta tenha phone provider)
+            const { data: phoneData, error: phoneError } = await this.supabase.auth.signInWithPassword({ phone: normalized, password });
+            if (!phoneError && phoneData?.user) {
+                this.session = phoneData.session;
+                this.user    = phoneData.user;
+                await this._loadProfile(phoneData.user.id);
+                this._notify();
+                return phoneData;
+            }
+
+            // Fallback: procurar o email associado ao telemóvel na tabela profiles
+            const { data: profileData, error: profileError } = await this.supabase
+                .from('profiles')
+                .select('email')
+                .eq('phone', normalized)
+                .maybeSingle();
+
+            if (profileError || !profileData?.email) {
+                throw new Error('Número de telemóvel não encontrado. Use o e-mail registado ou crie uma conta.');
+            }
+            credentials = { email: profileData.email, password };
         }
 
         const { data, error } = await this.supabase.auth.signInWithPassword(credentials);

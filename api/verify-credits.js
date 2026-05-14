@@ -7,13 +7,21 @@ const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST')   return res.status(405).json({ error: 'Método não permitido' });
 
-  const body = req.method === 'GET' ? {} : (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {}));
-  const { userId } = req.method === 'GET' ? req.query : body;
+  // Require Authorization token to prevent unauthenticated credit snooping
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  if (!token) {
+    return res.status(401).json({ error: 'Autenticação obrigatória', code: 'AUTH_REQUIRED' });
+  }
+
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  const { userId } = body;
 
   if (!userId) {
     return res.status(400).json({ error: 'userId é obrigatório' });

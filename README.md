@@ -8,6 +8,61 @@ Plataforma de geração inteligente de documentos para Moçambique — PWA compl
 
 ## 📋 Changelog
 
+---
+
+### v7.1 — Correcções de Segurança e Estabilidade Auth (14 Mai 2026)
+
+#### 🔴 Fix 1 — Múltiplos pedidos duplicados ao `/api/auth/signup` (Bug principal)
+
+**Problema:** ao clicar em "Criar Conta", o browser enviava 3–4 pedidos HTTP simultâneos à API de signup, causando erros 409 em cascata no console. O utilizador via os erros mas a conta era criada na primeira chamada.
+
+**Causa raiz:** `AuthUI._bindEvents()` adicionava sempre novos event listeners ao botão `#btnRegister` sem verificar se já estavam registados. Se a classe `AuthUI` fosse instanciada mais de uma vez (e.g., durante actualização do Service Worker, reload parcial ou HMR), o DOM existente acumulava múltiplos listeners no mesmo botão — cada clique disparava `_handleRegister()` N vezes em paralelo.
+
+**Solução (3 partes):**
+- `assets/js/auth/AuthUI.js` — `_bindEvents()` agora marca o elemento overlay com `_mzdocsBound = true` na primeira execução e retorna imediatamente em execuções seguintes (guard de deduplicação).
+- `assets/js/auth/AuthUI.js` — `_handleRegister()` e `_handleLogin()` protegidos com flags `_registerSubmitting` / `_loginSubmitting`: se uma submissão já estiver em curso, chamadas adicionais são ignoradas.
+- `assets/js/auth/AuthUI.js` — acesso ao botão (`btn`) protegido com `null`-check — se o elemento não existir por alguma razão, o código não lança excepção e deixa o pedido in-flight sem forma de cancelar.
+
+---
+
+#### 🔴 Fix 2 — Login por telemóvel nunca funcionava após registo
+
+**Problema:** o registo cria a conta no Supabase Auth com `email + password`. No entanto, o login por telemóvel tentava `signInWithPassword({ phone, password })` — credencial que nunca existia no Supabase Auth. O telemóvel estava apenas na tabela `profiles`, não na camada de autenticação. Resultado: nenhum utilizador conseguia entrar com o número de telemóvel.
+
+**Solução (`assets/js/auth/AuthManager.js`):**
+1. Ao fazer login com número de telemóvel, tenta primeiro `signInWithPassword({ phone })` (suporta contas futuras criadas com provider de telemóvel).
+2. Se falhar, pesquisa `profiles.email` onde `phone = normalized` e faz `signInWithPassword({ email })`.
+3. Se o número não existir em `profiles`, devolve mensagem clara: _"Número de telemóvel não encontrado. Use o e-mail registado ou crie uma conta."_
+
+---
+
+#### 🟡 Fix 3 — `verify-credits.js` aceitava pedidos não autenticados
+
+**Problema:** `GET /api/verify-credits?userId=<uuid>` devolvia o saldo de qualquer utilizador sem autenticação — qualquer pessoa com um UUID podia ver os créditos de outro.
+
+**Solução (`api/verify-credits.js`):**
+- Método GET removido; apenas `POST` aceite.
+- Cabeçalho `Authorization: Bearer <token>` obrigatório; pedidos sem token retornam `401`.
+
+---
+
+#### 🟡 Fix 4 — Service Worker re-tentava documentos com erros de servidor
+
+**Problema:** o `BackgroundSyncPlugin` do Workbox fazia retry de pedidos a `/api/generate-document` que falharam com erros de servidor (402 Créditos insuficientes, 500 Erro interno). Esses pedidos nunca iriam ter sucesso num retry, mas consumiam quota de sincronização e podiam gerar documentos duplicados.
+
+**Solução (`sw.js`):**
+- Adicionado handler `onSync` personalizado: só faz `unshiftRequest` (requeue) em caso de erro de rede real (`fetch` lança excepção). Respostas com status ≠ 2xx são descartadas silenciosamente.
+- `CACHE_VERSION` actualizado para `v7-20260514` para forçar invalidação de cache e garantir que os browsers servem os ficheiros JS corrigidos.
+
+---
+
+**Ficheiros modificados nesta versão:**
+- `assets/js/auth/AuthUI.js`
+- `assets/js/auth/AuthManager.js`
+- `api/verify-credits.js`
+- `sw.js`
+
+
 ### v7.0 — Rate Limit Persistente, Sync Offline→Nuvem, Endpoint em Falta e CSS Print
 
 #### 🟢 Fix 1 — Rate limit persistente com Upstash Redis (`api/generate-document.js`)

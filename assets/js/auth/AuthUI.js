@@ -138,6 +138,10 @@ export class AuthUI {
     }
 
     _bindEvents() {
+        // Guard: prevent attaching duplicate listeners if constructor is called more than once
+        if (document.getElementById('authOverlay')?._mzdocsBound) return;
+        if (document.getElementById('authOverlay')) document.getElementById('authOverlay')._mzdocsBound = true;
+
         document.getElementById('authClose')?.addEventListener('click', () => this.close());
 
         // Troca de vistas via links
@@ -166,6 +170,8 @@ export class AuthUI {
     }
 
     async _handleLogin() {
+        if (this._loginSubmitting) return;
+
         const btn        = document.getElementById('btnLogin');
         const identifier = document.getElementById('loginIdentifier')?.value?.trim();
         const password   = document.getElementById('loginPassword')?.value;
@@ -173,8 +179,8 @@ export class AuthUI {
         if (!identifier) return this._showError('Introduza o número de telemóvel ou e-mail');
         if (!password)   return this._showError('Introduza a password');
 
-        btn.disabled    = true;
-        btn.textContent = '⏳ A entrar...';
+        this._loginSubmitting = true;
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ A entrar...'; }
         try {
             await authManager.signIn(identifier, password);
             this.close();
@@ -182,12 +188,15 @@ export class AuthUI {
         } catch (err) {
             this._showError(err.message || err.toString());
         } finally {
-            btn.disabled    = false;
-            btn.textContent = 'Entrar';
+            this._loginSubmitting = false;
+            if (btn) { btn.disabled = false; btn.textContent = 'Entrar'; }
         }
     }
 
     async _handleRegister() {
+        // Guard: prevent concurrent submissions (e.g. double-click or duplicate event listeners)
+        if (this._registerSubmitting) return;
+
         const btn     = document.getElementById('btnRegister');
         const name    = document.getElementById('regName')?.value?.trim();
         const phone   = document.getElementById('regPhone')?.value?.trim();
@@ -201,8 +210,8 @@ export class AuthUI {
         if (!pass || pass.length < 6) return this._showError('Password deve ter pelo menos 6 caracteres');
         if (pass !== confirm)    return this._showError('As passwords não coincidem');
 
-        btn.disabled    = true;
-        btn.textContent = '⏳ A criar conta...';
+        this._registerSubmitting = true;
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ A criar conta...'; }
         try {
             await authManager.signUp(phone, email, pass, name);
             this._switchView('success');
@@ -210,8 +219,8 @@ export class AuthUI {
         } catch (err) {
             this._showError(err.message || err.toString());
         } finally {
-            btn.disabled    = false;
-            btn.textContent = 'Criar Conta';
+            this._registerSubmitting = false;
+            if (btn) { btn.disabled = false; btn.textContent = 'Criar Conta'; }
         }
     }
 

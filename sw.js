@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v7-20260513';
+const CACHE_VERSION = 'v7-20260514';
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
@@ -86,12 +86,36 @@ workbox.routing.registerRoute(
     })
 );
 
+// NOTE: BackgroundSync is only triggered on actual network failures (fetch throws),
+// NOT on server errors (409, 500 etc.). The NetworkFirst strategy handles the routing;
+// BackgroundSyncPlugin only queues when the network request cannot be made at all.
 workbox.routing.registerRoute(
     /\/api\/generate-document/,
     new workbox.strategies.NetworkFirst({
         cacheName: `api-cache-${CACHE_VERSION}`,
         networkTimeoutSeconds: 30,
-        plugins: [new workbox.backgroundSync.BackgroundSyncPlugin('document-queue', { maxRetentionTime: 24 * 60 })]
+        plugins: [
+            new workbox.backgroundSync.BackgroundSyncPlugin('document-queue', {
+                maxRetentionTime: 24 * 60,
+                onSync: async ({ queue }) => {
+                    let entry;
+                    while ((entry = await queue.shiftRequest())) {
+                        try {
+                            const response = await fetch(entry.request.clone());
+                            // Only consider it a success if the server returned 2xx
+                            if (!response.ok) {
+                                // Server error — do NOT requeue, discard silently
+                                console.warn('[SW] Background sync: server returned', response.status, '— discarding');
+                            }
+                        } catch (error) {
+                            // Real network failure — requeue for later
+                            await queue.unshiftRequest(entry);
+                            throw error;
+                        }
+                    }
+                },
+            })
+        ]
     })
 );
 
