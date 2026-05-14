@@ -135,49 +135,41 @@ async function handleSignup(req, res) {
       id: userId, phone: normalized, email: normalizedEmail,
       full_name: normalizedName, updated_at: new Date().toISOString(),
     };
-    let profileSaved = false;
-    if (supabaseAdmin) {
-      // Aguardar o trigger do Supabase criar o registo base em profiles
-      // (race condition: o trigger on auth.users pode ainda não ter corrido)
-      await new Promise(r => setTimeout(r, 800));
-      let upsertErr;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const { error } = await supabaseAdmin.from('profiles').upsert(profilePayload, { onConflict: 'id' });
-        upsertErr = error;
-        if (!error) { profileSaved = true; break; }
-        // Se for violação RLS em "new row", o trigger ainda não criou o registo — esperar mais
-        if (error.message?.includes('row-level security') || error.code === '42501') {
-          console.warn(`[auth/signup] RLS ao gravar perfil (tentativa ${attempt + 1}/3):`, error.message);
-          await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
-        } else {
-          // Outro erro — não vale fazer retry
-          console.error('[auth/signup] Erro ao gravar perfil (admin):', error.message);
-          break;
-        }
-      }
-      if (!profileSaved && upsertErr) console.error('[auth/signup] Erro final ao gravar perfil:', upsertErr.message);
-    }
-    if (!profileSaved && userData.session) {
-      const supabaseUser = createClient(supabaseUrl, anonKey, {
-        ...SUPABASE_OPTS_ANON(),
-        global: { headers: { Authorization: `Bearer ${userData.session.access_token}` } },
-      });
-      const { error: updateErr } = await supabaseUser.from('profiles')
-        .update({ phone: normalized, email: normalizedEmail, full_name: normalizedName }).eq('id', userId);
-      if (!updateErr) profileSaved = true;
-    }
-    if (!profileSaved)
-      console.warn(`[auth/signup] Phone ${normalized} NÃO gravado para user ${userId}. Configure SUPABASE_SERVICE_ROLE_KEY.`);
-    return res.status(201).json({
+    // Responder imediatamente ao cliente — não bloquear na gravação do perfil.
+    // O perfil é gravado em background; o cliente faz login logo a seguir.
+    res.status(201).json({
       success: true,
-      user: { id: userId, phone: normalized, email: normalizedEmail },
+      user:    { id: userId, phone: normalized, email: normalizedEmail },
       session: userData.session || null,
       message: 'Conta criada! 3 créditos grátis atribuídos.',
-      _debug: { profileSaved, hasServiceRole: !!serviceKey, hasSession: !!userData.session },
     });
+
+    // ── Gravar perfil em background (não bloqueia a resposta) ────────────────
+    if (!supabaseAdmin) {
+      console.warn(`[auth/signup] Sem service role — perfil não gravado para ${userId.slice(0,8)}***`);
+      return;
+    }
+    // Aguardar trigger do Supabase (cria linha base em profiles)
+    await new Promise(r => setTimeout(r, 600));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { error } = await supabaseAdmin.from('profiles').upsert(profilePayload, { onConflict: 'id' });
+      if (!error) { console.log(`[auth/signup] Perfil gravado (tentativa ${attempt + 1})`); return; }
+      if (error.message?.includes('row-level security') || error.code === '42501') {
+        console.warn(`[auth/signup] RLS tentativa ${attempt + 1}/3:`, error.message);
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      } else {
+        console.error('[auth/signup] Erro ao gravar perfil:', error.message);
+        return;
+      }
+    }
+    console.error(`[auth/signup] Perfil NÃO gravado após 3 tentativas para ${userId.slice(0,8)}***`);
   } catch (err) {
+    // Só chega aqui se o erro ocorreu ANTES do res.status(201) — i.e., antes de criar o user
     console.error('[auth/signup]', err);
-    return res.status(500).json({ error: err.message || 'Erro ao criar conta' });
+    // res.headersSent = true significa que já respondemos 201 e estamos no bloco background
+    if (!res.headersSent) {
+      return res.status(500).json({ error: err.message || 'Erro ao criar conta' });
+    }
   }
 }
 

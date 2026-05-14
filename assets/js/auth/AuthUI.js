@@ -213,9 +213,18 @@ export class AuthUI {
         this._registerSubmitting = true;
         if (btn) { btn.disabled = true; btn.textContent = '⏳ A criar conta...'; }
         try {
-            await authManager.signUp(phone, email, pass, name);
-            this._switchView('success');
-            this._toast('✅ Conta criada com sucesso!', 'success');
+            const result = await authManager.signUp(phone, email, pass, name);
+            const loggedIn = !!(result?.session || result?._autoLogin);
+
+            if (loggedIn) {
+                // Login automático funcionou — fechar modal e mostrar boas-vindas
+                this.close();
+                this._toast('✅ Conta criada! Bem-vindo ao MzDocs Pro 🎉', 'success');
+            } else {
+                // Supabase requer confirmação de email — mostrar ecrã informativo
+                this._switchView('success');
+                this._toast('✅ Conta criada! Verifique o e-mail para confirmar.', 'success');
+            }
         } catch (err) {
             const msg = (err.message || '').toLowerCase();
             const isConflict = msg.includes('já está registado') || msg.includes('já tem conta') ||

@@ -10,6 +10,45 @@ Plataforma de geração inteligente de documentos para Moçambique — PWA compl
 
 ---
 
+### v7.3 — Registo com Login Automático Imediato (14 Mai 2026)
+
+#### 🔴 Fix — Modal ficava bloqueado em "⏳ A criar conta..." indefinidamente
+
+**Problema:** após criar conta com sucesso (201 do servidor), o modal continuava preso com o botão desactivado sem qualquer feedback. A conta era criada no Supabase mas o utilizador nunca via confirmação nem ficava autenticado.
+
+**Causa raiz — 3 factores combinados:**
+
+1. **Servidor lento (até ~2,6 s bloqueados):** o handler `handleSignup` aguardava 800 ms + até 3 × 600 ms de retry para gravar o perfil em `profiles` *antes* de responder ao cliente. A Vercel tem timeout de 30 s na função, mas o browser (e o utilizador) ficava à espera de toda essa latência.
+
+2. **Sem sessão devolvida:** quando a confirmação de email está activa no Supabase, `auth.signUp()` devolve `session: null`. O `AuthManager.signUp()` caia no ramo `else if (data.user)` → `this.user = null` → nenhum login automático acontecia.
+
+3. **`AuthUI` não distinguia login automático de registo sem sessão:** ia sempre para `_switchView('success')` sem saber se o utilizador já estava autenticado.
+
+**Solução (3 camadas):**
+
+**`api/auth/index.js` — resposta imediata + gravação de perfil em background:**
+- O servidor responde `201` assim que o utilizador é criado no Supabase Auth.
+- A gravação do perfil em `profiles` (upsert + retries) corre *depois* da resposta, em background, sem bloquear o cliente.
+- O try/catch verifica `res.headersSent` para não tentar enviar um segundo erro se a falha for no background.
+
+**`AuthManager.signUp()` — login automático com fallback:**
+1. Se o servidor devolve `session` → usa `setSession()` directamente.
+2. Se não há sessão (confirmação de email activa) → aguarda 1,2 s e tenta `signInWithPassword({ email, password })` com as credenciais recém-criadas.
+3. Se tudo falhar → retorna sem sessão (caso raro: Supabase bloqueia login imediato).
+
+**`AuthUI._handleRegister()` — UX correcta consoante o resultado:**
+- Login automático bem-sucedido → **fecha o modal** e mostra toast "✅ Conta criada! Bem-vindo ao MzDocs Pro 🎉"
+- Sem login automático (confirmação obrigatória) → mostra ecrã informativo de sucesso com instruções de e-mail.
+- Erro de conflito (409) → redireciona para login e pré-preenche o e-mail (comportamento do v7.2 mantido).
+
+**Ficheiros modificados:**
+- `api/auth/index.js`
+- `assets/js/auth/AuthManager.js`
+- `assets/js/auth/AuthUI.js`
+
+
+---
+
 ### v7.2 — Auto-versão do SW + UX de Conflito no Registo (14 Mai 2026)
 
 #### 🟢 Fix 1 — `CACHE_VERSION` gerado automaticamente a cada deploy

@@ -126,21 +126,45 @@ export class AuthManager {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Erro ao criar conta');
 
-        // Aplicar session devolvida pelo servidor (login automático pós-registo)
+        // Caso 1: servidor devolveu sessão directamente (confirmação de email desactivada)
         if (data.session && this.supabase) {
-            await this.supabase.auth.setSession({
-                access_token:  data.session.access_token,
-                refresh_token: data.session.refresh_token,
-            });
-            this.session = data.session;
-            this.user    = data.session?.user || data.user || null;
-            if (this.user?.id) await this._loadProfile(this.user.id);
-            this._notify();
-        } else if (data.user) {
-            // Supabase requer confirmação de email — sem sessão imediata
-            this.user = null;
-            this._notify();
+            try {
+                await this.supabase.auth.setSession({
+                    access_token:  data.session.access_token,
+                    refresh_token: data.session.refresh_token,
+                });
+                this.session = data.session;
+                this.user    = data.session?.user || data.user || null;
+                if (this.user?.id) await this._loadProfile(this.user.id);
+                this._notify();
+                return data;
+            } catch (_) { /* falhou setSession — tentar login directo abaixo */ }
         }
+
+        // Caso 2: sem sessão (confirmação de email activa ou setSession falhou)
+        // Tentar login directo com as credenciais que acabaram de ser registadas.
+        // Aguarda brevemente para o Supabase propagar o novo utilizador.
+        if (this.supabase && data.user) {
+            await new Promise(r => setTimeout(r, 1200));
+            try {
+                const { data: loginData, error: loginErr } = await this.supabase.auth.signInWithPassword({
+                    email: email.toLowerCase().trim(),
+                    password,
+                });
+                if (!loginErr && loginData?.session) {
+                    this.session = loginData.session;
+                    this.user    = loginData.user;
+                    if (this.user?.id) await this._loadProfile(this.user.id);
+                    this._notify();
+                    return { ...data, session: loginData.session, _autoLogin: true };
+                }
+            } catch (_) { /* login automático falhou — continuar sem sessão */ }
+        }
+
+        // Caso 3: nenhuma das anteriores funcionou — conta criada mas sem login
+        // (ex: Supabase exige confirmação de email manual)
+        this.user = null;
+        this._notify();
         return data;
     }
 
