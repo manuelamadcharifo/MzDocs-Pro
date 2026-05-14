@@ -217,7 +217,18 @@ export class AuthUI {
             this._switchView('success');
             this._toast('✅ Conta criada com sucesso!', 'success');
         } catch (err) {
-            this._showError(err.message || err.toString());
+            const msg = (err.message || '').toLowerCase();
+            const isConflict = msg.includes('já está registado') || msg.includes('já tem conta') ||
+                               msg.includes('already') || msg.includes('registered') || msg.includes('duplicate');
+            if (isConflict) {
+                // Conta já existe — redirecionar para login e pré-preencher o email
+                this._switchView('login');
+                const loginField = document.getElementById('loginIdentifier');
+                if (loginField && email) loginField.value = email;
+                this._showError('Já tens conta com este e-mail. Faz login abaixo ou recupera a password.');
+            } else {
+                this._showError(err.message || err.toString());
+            }
         } finally {
             this._registerSubmitting = false;
             if (btn) { btn.disabled = false; btn.textContent = 'Criar Conta'; }
@@ -269,7 +280,8 @@ export class AuthUI {
         const msg = (raw || '').toLowerCase();
         if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('email not confirmed'))
             return 'E-mail ou password incorrectos. Verifique e tente novamente.';
-        if (msg.includes('user already registered') || msg.includes('already been registered') || msg.includes('duplicate'))
+        if (msg.includes('já está registado') || msg.includes('já tem conta') ||
+            msg.includes('user already registered') || msg.includes('already been registered') || msg.includes('duplicate'))
             return 'Este e-mail ou telemóvel já tem conta. Use "Entrar" ou recupere a password.';
         if (msg.includes('password should be') || msg.includes('password must'))
             return 'A password deve ter pelo menos 6 caracteres.';

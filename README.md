@@ -10,6 +10,38 @@ Plataforma de geração inteligente de documentos para Moçambique — PWA compl
 
 ---
 
+### v7.2 — Auto-versão do SW + UX de Conflito no Registo (14 Mai 2026)
+
+#### 🟢 Fix 1 — `CACHE_VERSION` gerado automaticamente a cada deploy
+
+**Problema:** o valor `CACHE_VERSION` em `sw.js` era actualizado manualmente — era fácil esquecer, fazendo com que browsers servissem JS desactualizado do cache mesmo após deploy de correcções críticas.
+
+**Solução:** criado `scripts/inject-version.js` que:
+- Substitui `CACHE_VERSION` em `sw.js` pela data UTC do deploy (formato `v7-YYYYMMDD`)
+- Actualiza o campo `version` em `package.json` (formato `7.0.YYYYMMDD`)
+- Corre automaticamente a cada deploy via `"buildCommand": "node scripts/inject-version.js"` no `vercel.json`
+
+A partir de agora, **não é necessário editar `sw.js` manualmente** antes de cada deploy — o Vercel injeta a data correcta sozinho.
+
+---
+
+#### 🟢 Fix 2 — Erro 409 no registo fazia crash silencioso na UI
+
+**Problema:** ao tentar criar conta com um e-mail já registado, o servidor devolvia `409 (Conflict)` com a mensagem portuguesa `"Este e-mail já está registado"`. A função `_friendlyError()` não reconhecia essa mensagem (só reconhecia strings inglesas como `"already registered"`) e mostrava o texto cru sem qualquer acção — o utilizador ficava preso no formulário de registo sem saber o que fazer.
+
+**Solução (`assets/js/auth/AuthUI.js`):**
+- `_friendlyError()` agora reconhece mensagens portuguesas (`"já está registado"`, `"já tem conta"`) além das inglesas.
+- `_handleRegister()`: ao detectar erro 409/conflito, em vez de apenas mostrar o erro, **redireciona automaticamente para o ecrã de login** e **pré-preenche o campo de identificador com o e-mail usado no registo**, com a mensagem: _"Já tens conta com este e-mail. Faz login abaixo ou recupera a password."_
+
+**Ficheiros modificados nesta versão:**
+- `assets/js/auth/AuthUI.js`
+- `scripts/inject-version.js` *(novo)*
+- `package.json`
+- `vercel.json`
+
+
+---
+
 ### v7.1 — Correcções de Segurança e Estabilidade Auth (14 Mai 2026)
 
 #### 🔴 Fix 1 — Múltiplos pedidos duplicados ao `/api/auth/signup` (Bug principal)
