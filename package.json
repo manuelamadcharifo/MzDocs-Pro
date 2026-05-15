@@ -1,13 +1,17 @@
 {
   "name": "mzdocs-pro",
-  "version": "7.0.20260515",
+  "version": "7.1.20260515",
   "description": "MzDocs Pro v7 — Documentos profissionais com IA gratuita para Moçambique",
   "main": "index.html",
   "homepage": "./",
   "scripts": {
     "dev": "vercel dev",
     "build": "node scripts/inject-version.js",
-    "start": "vercel dev"
+    "start": "vercel dev",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:auth": "jest tests/auth.test.js",
+    "lint": "echo 'Linting not configured yet'"
   },
   "keywords": [
     "pwa",
@@ -23,5 +27,21 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "assets/js/**/*.js",
+      "!assets/js/**/*.test.js"
+    ],
+    "moduleNameMapper": {
+      "^(\.{1,2}/.*)\.js$": "$1"
+    }
   }
 }

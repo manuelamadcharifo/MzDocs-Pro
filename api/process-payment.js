@@ -1,104 +1,61 @@
+// api/process-payment.js
+// Estrutura preparada para integração MPesa / e-Mola
+
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
-// api/process-payment.js — M-Pesa C2B + Manual (WhatsApp)
-
-const PACKAGES = {
-    avulso:  { amount: 50,  credits: 3,  name: 'Avulso'  },
-    starter: { amount: 150, credits: 10, name: 'Starter' },
-    basico:  { amount: 350, credits: 25, name: 'Básico'  },
-    pro:     { amount: 750, credits: 60, name: 'Pro'     },
-};
 
 const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
+const PACKAGES = {
+  'starter': { credits: 5, price: 150, label: 'Starter — 5 créditos' },
+  'basic':   { credits: 15, price: 375, label: 'Básico — 15 créditos' },
+  'pro':     { credits: 50, price: 1000, label: 'Pro — 50 créditos' },
+  'business':{ credits: 200, price: 3000, label: 'Business — 200 créditos' },
+};
+
 module.exports = async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-    if (req.method === 'OPTIONS') return res.status(200).end();
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
-    let body;
-    try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body; }
-    catch { return res.status(400).json({ error: 'Body JSON inválido' }); }
+  let body;
+  try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
+  catch { return res.status(400).json({ error: 'Body JSON inválido' }); }
 
-    const { mode, phoneNumber, packageId, userId } = body;
-    const pkg = PACKAGES[packageId];
-    if (!pkg) return res.status(400).json({ error: 'Pacote inválido' });
+  const { phone, packageId, provider = 'mpesa' } = body;
 
-    const mpesaConfigured = process.env.MPESA_API_KEY && process.env.MPESA_SERVICE_CODE;
+  if (!phone) return res.status(400).json({ error: 'Número de telemóvel é obrigatório' });
+  if (!packageId || !PACKAGES[packageId]) {
+    return res.status(400).json({ error: 'Pacote inválido', available: Object.keys(PACKAGES) });
+  }
 
-    if (mode === 'mpesa' && mpesaConfigured) {
-        try {
-            const result = await processMPesaPayment(phoneNumber, pkg.amount, packageId);
-            await saveTransaction(userId, packageId, pkg, 'mpesa', result.receipt, null, phoneNumber);
-            return res.status(200).json({
-                success: true,
-                mode: 'automatic',
-                receipt: result.receipt,
-                message: 'Confirme o pagamento no seu telemóvel'
-            });
-        } catch (err) {
-            console.warn('[process-payment] M-Pesa falhou, fallback manual:', err.message);
-        }
-    }
+  const pkg = PACKAGES[packageId];
+  const cleanPhone = phone.replace(/\D/g, '');
+  const normalizedPhone = cleanPhone.startsWith('258') ? `+${cleanPhone}` : `+258${cleanPhone}`;
 
-    // Manual (WhatsApp)
-    const referenceId = 'MAN' + Math.random().toString(36).substring(2, 10).toUpperCase();
-    await saveTransaction(userId, packageId, pkg, 'manual', null, referenceId, phoneNumber);
+  const isConfigured = !!process.env.MPESA_API_KEY && !!process.env.MPESA_SERVICE_CODE;
 
-    const waNumber = process.env.WHATSAPP_NUMBER || '258858695506';
-    const message  = `🧾 *PAGAMENTO MzDocs Pro*\n\n📦 Pacote: ${pkg.name}\n💰 Valor: ${pkg.amount} MZN\n🆔 Referência: ${referenceId}\n📱 Número: ${phoneNumber || 'N/A'}\n\nFaça M-Pesa para *${waNumber}* e envie o comprovativo aqui.`;
+  if (!isConfigured) {
+    console.log(`[MPesa Sandbox] Simulação: ${pkg.label} para ${normalizedPhone}`);
+    await new Promise(r => setTimeout(r, 1500));
+    const transactionId = `SIM_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
     return res.status(200).json({
-        success: true,
-        mode: 'manual',
-        referenceId,
-        whatsappLink: `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`,
-        message: 'Envie o comprovativo pelo WhatsApp'
+      success: true,
+      sandbox: true,
+      message: 'Pagamento simulado com sucesso. Em produção, o utilizador receberá pedido USSD no telemóvel.',
+      transactionId,
+      package: pkg,
+      phone: normalizedPhone,
+      nextStep: 'Adicione MPESA_API_KEY e MPESA_SERVICE_CODE nas variáveis de ambiente para activar pagamentos reais.',
     });
-}
+  }
 
-async function processMPesaPayment(phone, amount, packageId) {
-    const res = await fetch('https://api.mpesa.vm.co.mz:18346/ipg/v1x/c2bPayment/singleStage/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.MPESA_API_KEY}`,
-            'Origin': process.env.SITE_URL || 'https://mz-docs-pro.vercel.app'
-        },
-        body: JSON.stringify({
-            input_TransactionReference: `MZDOCS-${Date.now()}`,
-            input_CustomerMSISDN: phone,
-            input_Amount: amount.toString(),
-            input_ThirdPartyReference: packageId,
-            input_ServiceProviderCode: process.env.MPESA_SERVICE_CODE
-        })
-    });
-    if (!res.ok) throw new Error(`M-Pesa HTTP ${res.status}`);
-    const data = await res.json();
-    return { receipt: data.output_TransactionID };
-}
-
-async function saveTransaction(userId, packageId, pkg, method, receipt, referenceId, phone) {
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return;
-    try {
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-            auth: { autoRefreshToken: false, persistSession: false },
-            realtime: { transport: ws },
-        });
-        await supabase.from('transactions').insert({
-            user_id:        userId || null,
-            package_id:     packageId,
-            amount:         pkg.amount,
-            credits:        pkg.credits,
-            status:         'pending',
-            payment_method: method,
-            mpesa_receipt:  receipt,
-            reference_id:   referenceId,
-            phone_number:   phone
-        });
-    } catch (e) { console.warn('[process-payment] Falha ao guardar transação:', e.message); }
-}
-
+  return res.status(503).json({ 
+    error: 'Serviço de pagamento não configurado.',
+    help: 'Contacte o administrador para activar pagamentos.' 
+  });
+};
