@@ -145,7 +145,7 @@ export const DocumentView = {
         <div class="res-preview-stats">${words} palavras · ~${pages} pág.</div>
       </div>
       <div class="res-a4-wrap">
-        <iframe id="resPreviewFrame" class="res-a4-frame" sandbox="allow-same-origin allow-scripts"></iframe>
+        <iframe id="resPreviewFrame" class="res-a4-frame" sandbox="allow-scripts"></iframe>
       </div>
     `;
 

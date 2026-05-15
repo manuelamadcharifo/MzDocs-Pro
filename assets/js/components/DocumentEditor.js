@@ -131,7 +131,7 @@ export class DocumentEditor {
           <div class="ed-preview-wrap" id="edPreviewWrap">
             <div class="ed-a4-bg">
               <div class="ed-a4-label">A4 · 210×297 mm</div>
-              <iframe id="edPreviewFrame" class="ed-a4-frame" sandbox="allow-same-origin allow-scripts"></iframe>
+              <iframe id="edPreviewFrame" class="ed-a4-frame" sandbox="allow-scripts"></iframe>
             </div>
           </div>
 

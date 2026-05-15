@@ -143,14 +143,20 @@ export class AuthManager {
 
         // Caso 2: sem sessão (confirmação de email activa ou setSession falhou)
         // Tentar login directo com as credenciais que acabaram de ser registadas.
-        // Aguarda brevemente para o Supabase propagar o novo utilizador.
+        // Timeout de 8 s para evitar que a UI fique suspensa indefinidamente.
         if (this.supabase && data.user) {
-            await new Promise(r => setTimeout(r, 1200));
+            await new Promise(r => setTimeout(r, 800));
             try {
-                const { data: loginData, error: loginErr } = await this.supabase.auth.signInWithPassword({
-                    email: email.toLowerCase().trim(),
-                    password,
-                });
+                const loginResult = await Promise.race([
+                    this.supabase.auth.signInWithPassword({
+                        email: email.toLowerCase().trim(),
+                        password,
+                    }),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('timeout')), 8000)
+                    ),
+                ]);
+                const { data: loginData, error: loginErr } = loginResult;
                 if (!loginErr && loginData?.session) {
                     this.session = loginData.session;
                     this.user    = loginData.user;
@@ -158,7 +164,7 @@ export class AuthManager {
                     this._notify();
                     return { ...data, session: loginData.session, _autoLogin: true };
                 }
-            } catch (_) { /* login automático falhou — continuar sem sessão */ }
+            } catch (_) { /* login automático falhou ou timeout — continuar sem sessão */ }
         }
 
         // Caso 3: nenhuma das anteriores funcionou — conta criada mas sem login
