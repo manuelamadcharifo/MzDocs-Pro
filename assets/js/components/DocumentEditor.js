@@ -1,748 +1,224 @@
 // assets/js/components/DocumentEditor.js
-// Editor WYSIWYG estilo Word — preview A4 fiel + edição rich text com toolbar
+import { exportManager } from '../utils/ExportManager.js';
+import { authManager } from '../auth/AuthManager.js';
+import { sanitizeHtml } from '../utils/Sanitizer.js';
 
 export class DocumentEditor {
-  constructor() {
-    this.content     = '';
-    this.serviceType = '';
-    this.modal       = null;
-    this.onReedit    = null;
-    this._previewFmt = 'pdf';
-    this._resizeHandler = null;
-    this._createModal();
-  }
+ constructor() {
+ this.content = '';
+ this.serviceType = '';
+ this.modal = null;
+ this._docController = null;
+ this._createModal();
+ }
 
-  _createModal() {
-    document.getElementById('editorOverlay')?.remove();
+ _createModal() {
+ if (document.getElementById('editorOverlay')) {
+ this.modal = document.getElementById('editorOverlay');
+ this._bindEvents();
+ return;
+ }
 
-    const overlay = document.createElement('div');
-    overlay.id = 'editorOverlay';
-    overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;padding:20px;';
-
-    overlay.innerHTML = `
-      <div class="ed-shell">
-        <!-- HEADER -->
-        <div class="ed-header">
-          <h3 class="ed-title">✏️ Editor de Documento</h3>
-          <div class="ed-fmt-tabs" id="edFmtTabs">
-            <button class="ed-tab active" data-fmt="preview" title="Preview do documento">👁️ Preview</button>
-            <button class="ed-tab" data-fmt="edit" title="Editar documento">📝 Editar</button>
-          </div>
-          <button id="editorClose" class="ed-close" title="Fechar">✕</button>
-        </div>
-
-        <!-- SUB-TOOLBAR (preview formats) -->
-        <div class="ed-subtoolbar" id="edSubtoolbar">
-          <div class="ed-fmt-group">
-            <span class="ed-fmt-label">Formato:</span>
-            <button class="ed-fmtbtn active" data-preview="pdf">📄 PDF</button>
-            <button class="ed-fmtbtn" data-preview="word">📃 Word</button>
-            <button class="ed-fmtbtn" data-preview="excel">📊 Excel</button>
-          </div>
-          <div class="ed-fmt-group" style="margin-left:auto;">
-            <button id="edBtnDownload" class="ed-action-btn primary">⬇️ Download</button>
-            <button id="edBtnWa"       class="ed-action-btn wa">💬 WhatsApp</button>
-            <button id="edBtnCopy"     class="ed-action-btn">📋 Copiar</button>
-            <button id="edBtnReedit"   class="ed-action-btn ai">🤖 Reeditar</button>
-            <button id="edBtnSign"    class="ed-action-btn" title="Inserir assinatura digital no documento">✍️ Assinar</button>
-          </div>
-        </div>
-
-        <!-- WORD TOOLBAR (só no modo edição) -->
-        <div class="ed-word-toolbar" id="edWordToolbar" style="display:none;">
-          <!-- Linha 1: formatação de texto -->
-          <div class="ed-word-row">
-            <div class="ed-word-group">
-              <select class="ed-sel" id="edFontFamily" title="Fonte">
-                <option value="'Times New Roman',serif">Times New Roman</option>
-                <option value="'Calibri',sans-serif" selected>Calibri</option>
-                <option value="Arial,sans-serif">Arial</option>
-                <option value="Georgia,serif">Georgia</option>
-              </select>
-              <select class="ed-sel ed-sel-sm" id="edFontSize" title="Tamanho">
-                <option value="10">10</option>
-                <option value="11">11</option>
-                <option value="12" selected>12</option>
-                <option value="14">14</option>
-                <option value="16">16</option>
-                <option value="18">18</option>
-                <option value="20">20</option>
-                <option value="24">24</option>
-              </select>
-            </div>
-            <div class="ed-word-group">
-              <button class="ed-wbtn" data-cmd="bold"        title="Negrito (Ctrl+B)"><b>B</b></button>
-              <button class="ed-wbtn" data-cmd="italic"      title="Itálico (Ctrl+I)"><i>I</i></button>
-              <button class="ed-wbtn" data-cmd="underline"   title="Sublinhado (Ctrl+U)"><u>U</u></button>
-              <button class="ed-wbtn" data-cmd="strikeThrough" title="Riscado"><s>S</s></button>
-            </div>
-            <div class="ed-word-group">
-              <button class="ed-wbtn" data-cmd="justifyLeft"    title="Alinhar esquerda">⬅</button>
-              <button class="ed-wbtn" data-cmd="justifyCenter"  title="Centrar">≡</button>
-              <button class="ed-wbtn" data-cmd="justifyRight"   title="Alinhar direita">➡</button>
-              <button class="ed-wbtn" data-cmd="justifyFull"    title="Justificar">☰</button>
-            </div>
-            <div class="ed-word-group">
-              <button class="ed-wbtn" data-cmd="insertUnorderedList" title="Lista com marcadores">• Lista</button>
-              <button class="ed-wbtn" data-cmd="insertOrderedList"   title="Lista numerada">1. Lista</button>
-              <button class="ed-wbtn" data-cmd="indent"   title="Aumentar recuo">→</button>
-              <button class="ed-wbtn" data-cmd="outdent"  title="Diminuir recuo">←</button>
-            </div>
-            <div class="ed-word-group">
-              <select class="ed-sel" id="edHeading" title="Estilo de parágrafo">
-                <option value="p">Parágrafo</option>
-                <option value="h1">Título 1</option>
-                <option value="h2">Título 2</option>
-                <option value="h3">Título 3</option>
-                <option value="h4">Título 4</option>
-              </select>
-            </div>
-          </div>
-          <!-- Linha 2: cor, tabela, undo/redo, stats -->
-          <div class="ed-word-row ed-word-row2">
-            <div class="ed-word-group">
-              <label class="ed-color-lbl" title="Cor do texto">A
-                <input type="color" id="edColorText" value="#000000">
-              </label>
-              <label class="ed-color-lbl ed-color-bg" title="Cor de fundo">▣
-                <input type="color" id="edColorBg" value="#ffffff">
-              </label>
-            </div>
-            <div class="ed-word-group">
-              <button class="ed-wbtn" id="edBtnTable" title="Inserir tabela">⊞ Tabela</button>
-              <button class="ed-wbtn" id="edBtnHr"    title="Inserir linha separadora">― Linha</button>
-              <button class="ed-wbtn" id="edBtnLink"  title="Inserir hiperligação">🔗 Link</button>
-            </div>
-            <div class="ed-word-group">
-              <button class="ed-wbtn" data-cmd="undo" title="Desfazer (Ctrl+Z)">↩ Undo</button>
-              <button class="ed-wbtn" data-cmd="redo" title="Refazer (Ctrl+Y)">↪ Redo</button>
-            </div>
-            <div class="ed-word-group" style="margin-left:auto;">
-              <button class="ed-action-btn" id="edBtnCopy2">📋 Copiar</button>
-              <button class="ed-action-btn ai" id="edBtnReedit2">🤖 Reeditar</button>
-              <div id="editorStats" class="ed-stats">0 palavras</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- BODY -->
-        <div class="ed-body">
-          <!-- PREVIEW A4 -->
-          <div class="ed-preview-wrap" id="edPreviewWrap">
-            <div class="ed-a4-bg">
-              <div class="ed-a4-label">A4 · 210×297 mm</div>
-              <iframe id="edPreviewFrame" class="ed-a4-frame" sandbox="allow-scripts"></iframe>
-            </div>
-          </div>
-
-          <!-- EDITOR WYSIWYG (estilo Word) -->
-          <div class="ed-edit-wrap" id="edEditWrap" style="display:none;">
-            <div class="ed-word-page-wrap">
-              <div class="ed-word-page" id="edWordDoc" contenteditable="true" spellcheck="true"></div>
-            </div>
+ const html = `
+<div id="editorOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;width:95%;max-width:900px;height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid #e5e7eb;">
+      <h3 style="margin:0;font-size:16px;color:#07101f;">✏️ Editor de Documento</h3>
+      <button id="editorClose" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b7280;">✕</button>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden;">
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+        <textarea id="editorTextarea" style="flex:1;width:100%;padding:16px;border:none;resize:none;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.6;color:#1e293b;outline:none;" placeholder="O documento aparecerá aqui..."></textarea>
+        <div style="padding:8px 16px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#f9fafb;">
+          <span id="editorStats" style="font-size:12px;color:#6b7280;">0 palavras | 0 caracteres</span>
+          <div style="display:flex;gap:8px;">
+            <button id="btnCopy" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">📋 Copiar</button>
+            <button id="btnPreview" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">👁️ Pré-visualizar</button>
+            <button id="btnReedit" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">🤖 Reeditar com IA</button>
           </div>
         </div>
       </div>
-    `;
-
-    document.body.appendChild(overlay);
-    this.modal = overlay;
-    this._bindEvents();
-  }
-
-  _bindEvents() {
-    this.modal.querySelector('#editorClose')?.addEventListener('click', () => this.close());
-
-    // Tabs principais (preview / editar)
-    this.modal.querySelectorAll('[data-fmt]').forEach(btn => {
-      btn.addEventListener('click', () => this._switchMode(btn.dataset.fmt));
-    });
-
-    // Tabs de formato de preview
-    this.modal.querySelectorAll('[data-preview]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.modal.querySelectorAll('[data-preview]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        this._previewFmt = btn.dataset.preview;
-        this._renderPreview(this._previewFmt);
-        this.modal.querySelector('#edBtnDownload').textContent = `⬇️ ${btn.dataset.preview.toUpperCase()}`;
-      });
-    });
-
-    // Acções preview
-    this.modal.querySelector('#edBtnDownload')?.addEventListener('click', () => this._download());
-    this.modal.querySelector('#edBtnWa')?.addEventListener('click',       () => this._sendWA());
-    this.modal.querySelector('#edBtnCopy')?.addEventListener('click',     () => this._copy());
-    this.modal.querySelector('#edBtnCopy2')?.addEventListener('click',    () => this._copy());
-    this.modal.querySelector('#edBtnReedit')?.addEventListener('click',   () => this._reedit());
-    this.modal.querySelector('#edBtnReedit2')?.addEventListener('click',  () => this._reedit());
-    this.modal.querySelector('#edBtnSign')?.addEventListener('click',     () => this._openSignature());
-
-    // Toolbar Word — botões execCommand
-    this.modal.querySelectorAll('[data-cmd]').forEach(btn => {
-      btn.addEventListener('mousedown', e => {
-        e.preventDefault(); // não perder foco do editor
-        document.execCommand(btn.dataset.cmd, false, null);
-        this._syncContentFromEditor();
-        this._updateToolbarState();
-      });
-    });
-
-    // Fonte
-    this.modal.querySelector('#edFontFamily')?.addEventListener('change', e => {
-      document.execCommand('fontName', false, e.target.value);
-      this._syncContentFromEditor();
-    });
-
-    // Tamanho
-    this.modal.querySelector('#edFontSize')?.addEventListener('change', e => {
-      // execCommand fontSize só aceita 1-7; usamos span style em vez disso
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount) {
-        const range = sel.getRangeAt(0);
-        const span = document.createElement('span');
-        span.style.fontSize = e.target.value + 'pt';
-        range.surroundContents(span);
-      }
-      this._syncContentFromEditor();
-    });
-
-    // Estilo de parágrafo (heading)
-    this.modal.querySelector('#edHeading')?.addEventListener('change', e => {
-      document.execCommand('formatBlock', false, e.target.value);
-      this._syncContentFromEditor();
-    });
-
-    // Cor do texto
-    this.modal.querySelector('#edColorText')?.addEventListener('input', e => {
-      document.execCommand('foreColor', false, e.target.value);
-      this._syncContentFromEditor();
-    });
-
-    // Cor de fundo
-    this.modal.querySelector('#edColorBg')?.addEventListener('input', e => {
-      document.execCommand('hiliteColor', false, e.target.value);
-      this._syncContentFromEditor();
-    });
-
-    // Inserir tabela
-    this.modal.querySelector('#edBtnTable')?.addEventListener('click', () => this._insertTable());
-
-    // Inserir linha
-    this.modal.querySelector('#edBtnHr')?.addEventListener('click', () => {
-      document.execCommand('insertHorizontalRule', false, null);
-      this._syncContentFromEditor();
-    });
-
-    // Inserir link
-    this.modal.querySelector('#edBtnLink')?.addEventListener('click', () => {
-      const url = prompt('URL do link:');
-      if (url) document.execCommand('createLink', false, url);
-      this._syncContentFromEditor();
-    });
-
-    // Sync ao editar no contenteditable
-    const wordDoc = this.modal.querySelector('#edWordDoc');
-    if (wordDoc) {
-      wordDoc.addEventListener('input', () => {
-        this._syncContentFromEditor();
-        this._updateStats();
-      });
-      wordDoc.addEventListener('keyup', () => this._updateToolbarState());
-      wordDoc.addEventListener('mouseup', () => this._updateToolbarState());
-    }
-  }
-
-  // ── Converte markdown → HTML rico para o editor Word ──────────
-  _mdToRichHTML(md) {
-    if (!md) return '<p><br></p>';
-    let html = md
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/---PAGE_BREAK---/g, '<hr style="page-break-after:always;border:2px dashed #aaa;margin:16px 0;">')
-      .replace(/^######\s(.+)$/gm, '<h6>$1</h6>')
-      .replace(/^#####\s(.+)$/gm,  '<h5>$1</h5>')
-      .replace(/^####\s(.+)$/gm,   '<h4>$1</h4>')
-      .replace(/^###\s(.+)$/gm,    '<h3>$1</h3>')
-      .replace(/^##\s(.+)$/gm,     '<h2>$1</h2>')
-      .replace(/^#\s(.+)$/gm,      '<h1>$1</h1>')
-      .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-      .replace(/\*\*(.+?)\*\*/g,     '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g,         '<em>$1</em>')
-      .replace(/_(.+?)_/g,           '<u>$1</u>')
-      .replace(/^---+$/gm, '<hr>')
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/^(\d+)\. (.+)$/gm, '<oli>$2</oli>');
-
-    // Tabelas markdown
-    html = html.replace(/(\|.+\|\n?)+/g, match => this._mdTableToHTML(match));
-
-    // Listas não ordenadas
-    html = html.replace(/(<li>[\s\S]*?<\/li>)+/g, m => `<ul style="margin:6pt 0 6pt 18pt;">${m}</ul>`);
-    // Listas ordenadas
-    html = html.replace(/(<oli>[\s\S]*?<\/oli>)+/g, m =>
-      `<ol style="margin:6pt 0 6pt 18pt;">${m.replace(/<\/?oli>/g, tag => tag.replace('oli','li'))}</ol>`
-    );
-
-    // Parágrafos
-    html = html.split('\n\n').map(block => {
-      block = block.trim();
-      if (!block) return '';
-      if (/^<(h[1-6]|ul|ol|hr|table)/i.test(block)) return block;
-      return `<p style="margin-bottom:8pt;text-align:justify;">${block.replace(/\n/g, '<br>')}</p>`;
-    }).join('\n');
-
-    return html || '<p><br></p>';
-  }
-
-  // ── Extrai texto do editor (HTML → markdown simplificado) ──────
-  _richHTMLToMd(html) {
-    // Preserva o HTML mas converte elementos básicos de volta a markdown
-    // para manter compatibilidade com o sistema de preview
-    return html
-      .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n')
-      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n')
-      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n')
-      .replace(/<h4[^>]*>(.*?)<\/h4>/gi, '#### $1\n')
-      .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
-      .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
-      .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
-      .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*')
-      .replace(/<u[^>]*>(.*?)<\/u>/gi, '_$1_')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n')
-      .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
-      .replace(/<hr[^>]*>/gi, '\n---\n')
-      .replace(/<[^>]+>/g, '')
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  }
-
-  _syncContentFromEditor() {
-    const doc = this.modal.querySelector('#edWordDoc');
-    if (doc) {
-      // Guardar o HTML rico E converter para markdown para o preview
-      this._richHTML = doc.innerHTML;
-      this.content   = this._richHTMLToMd(doc.innerHTML);
-    }
-  }
-
-  // ── Actualiza estado visual dos botões da toolbar ──────────────
-  _updateToolbarState() {
-    const cmds = ['bold','italic','underline','strikeThrough',
-                  'justifyLeft','justifyCenter','justifyRight','justifyFull',
-                  'insertUnorderedList','insertOrderedList'];
-    cmds.forEach(cmd => {
-      const btn = this.modal.querySelector(`[data-cmd="${cmd}"]`);
-      if (btn) btn.classList.toggle('active', document.queryCommandState(cmd));
-    });
-  }
-
-  // ── Insere tabela ──────────────────────────────────────────────
-  _insertTable() {
-    const rows = parseInt(prompt('Número de linhas:', '3') || '3');
-    const cols = parseInt(prompt('Número de colunas:', '3') || '3');
-    if (!rows || !cols) return;
-
-    let html = '<table style="width:100%;border-collapse:collapse;margin:10pt 0;">';
-    html += '<thead><tr>';
-    for (let c = 0; c < cols; c++) {
-      html += `<th style="border:1px solid #555;padding:5pt 7pt;background:#f0f0f0;font-weight:bold;">Coluna ${c+1}</th>`;
-    }
-    html += '</tr></thead><tbody>';
-    for (let r = 0; r < rows; r++) {
-      html += '<tr>';
-      for (let c = 0; c < cols; c++) {
-        html += '<td style="border:1px solid #555;padding:5pt 7pt;" contenteditable="true"></td>';
-      }
-      html += '</tr>';
-    }
-    html += '</tbody></table>';
-    document.execCommand('insertHTML', false, html);
-    this._syncContentFromEditor();
-  }
-
-  // ── Muda entre modo preview e edição ──────────────────────────
-  _switchMode(mode) {
-    const previewWrap = this.modal.querySelector('#edPreviewWrap');
-    const editWrap    = this.modal.querySelector('#edEditWrap');
-    const subtoolbar  = this.modal.querySelector('#edSubtoolbar');
-    const wordToolbar = this.modal.querySelector('#edWordToolbar');
-    const wordDoc     = this.modal.querySelector('#edWordDoc');
-
-    this.modal.querySelectorAll('[data-fmt]').forEach(b => {
-      b.classList.toggle('active', b.dataset.fmt === mode);
-    });
-
-    if (mode === 'preview') {
-      // Sync do editor antes de mudar para preview
-      if (wordDoc) this._syncContentFromEditor();
-      previewWrap.style.display = 'flex';
-      editWrap.style.display    = 'none';
-      subtoolbar.style.display  = 'flex';
-      wordToolbar.style.display = 'none';
-      this._renderPreview(this._previewFmt);
-      this._updateA4Scale();
-    } else {
-      previewWrap.style.display = 'none';
-      editWrap.style.display    = 'flex';
-      subtoolbar.style.display  = 'none';
-      wordToolbar.style.display = 'flex';
-      // Renderizar conteúdo rico no editor
-      if (wordDoc) {
-        wordDoc.innerHTML = this._richHTML || this._mdToRichHTML(this.content);
-        setTimeout(() => { wordDoc.focus(); }, 50);
-      }
-      this._updateStats();
-      this._updateToolbarState();
-    }
-  }
-
-  // ── Escala A4 para mobile ──────────────────────────────────────
-  _updateA4Scale() {
-    const frame = this.modal.querySelector('.ed-a4-frame');
-    if (!frame) return;
-    const wrap  = this.modal.querySelector('.ed-preview-wrap');
-    if (!wrap)  return;
-    const availW  = wrap.clientWidth - 32;
-    const a4Px    = 210 * 3.7795;
-    const scale   = Math.min(1, availW / a4Px);
-    frame.style.transform       = `scale(${scale})`;
-    frame.style.transformOrigin = 'top center';
-    const a4HeightPx = 297 * 3.7795;
-    frame.style.marginBottom = `${(a4HeightPx * scale) - a4HeightPx}px`;
-  }
-
-  // ── Preview A4 no iframe ───────────────────────────────────────
-  _renderPreview(format) {
-    const frame = this.modal.querySelector('#edPreviewFrame');
-    if (!frame) return;
-    const html = this._buildPreviewHTML(format);
-    // Use blob URL instead of srcdoc — srcdoc with sandbox="allow-scripts" is blocked
-    // by Chrome when the document origin resolves to "about:srcdoc".
-    if (this._previewBlobURL) URL.revokeObjectURL(this._previewBlobURL);
-    this._previewBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    frame.src = this._previewBlobURL;
-  }
-
-  _buildPreviewHTML(format) {
-    const css  = this._getFormatCSS(format);
-    const body = this._markdownToHTML(this.content);
-    return `<!DOCTYPE html>
-<html lang="pt">
-<head><meta charset="UTF-8"><style>${css}</style></head>
-<body><div class="doc-page">${body}</div></body>
-</html>`;
-  }
-
-  _getFormatCSS(format) {
-    const base = `
-      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-      body{background:#fff;}
-      .doc-page{width:210mm;min-height:297mm;padding:25mm 22mm 20mm 25mm;background:#fff;font-size:12pt;line-height:1.5;color:#000;}
-      h1{font-size:18pt;font-weight:bold;text-align:center;margin-bottom:16pt;}
-      h2{font-size:14pt;font-weight:bold;margin-top:14pt;margin-bottom:8pt;border-bottom:1px solid #ccc;padding-bottom:3pt;}
-      h3{font-size:12pt;font-weight:bold;margin-top:10pt;margin-bottom:6pt;}
-      h4{font-size:11pt;font-weight:bold;margin-top:8pt;margin-bottom:4pt;}
-      p{margin-bottom:8pt;text-align:justify;}
-      ul,ol{margin:6pt 0 6pt 18pt;}li{margin-bottom:3pt;}
-      table{width:100%;border-collapse:collapse;margin:10pt 0;font-size:11pt;page-break-inside:avoid;}
-      td,th{border:1px solid #000;padding:5pt 7pt;}th{background:#f0f0f0;font-weight:bold;}
-      strong{font-weight:bold;}em{font-style:italic;}
-      hr{border:none;border-top:1px solid #888;margin:12pt 0;}
-      h1,h2,h3,h4{page-break-after:avoid;}
-    `;
-    if (format === 'word') return base + `
-      body,.doc-page{font-family:'Calibri','Segoe UI',Arial,sans-serif;font-size:11pt;}
-      h1{color:#2E74B5;font-size:16pt;}h2{color:#2E74B5;font-size:13pt;border-bottom-color:#2E74B5;}
-      td,th{border-color:#BFBFBF;}th{background:#D9E2F3;color:#1F3864;}
-    `;
-    if (format === 'excel') return `
-      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-      body{font-family:'Calibri',Arial,sans-serif;font-size:11pt;background:#fff;}
-      .doc-page{padding:0;width:100%;min-height:100vh;}
-      table{width:100%;border-collapse:collapse;}
-      th{background:#4472C4;color:#fff;font-weight:bold;padding:6pt 8pt;border:1px solid #2F5597;}
-      td{padding:5pt 8pt;border:1px solid #B4B4B4;}
-      tr:nth-child(even) td{background:#F2F2F2;}
-      h1,h2,h3{padding:8pt;font-size:13pt;}p{padding:4pt 8pt;}ul,ol{padding:4pt 8pt 4pt 24pt;}
-    `;
-    return base + `body,.doc-page{font-family:'Times New Roman',Georgia,serif;}`;
-  }
-
-  _markdownToHTML(md) {
-    if (!md) return '<p><em>Sem conteúdo</em></p>';
-    if (this._previewFmt === 'excel') {
-      return `<div style="background:#E7E6E6;border-bottom:3px solid #4472C4;padding:6px 16px;font-weight:bold;display:inline-block;margin-bottom:8px;">📊 Folha 1</div>${this._mdToHTMLBasic(md)}`;
-    }
-    return this._mdToHTMLBasic(md);
-  }
-
-  _mdToHTMLBasic(md) {
-    // Replace PAGE_BREAK FIRST (before HTML-escaping) so it doesn't get mangled
-    const PAGE_BREAK_PLACEHOLDER = '___PB___';
-    let html = md
-      .replace(/---PAGE_BREAK---/g, PAGE_BREAK_PLACEHOLDER)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(new RegExp(PAGE_BREAK_PLACEHOLDER,'g'),'<hr class="page-break" style="page-break-after:always;border:2px dashed #aaa;margin:20px 0;">')
-      .replace(/^######\s(.+)$/gm,'<h6>$1</h6>')
-      .replace(/^#####\s(.+)$/gm, '<h5>$1</h5>')
-      .replace(/^####\s(.+)$/gm,  '<h4>$1</h4>')
-      .replace(/^###\s(.+)$/gm,   '<h3>$1</h3>')
-      .replace(/^##\s(.+)$/gm,    '<h2>$1</h2>')
-      .replace(/^#\s(.+)$/gm,     '<h1>$1</h1>')
-      .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
-      .replace(/\*\*(.+?)\*\*/g,    '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g,        '<em>$1</em>')
-      .replace(/^---+$/gm,'<hr>')
-      .replace(/^- (.+)$/gm,'<li>$1</li>')
-      .replace(/^(\d+)\. (.+)$/gm,'<li>$2</li>')
-      .replace(/\n\n/g,'</p><p>')
-      .replace(/\n/g,'<br>');
-    html = html.replace(/(<li>.*?<\/li>)+/gs, m => `<ul>${m}</ul>`);
-    html = html.replace(/(\|.+\|\n?)+/g, m => this._mdTableToHTML(m));
-    return `<p>${html}</p>`;
-  }
-
-  _mdTableToHTML(tableStr) {
-    const rows = tableStr.trim().split('\n').filter(r => !/^[\|\s\-:]+$/.test(r));
-    if (!rows.length) return tableStr;
-    const headers = rows[0].split('|').map(c => c.trim()).filter(Boolean);
-    const body    = rows.slice(1);
-    const thead = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
-    const tbody = body.map(row => {
-      const cells = row.split('|').map(c => c.trim()).filter(Boolean);
-      return `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
-    }).join('');
-    return `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
-  }
-
-  // ── Downloads ─────────────────────────────────────────────────
-  async _download() {
-    const fmt = this._previewFmt;
-    const btn = this.modal.querySelector('#edBtnDownload');
-    const orig = btn.textContent;
-    btn.disabled = true; btn.textContent = '⏳…';
-    try {
-      if (fmt === 'pdf')   await this._downloadPDF();
-      if (fmt === 'word')  await this._downloadWord();
-      if (fmt === 'excel') await this._downloadExcel();
-    } catch (err) { alert('❌ Erro ao exportar: ' + err.message); }
-    finally { btn.disabled = false; btn.textContent = orig; }
-  }
-
-  async _downloadPDF() {
-    const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
-    const doc = new jsPDF({ unit:'mm', format:'a4' });
-    const lines = doc.splitTextToSize(this.content, 170);
-    let y = 25;
-    lines.forEach(line => {
-      if (y > 270) { doc.addPage(); y = 25; }
-      const isH1 = line.startsWith('# '), isH2 = line.startsWith('## ');
-      if (isH1) { doc.setFontSize(18); doc.setFont('times','bold'); doc.text(line.replace(/^#+ /,''), 105, y, {align:'center'}); y += 10; }
-      else if (isH2) { doc.setFontSize(14); doc.setFont('times','bold'); doc.text(line.replace(/^#+ /,''), 25, y); y += 9; }
-      else { doc.setFontSize(12); doc.setFont('times','normal'); doc.text(line, 25, y); y += 7; }
-    });
-    doc.save(`mzdocs-${this.serviceType}-${Date.now()}.pdf`);
-  }
-
-  async _downloadWord() {
-    // Usa o HTML rico do editor se disponível, senão converte o markdown
-    const richContent = this._richHTML || this._mdToRichHTML(this.content);
-    const css = this._getFormatCSS('word');
-    const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
-      xmlns:w='urn:schemas-microsoft-com:office:word'
-      xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset="UTF-8">
-      <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->
-      <style>${css}
-        @page{size:210mm 297mm;margin:25mm 22mm 20mm 25mm;}
-        body{font-family:Calibri,sans-serif;font-size:11pt;line-height:1.5;}
-      </style></head>
-      <body><div class="doc-page">${richContent}</div></body></html>`;
-    const blob = new Blob(['\ufeff', html], { type:'application/msword' });
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.doc` });
-    a.click(); URL.revokeObjectURL(url);
-  }
-
-  async _downloadExcel() {
-    const html = `<html><head><meta charset="UTF-8"></head><body>${this._mdToHTMLBasic(this.content)}</body></html>`;
-    const blob = new Blob(['\ufeff', html], { type:'application/vnd.ms-excel' });
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.xls` });
-    a.click(); URL.revokeObjectURL(url);
-  }
-
-  _copy() {
-    navigator.clipboard.writeText(this.content)
-      .then(() => alert('✅ Copiado!'))
-      .catch(() => { const ta = Object.assign(document.createElement('textarea'),{value:this.content}); document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('✅ Copiado!'); });
-  }
-
-  _sendWA() {
-    const preview = this.content.slice(0,800).replace(/#{1,3} /g,'*');
-    window.open(`https://wa.me/258858695506?text=${encodeURIComponent(`📄 *${this.serviceType||'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`)}`, '_blank');
-  }
-
-  _reedit() {
-    const instruction = prompt('💡 O que deseja alterar no documento?\n\nExemplo: "Adicione mais detalhes na introdução"');
-    if (!instruction) return;
-    if (this.onReedit) {
-      this.onReedit({ currentContent: this.content, instruction, serviceType: this.serviceType });
-    } else {
-      document.dispatchEvent(new CustomEvent('document:reedit', {
-        detail: { currentContent: this.content, instruction, serviceType: this.serviceType }
-      }));
-    }
-  }
-
-
-  // ── Assinatura Digital ─────────────────────────────────────────
-  _openSignature() {
-    // Criar modal de assinatura inline
-    const existing = document.getElementById('signatureModal');
-    if (existing) existing.remove();
-
-    const sigModal = document.createElement('div');
-    sigModal.id = 'signatureModal';
-    sigModal.style.cssText = [
-      'position:fixed','inset:0','z-index:99999',
-      'background:rgba(0,0,0,0.7)','display:flex',
-      'align-items:center','justify-content:center','padding:20px'
-    ].join(';');
-
-    sigModal.innerHTML = `
-      <div style="background:#fff;border-radius:16px;padding:24px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3 style="font-size:16px;font-weight:700;color:#07101f;">✍️ Assinatura Digital</h3>
-          <button id="sigModalClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:4px;">✕</button>
-        </div>
-        <p style="font-size:13px;color:#6b7280;margin-bottom:12px;">Desenhe a sua assinatura com o dedo ou rato:</p>
-        <canvas id="sigCanvas" width="420" height="160"
-          style="border:2px dashed #d1d5db;border-radius:8px;width:100%;touch-action:none;cursor:crosshair;background:#fafafa;display:block;"></canvas>
-        <p id="sigHint" style="font-size:11px;color:#9ca3af;text-align:center;margin-top:6px;">Toque e arraste para assinar</p>
-        <div style="display:flex;gap:8px;margin-top:16px;">
-          <button id="sigClear" style="flex:1;padding:10px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:#374151;">🗑 Limpar</button>
-          <button id="sigInsert" style="flex:2;padding:10px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✅ Inserir no Documento</button>
-        </div>
+      <div id="previewPane" style="display:none;flex:1;border-left:1px solid #e5e7eb;overflow:auto;padding:16px;background:#f8fafc;">
+        <div id="previewContent" style="font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.6;color:#1e293b;"></div>
       </div>
-    `;
-    document.body.appendChild(sigModal);
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;gap:10px;justify-content:flex-end;background:#f9fafb;">
+      <button id="btnExportMd" style="padding:8px 16px;border:1px solid #d1d5db;border-radius:10px;background:#fff;font-size:13px;cursor:pointer;font-weight:500;">📝 Markdown</button>
+      <button id="btnExportPdf" style="padding:8px 16px;border:1px solid #d1d5db;border-radius:10px;background:#fff;font-size:13px;cursor:pointer;font-weight:500;">📄 PDF</button>
+      <button id="btnExportWord" style="padding:8px 16px;border:1px solid #d1d5db;border-radius:10px;background:#fff;font-size:13px;cursor:pointer;font-weight:500;">📃 Word</button>
+    </div>
+  </div>
+</div>`;
 
-    const canvas = document.getElementById('sigCanvas');
-    const ctx    = canvas.getContext('2d');
-    ctx.strokeStyle = '#1a1a2e';
-    ctx.lineWidth   = 2.5;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-    let drawing     = false;
-    let hasSig      = false;
+ const div = document.createElement('div');
+ div.innerHTML = html;
+ document.body.appendChild(div.firstElementChild);
+ this.modal = document.getElementById('editorOverlay');
+ this._bindEvents();
+ }
 
-    const getPos = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width  / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const src = e.touches ? e.touches[0] : e;
-      return {
-        x: (src.clientX - rect.left) * scaleX,
-        y: (src.clientY - rect.top)  * scaleY,
-      };
-    };
+ _bindEvents() {
+ document.getElementById('editorClose')?.addEventListener('click', () => this.close());
+ document.getElementById('btnCopy')?.addEventListener('click', () => this._copyContent());
+ document.getElementById('btnExportMd')?.addEventListener('click', () => this._downloadMarkdown());
+ document.getElementById('btnExportPdf')?.addEventListener('click', () => this._exportPDF());
+ document.getElementById('btnExportWord')?.addEventListener('click', () => this._exportWord());
+ document.getElementById('btnPreview')?.addEventListener('click', () => this._togglePreview());
+ document.getElementById('btnReedit')?.addEventListener('click', () => this._showReeditDialog());
 
-    canvas.addEventListener('mousedown',  e => { drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
-    canvas.addEventListener('mousemove',  e => { if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; });
-    canvas.addEventListener('mouseup',    () => { drawing = false; ctx.beginPath(); });
-    canvas.addEventListener('mouseleave', () => { drawing = false; ctx.beginPath(); });
-    canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, { passive: false });
-    canvas.addEventListener('touchmove',  e => { e.preventDefault(); if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; }, { passive: false });
-    canvas.addEventListener('touchend',   () => { drawing = false; ctx.beginPath(); });
+ document.getElementById('editorTextarea')?.addEventListener('input', (e) => {
+ this.content = e.target.value;
+ this._updateStats();
+ });
+ }
 
-    document.getElementById('sigClear').addEventListener('click', () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      hasSig = false;
-    });
+ loadDocument(content, serviceType) {
+ this.content = content || '';
+ this.serviceType = serviceType || 'generic';
 
-    document.getElementById('sigModalClose').addEventListener('click', () => sigModal.remove());
-    sigModal.addEventListener('click', e => { if (e.target === sigModal) sigModal.remove(); });
+ const textarea = document.getElementById('editorTextarea');
+ if (textarea) {
+ textarea.value = this.content;
+ this._updateStats();
+ this.open();
+ return;
+ }
 
-    document.getElementById('sigInsert').addEventListener('click', () => {
-      if (!hasSig) { alert('⚠️ Desenhe uma assinatura primeiro.'); return; }
-      const dataUrl = canvas.toDataURL('image/png');
-      const sigHTML = `
-        <div style="margin-top:24pt;border-top:1px solid #333;padding-top:8pt;display:inline-block;text-align:center;">
-          <img src="${dataUrl}" style="max-width:200px;height:60px;object-fit:contain;display:block;margin-bottom:4pt;" alt="Assinatura">
-          <div style="font-size:9pt;color:#555;">Assinado digitalmente via MzDocs Pro</div>
-          <div style="font-size:9pt;color:#555;">${new Date().toLocaleDateString('pt-MZ')}</div>
-        </div>
-      `;
+ const observer = new MutationObserver((mutations, obs) => {
+ const ta = document.getElementById('editorTextarea');
+ if (ta) {
+ ta.value = this.content;
+ this._updateStats();
+ this.open();
+ obs.disconnect();
+ }
+ });
 
-      // Inserir no editor: se estiver em modo edição, insere no cursor; senão appenda ao markdown
-      const wordDoc = this.modal.querySelector('#edWordDoc');
-      if (wordDoc && document.activeElement === wordDoc) {
-        document.execCommand('insertHTML', false, sigHTML);
-        this._syncContentFromEditor();
-      } else {
-        // Modo preview — appenda representação markdown e passa para edição
-        this.content += `\n\n---\n**Assinatura Digital** — ${new Date().toLocaleDateString('pt-MZ')}`;
-        // Guardar dataUrl para reapor no HTML rico do editor
-        this._pendingSignatureImg = dataUrl;
-        this._switchMode('edit');
-        setTimeout(() => {
-          const doc = this.modal.querySelector('#edWordDoc');
-          if (doc) {
-            doc.innerHTML += sigHTML;
-            this._syncContentFromEditor();
-          }
-        }, 100);
-      }
+ observer.observe(document.body, { childList: true, subtree: true });
+ setTimeout(() => observer.disconnect(), 2000);
+ }
 
-      sigModal.remove();
-      // Feedback
-      const hint = document.createElement('div');
-      hint.textContent = '✍️ Assinatura inserida!';
-      hint.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:8px 20px;border-radius:20px;font-size:13px;font-weight:700;z-index:99999;';
-      document.body.appendChild(hint);
-      setTimeout(() => hint.remove(), 2500);
-    });
-  }
+ open() {
+ if (!this.modal) this._createModal();
+ this.modal.style.display = 'flex';
+ document.body.style.overflow = 'hidden';
+ }
 
-  _updateStats() {
-    const words = this.content.trim().split(/\s+/).filter(w => w.length > 0).length;
-    const el = this.modal?.querySelector('#editorStats');
-    if (el) el.textContent = `${words} palavras | ${this.content.length} chars`;
-  }
+ close() {
+ const textarea = document.getElementById('editorTextarea');
+ if (textarea) {
+ this.content = textarea.value;
+ }
 
-  // ── API pública ────────────────────────────────────────────────
-  loadDocument(content, serviceType) {
-    this.content     = content;
-    this.serviceType = serviceType;
-    this._previewFmt = 'pdf';
-    this._richHTML   = null; // reset rich HTML cache
+ document.dispatchEvent(new CustomEvent('editor:closed', {
+ detail: { content: this.content, serviceType: this.serviceType }
+ }));
 
-    this._updateStats();
-    this.open();
-    this._switchMode('preview');
+ if (this.modal) this.modal.style.display = 'none';
+ document.body.style.overflow = '';
+ }
 
-    this.modal.querySelectorAll('[data-preview]').forEach(b => {
-      b.classList.toggle('active', b.dataset.preview === 'pdf');
-    });
-    const dlBtn = this.modal.querySelector('#edBtnDownload');
-    if (dlBtn) dlBtn.textContent = '⬇️ PDF';
+ async _exportPDF() {
+ const btn = document.getElementById('btnExportPdf');
+ if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+ try {
+ await exportManager.toPDF(this.content, 'Documento', {
+ type: this.serviceType,
+ user: authManager.user?._profile?.full_name || authManager.user?.user_metadata?.full_name
+ });
+ } catch (err) {
+ alert('❌ Erro ao gerar PDF: ' + err.message);
+ } finally {
+ if (btn) { btn.disabled = false; btn.textContent = '📄 PDF'; }
+ }
+ }
 
-    setTimeout(() => this._updateA4Scale(), 100);
+ async _exportWord() {
+ const btn = document.getElementById('btnExportWord');
+ if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+ try {
+ await exportManager.toWord(this.content, 'Documento', {
+ type: this.serviceType,
+ user: authManager.user?._profile?.full_name || authManager.user?.user_metadata?.full_name
+ });
+ } catch (err) {
+ alert('❌ Erro ao gerar Word: ' + err.message);
+ } finally {
+ if (btn) { btn.disabled = false; btn.textContent = '📝 Word'; }
+ }
+ }
 
-    if (!this._resizeHandler) {
-      this._resizeHandler = () => this._updateA4Scale();
-      window.addEventListener('resize', this._resizeHandler);
-    }
-  }
+ _downloadMarkdown() {
+ const blob = new Blob([this.content], { type: 'text/markdown;charset=utf-8' });
+ const url = URL.createObjectURL(blob);
+ const a = document.createElement('a');
+ a.href = url;
+ a.download = `mzdocs-${this.serviceType}-${Date.now()}.md`;
+ a.click();
+ URL.revokeObjectURL(url);
+ }
 
-  open()  { if (this.modal) { this.modal.style.display='flex'; document.body.style.overflow='hidden'; } }
-  close() {
-    if (this.modal) { this.modal.style.display='none'; document.body.style.overflow=''; }
-    if (this._previewBlobURL) { URL.revokeObjectURL(this._previewBlobURL); this._previewBlobURL = null; }
-  }
-  getContent() { return this.content; }
+ _copyContent() {
+ navigator.clipboard.writeText(this.content)
+ .then(() => alert('✅ Copiado!'))
+ .catch(() => alert('❌ Não foi possível copiar'));
+ }
+
+ _togglePreview() {
+ const previewPane = document.getElementById('previewPane');
+ const isVisible = previewPane && previewPane.style.display !== 'none';
+ if (isVisible) {
+ previewPane.style.display = 'none';
+ } else {
+ previewPane.style.display = 'block';
+ this._renderPreview();
+ }
+ }
+
+ _renderPreview() {
+ const preview = document.getElementById('previewContent');
+ if (!preview) return;
+
+ let html = this.content
+ .replace(/#{6}\s(.+)/g, '<h6>$1</h6>')
+ .replace(/#{5}\s(.+)/g, '<h5>$1</h5>')
+ .replace(/#{4}\s(.+)/g, '<h4>$1</h4>')
+ .replace(/#{3}\s(.+)/g, '<h3>$1</h3>')
+ .replace(/#{2}\s(.+)/g, '<h2>$1</h2>')
+ .replace(/#{1}\s(.+)/g, '<h1>$1</h1>')
+ .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+ .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+ .replace(/\*(.+?)\*/g, '<em>$1</em>')
+ .replace(/`(.+?)`/g, '<code>$1</code>')
+ .replace(/\n/g, '<br>');
+
+ preview.innerHTML = sanitizeHtml(html);
+ }
+
+ _showReeditDialog() {
+ const instruction = prompt('💡 O que deseja alterar no documento?\n\nExemplo: "Adicione mais detalhes na introdução"');
+ if (!instruction) return;
+
+ document.dispatchEvent(new CustomEvent('document:reedit', {
+ detail: {
+ currentContent: this.content,
+ instruction,
+ serviceType: this.serviceType
+ }
+ }));
+ }
+
+ _updateStats() {
+ const words = this.content.trim().split(/\s+/).filter(w => w.length > 0).length;
+ const chars = this.content.length;
+ const el = document.getElementById('editorStats');
+ if (el) el.textContent = `${words} palavras | ${chars} caracteres`;
+ }
+
+ getContent() {
+ return this.content;
+ }
 }
+
+export const documentEditor = new DocumentEditor();
+window.documentEditor = documentEditor;
