@@ -131,7 +131,7 @@ export class DocumentEditor {
           <div class="ed-preview-wrap" id="edPreviewWrap">
             <div class="ed-a4-bg">
               <div class="ed-a4-label">A4 · 210×297 mm</div>
-              <iframe id="edPreviewFrame" class="ed-a4-frame" sandbox="allow-same-origin"></iframe>
+              <iframe id="edPreviewFrame" class="ed-a4-frame" sandbox="allow-same-origin allow-scripts"></iframe>
             </div>
           </div>
 
@@ -418,7 +418,12 @@ export class DocumentEditor {
   _renderPreview(format) {
     const frame = this.modal.querySelector('#edPreviewFrame');
     if (!frame) return;
-    frame.srcdoc = this._buildPreviewHTML(format);
+    const html = this._buildPreviewHTML(format);
+    // Use blob URL instead of srcdoc — srcdoc with sandbox="allow-scripts" is blocked
+    // by Chrome when the document origin resolves to "about:srcdoc".
+    if (this._previewBlobURL) URL.revokeObjectURL(this._previewBlobURL);
+    this._previewBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    frame.src = this._previewBlobURL;
   }
 
   _buildPreviewHTML(format) {
@@ -475,9 +480,12 @@ export class DocumentEditor {
   }
 
   _mdToHTMLBasic(md) {
+    // Replace PAGE_BREAK FIRST (before HTML-escaping) so it doesn't get mangled
+    const PAGE_BREAK_PLACEHOLDER = '___PB___';
     let html = md
+      .replace(/---PAGE_BREAK---/g, PAGE_BREAK_PLACEHOLDER)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/---PAGE_BREAK---/g,'<hr class="page-break">')
+      .replace(new RegExp(PAGE_BREAK_PLACEHOLDER,'g'),'<hr class="page-break" style="page-break-after:always;border:2px dashed #aaa;margin:20px 0;">')
       .replace(/^######\s(.+)$/gm,'<h6>$1</h6>')
       .replace(/^#####\s(.+)$/gm, '<h5>$1</h5>')
       .replace(/^####\s(.+)$/gm,  '<h4>$1</h4>')
@@ -732,6 +740,9 @@ export class DocumentEditor {
   }
 
   open()  { if (this.modal) { this.modal.style.display='flex'; document.body.style.overflow='hidden'; } }
-  close() { if (this.modal) { this.modal.style.display='none'; document.body.style.overflow=''; } }
+  close() {
+    if (this.modal) { this.modal.style.display='none'; document.body.style.overflow=''; }
+    if (this._previewBlobURL) { URL.revokeObjectURL(this._previewBlobURL); this._previewBlobURL = null; }
+  }
   getContent() { return this.content; }
 }

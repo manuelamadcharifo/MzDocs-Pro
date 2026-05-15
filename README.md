@@ -10,6 +10,40 @@ Plataforma de geração inteligente de documentos para Moçambique — PWA compl
 
 ---
 
+### v7.4 — Editor e Preview: Script Bloqueado + PAGE_BREAK como Texto (14 Mai 2026)
+
+#### 🔴 Fix 1 — "Blocked script execution in 'about:srcdoc'" — editor abre "Sem conteúdo"
+
+**Problema:** o iframe do editor (`DocumentEditor`) e o iframe do modal de resultado (`Views.js`) usavam `frame.srcdoc = html`. O Chrome, ao usar `srcdoc` com `sandbox="allow-scripts"`, resolve a origin do documento para `about:srcdoc` e bloqueia todos os scripts — mesmo com o atributo explícito. Resultado: o preview carregava mas qualquer conteúdo dinâmico era bloqueado, e quando o editor tentava ler `this.content`, encontrava uma string vazia, exibindo *"Sem conteúdo"*.
+
+**Solução:** substituído `frame.srcdoc` por `frame.src` com um `Blob URL` gerado a partir do HTML:
+```js
+const blob = new Blob([html], { type: 'text/html' });
+frame.src = URL.createObjectURL(blob);
+```
+Um Blob URL resolve para uma origin `blob:https://...` isolada mas válida, sem os bloqueios do `about:srcdoc`. O URL anterior é revogado com `URL.revokeObjectURL()` a cada actualização e ao fechar o modal, evitando fugas de memória.
+
+**Ficheiros:** `assets/js/components/DocumentEditor.js`, `assets/js/views/Views.js`
+
+---
+
+#### 🟡 Fix 2 — `---PAGE_BREAK---` aparecia como texto literal no preview e no resultado
+
+**Problema:** em ambos os renderizadores Markdown (`_mdToHTMLBasic` no editor e `_markdownToHTML` no Views), o `---PAGE_BREAK---` era substituído *depois* do escape de HTML (`replace(/&/g,'&amp;')` etc.). Como `---PAGE_BREAK---` não contém caracteres especiais HTML, o escape em si não era o problema — mas a regex `.replace(/^---+$/gm, '<hr>')` só apanha linhas compostas *exclusivamente* por hífens, e `---PAGE_BREAK---` tem texto no meio. Resultado: aparecia como texto literal no documento.
+
+**Solução:** substituição de `---PAGE_BREAK---` por um placeholder interno antes do escape, restaurado depois como elemento HTML de quebra de página:
+```js
+const PB = '___PAGEBREAK___';
+md.replace(/---PAGE_BREAK---/g, PB)
+  .replace(/&/g,'&amp;') /* ... */
+  .replace(new RegExp(PB,'g'), '<hr style="page-break-after:always;...">')
+```
+
+**Ficheiros:** `assets/js/components/DocumentEditor.js`, `assets/js/views/Views.js`
+
+
+---
+
 ### v7.3 — Registo com Login Automático Imediato (14 Mai 2026)
 
 #### 🔴 Fix — Modal ficava bloqueado em "⏳ A criar conta..." indefinidamente

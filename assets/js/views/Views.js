@@ -145,7 +145,7 @@ export const DocumentView = {
         <div class="res-preview-stats">${words} palavras · ~${pages} pág.</div>
       </div>
       <div class="res-a4-wrap">
-        <iframe id="resPreviewFrame" class="res-a4-frame" sandbox="allow-same-origin"></iframe>
+        <iframe id="resPreviewFrame" class="res-a4-frame" sandbox="allow-same-origin allow-scripts"></iframe>
       </div>
     `;
 
@@ -179,7 +179,8 @@ export const DocumentView = {
         table{width:100%;border-collapse:collapse;margin:8pt 0;}
         td,th{border:1px solid #000;padding:4pt 6pt;font-size:11pt;}
         th{background:#f0f0f0;font-weight:bold;}
-        strong{font-weight:bold;}em{font-style:italic;}hr{border:none;border-top:1px solid #888;margin:10pt 0;}`;
+        strong{font-weight:bold;}em{font-style:italic;}hr{border:none;border-top:1px solid #888;margin:10pt 0;}
+        div[style*="page-break"]{margin:16pt 0;}`;
     } else if (format === 'word') {
       css = `body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.15;color:#000;padding:18mm;}
         h1{font-size:16pt;color:#2E74B5;margin-bottom:12pt;}
@@ -196,13 +197,21 @@ export const DocumentView = {
         h1,h2,h3{font-weight:bold;}`;
     }
 
-    frame.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}${css}</style></head><body>${bodyHTML}</body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}${css}</style></head><body>${bodyHTML}</body></html>`;
+    // blob URL instead of srcdoc to avoid "Blocked script execution in about:srcdoc"
+    if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
+    this._resultBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    frame.src = this._resultBlobURL;
   },
 
   // Converte Markdown para HTML para preview legível
   _markdownToHTML(md) {
+    // PAGE_BREAK must be replaced BEFORE html-escaping or it gets mangled
+    const PB = '___PAGEBREAK___';
     let html = md
+      .replace(/---PAGE_BREAK---/g, PB)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(new RegExp(PB, 'g'), '<div style="page-break-after:always;border-top:2px dashed #aaa;margin:20pt 0;"></div>')
       // Headers
       .replace(/^######\s+(.+)$/gm, '<h6>$1</h6>')
       .replace(/^#####\s+(.+)$/gm, '<h5>$1</h5>')
