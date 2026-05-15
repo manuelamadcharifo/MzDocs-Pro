@@ -2,7 +2,7 @@
   "version": 2,
   "outputDirectory": ".",
   "functions": {
-    "api/generate-document.js": { "maxDuration": 120 },
+    "api/generate-document.js": { "maxDuration": 60 },
     "api/verify-credits.js": { "maxDuration": 10 },
     "api/deduct-credit.js": { "maxDuration": 10 },
     "api/process-payment.js": { "maxDuration": 30 },
@@ -52,7 +52,7 @@
       ]
     },
     {
-      "source": "/assets/(.*)\.js",
+      "source": "/assets/(.*)\\\\.js",
       "headers": [
         { "key": "Content-Type", "value": "application/javascript" }
       ]
