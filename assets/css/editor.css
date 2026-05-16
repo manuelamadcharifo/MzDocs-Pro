@@ -444,6 +444,11 @@
   color: #fff; border: none;
 }
 .ed-action-btn.ai:hover { background: linear-gradient(135deg,#7C3AED,#5B21B6); }
+.ed-action-btn.save {
+  background: linear-gradient(135deg,#10b981,#059669);
+  color: #fff; border-color: transparent; font-weight: 700;
+}
+.ed-action-btn.save:hover { background: linear-gradient(135deg,#059669,#047857); }
 
 /* Stats */
 .ed-stats {
@@ -549,6 +554,7 @@
   .ed-subtoolbar { gap: 5px; padding: 6px 10px; }
   .ed-action-btn.wa,
   .ed-action-btn.ai { display: none; }
+  .ed-action-btn.save { padding: 5px 12px; font-size: 12px; } /* always visible */
 }
 
 @keyframes fadeIn {

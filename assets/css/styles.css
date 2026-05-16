@@ -348,49 +348,76 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 
 /* ── HEADER RESPONSIVO ───────────────────────────────────────────────────── */
 
-/* Base: garantir que o header nunca quebra linha */
-.hdr { flex-wrap: nowrap; overflow: hidden; }
-.hdr-l { flex-shrink: 0; }
-.hdr-r { flex-shrink: 0; }
+/* Base: header fixo sem quebra de linha */
+.hdr { flex-wrap: nowrap; overflow: visible; }
+.hdr-l { flex-shrink: 0; min-width: 0; }
+/* hdr-r pode encolher para ceder espaço ao logo */
+.hdr-r { flex-shrink: 1; min-width: 0; overflow: visible; }
 
 /* Ocultar sempre a ver-tag — poupa espaço em todos os tamanhos */
 .ver-tag { display: none; }
 
 @media (max-width: 520px) {
-  .hdr { height: auto; min-height: 54px; padding: 8px 12px; gap: 6px; }
+  .hdr {
+    height: auto; min-height: 54px;
+    padding: 0 10px;        /* padding horizontal reduzido */
+    gap: 0;                  /* sem gap entre l e r — usamos justify-content */
+    justify-content: space-between;
+  }
 
-  /* Logo */
-  .hdr-l { gap: 6px; }
+  /* Logo — não encolhe */
+  .hdr-l { gap: 5px; flex-shrink: 0; }
   .logo-badge { width: 28px; height: 28px; font-size: 15px; }
-  .lt-name { font-size: 16px; }
-  .lt-pro  { font-size: 11px; }
+  .lt-name { font-size: 15px; }
+  .lt-pro  { font-size: 10px; }
 
-  /* Direita */
-  .hdr-r { gap: 6px; }
-  #userArea { gap: 6px !important; }
-  #userMenu { gap: 0 !important; }  /* avatar sozinho, sem gap */
+  /* Direita — encolhe se necessário, itens não quebram */
+  .hdr-r { gap: 5px; flex-shrink: 1; min-width: 0; flex-wrap: nowrap; }
+  #userArea { gap: 5px !important; flex-wrap: nowrap !important; align-items: center !important; }
+  #userMenu { gap: 0 !important; flex-shrink: 0; }
 
   /* Botão Entrar */
-  .btn-auth { padding: 6px 14px !important; font-size: 12px !important; white-space: nowrap; }
+  .btn-auth {
+    padding: 6px 12px !important; font-size: 12px !important;
+    white-space: nowrap; flex-shrink: 0;
+  }
 
-  /* Pill créditos */
-  .credit-pill { padding: 5px 9px; gap: 3px; }
-  .cp-val { font-size: 13px; }
-  .cp-lbl { display: none; }
+  /* Pill créditos — compactar ao máximo */
+  .credit-pill { padding: 5px 8px; gap: 3px; flex-shrink: 0; }
+  .cp-val { font-size: 13px; font-weight: 800; }
+  .cp-lbl { display: none; }   /* remover "cr" — poupa 16px */
 
-  /* Botão Comprar */
-  .btn-topup { padding: 6px 11px; font-size: 11px; border-radius: 16px; }
+  /* Botão Comprar — encolhe texto */
+  .btn-topup {
+    padding: 6px 10px; font-size: 11px;
+    border-radius: 16px; flex-shrink: 0;
+    white-space: nowrap;
+  }
 
-  /* Arquivo */
-  #btnHistory { padding: 6px 10px !important; font-size: 13px !important; }
+  /* Arquivo — botão ícone puro */
+  #btnHistory {
+    padding: 6px 9px !important; font-size: 13px !important;
+    flex-shrink: 0;
+  }
 
-  /* Dropdown abre para a esquerda em mobile para não sair do ecrã */
-  .usr-dropdown { right: -8px; min-width: 180px; }
+  /* Dropdown não sai do ecrã à direita */
+  .usr-dropdown { right: 0; min-width: 175px; }
 }
 
-@media (max-width: 380px) {
-  .hdr { padding: 7px 10px; }
-  .btn-topup { display: none; }  /* muito pequeno: esconder "+ Comprar", créditos já são clicáveis */
+@media (max-width: 400px) {
+  /* Ecrãs muito pequenos: esconder "+ Comprar" (créditos são clicáveis) */
+  .btn-topup { display: none !important; }
+  .hdr-r { gap: 4px; }
+  #userArea { gap: 4px !important; }
+  .credit-pill { padding: 4px 7px; }
+  .cp-val { font-size: 12px; }
+}
+
+@media (max-width: 340px) {
+  /* Ecrãs mínimos (Galaxy Fold, etc): esconder também o arquivo */
+  #btnHistory { display: none !important; }
+  .hdr-l { gap: 4px; }
+  .lt-name { font-size: 13px; }
 }
 
 

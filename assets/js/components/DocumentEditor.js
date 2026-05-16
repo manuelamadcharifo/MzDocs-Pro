@@ -121,6 +121,7 @@ export class DocumentEditor {
             <div class="ed-word-group" style="margin-left:auto;">
               <button class="ed-action-btn" id="edBtnCopy2">📋 Copiar</button>
               <button class="ed-action-btn ai" id="edBtnReedit2">🤖 Reeditar</button>
+              <button class="ed-action-btn save" id="edBtnSave" title="Guardar edição e voltar ao preview">💾 Guardar</button>
               <div id="editorStats" class="ed-stats">0 palavras</div>
             </div>
           </div>
@@ -132,7 +133,7 @@ export class DocumentEditor {
           <div class="ed-preview-wrap" id="edPreviewWrap">
             <div class="ed-a4-bg">
               <div class="ed-a4-label">A4 · 210×297 mm</div>
-              <iframe id="edPreviewFrame" class="ed-a4-frame" sandbox="allow-scripts"></iframe>
+              <iframe id="edPreviewFrame" class="ed-a4-frame"></iframe>
             </div>
           </div>
 
@@ -177,6 +178,7 @@ export class DocumentEditor {
     this.modal.querySelector('#edBtnCopy2')?.addEventListener('click',    () => this._copy());
     this.modal.querySelector('#edBtnReedit')?.addEventListener('click',   () => this._reedit());
     this.modal.querySelector('#edBtnReedit2')?.addEventListener('click',  () => this._reedit());
+    this.modal.querySelector('#edBtnSave')?.addEventListener('click',      () => this._saveAndPreview());
     this.modal.querySelector('#edBtnSign')?.addEventListener('click',     () => this._openSignature());
 
     // Toolbar Word — botões execCommand
@@ -420,11 +422,22 @@ export class DocumentEditor {
     const frame = this.modal.querySelector('#edPreviewFrame');
     if (!frame) return;
     const html = this._buildPreviewHTML(format);
-    // Use blob URL instead of srcdoc — srcdoc with sandbox="allow-scripts" is blocked
-    // by Chrome when the document origin resolves to "about:srcdoc".
-    if (this._previewBlobURL) URL.revokeObjectURL(this._previewBlobURL);
-    this._previewBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    frame.src = this._previewBlobURL;
+    // Use contentDocument.write() — works on all browsers (desktop + Android Chrome)
+    // without blob URL (which Android Chrome blocks in sandboxed iframes without allow-same-origin)
+    // and without srcdoc (which blocks scripts even with allow-scripts)
+    try {
+      const doc = frame.contentDocument || frame.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(html);
+        doc.close();
+      }
+    } catch (e) {
+      // Last resort: blob URL with allow-same-origin (revoke previous)
+      if (this._previewBlobURL) URL.revokeObjectURL(this._previewBlobURL);
+      this._previewBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      frame.src = this._previewBlobURL;
+    }
   }
 
   _buildPreviewHTML(format) {
@@ -707,6 +720,23 @@ export class DocumentEditor {
       document.body.appendChild(hint);
       setTimeout(() => hint.remove(), 2500);
     });
+  }
+
+  // ── Guardar edição e voltar ao preview ────────────────────────
+  _saveAndPreview() {
+    this._syncContentFromEditor();
+    this._switchMode('preview');
+    // Toast de confirmação
+    const toast = document.createElement('div');
+    toast.textContent = '💾 Edição guardada!';
+    toast.style.cssText = [
+      'position:fixed','bottom:80px','left:50%','transform:translateX(-50%)',
+      'background:#10b981','color:#fff','padding:8px 20px',
+      'border-radius:20px','font-size:13px','font-weight:700',
+      'z-index:99999','pointer-events:none'
+    ].join(';');
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2200);
   }
 
   _updateStats() {

@@ -145,7 +145,7 @@ export const DocumentView = {
         <div class="res-preview-stats">${words} palavras · ~${pages} pág.</div>
       </div>
       <div class="res-a4-wrap">
-        <iframe id="resPreviewFrame" class="res-a4-frame" sandbox="allow-scripts"></iframe>
+        <iframe id="resPreviewFrame" class="res-a4-frame"></iframe>
       </div>
     `;
 
@@ -198,10 +198,16 @@ export const DocumentView = {
     }
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}${css}</style></head><body>${bodyHTML}</body></html>`;
-    // blob URL instead of srcdoc to avoid "Blocked script execution in about:srcdoc"
-    if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
-    this._resultBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    frame.src = this._resultBlobURL;
+    // contentDocument.write() — works on all browsers incl. Android Chrome
+    // without blob URL (blocked on mobile in sandboxed iframes) or srcdoc (blocks scripts)
+    try {
+      const doc = frame.contentDocument || frame.contentWindow?.document;
+      if (doc) { doc.open(); doc.write(html); doc.close(); }
+    } catch (e) {
+      if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
+      this._resultBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      frame.src = this._resultBlobURL;
+    }
   },
 
   // Converte Markdown para HTML para preview legível
