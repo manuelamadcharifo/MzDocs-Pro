@@ -42,23 +42,14 @@
   <div class="hdr-l">
     <div class="logo-badge">📄</div>
     <div class="logo-text"><span class="lt-name">MzDocs</span><span class="lt-pro">Pro</span></div>
-    <span class="ver-tag">v7</span>
   </div>
   <div class="hdr-r">
-    <!-- Visitante: apenas botão Entrar -->
-    <button class="btn-auth" id="authBtn"
-      style="padding:8px 16px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
-      🔐 Entrar
-    </button>
-    <!-- Autenticado: avatar + arquivo + créditos + comprar -->
-    <div id="userArea" style="display:none;align-items:center;gap:8px;">
-      <div id="userMenu" style="display:flex;align-items:center;gap:8px;"></div>
-      <button class="btn-history" id="btnHistory" title="Arquivo de documentos"
-        style="padding:7px 11px;background:#f1f5f9;color:#334155;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;">
-        📁
-      </button>
-      <div class="credit-pill" id="creditPill" style="cursor:pointer;" title="Créditos disponíveis">
-        <span>⚡</span><span class="cp-val" id="creditVal">—</span><span class="cp-lbl">cr</span>
+    <button class="btn-auth" id="authBtn">🔐 Entrar</button>
+    <div class="user-area" id="userArea">
+      <div class="user-menu" id="userMenu"></div>
+      <button class="btn-icon" id="btnHistory" title="Arquivo de documentos">📁</button>
+      <div class="credit-pill" id="creditPill" title="Créditos disponíveis">
+        <span class="cp-icon">⚡</span><span class="cp-val" id="creditVal">—</span><span class="cp-lbl">cr</span>
       </div>
       <button class="btn-topup" id="btnTopup">+ Comprar</button>
     </div>

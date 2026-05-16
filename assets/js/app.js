@@ -103,7 +103,7 @@ function _setupAuthHeader() {
  authManager.onChange(user => {
  if (user && !user.is_anonymous) {
  if (authBtn) authBtn.style.display = 'none';
- if (userArea) userArea.style.display = 'flex';
+ if (userArea) userArea.classList.add('visible');
  if (guestBar) guestBar.style.display = 'none';
 
  const fabLogout = document.getElementById('fabLogout');
@@ -167,7 +167,7 @@ function _setupAuthHeader() {
 
  } else {
  if (authBtn) { authBtn.style.display = 'block'; authBtn.textContent = '🔐 Entrar'; authBtn.onclick = () => authUI.open('login'); }
- if (userArea) userArea.style.display = 'none';
+ if (userArea) userArea.classList.remove('visible');
  if (guestBar) guestBar.style.display = 'flex';
  const fabLogout = document.getElementById('fabLogout');
  if (fabLogout) fabLogout.style.display = 'none';
