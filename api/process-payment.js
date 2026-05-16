@@ -6,11 +6,12 @@ const ws = require('ws');
 
 const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 
+// Deve estar sincronizado com PaymentService.js (frontend)
 const PACKAGES = {
-  'starter': { credits: 5, price: 150, label: 'Starter — 5 créditos' },
-  'basic':   { credits: 15, price: 375, label: 'Básico — 15 créditos' },
-  'pro':     { credits: 50, price: 1000, label: 'Pro — 50 créditos' },
-  'business':{ credits: 200, price: 3000, label: 'Business — 200 créditos' },
+  avulso:  { credits: 3,  price: 50,  name: 'Avulso'  },
+  starter: { credits: 10, price: 150, name: 'Starter' },
+  basico:  { credits: 25, price: 350, name: 'Básico'  },
+  pro:     { credits: 60, price: 750, name: 'Pro'     },
 };
 
 module.exports = async function handler(req, res) {
