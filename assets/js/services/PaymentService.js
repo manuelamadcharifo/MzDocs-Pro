@@ -63,7 +63,7 @@ export class PaymentService {
       body: JSON.stringify({
         mode: 'manual',
         packageId,
-        phoneNumber: phoneNumber ? this._formatPhone(phoneNumber) : null,
+        phone: phoneNumber ? this._formatPhone(phoneNumber) : null, // campo correcto para a API
         userId,
       }),
     });

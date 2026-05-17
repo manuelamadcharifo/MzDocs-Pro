@@ -1,12 +1,9 @@
 // api/process-payment.js
-// Estrutura preparada para integração MPesa / e-Mola
-
 const { createClient } = require('@supabase/supabase-js');
-const ws = require('ws');
 
 const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+const WA_NUMBER = process.env.WA_SUPPORT_NUMBER || '258858695506';
 
-// Deve estar sincronizado com PaymentService.js (frontend)
 const PACKAGES = {
   avulso:  { credits: 3,  price: 50,  name: 'Avulso'  },
   starter: { credits: 10, price: 150, name: 'Starter' },
@@ -26,37 +23,87 @@ module.exports = async function handler(req, res) {
   try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
   catch { return res.status(400).json({ error: 'Body JSON inválido' }); }
 
-  const { phone, packageId, provider = 'mpesa' } = body;
+  // Aceitar tanto "phone" como "phoneNumber" (compatibilidade frontend)
+  const packageId   = body.packageId;
+  const rawPhone    = body.phone || body.phoneNumber || '';
+  const mode        = body.mode || 'manual';
+  const userId      = body.userId || 'anon';
+  const provider    = body.provider || 'mpesa';
 
-  if (!phone) return res.status(400).json({ error: 'Número de telemóvel é obrigatório' });
+  console.log('[process-payment] Recebido:', { packageId, rawPhone, mode, userId });
+
+  if (!rawPhone) {
+    return res.status(400).json({ error: 'Número de telemóvel é obrigatório (campo: phone ou phoneNumber)' });
+  }
   if (!packageId || !PACKAGES[packageId]) {
     return res.status(400).json({ error: 'Pacote inválido', available: Object.keys(PACKAGES) });
   }
 
   const pkg = PACKAGES[packageId];
-  const cleanPhone = phone.replace(/\D/g, '');
+  const cleanPhone = rawPhone.replace(/\D/g, '');
   const normalizedPhone = cleanPhone.startsWith('258') ? `+${cleanPhone}` : `+258${cleanPhone}`;
 
-  const isConfigured = !!process.env.MPESA_API_KEY && !!process.env.MPESA_SERVICE_CODE;
+  // ── Modo manual (WhatsApp) ─────────────────────────────────────────────────
+  if (mode === 'manual') {
+    const referenceId = `MZ-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
 
-  if (!isConfigured) {
-    console.log(`[MPesa Sandbox] Simulação: ${pkg.label} para ${normalizedPhone}`);
-    await new Promise(r => setTimeout(r, 1500));
-    const transactionId = `SIM_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    // Registar pedido no Supabase (se configurado) — não bloquear se falhar
+    try {
+      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+        await supabase.from('payment_requests').insert({
+          reference_id: referenceId,
+          user_id:      userId !== 'anon' ? userId : null,
+          phone:        normalizedPhone,
+          package_id:   packageId,
+          credits:      pkg.credits,
+          amount:       pkg.price,
+          status:       'pending',
+          mode:         'manual',
+        });
+      }
+    } catch (dbErr) {
+      console.warn('[process-payment] Supabase insert falhou (não crítico):', dbErr.message);
+    }
+
+    const waMessage = encodeURIComponent(
+      `*Pagamento MzDocs Pro*\n\n` +
+      `Referência: ${referenceId}\n` +
+      `Pacote: ${pkg.name}\n` +
+      `Créditos: ${pkg.credits}\n` +
+      `Valor: ${pkg.price} MZN\n` +
+      `Telemóvel: ${normalizedPhone}\n\n` +
+      `Segue o comprovativo de pagamento M-Pesa.`
+    );
 
     return res.status(200).json({
-      success: true,
-      sandbox: true,
-      message: 'Pagamento simulado com sucesso. Em produção, o utilizador receberá pedido USSD no telemóvel.',
-      transactionId,
-      package: pkg,
-      phone: normalizedPhone,
-      nextStep: 'Adicione MPESA_API_KEY e MPESA_SERVICE_CODE nas variáveis de ambiente para activar pagamentos reais.',
+      success:      true,
+      mode:         'manual',
+      referenceId,
+      package:      pkg,
+      phone:        normalizedPhone,
+      whatsappLink: `https://wa.me/${WA_NUMBER}?text=${waMessage}`,
+      message:      'Pedido manual registado. Envie o comprovativo pelo WhatsApp.',
     });
   }
 
-  return res.status(503).json({ 
-    error: 'Serviço de pagamento não configurado.',
-    help: 'Contacte o administrador para activar pagamentos.' 
-  });
+  // ── Modo M-Pesa automático ─────────────────────────────────────────────────
+  const isConfigured = !!process.env.MPESA_API_KEY && !!process.env.MPESA_SERVICE_CODE;
+
+  if (mode === 'mpesa' && !isConfigured) {
+    // Indicar ao frontend para usar modo manual
+    return res.status(503).json({
+      error:    'M-Pesa não configurado',
+      fallback: 'Use modo manual',
+    });
+  }
+
+  if (mode === 'mpesa' && isConfigured) {
+    // TODO: integração MPesa C2B real aqui
+    return res.status(503).json({
+      error: 'Integração M-Pesa ainda não implementada. Use modo manual.',
+    });
+  }
+
+  return res.status(400).json({ error: 'Modo de pagamento inválido: ' + mode });
 };
