@@ -379,8 +379,11 @@ export class DocumentEditor {
     });
 
     if (mode === 'preview') {
-      // Sync do editor antes de mudar para preview
-      if (wordDoc) this._syncContentFromEditor();
+      // Sync do editor apenas se o modo edição foi usado (wordDoc tem conteúdo real)
+      // CRITICAL: calling _syncContentFromEditor() on an empty wordDoc resets this.content to ''
+      if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+        this._syncContentFromEditor();
+      }
       previewWrap.style.display = 'flex';
       editWrap.style.display    = 'none';
       subtoolbar.style.display  = 'flex';

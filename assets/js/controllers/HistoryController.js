@@ -40,6 +40,14 @@ export class HistoryController {
       let synced = 0;
       for (const doc of pending) {
         try {
+          // Skip legacy non-UUID IDs — mark as synced locally to stop infinite retry
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (!uuidRegex.test(doc.id)) {
+            console.warn('[History] Skipping legacy non-UUID doc id:', doc.id, '— marking synced locally');
+            await offlineDB.saveDocument({ ...doc, synced: true });
+            synced++;
+            continue;
+          }
           // Use insert with ignoreDuplicates — avoids 400 from missing unique constraint on upsert
           const payload = {
             id:           doc.id,
@@ -52,14 +60,9 @@ export class HistoryController {
           };
           const { error } = await supabase
             .from('documents')
-            .insert(payload)
-            .select('id');
+            .upsert(payload, { ignoreDuplicates: true });
 
           if (!error) {
-            await offlineDB.saveDocument({ ...doc, synced: true });
-            synced++;
-          } else if (error.code === '23505') {
-            // Duplicate — already in Supabase, just mark synced locally
             await offlineDB.saveDocument({ ...doc, synced: true });
             synced++;
           } else {
@@ -108,7 +111,13 @@ export class HistoryController {
     if (!supabase || !userId) return;
 
     try {
-      const { error } = await supabase.from('documents').insert({
+      // Validate UUID before sending to Supabase
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(doc.id)) {
+        console.warn('[History] saveDocument: non-UUID id skipped for Supabase:', doc.id);
+        return;
+      }
+      const { error } = await supabase.from('documents').upsert({
         id:           doc.id,
         user_id:      userId,
         service_type: doc.service_type,
@@ -116,11 +125,8 @@ export class HistoryController {
         content:      doc.content,
         model_used:   doc.model_used,
         created_at:   doc.created_at,
-      });
+      }, { ignoreDuplicates: true });
       if (!error) {
-        await offlineDB.saveDocument({ ...doc, synced: true });
-      } else if (error.code === '23505') {
-        // Já existe — marcar como sincronizado na mesma
         await offlineDB.saveDocument({ ...doc, synced: true });
       } else {
         console.warn('[History] Supabase save error:', error.code, error.message);
