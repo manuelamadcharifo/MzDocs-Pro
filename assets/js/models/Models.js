@@ -177,17 +177,21 @@ export class CreditModel {
             const user = window.authManager?.user;
             if (!user) return;
 
-            // Conta temporária: sem email real (gerado automaticamente) e sem telefone
-            const email = user.email || '';
-            const phone = user.phone || '';
-            const isTemp = (
+            // Detectar conta avulso: campo novo account_type, ou campos legados
+            const profile = window.authManager?.profile;
+            const isAvulso = profile?.account_type === 'avulso';
+
+            // Fallback para detecção legada (emails gerados automaticamente)
+            const email  = user.email || '';
+            const phone  = user.phone || '';
+            const isLegacyTemp = (
                 email.includes('@temp.mzdocs') ||
                 email.includes('@guest.mzdocs') ||
                 (!phone && email.startsWith('guest_')) ||
                 user.user_metadata?.is_temp === true
             );
 
-            if (!isTemp) return;
+            if (!isAvulso && !isLegacyTemp) return;
 
             // Aguardar 3s para garantir que o utilizador viu a mensagem de créditos zerados
             await new Promise(r => setTimeout(r, 3000));

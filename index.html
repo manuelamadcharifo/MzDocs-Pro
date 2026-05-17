@@ -80,7 +80,7 @@
 
 <!-- BANNER VISITANTE — aparece só para não autenticados -->
 <div class="free-bar" id="guestBar" style="display:none;">
-  👋 <strong>Bem-vindo!</strong> Crie uma conta gratuita e ganhe 3 créditos — ou <button id="btnGuestBuy" style="background:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.5);color:inherit;border-radius:6px;padding:2px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-left:4px;">Comprar acesso avulso · 50 MZN</button>
+  👋 <strong>Bem-vindo!</strong> Crie uma conta gratuita e ganhe 1 crédito grátis — ou <button id="btnGuestBuy" style="background:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.5);color:inherit;border-radius:6px;padding:2px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-left:4px;">Comprar acesso avulso · 50 MZN</button>
   <button onclick="this.parentElement.style.display='none'" style="margin-left:8px;background:none;border:none;cursor:pointer;font-size:16px;color:inherit;">✕</button>
 </div>
 
@@ -327,7 +327,7 @@
     <div id="avulsoSection" style="display:none;margin-bottom:16px;">
       <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;">
         <div style="font-size:13px;font-weight:700;color:#1D4ED8;margin-bottom:4px;">🚀 Acesso Avulso — Sem Conta</div>
-        <div style="font-size:13px;color:#1e40af;line-height:1.5;">1 documento gerado por IA + 2 revisões</div>
+        <div style="font-size:13px;color:#1e40af;line-height:1.5;">3 documentos gerados por IA · válido 7 dias · sem conta permanente</div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
           <span style="font-size:20px;font-weight:800;color:#1D4ED8;">MZN 50</span>
           <button class="pkg-avulso-btn" data-pkg="avulso"
@@ -342,25 +342,32 @@
         <div style="flex:1;height:1px;background:#e5e7eb;"></div>
       </div>
     </div>
+    <!-- PACOTES (preços v8.0) -->
     <div class="pkg-grid">
       <div class="pkg" data-pkg="starter">
         <div class="pkg-name">Starter</div>
-        <div class="pkg-price">MZN 150</div>
+        <div class="pkg-price">MZN 120</div>
         <div class="pkg-cr">10 créditos</div>
-        <div class="pkg-per">MZN 15/doc</div>
+        <div class="pkg-per">MZN 12/doc</div>
       </div>
       <div class="pkg popular" data-pkg="basico">
         <div class="pkg-badge">Popular</div>
         <div class="pkg-name">Básico</div>
-        <div class="pkg-price">MZN 350</div>
+        <div class="pkg-price">MZN 280</div>
         <div class="pkg-cr">25 créditos</div>
-        <div class="pkg-per">MZN 14/doc</div>
+        <div class="pkg-per">MZN 11.2/doc</div>
       </div>
       <div class="pkg" data-pkg="pro">
         <div class="pkg-name">Pro</div>
-        <div class="pkg-price">MZN 750</div>
-        <div class="pkg-cr">60/mês</div>
-        <div class="pkg-per">MZN 12.5/doc</div>
+        <div class="pkg-price">MZN 600</div>
+        <div class="pkg-cr">60 créditos</div>
+        <div class="pkg-per">MZN 10/doc</div>
+      </div>
+      <div class="pkg" data-pkg="empresa">
+        <div class="pkg-name">Empresa</div>
+        <div class="pkg-price">MZN 1500</div>
+        <div class="pkg-cr">150 créditos</div>
+        <div class="pkg-per">MZN 10/doc</div>
       </div>
     </div>
     <div id="mpesaSection" style="display:none">

@@ -5,10 +5,11 @@ const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
 const WA_NUMBER = process.env.WA_SUPPORT_NUMBER || '258858695506';
 
 const PACKAGES = {
-  avulso:  { credits: 3,  price: 50,  name: 'Avulso'  },
-  starter: { credits: 10, price: 150, name: 'Starter' },
-  basico:  { credits: 25, price: 350, name: 'Básico'  },
-  pro:     { credits: 60, price: 750, name: 'Pro'     },
+  avulso:  { credits: 3,   price: 50,   name: 'Avulso'  },
+  starter: { credits: 10,  price: 120,  name: 'Starter' },
+  basico:  { credits: 25,  price: 280,  name: 'Básico'  },
+  pro:     { credits: 60,  price: 600,  name: 'Pro'     },
+  empresa: { credits: 150, price: 1500, name: 'Empresa' },
 };
 
 module.exports = async function handler(req, res) {
