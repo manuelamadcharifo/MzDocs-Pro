@@ -40,7 +40,8 @@ export class HistoryController {
       let synced = 0;
       for (const doc of pending) {
         try {
-          const { error } = await supabase.from('documents').upsert({
+          // Use insert with ignoreDuplicates — avoids 400 from missing unique constraint on upsert
+          const payload = {
             id:           doc.id,
             user_id:      userId,
             service_type: doc.service_type,
@@ -48,11 +49,21 @@ export class HistoryController {
             content:      doc.content,
             model_used:   doc.model_used,
             created_at:   doc.created_at,
-          }, { onConflict: 'id' });
+          };
+          const { error } = await supabase
+            .from('documents')
+            .insert(payload)
+            .select('id');
 
           if (!error) {
             await offlineDB.saveDocument({ ...doc, synced: true });
             synced++;
+          } else if (error.code === '23505') {
+            // Duplicate — already in Supabase, just mark synced locally
+            await offlineDB.saveDocument({ ...doc, synced: true });
+            synced++;
+          } else {
+            console.warn('[History] Sync upsert error:', error.code, error.message);
           }
         } catch (_) { /* continua para o próximo */ }
       }
@@ -106,10 +117,13 @@ export class HistoryController {
         model_used:   doc.model_used,
         created_at:   doc.created_at,
       });
-      if (error) console.warn('[History] Supabase save error:', error.message);
-      else {
-        // Marcar como sincronizado no IndexedDB
+      if (!error) {
         await offlineDB.saveDocument({ ...doc, synced: true });
+      } else if (error.code === '23505') {
+        // Já existe — marcar como sincronizado na mesma
+        await offlineDB.saveDocument({ ...doc, synced: true });
+      } else {
+        console.warn('[History] Supabase save error:', error.code, error.message);
       }
     } catch (e) {
       console.warn('[History] Supabase unreachable, ficará em IndexedDB:', e.message);

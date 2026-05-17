@@ -505,16 +505,17 @@ export class DocumentController {
  } catch (err) { NotificationView.error('❌ Erro Excel: ' + err.message); }
  }
 
- _bindEditBtn() {
- const btn = document.getElementById('btnEdit');
- if (!btn) return;
- const fresh = btn.cloneNode(true);
- btn.parentNode.replaceChild(fresh, btn);
- fresh.addEventListener('click', (e) => {
- e.stopPropagation();
- this._openEditor();
- });
- }
+  _bindEditBtn() {
+    const btn = document.getElementById('btnEdit');
+    if (!btn) return;
+    // Guard: if already bound, skip — prevents duplicate listeners from multiple calls
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._openEditor();
+    });
+  }
 
  _openEditor() {
  if (!this.docModel.content) {
