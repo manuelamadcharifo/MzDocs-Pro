@@ -18,7 +18,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 
 /* HEADER */
 .hdr{position:sticky;top:0;z-index:60;background:var(--ink);height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.06)}
-.hdr-l,.hdr-r{display:flex;align-items:center;gap:8px}
+.hdr-l{display:flex;align-items:center;gap:8px}
 .logo-badge{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--green));display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
 .lt-name{font-family:'Instrument Serif',serif;font-size:19px;color:#fff;letter-spacing:-.3px}
 .lt-pro{font-size:13px;font-weight:700;color:var(--gold);letter-spacing:.5px}
@@ -353,11 +353,11 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 /* ver-tag: sempre escondida */
 .ver-tag { display: none; }
 
-/* hdr base: flex row, sem quebra, largura total */
-.hdr { flex-wrap: nowrap; width: 100%; box-sizing: border-box; overflow: hidden; }
+/* ── HEADER — layout responsivo ─────────────────────────────────────────── */
+.hdr { flex-wrap: nowrap; width: 100%; box-sizing: border-box; }
 .hdr-l { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
 .hdr-r { flex: 1 1 auto; display: flex; align-items: center; justify-content: flex-end;
-          gap: 8px; min-width: 0; overflow: hidden; }
+          gap: 8px; min-width: 0; }
 
 /* Botão Entrar */
 .btn-auth {
@@ -371,48 +371,54 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 
 /* Área autenticada */
 .user-area {
-  display: none;              /* JS faz display:flex quando autenticado */
+  display: none;
   align-items: center;
   gap: 8px;
-  min-width: 0;
-  overflow: hidden;
+  flex-shrink: 0;           /* não deixar encolher: os ícones têm prioridade */
 }
 .user-area.visible { display: flex; }
 
-.user-menu { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+/* user-menu: envolve o avatar + dropdown — precisa de position:relative */
+.user-menu {
+  display: flex; align-items: center;
+  position: relative;       /* âncora do dropdown absoluto */
+  flex-shrink: 0;
+}
 
-/* Botão arquivo — ícone */
+/* Botão arquivo */
 .btn-icon {
-  padding: 7px 11px;
+  padding: 7px 10px;
   background: rgba(255,255,255,.08);
   color: #fff; border: 1px solid rgba(255,255,255,.12);
-  border-radius: 10px; font-size: 14px; font-weight: 600;
-  cursor: pointer; white-space: nowrap; flex-shrink: 0;
-  transition: var(--t);
+  border-radius: 10px; font-size: 15px;
+  cursor: pointer; flex-shrink: 0;
+  transition: var(--t); line-height: 1;
 }
 .btn-icon:hover { background: rgba(255,255,255,.15); }
+
+/* Créditos — compacto */
+.credit-pill { flex-shrink: 0; }
+.cp-icon { font-size: 13px; }
 
 /* ── MOBILE ≤ 520px ──────────────────────────────────────────────────────── */
 @media (max-width: 520px) {
   .hdr { padding: 0 10px; height: 52px; }
-
   .hdr-l { gap: 5px; }
+  .hdr-r { gap: 5px; }
+  .user-area { gap: 5px; }
+
   .logo-badge { width: 28px; height: 28px; font-size: 15px; }
   .lt-name { font-size: 15px; }
   .lt-pro  { font-size: 10px; }
 
-  .hdr-r { gap: 6px; }
-  .user-area { gap: 6px; }
+  .btn-auth { padding: 6px 12px; font-size: 12px; }
 
-  .btn-auth { padding: 6px 13px; font-size: 12px; }
+  .credit-pill { padding: 4px 8px; gap: 3px; }
+  .cp-val { font-size: 13px; }
+  .cp-lbl { display: none; }        /* esconder "cr" em mobile */
 
-  .credit-pill { padding: 5px 8px; gap: 3px; }
-  .cp-val { font-size: 13px; font-weight: 800; }
-  .cp-lbl { display: none; }
-
-  .btn-topup { padding: 6px 10px; font-size: 11px; border-radius: 16px; }
-
-  .btn-icon { padding: 6px 9px; font-size: 13px; }
+  .btn-topup { padding: 5px 10px; font-size: 11px; border-radius: 16px; }
+  .btn-icon  { padding: 5px 9px; font-size: 14px; }
 
   .usr-dropdown { right: 0; min-width: 175px; }
 }
@@ -420,11 +426,9 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 /* ── MOBILE ≤ 400px — esconder "+ Comprar" ───────────────────────────────── */
 @media (max-width: 400px) {
   .btn-topup { display: none; }
-  .hdr-r { gap: 5px; }
-  .user-area { gap: 5px; }
 }
 
-/* ── MOBILE ≤ 340px — esconder arquivo (Galaxy Fold, etc) ────────────────── */
+/* ── MOBILE ≤ 340px — esconder arquivo (Galaxy Fold, etc.) ──────────────── */
 @media (max-width: 340px) {
   #btnHistory { display: none; }
   .lt-name { font-size: 13px; }
