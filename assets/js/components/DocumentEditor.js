@@ -534,6 +534,11 @@ export class DocumentEditor {
     const fmt = this._previewFmt;
     const btn = this.modal.querySelector('#edBtnDownload');
     const orig = btn.textContent;
+    // Sync from rich-text editor before export to ensure this.content is current
+    const wordDoc = this.modal.querySelector('#edWordDoc');
+    if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+      this._syncContentFromEditor();
+    }
     btn.disabled = true; btn.textContent = '⏳…';
     try {
       if (fmt === 'pdf')   await this._downloadPDF();
@@ -544,38 +549,77 @@ export class DocumentEditor {
   }
 
   async _downloadPDF() {
-    const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
-    const doc = new jsPDF({ unit:'mm', format:'a4' });
-    const lines = doc.splitTextToSize(this.content, 170);
-    let y = 25;
-    lines.forEach(line => {
-      if (y > 270) { doc.addPage(); y = 25; }
-      const isH1 = line.startsWith('# '), isH2 = line.startsWith('## ');
-      if (isH1) { doc.setFontSize(18); doc.setFont('times','bold'); doc.text(line.replace(/^#+ /,''), 105, y, {align:'center'}); y += 10; }
-      else if (isH2) { doc.setFontSize(14); doc.setFont('times','bold'); doc.text(line.replace(/^#+ /,''), 25, y); y += 9; }
-      else { doc.setFontSize(12); doc.setFont('times','normal'); doc.text(line, 25, y); y += 7; }
-    });
-    doc.save(`mzdocs-${this.serviceType}-${Date.now()}.pdf`);
+    // Use the full PDFExporter (same pipeline as original generation) for professional output
+    // with cover page, page numbers, table of contents, etc.
+    try {
+      const { PDFExporter } = await import('./PDFExporter.js');
+      // Build metadata from docController if available, else use serviceType as fallback
+      const ctrl     = this._docController || window.docController;
+      const metadata = ctrl ? ctrl._buildExportMetadata(
+        (ctrl.docModel?.service ? (await import('../services/ServiceDefinitions.js').then(m => m.SERVICES[ctrl.docModel.service])) : null)
+      ) : {
+        title:   this.serviceType || 'Documento',
+        docType: 'generic',
+        cidade:  'Maputo',
+        ano:     new Date().getFullYear(),
+      };
+      await new PDFExporter().export(
+        this.content,
+        `mzdocs-${this.serviceType}-${Date.now()}.pdf`,
+        metadata
+      );
+    } catch (err) {
+      console.error('[DocumentEditor] PDFExporter falhou, a usar fallback:', err.message);
+      // Fallback: iframe print with preview HTML
+      const html = this._buildPreviewHTML('pdf');
+      const printFrame = document.createElement('iframe');
+      printFrame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;';
+      document.body.appendChild(printFrame);
+      printFrame.srcdoc = html;
+      printFrame.onload = () => {
+        try { printFrame.contentWindow.focus(); printFrame.contentWindow.print(); } catch(_) {}
+        setTimeout(() => document.body.removeChild(printFrame), 2000);
+      };
+    }
   }
 
   async _downloadWord() {
-    // Usa o HTML rico do editor se disponível, senão converte o markdown
-    const richContent = this._richHTML || this._mdToRichHTML(this.content);
-    const css = this._getFormatCSS('word');
-    const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
-      xmlns:w='urn:schemas-microsoft-com:office:word'
-      xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset="UTF-8">
-      <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->
-      <style>${css}
-        @page{size:210mm 297mm;margin:25mm 22mm 20mm 25mm;}
-        body{font-family:Calibri,sans-serif;font-size:11pt;line-height:1.5;}
-      </style></head>
-      <body><div class="doc-page">${richContent}</div></body></html>`;
-    const blob = new Blob(['\ufeff', html], { type:'application/msword' });
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.doc` });
-    a.click(); URL.revokeObjectURL(url);
+    // Use the full WordExporter (same pipeline as original generation)
+    try {
+      const { WordExporter } = await import('./WordExporter.js');
+      const ctrl     = this._docController || window.docController;
+      const metadata = ctrl ? ctrl._buildExportMetadata(
+        (ctrl.docModel?.service ? (await import('../services/ServiceDefinitions.js').then(m => m.SERVICES[ctrl.docModel.service])) : null)
+      ) : {
+        title:   this.serviceType || 'Documento',
+        docType: 'generic',
+        cidade:  'Maputo',
+        ano:     new Date().getFullYear(),
+      };
+      await new WordExporter().export(
+        this.content,
+        `mzdocs-${this.serviceType}-${Date.now()}.docx`,
+        metadata
+      );
+    } catch (err) {
+      console.error('[DocumentEditor] WordExporter falhou, a usar fallback:', err.message);
+      // Fallback: simple .doc via blob
+      const richContent = this._mdToRichHTML(this.content);
+      const css = this._getFormatCSS('word');
+      const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
+        xmlns:w='urn:schemas-microsoft-com:office:word'
+        xmlns='http://www.w3.org/TR/REC-html40'>
+        <head><meta charset="UTF-8">
+        <style>${css}
+          @page{size:210mm 297mm;margin:25mm 22mm 20mm 25mm;}
+          body{font-family:Calibri,sans-serif;font-size:11pt;line-height:1.5;}
+        </style></head>
+        <body><div class="doc-page">${richContent}</div></body></html>`;
+      const blob = new Blob(['﻿', html], { type:'application/msword' });
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.doc` });
+      a.click(); URL.revokeObjectURL(url);
+    }
   }
 
   async _downloadExcel() {
