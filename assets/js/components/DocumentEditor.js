@@ -767,7 +767,13 @@ export class DocumentEditor {
 
     this._updateStats();
     this.open();
-    this._switchMode('preview');
+    // Wait for modal to paint before writing to iframe contentDocument
+    // (single rAF is correct here — we need one layout pass, not a timer)
+    requestAnimationFrame(() => {
+      console.log('[DocumentEditor] EDITOR MOUNTED — rendering preview');
+      this._switchMode('preview');
+      console.log('[DocumentEditor] EDITOR RENDER SUCCESS');
+    });
 
     this.modal.querySelectorAll('[data-preview]').forEach(b => {
       b.classList.toggle('active', b.dataset.preview === 'pdf');
