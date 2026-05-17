@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v7-20260516'; // auto-gerado pelo build — não editar manualmente
+const CACHE_VERSION = 'v7-20260517'; // auto-gerado pelo build — não editar manualmente
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
@@ -56,19 +56,38 @@ workbox.precaching.precacheAndRoute([
 ]);
 
 // ── ESTRATÉGIAS DE CACHE ────────────────────────────────────────────────────
+// Google Fonts — usar NetworkFirst com fallback silencioso.
+// A CSP do documento inclui fonts.googleapis.com e fonts.gstatic.com no connect-src,
+// mas o SW herdava uma CSP antiga em cache. NetworkFirst tenta a rede e,
+// se falhar (ex: offline), serve do cache sem lançar erro.
 workbox.routing.registerRoute(
     /^https:\/\/fonts\.googleapis\.com\//,
-    new workbox.strategies.CacheFirst({
+    new workbox.strategies.NetworkFirst({
         cacheName: `google-fonts-${CACHE_VERSION}`,
-        plugins: [new workbox.expiration.ExpirationPlugin({ maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 })]
+        networkTimeoutSeconds: 3,
+        plugins: [
+            new workbox.expiration.ExpirationPlugin({ maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 }),
+            {
+                // Capturar erros de rede/CSP silenciosamente — não bloquear a página
+                fetchDidFail: async () => { /* silencioso */ },
+                handlerDidError: async () => Response.error(),
+            }
+        ]
     })
 );
 
 workbox.routing.registerRoute(
     /^https:\/\/fonts\.gstatic\.com\//,
-    new workbox.strategies.CacheFirst({
+    new workbox.strategies.NetworkFirst({
         cacheName: `google-fonts-files-${CACHE_VERSION}`,
-        plugins: [new workbox.expiration.ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 365 * 24 * 60 * 60 })]
+        networkTimeoutSeconds: 3,
+        plugins: [
+            new workbox.expiration.ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 365 * 24 * 60 * 60 }),
+            {
+                fetchDidFail: async () => { /* silencioso */ },
+                handlerDidError: async () => Response.error(),
+            }
+        ]
     })
 );
 

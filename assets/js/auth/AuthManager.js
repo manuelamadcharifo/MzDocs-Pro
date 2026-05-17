@@ -63,7 +63,11 @@ export class AuthManager {
  this.user = null;
  }
 
- this.supabase.auth.onAuthStateChange(async (_event, session) => {
+ const { data: { subscription } } = this.supabase.auth.onAuthStateChange(async (_event, session) => {
+ if (this._suppressAuthStateChange) {
+   console.log('[AuthManager] onAuthStateChange suprimido durante signUp');
+   return;
+ }
  this.session = session;
  this.user = session?.user || null;
  if (this.user) {
@@ -73,6 +77,7 @@ export class AuthManager {
  }
  this._notify();
  });
+ this._authSubscription = subscription;
 
  } catch (err) {
  console.error('[AuthManager] Erro de inicialização:', err);
@@ -156,23 +161,35 @@ export class AuthManager {
     // Caso 1: servidor devolveu sessão (login automático)
     if (data.session && this.supabase) {
       console.log('[AuthManager] signUp: Sessão recebida, aplicando setSession…');
+      // Suprimir onAuthStateChange durante setSession para evitar bloqueio
+      // (o listener tentaria _loadProfile antes do perfil existir no Supabase)
+      this._suppressAuthStateChange = true;
       try {
-        const { error: sessErr } = await this.supabase.auth.setSession({
+        const { data: sessData, error: sessErr } = await this.supabase.auth.setSession({
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
         });
-        if (sessErr) console.warn('[AuthManager] signUp: setSession warning:', sessErr.message);
-        else console.log('[AuthManager] signUp: setSession OK ✅');
-        this.session = data.session;
-        this.user = data.session?.user || data.user || null;
-        console.log('[AuthManager] signUp: user =', this.user?.id);
-        setTimeout(() => this._loadProfile(this.user?.id).catch(e =>
-          console.warn('[AuthManager] signUp: _loadProfile bg falhou:', e)
-        ), 1500);
+        if (sessErr) {
+          console.warn('[AuthManager] signUp: setSession warning:', sessErr.message);
+        } else {
+          console.log('[AuthManager] signUp: setSession OK ✅');
+        }
+        // Usar a sessão confirmada pelo Supabase (ou a do servidor como fallback)
+        this.session = sessData?.session || data.session;
+        this.user = this.session?.user || data.session?.user || data.user || null;
+        console.log('[AuthManager] signUp: user definido =', this.user?.id);
+        // Carregar perfil em background sem bloquear
+        setTimeout(() => {
+          this._suppressAuthStateChange = false; // reativar listener
+          this._loadProfile(this.user?.id).catch(e =>
+            console.warn('[AuthManager] signUp: _loadProfile bg falhou:', e)
+          );
+        }, 2000);
         this._notify();
         return data;
       } catch (sessException) {
         console.error('[AuthManager] signUp: Excepção em setSession:', sessException);
+        this._suppressAuthStateChange = false;
       }
     }
 
