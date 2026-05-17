@@ -314,10 +314,7 @@ export class DocumentEditor {
         // Insert separator after header row
         if (rowIdx === 0) rows.push('| ' + cells.map(() => '---').join(' | ') + ' |');
       });
-      return rows.length ? '
-' + rows.join('
-') + '
-' : '';
+      return rows.length ? '\n' + rows.join('\n') + '\n' : '';
     });
 
     // Step 2: convert remaining elements
