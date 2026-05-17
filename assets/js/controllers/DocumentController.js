@@ -9,6 +9,23 @@ import { DocumentEditor } from '../components/DocumentEditor.js';
 import { Storage } from '../utils/Storage.js';
 import { offlineDB } from '../utils/IndexedDB.js';
 
+// ─── documentState: single source of truth for generated content ─────────────
+export const documentState = {
+  currentContent: '',
+  serviceType: '',
+  lastUpdated: null,
+  set(content, serviceType) {
+    this.currentContent = content || '';
+    this.serviceType = serviceType || '';
+    this.lastUpdated = Date.now();
+    console.log('[documentState] set — length:', this.currentContent.length, 'service:', serviceType);
+  },
+  get() { return this.currentContent; },
+  isValid() { return typeof this.currentContent === 'string' && this.currentContent.trim().length > 0; },
+};
+if (typeof window !== 'undefined') window.documentState = documentState;
+
+
 const WA_NUMBER = '258858695506';
 
 export class DocumentController {
@@ -49,6 +66,7 @@ export class DocumentController {
  document.addEventListener('editor:closed', (e) => {
  if (e.detail?.content) {
  this.docModel.setGenerated(e.detail.content, this.docModel.model);
+      documentState.set(e.detail.content, this.docModel.service);
  }
  });
  }
@@ -158,6 +176,7 @@ export class DocumentController {
  await this.creditModel.consume(cost);
 
  this.docModel.setGenerated(result.document, result.model);
+    documentState.set(result.document, this.docModel.service);
  this.docModel.formData = data;
 
  try {
@@ -282,6 +301,7 @@ export class DocumentController {
  await this.creditModel.consume(cost);
 
  this.docModel.setGenerated(result.document, result.model);
+    documentState.set(result.document, this.docModel.service);
  this.docModel.formData = data;
 
  try {
@@ -509,12 +529,19 @@ export class DocumentController {
  window.documentEditor = new DocumentEditor();
  }
 
- requestAnimationFrame(() => {
- setTimeout(() => {
- window.documentEditor.loadDocument(content, serviceType);
- window.documentEditor._docController = this;
- }, 50);
- });
+    // Validate content before passing to editor (Bug 3: remove rAF+setTimeout race)
+    const editorContent = (content && typeof content === 'string' && content.trim().length > 0)
+      ? content
+      : documentState.get();
+
+    if (!editorContent || typeof editorContent !== 'string' || editorContent.trim().length === 0) {
+      console.error('[DocumentController] _openEditor: invalid content — aborting');
+      NotificationView.warn('⚠️ Conteúdo inválido. Tente gerar novamente.');
+      return;
+    }
+    console.log('[DocumentController] _openEditor — content length:', editorContent.length, 'service:', serviceType);
+    window.documentEditor.loadDocument(editorContent, serviceType);
+    window.documentEditor._docController = this;
  }
 
  sendWA() {
@@ -542,6 +569,7 @@ export class DocumentController {
  if (window.documentEditor) {
  window.documentEditor.loadDocument(result.document, serviceType || this.docModel.service);
  this.docModel.setGenerated(result.document, result.model);
+    documentState.set(result.document, this.docModel.service);
  }
  await this.creditModel.consume(1);
  NotificationView.success('✅ Documento reeditado!');

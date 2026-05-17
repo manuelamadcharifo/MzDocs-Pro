@@ -141,7 +141,8 @@ export class AuthManager {
  });
  this.session = data.session;
  this.user = data.session?.user || data.user || null;
- if (this.user?.id) await this._loadProfile(this.user.id);
+ // NON-BLOCKING: profile loads in background, never blocks signup
+ setTimeout(() => this._loadProfile(this.user.id).catch(console.error), 1500);
  this._notify();
  return data;
  } catch (_) { }
@@ -159,7 +160,8 @@ export class AuthManager {
  if (!loginErr && loginData?.session) {
  this.session = loginData.session;
  this.user = loginData.user;
- if (this.user?.id) await this._loadProfile(this.user.id);
+ // NON-BLOCKING: profile loads in background, never blocks signup
+ setTimeout(() => this._loadProfile(this.user.id).catch(console.error), 1500);
  this._notify();
  return { ...data, session: loginData.session, _autoLogin: true };
  }

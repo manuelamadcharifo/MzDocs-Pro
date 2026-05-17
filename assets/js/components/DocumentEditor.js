@@ -747,6 +747,19 @@ export class DocumentEditor {
 
   // ── API pública ────────────────────────────────────────────────
   loadDocument(content, serviceType) {
+    // DEBUG: log incoming content
+    console.log('[DocumentEditor] loadDocument — type:', typeof content, 'length:', content?.length);
+    // Fallback: use window.documentState if content is invalid (Bug 2 fix)
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      const fallback = window.documentState?.get();
+      if (fallback && fallback.trim().length > 0) {
+        console.warn('[DocumentEditor] invalid content — using documentState fallback');
+        content = fallback;
+      } else {
+        console.error('[DocumentEditor] loadDocument: no valid content available — aborting');
+        return;
+      }
+    }
     this.content     = content;
     this.serviceType = serviceType;
     this._previewFmt = 'pdf';
