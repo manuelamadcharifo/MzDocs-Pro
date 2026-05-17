@@ -134,6 +134,8 @@ async function handleSignup(req, res) {
     const profilePayload = {
       id: userId, phone: normalized, email: normalizedEmail,
       full_name: normalizedName, updated_at: new Date().toISOString(),
+      account_type: 'normal',
+      credits_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     };
     // Responder imediatamente ao cliente — não bloquear na gravação do perfil.
     // O perfil é gravado em background; o cliente faz login logo a seguir.
@@ -141,7 +143,7 @@ async function handleSignup(req, res) {
       success: true,
       user:    { id: userId, phone: normalized, email: normalizedEmail },
       session: userData.session || null,
-      message: 'Conta criada! 3 créditos grátis atribuídos.',
+      message: 'Conta criada! 1 crédito grátis atribuído (válido 1 mês).',
     });
 
     // ── Gravar perfil em background (não bloqueia a resposta) ────────────────

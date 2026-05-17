@@ -86,13 +86,16 @@ export class AuthManager {
  this._notify();
  }
 
+ // Perfil público — acessível via window.authManager.profile
+ get profile() { return this.user?._profile || null; }
+
  async _loadProfile(userId) {
  if (!this.supabase || !userId) return;
  for (let attempt = 1; attempt <= 4; attempt++) {
  try {
  const { data, error } = await this.supabase
  .from('profiles')
- .select('is_admin, credits, full_name, email, phone')
+ .select('is_admin, credits, full_name, email, phone, account_type, credits_expires_at, free_credit_used')
  .eq('id', userId)
  .single();
  if (error && error.code !== 'PGRST116') {

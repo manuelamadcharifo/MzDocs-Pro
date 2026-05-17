@@ -1,6 +1,12 @@
 {
   "version": 2,
   "outputDirectory": ".",
+  "crons": [
+    {
+      "path": "/api/cleanup-temp-accounts",
+      "schedule": "0 0 * * *"
+    }
+  ],
   "functions": {
     "api/generate-document.js": {
       "maxDuration": 60
@@ -16,6 +22,9 @@
     },
     "api/delete-temp-account.js": {
       "maxDuration": 10
+    },
+    "api/cleanup-temp-accounts.js": {
+      "maxDuration": 30
     },
     "api/auth/index.js": {
       "maxDuration": 30

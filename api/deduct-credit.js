@@ -91,18 +91,52 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // ── Auto-eliminação de conta temp ao chegar a 0 ──────────────────────
+    // ── Verificar expiração de créditos antes de aceitar dedução ────────────
+    // (O RPC deduct_credits não verifica expiração — verificamos aqui como camada extra)
+    if (remaining !== -1) {
+      try {
+        const { data: profileCheck } = await supabaseAdmin
+          .from('profiles')
+          .select('credits_expires_at, account_type')
+          .eq('id', userId)
+          .single();
+        if (
+          profileCheck?.credits_expires_at &&
+          new Date(profileCheck.credits_expires_at) < new Date()
+        ) {
+          // Créditos expirados — reverter a dedução e devolver erro
+          await supabaseAdmin
+            .from('profiles')
+            .update({ credits: remaining + cost, updated_at: new Date().toISOString() })
+            .eq('id', userId);
+          return res.status(402).json({
+            error:        'Créditos expirados.',
+            code:         'CREDITS_EXPIRED',
+            account_type: profileCheck.account_type,
+            credits:      0,
+          });
+        }
+      } catch (expiryErr) {
+        console.warn('[deduct-credit] Falha ao verificar expiração:', expiryErr.message);
+      }
+    }
+
+    // ── Auto-eliminação de conta avulso ao chegar a 0 ────────────────────
     // Feita aqui no Node com service_role — mais fiável do que dentro do SQL DEFINER
     if (remaining === 0) {
       try {
         const { data: profile } = await supabaseAdmin
-          .from('profiles').select('is_temp').eq('id', userId).single();
-        if (profile?.is_temp) {
+          .from('profiles')
+          .select('account_type, is_temp')
+          .eq('id', userId)
+          .single();
+        // Suporte ao campo legado is_temp E ao novo account_type = 'avulso'
+        if (profile?.is_temp || profile?.account_type === 'avulso') {
           await supabaseAdmin.auth.admin.deleteUser(userId);
-          console.log(`[deduct-credit] Conta temp ${userId.slice(0,8)}*** eliminada após 0 créditos`);
+          console.log('[deduct-credit] Conta avulso ' + userId.slice(0, 8) + '*** eliminada após 0 créditos');
         }
       } catch (delErr) {
-        console.warn('[deduct-credit] Falha ao eliminar conta temp:', delErr.message);
+        console.warn('[deduct-credit] Falha ao eliminar conta avulso:', delErr.message);
       }
     }
 
@@ -123,7 +157,7 @@ async function fallbackDeduct(supabaseAdmin, userId, cost, res) {
   try {
     const { data: profile, error: selErr } = await supabaseAdmin
       .from('profiles')
-      .select('credits, is_temp')
+      .select('credits, is_temp, account_type, credits_expires_at')
       .eq('id', userId)
       .single();
 
@@ -148,12 +182,12 @@ async function fallbackDeduct(supabaseAdmin, userId, cost, res) {
 
     if (updErr) throw updErr;
 
-    if (newCredits === 0 && profile.is_temp) {
+    if (newCredits === 0 && (profile.is_temp || profile.account_type === 'avulso')) {
       try {
         await supabaseAdmin.auth.admin.deleteUser(userId);
-        console.log(`[deduct-credit] Conta temp ${userId.slice(0,8)}*** eliminada (fallback)`);
+        console.log('[deduct-credit] Conta avulso ' + userId.slice(0, 8) + '*** eliminada (fallback)');
       } catch (delErr) {
-        console.warn('[deduct-credit] Falha ao eliminar conta temp (fallback):', delErr.message);
+        console.warn('[deduct-credit] Falha ao eliminar conta avulso (fallback):', delErr.message);
       }
     }
 

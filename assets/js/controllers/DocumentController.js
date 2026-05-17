@@ -175,6 +175,10 @@ export class DocumentController {
  }
  await this.creditModel.consume(cost);
 
+ // Detectar último crédito APÓS dedução
+ const remainingAfterNormal = this.creditModel.value;
+ const isLastCreditNormal   = remainingAfterNormal === 0;
+
  this.docModel.setGenerated(result.document, result.model);
     documentState.set(result.document, this.docModel.service);
  this.docModel.formData = data;
@@ -197,6 +201,12 @@ export class DocumentController {
  ModalView.open('resultOverlay');
  this._bindEditBtn();
  NotificationView.success('✅ Documento gerado!');
+
+ // Aviso de último crédito — 2s após para o utilizador ver o documento primeiro
+ if (isLastCreditNormal) {
+ const accountType = window.authManager?.profile?.account_type || 'normal';
+ setTimeout(() => { window.paymentController?.showAfterLastCredit(accountType); }, 2000);
+ }
 
  } catch (err) {
  DocumentView.hideLoader(this._genIv);
@@ -325,6 +335,13 @@ export class DocumentController {
  ModalView.open('resultOverlay');
  this._bindEditBtn();
  NotificationView.success(`✅ Documento longo gerado! (${result.sections} secções)`);
+
+ // Aviso de último crédito — 2s após para o utilizador ver o documento primeiro
+ const remainingAfterLong = this.creditModel.value;
+ if (remainingAfterLong === 0) {
+ const accountTypeLong = window.authManager?.profile?.account_type || 'normal';
+ setTimeout(() => { window.paymentController?.showAfterLastCredit(accountTypeLong); }, 2000);
+ }
 
  } catch (err) {
  DocumentView.hideLoader(this._genIv);
