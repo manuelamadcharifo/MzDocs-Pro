@@ -421,23 +421,17 @@ export class DocumentEditor {
   _renderPreview(format) {
     const frame = this.modal.querySelector('#edPreviewFrame');
     if (!frame) return;
-    const html = this._buildPreviewHTML(format);
-    // Use contentDocument.write() — works on all browsers (desktop + Android Chrome)
-    // without blob URL (which Android Chrome blocks in sandboxed iframes without allow-same-origin)
-    // and without srcdoc (which blocks scripts even with allow-scripts)
-    try {
-      const doc = frame.contentDocument || frame.contentWindow?.document;
-      if (doc) {
-        doc.open();
-        doc.write(html);
-        doc.close();
-      }
-    } catch (e) {
-      // Last resort: blob URL with allow-same-origin (revoke previous)
-      if (this._previewBlobURL) URL.revokeObjectURL(this._previewBlobURL);
-      this._previewBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-      frame.src = this._previewBlobURL;
+    console.log('[DocumentEditor] _renderPreview — content length:', this.content?.length, 'format:', format);
+    if (!this.content || this.content.trim().length === 0) {
+      console.error('[DocumentEditor] _renderPreview: this.content is empty!');
+      return;
     }
+    const html = this._buildPreviewHTML(format);
+    // srcdoc: most reliable cross-browser approach
+    // - No contentDocument.write() (fails silently when iframe not yet painted)
+    // - No blob: URL (blocked by CSP in sandboxed iframes)
+    // - No scripts needed inside preview so 'unsafe-inline' not required
+    frame.srcdoc = html;
   }
 
   _buildPreviewHTML(format) {
@@ -792,7 +786,6 @@ export class DocumentEditor {
   open()  { if (this.modal) { this.modal.style.display='flex'; document.body.style.overflow='hidden'; } }
   close() {
     if (this.modal) { this.modal.style.display='none'; document.body.style.overflow=''; }
-    if (this._previewBlobURL) { URL.revokeObjectURL(this._previewBlobURL); this._previewBlobURL = null; }
   }
   getContent() { return this.content; }
 }
