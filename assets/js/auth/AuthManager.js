@@ -119,66 +119,109 @@ export class AuthManager {
  ]);
  }
 
- async signUp(phone, email, password, fullName = '') {
- const res = await this._withTimeout(
- fetch('/api/auth/signup', {
- method: 'POST',
- headers: { 'Content-Type': 'application/json' },
- body: JSON.stringify({ phone, email, password, fullName })
- }),
- 15000,
- 'O servidor demorou demasiado a criar a conta. Tente novamente.'
- );
+  async signUp(phone, email, password, fullName = '') {
+    console.log('[AuthManager] signUp: A iniciar criação de conta…', { email, phone });
 
- const data = await res.json();
- if (!res.ok) throw new Error(data.error || 'Erro ao criar conta');
+    let res;
+    try {
+      res = await this._withTimeout(
+        fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, email, password, fullName })
+        }),
+        15000,
+        'O servidor demorou demasiado a criar a conta. Tente novamente.'
+      );
+    } catch (fetchErr) {
+      console.error('[AuthManager] signUp: Erro de rede:', fetchErr);
+      throw fetchErr;
+    }
 
- if (data.session && this.supabase) {
- try {
- await this.supabase.auth.setSession({
- access_token: data.session.access_token,
- refresh_token: data.session.refresh_token,
- });
- this.session = data.session;
- this.user = data.session?.user || data.user || null;
- // NON-BLOCKING: profile loads in background, never blocks signup
- setTimeout(() => this._loadProfile(this.user.id).catch(console.error), 1500);
- this._notify();
- return data;
- } catch (_) { }
- }
+    let data;
+    try {
+      data = await res.json();
+    } catch (jsonErr) {
+      console.error('[AuthManager] signUp: Resposta inválida do servidor:', jsonErr);
+      throw new Error('Resposta inválida do servidor. Tente novamente.');
+    }
 
- if (this.supabase && data.user) {
- await new Promise(r => setTimeout(r, 800));
- try {
- const loginResult = await this._withTimeout(
- this.supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password }),
- 8000,
- 'timeout'
- );
- const { data: loginData, error: loginErr } = loginResult;
- if (!loginErr && loginData?.session) {
- this.session = loginData.session;
- this.user = loginData.user;
- // NON-BLOCKING: profile loads in background, never blocks signup
- setTimeout(() => this._loadProfile(this.user.id).catch(console.error), 1500);
- this._notify();
- return { ...data, session: loginData.session, _autoLogin: true };
- }
- } catch (e) {
- const msg = (e.message || '').toLowerCase();
- if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
- this.user = null;
- this._notify();
- return { ...data, _emailConfirmRequired: true };
- }
- }
- }
+    console.log('[AuthManager] signUp: Resposta:', { status: res.status, ok: res.ok, hasSession: !!data.session, hasUser: !!data.user });
 
- this.user = null;
- this._notify();
- return data;
- }
+    if (!res.ok) {
+      console.error('[AuthManager] signUp: Erro:', data.error);
+      throw new Error(data.error || 'Erro ao criar conta');
+    }
+
+    // Caso 1: servidor devolveu sessão (login automático)
+    if (data.session && this.supabase) {
+      console.log('[AuthManager] signUp: Sessão recebida, aplicando setSession…');
+      try {
+        const { error: sessErr } = await this.supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+        if (sessErr) console.warn('[AuthManager] signUp: setSession warning:', sessErr.message);
+        else console.log('[AuthManager] signUp: setSession OK ✅');
+        this.session = data.session;
+        this.user = data.session?.user || data.user || null;
+        console.log('[AuthManager] signUp: user =', this.user?.id);
+        setTimeout(() => this._loadProfile(this.user?.id).catch(e =>
+          console.warn('[AuthManager] signUp: _loadProfile bg falhou:', e)
+        ), 1500);
+        this._notify();
+        return data;
+      } catch (sessException) {
+        console.error('[AuthManager] signUp: Excepção em setSession:', sessException);
+      }
+    }
+
+    // Caso 2: conta criada sem sessão — tentar auto-login
+    if (this.supabase && data.user) {
+      console.log('[AuthManager] signUp: Tentando auto-login…');
+      await new Promise(r => setTimeout(r, 800));
+      try {
+        const loginResult = await this._withTimeout(
+          this.supabase.auth.signInWithPassword({ email: email.toLowerCase().trim(), password }),
+          8000,
+          'timeout'
+        );
+        const { data: loginData, error: loginErr } = loginResult;
+        if (loginErr) {
+          console.warn('[AuthManager] signUp: auto-login erro:', loginErr.message);
+          const msg = (loginErr.message || '').toLowerCase();
+          if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
+            this.user = null;
+            this._notify();
+            return { ...data, _emailConfirmRequired: true };
+          }
+        } else if (loginData?.session) {
+          console.log('[AuthManager] signUp: auto-login OK ✅', loginData.user?.id);
+          this.session = loginData.session;
+          this.user = loginData.user;
+          setTimeout(() => this._loadProfile(this.user?.id).catch(e =>
+            console.warn('[AuthManager] signUp: _loadProfile bg falhou:', e)
+          ), 1500);
+          this._notify();
+          return { ...data, session: loginData.session, _autoLogin: true };
+        }
+      } catch (e) {
+        console.error('[AuthManager] signUp: Excepção no auto-login:', e.message);
+        const msg = (e.message || '').toLowerCase();
+        if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
+          this.user = null;
+          this._notify();
+          return { ...data, _emailConfirmRequired: true };
+        }
+      }
+    }
+
+    // Caso 3: sem sessão automática
+    console.info('[AuthManager] signUp: Conta criada sem sessão automática');
+    this.user = null;
+    this._notify();
+    return data;
+  }
 
  async signIn(identifier, password) {
  if (!this.supabase) throw new Error('Supabase não configurado');

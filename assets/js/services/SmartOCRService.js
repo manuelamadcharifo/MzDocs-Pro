@@ -12,13 +12,29 @@ export class SmartOCRService {
   async _loadTesseract() {
     if (this._tesseractLoaded) return;
     if (window.Tesseract) { this._tesseractLoaded = true; return; }
-    await new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = 'https://unpkg.com/tesseract.js@5.0.2/dist/tesseract.min.js';
-      s.onload = () => { this._tesseractLoaded = true; res(); };
-      s.onerror = rej;
-      document.head.appendChild(s);
-    });
+
+    // Usa cdn.jsdelivr.net (permitido pela CSP) com fallback para unpkg.com
+    const cdns = [
+      'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.2/dist/tesseract.min.js',
+      'https://unpkg.com/tesseract.js@5.0.2/dist/tesseract.min.js',
+    ];
+
+    for (const src of cdns) {
+      try {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = src;
+          s.onload = () => { this._tesseractLoaded = true; res(); };
+          s.onerror = () => rej(new Error('Falha: ' + src));
+          document.head.appendChild(s);
+        });
+        console.log('[SmartOCR] Tesseract carregado de:', src);
+        return;
+      } catch (err) {
+        console.warn('[SmartOCR] CDN falhou, tentando próximo…', err.message);
+      }
+    }
+    throw new Error('Não foi possível carregar o motor OCR. Verifique a sua ligação à internet.');
   }
 
   // ── OCR simples (texto bruto) ─────────────────────────────────
