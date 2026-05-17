@@ -319,14 +319,10 @@ export class DocumentEditor {
 
     // Step 2: convert remaining elements
     return html
-      .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1
-')
-      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1
-')
-      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1
-')
-      .replace(/<h4[^>]*>(.*?)<\/h4>/gi, '#### $1
-')
+  .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n')
+  .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n')
+  .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n')
+  .replace(/<h4[^>]*>(.*?)<\/h4>/gi, '#### $1\n')
       .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
       .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
       .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
