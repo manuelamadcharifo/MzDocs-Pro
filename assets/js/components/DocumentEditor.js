@@ -299,13 +299,37 @@ export class DocumentEditor {
 
   // ── Extrai texto do editor (HTML → markdown simplificado) ──────
   _richHTMLToMd(html) {
-    // Preserva o HTML mas converte elementos básicos de volta a markdown
-    // para manter compatibilidade com o sistema de preview
+    // Step 1: convert tables HTML → markdown BEFORE stripping tags
+    // Tables are otherwise destroyed by the generic tag-stripper
+    html = html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, (_, tableBody) => {
+      const rows = [];
+      const rowMatches = tableBody.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+      rowMatches.forEach((rowHtml, rowIdx) => {
+        const cellMatches = rowHtml.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || [];
+        const cells = cellMatches.map(cell =>
+          cell.replace(/<[^>]+>/g, '').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ').trim()
+        );
+        if (cells.length === 0) return;
+        rows.push('| ' + cells.join(' | ') + ' |');
+        // Insert separator after header row
+        if (rowIdx === 0) rows.push('| ' + cells.map(() => '---').join(' | ') + ' |');
+      });
+      return rows.length ? '
+' + rows.join('
+') + '
+' : '';
+    });
+
+    // Step 2: convert remaining elements
     return html
-      .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n')
-      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n')
-      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n')
-      .replace(/<h4[^>]*>(.*?)<\/h4>/gi, '#### $1\n')
+      .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1
+')
+      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1
+')
+      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1
+')
+      .replace(/<h4[^>]*>(.*?)<\/h4>/gi, '#### $1
+')
       .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
       .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
       .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
