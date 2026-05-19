@@ -734,7 +734,6 @@ USING (EXISTS (
 
     // ── CONFIGURAÇÕES ────────────────────────────────────────────────────
     // _loadSettings, _savePricing, _saveSettings → replaced by async DB versions (v8.2)
-    }
 
     // ── DIAGNÓSTICO ─────────────────────────────────────────────────────
     async diagnoseMissingPhones() {
