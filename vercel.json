@@ -31,9 +31,37 @@
     },
     "api/admin/index.js": {
       "maxDuration": 30
+    },
+    "api/admin/pages.js": {
+      "maxDuration": 15
+    },
+    "api/admin/generate-page.js": {
+      "maxDuration": 60
+    },
+    "api/sitemap.xml.js": {
+      "maxDuration": 10
+    },
+    "api/page-view.js": {
+      "maxDuration": 5
     }
   },
   "rewrites": [
+    {
+      "source": "/api/admin/pages",
+      "destination": "/api/admin/pages"
+    },
+    {
+      "source": "/api/admin/generate-page",
+      "destination": "/api/admin/generate-page"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap.xml"
+    },
+    {
+      "source": "/api/page-view",
+      "destination": "/api/page-view"
+    },
     {
       "source": "/api/admin/:action",
       "destination": "/api/admin/index"
@@ -131,6 +159,19 @@
         {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/pages/(.*)\\.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=86400, stale-while-revalidate=604800"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "index, follow"
         }
       ]
     }

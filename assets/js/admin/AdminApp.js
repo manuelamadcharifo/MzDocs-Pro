@@ -62,7 +62,8 @@ class AdminApp {
 
         const titles = {
             dashboard: 'Dashboard', users: 'Utilizadores',
-            transactions: 'Transações', documents: 'Documentos', settings: 'Configurações'
+            transactions: 'Transações', documents: 'Documentos',
+            blog: 'Blog / Páginas', settings: 'Configurações'
         };
         document.getElementById('pageTitle').textContent = titles[section] || section;
         this._section = section;
@@ -71,6 +72,7 @@ class AdminApp {
         if (section === 'users')        this._loadUsers();
         if (section === 'transactions') this._loadTransactions();
         if (section === 'documents')    this._loadDocuments();
+        if (section === 'blog')         this._loadBlog();
         if (section === 'settings')     this._loadSettings();
     }
 
@@ -814,6 +816,276 @@ USING (EXISTS (
         return { trabalho:'📚 Trabalho', cv:'📋 CV', carta:'✉️ Carta', orcamento:'🏗️ Orçamento',
                  impressao:'🖨️ Impressão', foto:'📷 Foto', conversao:'🔄 Conversão' }[t] || (t || '—');
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    // BLOG / PÁGINAS
+    // ════════════════════════════════════════════════════════════════════
+
+    async _getAdminToken() {
+        const { data } = await this.supabase.auth.getSession();
+        return data?.session?.access_token || null;
+    }
+
+    async _loadBlog() {
+        const tbody = document.getElementById('blogTable');
+        const empty = document.getElementById('blogEmpty');
+        const badge = document.getElementById('navBadgeBlog');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#94a3b8;">A carregar…</td></tr>';
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/pages', { headers: { Authorization: 'Bearer ' + token } });
+            const pages = await res.json();
+            this._allBlogPages = Array.isArray(pages) ? pages : [];
+            if (badge) badge.textContent = this._allBlogPages.length;
+            this.filterBlog();
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#ef4444;">Erro: ' + err.message + '</td></tr>';
+        }
+    }
+
+    filterBlog() {
+        const q      = (document.getElementById('searchBlog')?.value || '').toLowerCase();
+        const status = document.getElementById('blogStatusFilter')?.value || 'all';
+        const pages  = (this._allBlogPages || []).filter(p => {
+            const matchQ = !q || (p.title || '').toLowerCase().includes(q) || (p.slug || '').includes(q);
+            const matchS = status === 'all'
+                || (status === 'published' && p.published)
+                || (status === 'draft' && !p.published);
+            return matchQ && matchS;
+        });
+
+        const tbody = document.getElementById('blogTable');
+        const empty = document.getElementById('blogEmpty');
+        if (!tbody) return;
+
+        if (pages.length === 0) {
+            tbody.innerHTML = '';
+            if (empty) empty.style.display = 'flex';
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+
+        tbody.innerHTML = pages.map(p => {
+            const date = p.updated_at
+                ? new Date(p.updated_at).toLocaleDateString('pt-MZ', { day:'2-digit', month:'short', year:'numeric' })
+                : '—';
+            const pubBadge = p.published
+                ? '<span style="background:#ECFDF5;color:#065F46;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">✅ Publicada</span>'
+                : '<span style="background:#FEF9C3;color:#713F12;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">📝 Rascunho</span>';
+            const aiBadge = p.ai_generated
+                ? '<span style="font-size:11px;">🤖</span>'
+                : '<span style="font-size:11px;color:#cbd5e1;">—</span>';
+            const safeTitle = (p.title || '').replace(/'/g, "\\'");
+            return '<tr>'
+                + '<td><strong>' + (p.title || '—') + '</strong></td>'
+                + '<td><code style="font-size:11px;background:#F1F5F9;padding:2px 6px;border-radius:4px;">' + p.slug + '</code></td>'
+                + '<td>' + pubBadge + '</td>'
+                + '<td>' + (p.views || 0) + '</td>'
+                + '<td>' + aiBadge + '</td>'
+                + '<td style="font-size:12px;color:#64748b;">' + date + '</td>'
+                + '<td>'
+                + '<button class="btn-ghost" style="font-size:12px;" onclick="adminApp.openPageEditor(\'' + p.id + '\')">✏️ Editar</button> '
+                + '<a href="/pages/' + p.slug + '.html" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none;">🔗 Ver</a> '
+                + '<button class="btn-danger" style="font-size:12px;" onclick="adminApp.deletePage(\'' + p.id + '\',\'' + safeTitle + '\')">🗑️</button>'
+                + '</td>'
+                + '</tr>';
+        }).join('');
+    }
+
+    async openPageEditor(pageId) {
+        pageId = pageId || null;
+
+        // Limpar todos os campos
+        ['pageTitle2','pageSlug','pageMetaDesc','pageContent','pageEditId','aiTitle','aiKeywords'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const preview  = document.getElementById('pagePreview');
+        const aiStatus = document.getElementById('aiStatus');
+        const metaCount= document.getElementById('metaCharCount');
+        if (preview)   preview.innerHTML = '';
+        if (aiStatus)  { aiStatus.style.display = 'none'; aiStatus.textContent = ''; aiStatus.style.color = '#1D4ED8'; }
+        if (metaCount) metaCount.textContent = '0 / 155';
+
+        const editorTitle = document.getElementById('editorModalTitle');
+        if (editorTitle) editorTitle.textContent = pageId ? '✏️ Editar Página' : '✏️ Nova Página';
+
+        // Live preview
+        const contentArea = document.getElementById('pageContent');
+        if (contentArea) {
+            if (contentArea._previewHandler) {
+                contentArea.removeEventListener('input', contentArea._previewHandler);
+            }
+            contentArea._previewHandler = () => { if (preview) preview.innerHTML = contentArea.value; };
+            contentArea.addEventListener('input', contentArea._previewHandler);
+        }
+
+        // Meta char count
+        const metaArea = document.getElementById('pageMetaDesc');
+        if (metaArea && metaCount) {
+            metaArea.oninput = () => { metaCount.textContent = metaArea.value.length + ' / 155'; };
+        }
+
+        // Slug: marcar como não-manual para autoSlug funcionar
+        const slugEl = document.getElementById('pageSlug');
+        if (slugEl) {
+            slugEl.dataset.manual = 'false';
+            slugEl.addEventListener('input', () => { slugEl.dataset.manual = 'true'; }, { once: true });
+        }
+
+        // Se editar, carregar dados existentes
+        if (pageId) {
+            const page = (this._allBlogPages || []).find(p => p.id === pageId);
+            if (page) {
+                try {
+                    const token = await this._getAdminToken();
+                    const res   = await fetch('/api/admin/pages?slug=' + encodeURIComponent(page.slug), {
+                        headers: { Authorization: 'Bearer ' + token }
+                    });
+                    if (res.ok) {
+                        const full = await res.json();
+                        document.getElementById('pageTitle2').value   = full.title            || '';
+                        document.getElementById('pageSlug').value     = full.slug             || '';
+                        document.getElementById('pageMetaDesc').value = full.meta_description || '';
+                        document.getElementById('pageContent').value  = full.content_html     || '';
+                        document.getElementById('pageEditId').value   = full.id               || '';
+                        if (metaCount) metaCount.textContent = (full.meta_description || '').length + ' / 155';
+                        if (preview)   preview.innerHTML = full.content_html || '';
+                        if (slugEl)    slugEl.dataset.manual = 'true';
+                    }
+                } catch (e) {
+                    console.error('[Blog editor load]', e);
+                }
+            }
+        }
+
+        document.getElementById('pageEditorOverlay').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+    }
+
+    closePageEditor() {
+        document.getElementById('pageEditorOverlay').style.display = 'none';
+        document.body.style.overflow = '';
+        const contentArea = document.getElementById('pageContent');
+        if (contentArea && contentArea._previewHandler) {
+            contentArea.removeEventListener('input', contentArea._previewHandler);
+            delete contentArea._previewHandler;
+        }
+    }
+
+    autoSlug() {
+        const titleEl = document.getElementById('pageTitle2');
+        const slugEl  = document.getElementById('pageSlug');
+        if (!titleEl || !slugEl || slugEl.dataset.manual === 'true') return;
+        slugEl.value = titleEl.value
+            .toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9\s-]/g, '')
+            .trim()
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .slice(0, 80);
+    }
+
+    async generateWithAI() {
+        const aiTitle    = (document.getElementById('aiTitle')?.value || '').trim();
+        const aiKeywords = (document.getElementById('aiKeywords')?.value || '').trim();
+        const aiTone     = document.getElementById('aiTone')?.value || 'informativo';
+        const aiWords    = parseInt(document.getElementById('aiWordCount')?.value || '600', 10);
+        const aiStatus   = document.getElementById('aiStatus');
+        const btn        = document.getElementById('btnGenerateAI');
+
+        if (!aiTitle) { alert('Introduza um título para gerar com IA.'); return; }
+
+        btn.disabled    = true;
+        btn.textContent = '⏳ A gerar…';
+        if (aiStatus) { aiStatus.style.display = 'block'; aiStatus.style.color = '#1D4ED8'; aiStatus.textContent = '🤖 A contactar a IA… pode demorar 10-30 segundos.'; }
+
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/generate-page', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body:    JSON.stringify({ title: aiTitle, keywords: aiKeywords, tone: aiTone, word_count: aiWords }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro na geração IA');
+
+            document.getElementById('pageTitle2').value   = data.title            || aiTitle;
+            document.getElementById('pageSlug').value     = data.slug             || '';
+            document.getElementById('pageMetaDesc').value = data.meta_description || '';
+            document.getElementById('pageContent').value  = data.content_html     || '';
+
+            const preview   = document.getElementById('pagePreview');
+            const metaCount = document.getElementById('metaCharCount');
+            if (preview)   preview.innerHTML = data.content_html || '';
+            if (metaCount) metaCount.textContent = (data.meta_description || '').length + ' / 155';
+
+            const slugEl = document.getElementById('pageSlug');
+            if (slugEl) slugEl.dataset.manual = 'true';
+
+            if (aiStatus) aiStatus.textContent = '✅ Artigo gerado! (provider: ' + (data.provider || 'IA') + ') — Reveja e publique.';
+
+        } catch (err) {
+            if (aiStatus) { aiStatus.style.color = '#ef4444'; aiStatus.textContent = '❌ ' + err.message; }
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = '✨ Gerar Artigo';
+        }
+    }
+
+    async savePage(publish) {
+        publish = publish === true;
+        const id      = (document.getElementById('pageEditId')?.value || '').trim();
+        const title   = (document.getElementById('pageTitle2')?.value || '').trim();
+        const slug    = (document.getElementById('pageSlug')?.value || '').trim();
+        const meta    = (document.getElementById('pageMetaDesc')?.value || '').trim();
+        const content = (document.getElementById('pageContent')?.value || '').trim();
+
+        if (!title)   { alert('O título é obrigatório.'); return; }
+        if (!content) { alert('O conteúdo é obrigatório.'); return; }
+
+        try {
+            const token   = await this._getAdminToken();
+            const payload = { title, slug, meta_description: meta, content_html: content, published: publish };
+            const method  = id ? 'PUT' : 'POST';
+            if (id) payload.id = id;
+
+            const res  = await fetch('/api/admin/pages', {
+                method,
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body:    JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
+
+            this.closePageEditor();
+            await this._loadBlog();
+            alert(publish ? '🚀 Página publicada com sucesso!' : '💾 Rascunho guardado com sucesso!');
+
+        } catch (err) {
+            alert('❌ Erro: ' + err.message);
+        }
+    }
+
+    async deletePage(pageId, pageTitle) {
+        if (!confirm('Eliminar a página "' + pageTitle + '"?\nEsta acção não pode ser desfeita.')) return;
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/pages', {
+                method:  'DELETE',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body:    JSON.stringify({ id: pageId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao eliminar');
+            await this._loadBlog();
+        } catch (err) {
+            alert('❌ Erro: ' + err.message);
+        }
+    }
+
 }
 
 window.adminApp = new AdminApp();

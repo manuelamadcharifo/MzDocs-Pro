@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Blog — Guias de Documentos para Moçambique | MzDocs Pro</title>
+  <meta name="description" content="Guias práticos sobre como criar documentos profissionais em Moçambique: CV, cartas formais, requerimentos, contratos e muito mais."/>
+  <meta name="robots" content="index, follow"/>
+  <link rel="canonical" href="https://mz-docs-pro.vercel.app/pages/"/>
+  <meta property="og:title"       content="Blog — Guias de Documentos para Moçambique"/>
+  <meta property="og:description" content="Guias práticos sobre documentos profissionais em Moçambique."/>
+  <meta property="og:type"        content="website"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=Instrument+Serif:ital@0;1&display=swap"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink: #07101F; --muted: #64748B; --border: #E2E8F0; --surface: #F8FAFD;
+      --blue: #3B82F6; --blue-d: #1D4ED8; --green: #009A44;
+    }
+    body { font-family: 'Bricolage Grotesque', sans-serif; background: var(--surface); color: var(--ink); }
+    .site-header {
+      background: var(--ink); padding: 0 20px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .site-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fff; }
+    .logo-badge { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, var(--blue), var(--green)); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .logo-text { font-family: 'Instrument Serif', serif; font-size: 18px; }
+    .header-cta { background: var(--blue); color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; }
+    .header-cta:hover { background: var(--blue-d); }
+    .hero { background: var(--ink); padding: 40px 20px; text-align: center; }
+    .hero h1 { font-family: 'Instrument Serif', serif; font-size: clamp(28px, 6vw, 42px); color: #fff; margin-bottom: 12px; }
+    .hero p { color: rgba(255,255,255,.65); font-size: 1rem; max-width: 480px; margin: 0 auto; }
+    .container { max-width: 900px; margin: 0 auto; padding: 32px 20px 60px; }
+    .articles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+    .article-card {
+      background: #fff; border: 1.5px solid var(--border); border-radius: 14px;
+      padding: 20px; text-decoration: none; color: var(--ink);
+      transition: all .2s; display: flex; flex-direction: column; gap: 10px;
+    }
+    .article-card:hover { border-color: var(--blue); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(59,130,246,.12); }
+    .card-tag { font-size: 11px; font-weight: 700; color: var(--blue-d); background: #EFF6FF; border-radius: 20px; padding: 2px 10px; align-self: flex-start; }
+    .card-title { font-size: 1rem; font-weight: 700; line-height: 1.4; }
+    .card-desc { font-size: .875rem; color: var(--muted); line-height: 1.5; flex: 1; }
+    .card-meta { font-size: 12px; color: var(--muted); display: flex; gap: 10px; }
+    .loading { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .loading-spinner { font-size: 2rem; animation: spin 1s linear infinite; display: block; margin-bottom: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .site-footer { background: var(--ink); color: rgba(255,255,255,.5); padding: 24px 20px; text-align: center; font-size: 13px; }
+    .site-footer a { color: rgba(255,255,255,.6); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <a class="site-logo" href="/">
+    <div class="logo-badge">📄</div>
+    <span class="logo-text">MzDocs</span>
+  </a>
+  <a class="header-cta" href="/">Criar Documento →</a>
+</header>
+
+<div class="hero">
+  <h1>Guias & Recursos</h1>
+  <p>Tudo o que precisa de saber sobre documentos profissionais em Moçambique.</p>
+</div>
+
+<div class="container">
+  <div id="articlesGrid" class="articles-grid">
+    <div class="loading">
+      <span class="loading-spinner">⏳</span>
+      A carregar artigos…
+    </div>
+  </div>
+</div>
+
+<footer class="site-footer">
+  © 2026 MzDocs Pro · Moçambique 🇲🇿
+  &nbsp;|&nbsp;<a href="/legal.html">Privacidade</a>
+  &nbsp;|&nbsp;<a href="/">Início</a>
+</footer>
+
+<script>
+  const SUPABASE_URL      = 'SUPABASE_URL_PLACEHOLDER';
+  const SUPABASE_ANON_KEY = 'SUPABASE_ANON_KEY_PLACEHOLDER';
+
+  async function loadArticles() {
+    const grid = document.getElementById('articlesGrid');
+    try {
+      const res  = await fetch(SUPABASE_URL + '/rest/v1/blog_pages?select=slug,title,meta_description,updated_at,views&published=eq.true&order=updated_at.desc', {
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+      });
+      const pages = await res.json();
+      if (!Array.isArray(pages) || pages.length === 0) {
+        grid.innerHTML = '<div class="empty">📭 Ainda não há artigos publicados. Volte em breve!</div>';
+        return;
+      }
+      grid.innerHTML = pages.map(function(p) {
+        var date = p.updated_at ? new Date(p.updated_at).toLocaleDateString('pt-MZ', { day:'numeric', month:'short', year:'numeric' }) : '';
+        var views = p.views || 0;
+        return '<a class="article-card" href="/pages/' + p.slug + '.html">' +
+          '<span class="card-tag">📚 Guia</span>' +
+          '<div class="card-title">' + escHtml(p.title) + '</div>' +
+          '<div class="card-desc">' + escHtml((p.meta_description || '').slice(0, 120)) + '…</div>' +
+          '<div class="card-meta"><span>🗓 ' + date + '</span><span>👁 ' + views + ' visitas</span></div>' +
+          '</a>';
+      }).join('');
+    } catch(e) {
+      grid.innerHTML = '<div class="empty">⚠️ Erro ao carregar artigos. Tente novamente.</div>';
+    }
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  loadArticles();
+</script>
+</body>
+</html>

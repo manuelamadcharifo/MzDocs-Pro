@@ -41,6 +41,10 @@
       <a class="nav-item" data-section="documents">
         <span class="nav-icon">📄</span><span class="nav-label">Documentos</span>
       </a>
+      <a class="nav-item" data-section="blog">
+        <span class="nav-icon">📝</span><span class="nav-label">Blog / Páginas</span>
+        <span class="nav-badge" id="navBadgeBlog">0</span>
+      </a>
       <a class="nav-item" data-section="settings">
         <span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span>
       </a>
@@ -208,7 +212,145 @@
       </div>
     </section>
 
-    <!-- ── CONFIGURAÇÕES ─────────────────────────────────────── -->
+    <!-- ── BLOG / PÁGINAS ────────────────────────────────────── -->
+    <section id="section-blog" class="admin-section">
+
+      <!-- Toolbar -->
+      <div class="section-toolbar">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="search" id="searchBlog" class="search-input" placeholder="🔍 Pesquisar páginas…" oninput="adminApp.filterBlog()"/>
+          <select id="blogStatusFilter" class="filter-select" onchange="adminApp.filterBlog()">
+            <option value="all">Todas</option>
+            <option value="published">Publicadas</option>
+            <option value="draft">Rascunhos</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="adminApp.openPageEditor()">＋ Nova Página</button>
+      </div>
+
+      <!-- Lista de páginas -->
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Título</th>
+              <th>Slug</th>
+              <th>Estado</th>
+              <th>Visitas</th>
+              <th>IA</th>
+              <th>Actualizado</th>
+              <th>Acções</th>
+            </tr>
+          </thead>
+          <tbody id="blogTable"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="blogEmpty" style="display:none">
+        <div style="font-size:2.5rem;margin-bottom:12px;">📝</div>
+        <p>Ainda não há páginas. Crie a sua primeira!</p>
+        <button class="btn-primary" style="margin-top:12px" onclick="adminApp.openPageEditor()">＋ Criar Página</button>
+      </div>
+    </section>
+
+    <!-- ── MODAL EDITOR DE PÁGINAS ────────────────────────────── -->
+    <div id="pageEditorOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;overflow-y:auto;">
+      <div style="background:#fff;max-width:860px;margin:20px auto;border-radius:16px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.25);">
+
+        <!-- Header do editor -->
+        <div style="background:#0F172A;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;">
+          <h3 id="editorModalTitle" style="color:#fff;font-size:1rem;font-weight:700;margin:0;">✏️ Nova Página</h3>
+          <button onclick="adminApp.closePageEditor()" style="background:none;border:none;color:rgba(255,255,255,.6);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+        </div>
+
+        <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+
+          <!-- Gerador IA -->
+          <div style="background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;">
+            <div style="font-weight:700;color:#1D4ED8;font-size:.9rem;margin-bottom:10px;">🤖 Gerar com IA</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+              <div>
+                <label style="font-size:.75rem;font-weight:600;color:#64748B;display:block;margin-bottom:4px;">Título / Tema</label>
+                <input type="text" id="aiTitle" placeholder="Ex: Como fazer um CV em Moçambique"
+                  style="width:100%;padding:8px 12px;border:1.5px solid #BFDBFE;border-radius:8px;font-size:.875rem;font-family:inherit;"/>
+              </div>
+              <div>
+                <label style="font-size:.75rem;font-weight:600;color:#64748B;display:block;margin-bottom:4px;">Palavras-chave</label>
+                <input type="text" id="aiKeywords" placeholder="cv, emprego, Maputo"
+                  style="width:100%;padding:8px 12px;border:1.5px solid #BFDBFE;border-radius:8px;font-size:.875rem;font-family:inherit;"/>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <select id="aiTone" style="padding:7px 10px;border:1.5px solid #BFDBFE;border-radius:8px;font-size:.875rem;font-family:inherit;background:#fff;">
+                <option value="informativo">Tom: Informativo</option>
+                <option value="prático">Tom: Prático</option>
+                <option value="académico">Tom: Académico</option>
+              </select>
+              <select id="aiWordCount" style="padding:7px 10px;border:1.5px solid #BFDBFE;border-radius:8px;font-size:.875rem;font-family:inherit;background:#fff;">
+                <option value="400">~400 palavras</option>
+                <option value="600" selected>~600 palavras</option>
+                <option value="900">~900 palavras</option>
+              </select>
+              <button id="btnGenerateAI" onclick="adminApp.generateWithAI()"
+                style="background:#1D4ED8;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:.875rem;font-weight:700;cursor:pointer;white-space:nowrap;">
+                ✨ Gerar Artigo
+              </button>
+            </div>
+            <div id="aiStatus" style="margin-top:8px;font-size:.8rem;color:#1D4ED8;display:none;"></div>
+          </div>
+
+          <!-- Campos do artigo -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">
+            <div>
+              <label style="font-size:.75rem;font-weight:600;color:#64748B;display:block;margin-bottom:4px;">Título <span style="color:#ef4444">*</span></label>
+              <input type="text" id="pageTitle2" placeholder="Título do artigo"
+                style="width:100%;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:.9rem;font-family:inherit;"
+                oninput="adminApp.autoSlug()"/>
+            </div>
+            <div>
+              <label style="font-size:.75rem;font-weight:600;color:#64748B;display:block;margin-bottom:4px;">Slug (URL)</label>
+              <input type="text" id="pageSlug" placeholder="como-fazer-cv"
+                style="width:100%;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:.875rem;font-family:inherit;"/>
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:.75rem;font-weight:600;color:#64748B;display:block;margin-bottom:4px;">Meta Description (SEO)</label>
+            <textarea id="pageMetaDesc" rows="2" placeholder="Descrição breve para o Google (máx. 155 caracteres)"
+              style="width:100%;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:.875rem;font-family:inherit;resize:vertical;"
+              maxlength="155"></textarea>
+            <div id="metaCharCount" style="font-size:11px;color:#94a3b8;text-align:right;margin-top:2px;">0 / 155</div>
+          </div>
+
+          <div>
+            <label style="font-size:.75rem;font-weight:600;color:#64748B;display:block;margin-bottom:6px;">Conteúdo HTML <span style="color:#ef4444">*</span></label>
+            <textarea id="pageContent" rows="16" placeholder="Cole ou escreva o HTML do artigo aqui…"
+              style="width:100%;padding:12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:.8rem;font-family:'Courier New',monospace;resize:vertical;line-height:1.6;"></textarea>
+          </div>
+
+          <!-- Preview -->
+          <details style="border:1.5px solid #E2E8F0;border-radius:8px;overflow:hidden;">
+            <summary style="padding:10px 14px;cursor:pointer;font-weight:600;font-size:.875rem;background:#F8FAFD;">👁 Pré-visualizar conteúdo</summary>
+            <div id="pagePreview" style="padding:16px;max-height:360px;overflow-y:auto;font-size:.9rem;line-height:1.7;border-top:1px solid #E2E8F0;"></div>
+          </details>
+
+          <input type="hidden" id="pageEditId"/>
+
+          <!-- Footer do editor -->
+          <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:4px;flex-wrap:wrap;">
+            <button onclick="adminApp.savePage(false)"
+              style="background:#F1F5F9;border:1.5px solid #E2E8F0;border-radius:8px;padding:9px 18px;font-weight:600;font-size:.875rem;cursor:pointer;font-family:inherit;">
+              💾 Guardar Rascunho
+            </button>
+            <button onclick="adminApp.savePage(true)"
+              style="background:#009A44;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;font-size:.875rem;cursor:pointer;font-family:inherit;">
+              🚀 Publicar Página
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CONFIGURAÇÕES ──────────────────────────────────────── -->
     <section id="section-settings" class="admin-section">
       <div class="settings-grid">
         <div class="settings-card">
