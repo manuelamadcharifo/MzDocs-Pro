@@ -103,84 +103,85 @@ class AdminApp {
     async _loadDashboard() {
         if (!this.supabase) return;
         try {
-            // Totais REAIS (sem filtro de data — todos os registos)
-            const [
-                { count: totalUsers },
-                { count: totalDocs },
-                { data: revenue },
-                { count: pending }
-            ] = await Promise.all([
-                this.supabase.from('profiles').select('*', { count: 'exact', head: true }),
-                this.supabase.from('documents').select('*', { count: 'exact', head: true }),
-                this.supabase.from('transactions').select('amount').eq('status', 'completed'),
-                this.supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-            ]);
+            const token = await this._getAdminToken();
+            // Use server-side stats endpoint for richer KPIs
+            const res   = await fetch('/api/admin/stats', {
+                headers: { Authorization: 'Bearer ' + token }
+            });
+            if (!res.ok) throw new Error('Stats endpoint failed: ' + res.status);
+            const d = await res.json();
 
-            const totalRevenue = (revenue || []).reduce((s, t) => s + (t.amount || 0), 0);
+            const e   = id => document.getElementById(id);
+            const fmt = n  => (n ?? 0).toLocaleString('pt-MZ');
 
-            const e = id => document.getElementById(id);
-            if (e('statTotalUsers')) e('statTotalUsers').textContent = totalUsers ?? '—';
-            if (e('statTotalDocs'))  e('statTotalDocs').textContent  = totalDocs ?? '—';
-            if (e('statRevenue'))    e('statRevenue').textContent    = totalRevenue.toLocaleString('pt-MZ') + ' MZN';
-            if (e('statPending'))    e('statPending').textContent    = pending ?? '—';
-            if (e('navBadgeUsers'))  e('navBadgeUsers').textContent  = totalUsers ?? 0;
-            if (e('navBadgePending')) e('navBadgePending').textContent = pending ?? 0;
+            if (e('statTotalUsers'))   e('statTotalUsers').textContent   = fmt(d.users?.total);
+            if (e('statUserSplit'))    e('statUserSplit').textContent     = (d.users?.normal ?? 0) + ' normais · ' + (d.users?.avulso ?? 0) + ' avulso';
+            if (e('statTotalDocs'))    e('statTotalDocs').textContent     = fmt(d.documents?.total);
+            if (e('statDocsToday'))    e('statDocsToday').textContent     = 'Hoje: ' + fmt(d.documents?.today);
+            if (e('statRevenue'))      e('statRevenue').textContent       = fmt(d.revenue?.month) + ' MZN';
+            if (e('statPending'))      e('statPending').textContent       = fmt(d.pending);
+            if (e('statNewUsers24h'))  e('statNewUsers24h').textContent   = fmt(d.users?.new_24h);
+            if (e('statAvulso'))       e('statAvulso').textContent        = fmt(d.users?.avulso);
+            if (e('statBlogPublished'))e('statBlogPublished').textContent = fmt(d.blog?.published);
+            if (e('statDocsWeek'))     e('statDocsWeek').textContent      = fmt(d.documents?.week);
 
-            await this._loadCharts();
+            // Nav badges
+            if (e('navBadgeUsers'))    e('navBadgeUsers').textContent    = fmt(d.users?.total);
+            if (e('navBadgePending'))  e('navBadgePending').textContent  = fmt(d.pending);
+
+            await this._loadChartsFromData(d.chartData, d.topDocTypes);
         } catch (err) { console.error('[Admin] Dashboard:', err); }
     }
 
-    async _loadCharts() {
-        if (!this.supabase || typeof Chart === 'undefined') return;
+    async _loadChartsFromData(chartData, topDocTypes) {
+        if (typeof Chart === 'undefined') return;
         try {
-            const sevenDays = new Date(Date.now() - 7 * 86400000).toISOString();
-            const [{ data: txData }, { data: docData }] = await Promise.all([
-                this.supabase.from('transactions').select('amount,created_at').eq('status','completed').gte('created_at', sevenDays),
-                this.supabase.from('documents').select('service_type').gte('created_at', sevenDays),
-            ]);
+            const labels = chartData?.labels || [];
+            const revenueData = chartData?.revenue || [];
+            const docsData    = chartData?.documents || [];
 
-            const days = Array.from({ length: 7 }, (_, i) => {
-                const d = new Date(Date.now() - (6 - i) * 86400000);
-                return d.toISOString().slice(0, 10);
-            });
-
-            // Revenue chart
+            // Revenue line chart
             const rc = document.getElementById('revenueChart');
             if (rc) {
                 if (this.charts.revenue) this.charts.revenue.destroy();
                 this.charts.revenue = new Chart(rc, {
                     type: 'line',
                     data: {
-                        labels: days.map(d => d.slice(5)),
+                        labels,
                         datasets: [{
                             label: 'MZN',
-                            data: days.map(day => (txData||[]).filter(t=>t.created_at.slice(0,10)===day).reduce((s,t)=>s+t.amount,0)),
+                            data: revenueData,
                             borderColor: '#3B82F6', backgroundColor: 'rgba(59,130,246,.1)',
-                            tension: .4, fill: true, pointRadius: 4
+                            tension: .4, fill: true, pointRadius: 4,
                         }]
                     },
                     options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
                 });
             }
 
-            // Docs chart
-            const typeMap = {};
-            (docData||[]).forEach(d => { typeMap[d.service_type] = (typeMap[d.service_type]||0) + 1; });
+            // Documents per day bar chart
             const dc = document.getElementById('documentsChart');
-            if (dc && Object.keys(typeMap).length) {
+            if (dc) {
                 if (this.charts.docs) this.charts.docs.destroy();
                 this.charts.docs = new Chart(dc, {
-                    type: 'doughnut',
+                    type: 'bar',
                     data: {
-                        labels: Object.keys(typeMap).map(k => this._typeLabel(k)),
-                        datasets: [{ data: Object.values(typeMap),
-                            backgroundColor: ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6'] }]
+                        labels,
+                        datasets: [{
+                            label: 'Docs',
+                            data: docsData,
+                            backgroundColor: 'rgba(16,185,129,.75)',
+                            borderRadius: 6,
+                        }]
                     },
-                    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
                 });
             }
         } catch (err) { console.warn('[Admin] Charts:', err); }
     }
+
+    // Legacy alias (kept for safety)
+    async _loadCharts() { await this._loadDashboard(); }
 
     // ── UTILIZADORES ────────────────────────────────────────────────────
     async _loadUsers() {
@@ -191,30 +192,34 @@ class AdminApp {
             // Tentativa 1: select completo
             ({ data, error } = await this.supabase
                 .from('profiles')
-                .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, is_temp, temp_ref, temp_password, created_at')
+                .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, is_temp, account_type, credits_expires_at, temp_ref, temp_password, created_at')
                 .order('created_at', { ascending: false }));
 
-            // Tentativa 2: sem is_blocked
+            // Tentativa 2: sem is_blocked (BD não migrada)
             if (error?.code === '42703') {
                 this._isBlockedMissing = true;
                 ({ data, error } = await this.supabase
                     .from('profiles')
-                    .select('id, full_name, phone, email, credits, total_documents, is_admin, is_temp, temp_ref, temp_password, created_at')
+                    .select('id, full_name, phone, email, credits, total_documents, is_admin, account_type, credits_expires_at, created_at')
                     .order('created_at', { ascending: false }));
             }
 
-            // Tentativa 3: sem colunas temporárias (BD ainda não migrada)
+            // Tentativa 3: schema mínimo
             if (error?.code === '42703') {
-                console.warn('[Admin] Colunas temp ausentes — execute EXECUTAR_AGORA_completo.sql no Supabase.');
                 ({ data, error } = await this.supabase
                     .from('profiles')
-                    .select('id, full_name, phone, email, credits, total_documents, is_admin, created_at')
+                    .select('id, full_name, phone, email, credits, is_admin, created_at')
                     .order('created_at', { ascending: false }));
             }
 
             if (error) throw error;
-            // Normalizar: garantir is_blocked=false se coluna ausente
-            this._users = (data || []).map(u => ({ ...u, is_blocked: u.is_blocked ?? false }));
+            // Normalizar campos opcionais
+            this._users = (data || []).map(u => ({
+                ...u,
+                is_blocked:   u.is_blocked   ?? false,
+                is_temp:      u.is_temp       ?? (u.account_type === 'avulso'),
+                account_type: u.account_type  ?? 'normal',
+            }));
             this._renderUsers(this._users);
 
             if (this._isBlockedMissing && !this._blockWarnShown) {
@@ -225,15 +230,18 @@ class AdminApp {
     }
 
     filterUsers(query) {
-        const q = (query || document.getElementById('searchUsers')?.value || '').toLowerCase();
+        const q    = (query || document.getElementById('searchUsers')?.value || '').toLowerCase();
         const type = document.getElementById('userTypeFilter')?.value || 'all';
-        let filtered = this._users.filter(u =>
+        let filtered = (this._users || []).filter(u =>
             (u.full_name || '').toLowerCase().includes(q) ||
-            (u.phone || '').includes(q) ||
-            (u.email || '').toLowerCase().includes(q)
+            (u.phone     || '').includes(q) ||
+            (u.email     || '').toLowerCase().includes(q) ||
+            (u.id        || '').toLowerCase().includes(q)
         );
         if (type === 'admin')   filtered = filtered.filter(u => u.is_admin);
         if (type === 'blocked') filtered = filtered.filter(u => u.is_blocked);
+        if (type === 'avulso')  filtered = filtered.filter(u => u.account_type === 'avulso' || u.is_temp);
+        if (type === 'normal')  filtered = filtered.filter(u => (u.account_type === 'normal' || !u.account_type) && !u.is_temp);
         this._renderUsers(filtered);
     }
 
@@ -265,9 +273,10 @@ class AdminApp {
                         <td><span class="credit-badge">💎 ${u.credits ?? 0}</span></td>
                         <td>${u.total_documents ?? 0}</td>
                         <td>
-                            ${u.is_temp    ? '<span class="badge badge-orange">⏳ Avulso</span>' : ''}
+                            ${(u.account_type === 'avulso' || u.is_temp) ? '<span class="badge badge-orange">⏳ Avulso</span>' : '<span class="badge badge-blue" style="font-size:10px;">👤 Normal</span>'}
                             ${u.is_admin ? '<span class="badge badge-purple">⭐ Admin</span>' : ''}
                             ${u.is_blocked ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
+                            ${u.credits_expires_at && new Date(u.credits_expires_at) < new Date() ? '<span class="badge badge-red" style="font-size:10px;">⌛ Expirado</span>' : ''}
                         </td>
                         <td style="font-size:.8rem">${new Date(u.created_at).toLocaleDateString('pt-MZ')}</td>
                         <td>
@@ -301,7 +310,7 @@ class AdminApp {
             <div class="user-card-meta">
                 <span class="credit-badge">💎 ${u.credits ?? 0} cr</span>
                 <span class="badge badge-gray">📄 ${u.total_documents ?? 0} docs</span>
-                ${u.is_temp     ? '<span class="badge badge-orange">⏳ Avulso</span>' : ''}
+                ${(u.account_type === 'avulso' || u.is_temp) ? '<span class="badge badge-orange">⏳ Avulso</span>' : '<span class="badge badge-blue" style="font-size:10px;">👤 Normal</span>'}
                 ${u.is_admin    ? '<span class="badge badge-purple">⭐ Admin</span>' : ''}
                 ${u.is_blocked  ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
             </div>
@@ -724,31 +733,7 @@ USING (EXISTS (
     }
 
     // ── CONFIGURAÇÕES ────────────────────────────────────────────────────
-    _loadSettings() {
-        const saved = JSON.parse(localStorage.getItem('mz_admin_settings') || '{}');
-        const e = id => document.getElementById(id);
-        if (saved.mpesaEnv && e('mpesaEnv')) e('mpesaEnv').value = saved.mpesaEnv;
-        if (e('pkgStarterCredits')) e('pkgStarterCredits').value = saved.starterCredits || 10;
-        if (e('pkgStarterPrice'))   e('pkgStarterPrice').value   = saved.starterPrice   || 150;
-        if (e('pkgBasicoCredits'))  e('pkgBasicoCredits').value  = saved.basicoCredits  || 25;
-        if (e('pkgBasicoPrice'))    e('pkgBasicoPrice').value    = saved.basicoPrice    || 350;
-        if (e('pkgProCredits'))     e('pkgProCredits').value     = saved.proCredits     || 60;
-        if (e('pkgProPrice'))       e('pkgProPrice').value       = saved.proPrice       || 750;
-    }
-    _savePricing() {
-        const v = id => parseInt(document.getElementById(id)?.value) || 0;
-        const s = JSON.parse(localStorage.getItem('mz_admin_settings') || '{}');
-        s.starterCredits = v('pkgStarterCredits'); s.starterPrice = v('pkgStarterPrice');
-        s.basicoCredits  = v('pkgBasicoCredits');  s.basicoPrice  = v('pkgBasicoPrice');
-        s.proCredits     = v('pkgProCredits');      s.proPrice     = v('pkgProPrice');
-        localStorage.setItem('mz_admin_settings', JSON.stringify(s));
-        this._notify('✅ Preços guardados localmente');
-    }
-    _saveSettings() {
-        const s = JSON.parse(localStorage.getItem('mz_admin_settings') || '{}');
-        s.mpesaEnv = document.getElementById('mpesaEnv')?.value || 'sandbox';
-        localStorage.setItem('mz_admin_settings', JSON.stringify(s));
-        this._notify('✅ Configuração M-Pesa guardada');
+    // _loadSettings, _savePricing, _saveSettings → replaced by async DB versions (v8.2)
     }
 
     // ── DIAGNÓSTICO ─────────────────────────────────────────────────────
@@ -1086,6 +1071,171 @@ USING (EXISTS (
         }
     }
 
-}
+
+    // ════════════════════════════════════════════════════════════════════
+    // SYSTEM SETTINGS (live from DB)
+    // ════════════════════════════════════════════════════════════════════
+
+    async _loadSettings() {
+        await Promise.all([
+            this._loadSystemSettings(),
+            this.loadAuditLog(),
+        ]);
+        // Existing pricing form submit (safe re-bind)
+        const pf = document.getElementById('pricingForm');
+        if (pf && !pf._bound) {
+            pf._bound = true;
+            pf.addEventListener('submit', async e => {
+                e.preventDefault();
+                await this._savePricingSettings();
+            });
+        }
+    }
+
+    async _loadSystemSettings() {
+        const loader = document.getElementById('systemSettingsLoader');
+        const form   = document.getElementById('systemSettingsForm');
+        if (!loader || !form) return;
+
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/settings', {
+                headers: { Authorization: 'Bearer ' + token }
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const { map } = await res.json();
+
+            // Populate fields
+            const set = (id, key) => {
+                const el = document.getElementById(id);
+                if (el && map[key] !== undefined) el.value = map[key];
+            };
+            set('cfg_site_name',               'site_name');
+            set('cfg_free_credits_normal',     'free_credits_normal');
+            set('cfg_free_credits_expiry_days','free_credits_expiry_days');
+            set('cfg_temp_credits',            'temp_credits');
+            set('cfg_temp_account_expiry_days','temp_account_expiry_days');
+            set('cfg_auto_delete_temp_hours',  'auto_delete_temp_hours');
+            set('cfg_whatsapp_support',        'whatsapp_support');
+
+            // Populate pricing fields too
+            set('pkgStarterCredits', 'pkg_starter_credits');
+            set('pkgStarterPrice',   'pkg_starter_price');
+            set('pkgBasicoCredits',  'pkg_basico_credits');
+            set('pkgBasicoPrice',    'pkg_basico_price');
+            set('pkgProCredits',     'pkg_pro_credits');
+            set('pkgProPrice',       'pkg_pro_price');
+            set('pkgEmpresaCredits', 'pkg_empresa_credits');
+            set('pkgEmpresaPrice',   'pkg_empresa_price');
+
+            loader.style.display = 'none';
+            form.style.display   = 'block';
+        } catch (err) {
+            loader.textContent = '⚠️ Erro ao carregar configurações: ' + err.message;
+            console.error('[Admin] _loadSystemSettings:', err);
+        }
+    }
+
+    async saveSystemSettings() {
+        const get = id => document.getElementById(id)?.value?.trim() || '';
+        const updates = {
+            site_name:               get('cfg_site_name'),
+            free_credits_normal:     get('cfg_free_credits_normal'),
+            free_credits_expiry_days:get('cfg_free_credits_expiry_days'),
+            temp_credits:            get('cfg_temp_credits'),
+            temp_account_expiry_days:get('cfg_temp_account_expiry_days'),
+            auto_delete_temp_hours:  get('cfg_auto_delete_temp_hours'),
+            whatsapp_support:        get('cfg_whatsapp_support'),
+        };
+        // Remove empty values
+        Object.keys(updates).forEach(k => { if (!updates[k]) delete updates[k]; });
+
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/settings', {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body:    JSON.stringify({ updates }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
+            this._notify('✅ Configurações guardadas com sucesso!', 'success');
+        } catch (err) {
+            this._notify('❌ ' + err.message, 'error');
+        }
+    }
+
+    async _savePricingSettings() {
+        const get = id => document.getElementById(id)?.value?.trim() || '';
+        const updates = {
+            pkg_starter_credits: get('pkgStarterCredits'),
+            pkg_starter_price:   get('pkgStarterPrice'),
+            pkg_basico_credits:  get('pkgBasicoCredits'),
+            pkg_basico_price:    get('pkgBasicoPrice'),
+            pkg_pro_credits:     get('pkgProCredits'),
+            pkg_pro_price:       get('pkgProPrice'),
+            pkg_empresa_credits: get('pkgEmpresaCredits'),
+            pkg_empresa_price:   get('pkgEmpresaPrice'),
+        };
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/settings', {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body:    JSON.stringify({ updates }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro');
+            this._notify('✅ Preços guardados!', 'success');
+        } catch (err) {
+            this._notify('❌ ' + err.message, 'error');
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // AUDIT LOG
+    // ════════════════════════════════════════════════════════════════════
+
+    async loadAuditLog() {
+        const container = document.getElementById('auditLogList');
+        if (!container) return;
+        container.innerHTML = '<div style="color:#94a3b8;font-size:.8rem;">A carregar…</div>';
+
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/audit-log?limit=30', {
+                headers: { Authorization: 'Bearer ' + token }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro');
+
+            const logs = data.logs || [];
+            if (!logs.length) {
+                container.innerHTML = '<div style="color:#94a3b8;font-size:.8rem;">Nenhuma acção registada ainda.</div>';
+                return;
+            }
+
+            container.innerHTML = logs.map(l => {
+                const date = new Date(l.created_at).toLocaleString('pt-MZ', {
+                    day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
+                });
+                const actionIcons = {
+                    update_settings: '⚙️', approve_payment: '✅', reject_payment: '❌',
+                    delete_user: '🗑️', block_user: '🔒', unblock_user: '🔓',
+                    add_credits: '➕', edit_credits: '✏️', update_pricing: '💰',
+                };
+                const icon = actionIcons[l.action] || '📋';
+                return '<div style="padding:6px 0;border-bottom:1px solid #f1f5f9;display:flex;gap:8px;align-items:flex-start;">'
+                    + '<span style="font-size:14px;">' + icon + '</span>'
+                    + '<div>'
+                    + '<div style="font-weight:600;font-size:.78rem;">' + (l.action || '—').replace(/_/g, ' ') + '</div>'
+                    + '<div style="color:#94a3b8;font-size:.72rem;">' + date + (l.target_type ? ' · ' + l.target_type : '') + '</div>'
+                    + '</div>'
+                    + '</div>';
+            }).join('');
+        } catch (err) {
+            container.innerHTML = '<div style="color:#ef4444;font-size:.8rem;">⚠️ ' + err.message + '</div>';
+        }
+    }
 
 window.adminApp = new AdminApp();

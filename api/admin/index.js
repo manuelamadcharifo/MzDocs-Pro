@@ -39,6 +39,8 @@ module.exports = async function handler(req, res) {
     case 'fix-profiles':    return handleFixProfiles(req, res);
     case 'stats':           return handleStats(req, res);
     case 'transactions':    return handleTransactions(req, res);
+    case 'settings':        return handleSettings(req, res);
+    case 'audit-log':       return handleAuditLog(req, res);
     default:
       return res.status(404).json({ error: `Acção desconhecida: "${action}". Use: confirm-payment, confirm-avulso, fix-profiles, stats, transactions` });
   }
@@ -314,42 +316,114 @@ async function handleStats(req, res) {
     const supabase = await getAdminClient();
     const auth = await validateAdmin(supabase, token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
-    const now = new Date();
+
+    const now        = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const weekStart  = new Date(now); weekStart.setDate(weekStart.getDate() - 7);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // ── Revenue helpers ─────────────────────────────────────────────────
     const rev = async (from) => {
-      const { data } = await supabase.from('transactions').select('amount').eq('status', 'completed').gte('created_at', from);
+      const { data } = await supabase.from('transactions').select('amount')
+        .eq('status', 'completed').gte('created_at', from);
       return data?.reduce((s, t) => s + (t.amount || 0), 0) || 0;
     };
-    const cnt = async (table, from) => {
-      const { count } = await supabase.from(table).select('*', { count: 'exact', head: true }).gte('created_at', from);
-      return count || 0;
-    };
-    const [revenueToday, revenueWeek, revenueMonth] = await Promise.all([rev(todayStart), rev(weekStart.toISOString()), rev(monthStart.toISOString())]);
-    const [docsToday, docsWeek, docsMonth]   = await Promise.all([cnt('documents', todayStart), cnt('documents', weekStart.toISOString()), cnt('documents', monthStart.toISOString())]);
-    const [usersToday, usersWeek, usersMonth] = await Promise.all([cnt('profiles', todayStart), cnt('profiles', weekStart.toISOString()), cnt('profiles', monthStart.toISOString())]);
-    const { count: usersTotal } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-    const { count: pending }    = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+
+    // ── Parallel KPI queries ─────────────────────────────────────────────
+    const [
+      revenueToday, revenueWeek, revenueMonth,
+
+      // Users by account_type
+      { count: totalNormal },
+      { count: totalAvulso },
+      { count: newUsers24h },
+
+      // Documents (credit_usage_log)
+      { count: docsToday },
+      { count: docsWeek },
+      { count: docsMonth },
+      { count: docsTotal },
+
+      // Pending payments
+      { count: pending },
+
+      // Blog
+      { count: publishedPosts },
+      { count: draftPosts },
+
+    ] = await Promise.all([
+      rev(todayStart), rev(weekStart.toISOString()), rev(monthStart.toISOString()),
+
+      supabase.from('profiles').select('*', { count: 'exact', head: true })
+        .or('account_type.eq.normal,account_type.is.null'),
+      supabase.from('profiles').select('*', { count: 'exact', head: true })
+        .eq('account_type', 'avulso'),
+      supabase.from('profiles').select('*', { count: 'exact', head: true })
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+
+      // Try credit_usage_log first, fall back to documents table
+      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true })
+        .gte('used_at', todayStart),
+      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true })
+        .gte('used_at', weekStart.toISOString()),
+      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true })
+        .gte('used_at', monthStart.toISOString()),
+      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true }),
+
+      supabase.from('transactions').select('*', { count: 'exact', head: true })
+        .eq('status', 'pending'),
+
+      supabase.from('blog_posts').select('*', { count: 'exact', head: true })
+        .eq('status', 'published'),
+      supabase.from('blog_posts').select('*', { count: 'exact', head: true })
+        .eq('status', 'draft'),
+    ]);
+
+    // ── 7-day chart data ─────────────────────────────────────────────────
     const dayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const chartLabels = [], chartRevenue = [], chartDocs = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      chartLabels.push(dayLabels[d.getDay()]);
+      const d        = new Date(); d.setDate(d.getDate() - i);
       const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
       const dayEnd   = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59).toISOString();
-      const { data: dr } = await supabase.from('transactions').select('amount').eq('status', 'completed').gte('created_at', dayStart).lte('created_at', dayEnd);
+      chartLabels.push(dayLabels[d.getDay()]);
+      const { data: dr } = await supabase.from('transactions').select('amount')
+        .eq('status', 'completed').gte('created_at', dayStart).lte('created_at', dayEnd);
       chartRevenue.push(dr?.reduce((s, t) => s + (t.amount || 0), 0) || 0);
-      const { count: dd } = await supabase.from('documents').select('*', { count: 'exact', head: true }).gte('created_at', dayStart).lte('created_at', dayEnd);
+      const { count: dd } = await supabase.from('credit_usage_log')
+        .select('*', { count: 'exact', head: true })
+        .gte('used_at', dayStart).lte('used_at', dayEnd);
       chartDocs.push(dd || 0);
     }
+
+    // ── Document type breakdown (top 6) ─────────────────────────────────
+    const { data: typesRaw } = await supabase.from('credit_usage_log')
+      .select('document_type')
+      .gte('used_at', monthStart.toISOString());
+    const typeCounts = {};
+    (typesRaw || []).forEach(r => {
+      typeCounts[r.document_type] = (typeCounts[r.document_type] || 0) + 1;
+    });
+    const topTypes = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1]).slice(0, 6);
+
     return res.status(200).json({
       success: true,
-      revenue:   { today: revenueToday, week: revenueWeek, month: revenueMonth },
-      documents: { today: docsToday,    week: docsWeek,    month: docsMonth    },
-      users:     { today: usersToday,   week: usersWeek,   month: usersMonth, total: usersTotal || 0 },
-      pending: pending || 0,
-      chartData: { labels: chartLabels, revenue: chartRevenue, documents: chartDocs },
+      revenue:   { today: revenueToday,  week: revenueWeek,  month: revenueMonth  },
+      documents: { today: docsToday || 0, week: docsWeek || 0, month: docsMonth || 0, total: docsTotal || 0 },
+      users: {
+        total:      (totalNormal || 0) + (totalAvulso || 0),
+        normal:     totalNormal  || 0,
+        avulso:     totalAvulso  || 0,
+        new_24h:    newUsers24h  || 0,
+      },
+      pending:       pending        || 0,
+      blog: {
+        published:   publishedPosts || 0,
+        drafts:      draftPosts     || 0,
+      },
+      topDocTypes:   topTypes,
+      chartData:     { labels: chartLabels, revenue: chartRevenue, documents: chartDocs },
     });
   } catch (err) {
     console.error('[admin/stats]', err);
@@ -389,3 +463,82 @@ async function handleTransactions(req, res) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS — GET all / PUT one key
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleSettings(req, res) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    if (req.method === 'GET') {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('key, value, description, updated_at')
+        .order('key');
+      if (error) throw error;
+      // Convert array to key-value map for convenience
+      const map = {};
+      (data || []).forEach(r => { map[r.key] = r.value; });
+      return res.status(200).json({ success: true, settings: data || [], map });
+    }
+
+    if (req.method === 'POST' || req.method === 'PUT') {
+      const { updates } = req.body; // { key: value, ... }
+      if (!updates || typeof updates !== 'object') {
+        return res.status(400).json({ error: 'updates object required' });
+      }
+      const now = new Date().toISOString();
+      const rows = Object.entries(updates).map(([key, value]) => ({
+        key, value: String(value), updated_by: auth.user.id, updated_at: now,
+      }));
+      const { error } = await supabase
+        .from('system_settings')
+        .upsert(rows, { onConflict: 'key' });
+      if (error) throw error;
+
+      // Log the action
+      await supabase.from('admin_logs').insert({
+        admin_id:    auth.user.id,
+        action:      'update_settings',
+        target_type: 'system_settings',
+        details:     updates,
+        created_at:  now,
+      }).catch(() => {});
+
+      return res.status(200).json({ success: true, updated: rows.length });
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (err) {
+    console.error('[admin/settings]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOG — GET recent entries
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleAuditLog(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    const limit = Math.min(parseInt(req.query?.limit || '50', 10), 200);
+    const { data, error } = await supabase
+      .from('admin_logs')
+      .select('id, action, target_type, target_id, details, created_at, admin_id')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return res.status(200).json({ success: true, logs: data || [] });
+  } catch (err) {
+    console.error('[admin/audit-log]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}

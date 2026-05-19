@@ -63,6 +63,18 @@
       "destination": "/api/page-view"
     },
     {
+      "source": "/api/admin/stats",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/admin/settings",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/admin/audit-log",
+      "destination": "/api/admin/index"
+    },
+    {
       "source": "/api/admin/:action",
       "destination": "/api/admin/index"
     },

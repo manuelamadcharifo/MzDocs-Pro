@@ -75,12 +75,14 @@
     <!-- ── DASHBOARD ─────────────────────────────────────────── -->
     <section id="section-dashboard" class="admin-section active">
 
+      <!-- Row 1: Revenue KPIs -->
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-icon bg-blue">👥</div>
           <div class="stat-body">
             <div class="stat-value" id="statTotalUsers">—</div>
             <div class="stat-label">Total Utilizadores</div>
+            <div class="stat-sub" id="statUserSplit" style="font-size:11px;color:#94a3b8;margin-top:2px;"></div>
           </div>
         </div>
         <div class="stat-card">
@@ -88,13 +90,14 @@
           <div class="stat-body">
             <div class="stat-value" id="statTotalDocs">—</div>
             <div class="stat-label">Documentos Gerados</div>
+            <div class="stat-sub" id="statDocsToday" style="font-size:11px;color:#94a3b8;margin-top:2px;"></div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon bg-yellow">💰</div>
           <div class="stat-body">
             <div class="stat-value" id="statRevenue">—</div>
-            <div class="stat-label">Receita Confirmada</div>
+            <div class="stat-label">Receita Confirmada (30d)</div>
           </div>
         </div>
         <div class="stat-card alert">
@@ -107,13 +110,46 @@
         </div>
       </div>
 
+      <!-- Row 2: Secondary KPIs -->
+      <div class="stats-grid" style="margin-top:12px;">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#F0FDF4;">🆕</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statNewUsers24h">—</div>
+            <div class="stat-label">Novos Utilizadores (24h)</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#FEF9C3;">👤</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statAvulso">—</div>
+            <div class="stat-label">Contas Avulso Activas</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#EFF6FF;">📝</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statBlogPublished">—</div>
+            <div class="stat-label">Artigos Publicados</div>
+            <button class="stat-action" onclick="adminApp.nav('blog')">Gerir →</button>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#F5F3FF;">📊</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statDocsWeek">—</div>
+            <div class="stat-label">Documentos (7 dias)</div>
+          </div>
+        </div>
+      </div>
+
       <div class="charts-row">
         <div class="chart-card">
-          <h3 class="chart-title">📈 Receita — Últimos 7 Dias</h3>
+          <h3 class="chart-title">📈 Receita — Últimos 7 Dias (MZN)</h3>
           <canvas id="revenueChart"></canvas>
         </div>
         <div class="chart-card">
-          <h3 class="chart-title">📊 Documentos por Tipo</h3>
+          <h3 class="chart-title">📊 Documentos por Dia</h3>
           <canvas id="documentsChart"></canvas>
         </div>
       </div>
@@ -131,9 +167,10 @@
         <div class="toolbar-right">
           <select id="userTypeFilter" class="filter-select" onchange="adminApp.filterUsers()">
             <option value="all">Todos</option>
-            <option value="admin">Admins</option>
-            <option value="blocked">Bloqueados</option>
-            <option value="temp">⏳ Temporários</option>
+            <option value="normal">👤 Normais</option>
+            <option value="avulso">⏳ Avulso</option>
+            <option value="admin">⭐ Admins</option>
+            <option value="blocked">🚫 Bloqueados</option>
           </select>
           <button class="btn-primary" onclick="adminApp.refresh()">🔄</button>
           <button class="btn-success" onclick="adminApp.createAvulsoModal()" style="background:#009A44;color:#fff;border:none;border-radius:8px;padding:.45rem .9rem;font-size:.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.3rem">➕ Avulso</button>
@@ -353,6 +390,45 @@
     <!-- ── CONFIGURAÇÕES ──────────────────────────────────────── -->
     <section id="section-settings" class="admin-section">
       <div class="settings-grid">
+
+        <!-- Live system settings from DB -->
+        <div class="settings-card">
+          <h3>⚙️ Configurações do Sistema</h3>
+          <div id="systemSettingsLoader" style="color:#94a3b8;font-size:.85rem;padding:8px 0;">A carregar…</div>
+          <form id="systemSettingsForm" style="display:none;">
+            <div class="form-row">
+              <label>Nome do Site</label>
+              <input type="text" id="cfg_site_name" placeholder="MzDocs Pro"/>
+            </div>
+            <div class="form-row">
+              <label>Créditos Grátis (conta normal)</label>
+              <input type="number" id="cfg_free_credits_normal" min="0" max="10"/>
+            </div>
+            <div class="form-row">
+              <label>Validade créditos grátis (dias)</label>
+              <input type="number" id="cfg_free_credits_expiry_days" min="1"/>
+            </div>
+            <div class="form-row">
+              <label>Créditos conta Avulso</label>
+              <input type="number" id="cfg_temp_credits" min="1"/>
+            </div>
+            <div class="form-row">
+              <label>Validade conta Avulso (dias)</label>
+              <input type="number" id="cfg_temp_account_expiry_days" min="1"/>
+            </div>
+            <div class="form-row">
+              <label>Auto-delete Avulso após (horas)</label>
+              <input type="number" id="cfg_auto_delete_temp_hours" min="1"/>
+            </div>
+            <div class="form-row">
+              <label>WhatsApp Suporte</label>
+              <input type="text" id="cfg_whatsapp_support" placeholder="+258858695506"/>
+            </div>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem"
+              onclick="adminApp.saveSystemSettings()">💾 Guardar Configurações</button>
+          </form>
+        </div>
+
         <div class="settings-card">
           <h3>📦 Preços dos Pacotes</h3>
           <form id="pricingForm">
@@ -391,6 +467,7 @@
             <button type="submit" class="btn-primary" style="width:100%;margin-top:.75rem">💾 Guardar Preços</button>
           </form>
         </div>
+
         <div class="settings-card">
           <h3>💳 M-Pesa</h3>
           <form id="mpesaConfigForm">
@@ -408,12 +485,24 @@
             <button type="submit" class="btn-primary" style="width:100%;margin-top:.75rem">💾 Guardar M-Pesa</button>
           </form>
         </div>
+
+        <div class="settings-card">
+          <h3>📋 Registo de Auditoria</h3>
+          <p style="font-size:.85rem;color:#64748b;margin-bottom:12px;">Últimas acções administrativas</p>
+          <div id="auditLogList" style="font-size:.8rem;max-height:260px;overflow-y:auto;">
+            <div style="color:#94a3b8;">A carregar…</div>
+          </div>
+          <button class="btn-ghost" style="margin-top:10px;font-size:.8rem;width:100%;"
+            onclick="adminApp.loadAuditLog()">🔄 Actualizar</button>
+        </div>
+
         <div class="settings-card danger-card">
           <h3>⚠️ Diagnóstico</h3>
           <p style="font-size:.85rem;color:#64748b;margin-bottom:1rem">Utilizadores sem telemóvel gravado na BD</p>
           <button class="btn-danger-outline" onclick="adminApp.diagnoseMissingPhones()">🔍 Ver perfis sem phone</button>
           <button class="btn-danger-outline" style="margin-top:.5rem" onclick="adminApp.fixMissingPhones()">🔧 Reparar automaticamente</button>
         </div>
+
       </div>
     </section>
 
