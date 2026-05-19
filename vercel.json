@@ -38,29 +38,21 @@
     "api/admin/generate-page.js": {
       "maxDuration": 60
     },
-    "api/sitemap.xml.js": {
+    "api/config.js": {
       "maxDuration": 10
     },
-    "api/page-view.js": {
-      "maxDuration": 5
+    "api/misc.js": {
+      "maxDuration": 10
     }
   },
   "rewrites": [
     {
-      "source": "/api/admin/pages",
-      "destination": "/api/admin/pages"
-    },
-    {
-      "source": "/api/admin/generate-page",
-      "destination": "/api/admin/generate-page"
-    },
-    {
       "source": "/sitemap.xml",
-      "destination": "/api/sitemap.xml"
+      "destination": "/api/misc/sitemap.xml"
     },
     {
       "source": "/api/page-view",
-      "destination": "/api/page-view"
+      "destination": "/api/misc/page-view"
     },
     {
       "source": "/api/admin/stats",
@@ -81,10 +73,6 @@
     {
       "source": "/api/auth/:action",
       "destination": "/api/auth/index"
-    },
-    {
-      "source": "/sw.js",
-      "destination": "/sw.js"
     },
     {
       "source": "/(.*)",
