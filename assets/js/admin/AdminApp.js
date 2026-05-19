@@ -734,7 +734,6 @@ USING (EXISTS (
 
     // ── CONFIGURAÇÕES ────────────────────────────────────────────────────
     // _loadSettings, _savePricing, _saveSettings → replaced by async DB versions (v8.2)
-    }
 
     // ── DIAGNÓSTICO ─────────────────────────────────────────────────────
     async diagnoseMissingPhones() {
@@ -1236,6 +1235,7 @@ USING (EXISTS (
         } catch (err) {
             container.innerHTML = '<div style="color:#ef4444;font-size:.8rem;">⚠️ ' + err.message + '</div>';
         }
+    }
     }
 
 window.adminApp = new AdminApp();

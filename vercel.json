@@ -174,8 +174,22 @@
           "value": "index, follow"
         }
       ]
+    },
+    {
+      "source": "/pages/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=86400, stale-while-revalidate=604800"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "index, follow"
+        }
+      ]
     }
   ],
   "buildCommand": "node scripts/inject-version.js",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "cleanUrls": true
 }

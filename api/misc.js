@@ -1,10 +1,4 @@
 // api/misc.js — router para funções auxiliares (page-view + sitemap)
-// Agrupa 2 funções em 1 para caber no limite do Vercel Hobby (12 funções).
-//
-// Rotas:
-//   POST /api/misc/page-view   → incrementa views de uma página do blog
-//   GET  /api/misc/sitemap.xml → gera sitemap dinâmico (também mapeado em /sitemap.xml)
-
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 
@@ -16,11 +10,10 @@ const STATIC_PAGES = [
 ];
 
 module.exports = async function handler(req, res) {
-  const urlPath    = (req.url || '').split('?')[0];
-  const pathParts  = urlPath.split('/').filter(Boolean);
+  const urlPath     = (req.url || '').split('?')[0];
+  const pathParts   = urlPath.split('/').filter(Boolean);
   const lastSegment = pathParts[pathParts.length - 1];
 
-  // Determinar acção: /api/misc/page-view  ou  /api/misc/sitemap.xml
   const action = (lastSegment && lastSegment !== 'misc')
     ? lastSegment
     : (req.query?.action || '');
@@ -31,7 +24,6 @@ module.exports = async function handler(req, res) {
   return res.status(404).json({ error: `Rota desconhecida: "${action}". Use: page-view, sitemap.xml` });
 };
 
-// ─── PAGE-VIEW ───────────────────────────────────────────────────────────────
 async function handlePageView(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -58,7 +50,6 @@ async function handlePageView(req, res) {
   }
 }
 
-// ─── SITEMAP ─────────────────────────────────────────────────────────────────
 async function handleSitemap(req, res) {
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
@@ -71,7 +62,6 @@ async function handleSitemap(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { autoRefreshToken: false, persistSession: false }, realtime: { transport: ws } }
     );
-
     const { data } = await supabaseAdmin
       .from('blog_pages')
       .select('slug, updated_at')
@@ -84,9 +74,7 @@ async function handleSitemap(req, res) {
       changefreq: 'monthly',
       lastmod:    p.updated_at ? p.updated_at.slice(0, 10) : undefined,
     }));
-  } catch (_) {
-    // Falha silenciosa — devolve sitemap só com páginas estáticas
-  }
+  } catch (_) {}
 
   const allPages = [...STATIC_PAGES, ...dynamicPages];
 

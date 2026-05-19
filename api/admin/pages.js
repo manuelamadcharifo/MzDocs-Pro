@@ -1,7 +1,8 @@
 // api/admin/pages.js — v8.1
 // CRUD de páginas do blog. Apenas administradores autenticados.
 // Métodos: GET (lista/detalhe) · POST (criar) · PUT (actualizar) · DELETE (eliminar)
-// Após criar/actualizar uma página publicada, gera o ficheiro HTML estático em /pages/.
+// Após criar/actualizar uma página publicada, gera automaticamente
+// uma página estática SEO-friendly no GitHub (/pages/slug/index.html).
 
 const { createClient } = require('@supabase/supabase-js');
 const ws  = require('ws');
@@ -75,6 +76,10 @@ module.exports = async function handler(req, res) {
         throw error;
       }
 
+      if (published) {
+        await generateStaticPage(data);
+      }
+
       return res.status(201).json({ success: true, page: data });
     }
 
@@ -94,6 +99,10 @@ module.exports = async function handler(req, res) {
       const { data, error } = await supabaseAdmin
         .from('blog_pages').update(updates).eq('id', id).select().single();
       if (error) throw error;
+
+      if (data?.published) {
+        await generateStaticPage(data);
+      }
 
       return res.status(200).json({ success: true, page: data });
     }
@@ -130,4 +139,79 @@ function slugify(str) {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .slice(0, 80);
+}
+
+
+async function generateStaticPage(page) {
+  const owner = process.env.GITHUB_OWNER;
+  const repo = process.env.GITHUB_REPO;
+  const token = process.env.GITHUB_TOKEN;
+
+  if (!owner || !repo || !token) {
+    console.warn('[generateStaticPage] GitHub env vars não configuradas');
+    return;
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(page.title)}</title>
+<meta name="description" content="${escapeHtml(page.meta_description || '')}">
+<link rel="canonical" href="${SITE_URL}/pages/${page.slug}">
+</head>
+<body>
+<main style="max-width:900px;margin:auto;padding:20px;font-family:Arial,sans-serif;line-height:1.7;">
+<h1>${page.title}</h1>
+${page.content_html}
+</main>
+</body>
+</html>`;
+
+  const githubPath = `pages/${page.slug}/index.html`;
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${githubPath}`;
+
+  let sha = undefined;
+
+  try {
+    const existing = await fetch(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+      },
+    });
+
+    if (existing.ok) {
+      const existingData = await existing.json();
+      sha = existingData.sha;
+    }
+  } catch (_) {}
+
+  const response = await fetch(apiUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: `Gerar página estática: ${page.slug}`,
+      content: Buffer.from(html).toString('base64'),
+      sha,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Falha ao publicar página estática: ${errorText}`);
+  }
+}
+
+function escapeHtml(str = '') {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
