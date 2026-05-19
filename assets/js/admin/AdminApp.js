@@ -1235,7 +1235,7 @@ USING (EXISTS (
         } catch (err) {
             container.innerHTML = '<div style="color:#ef4444;font-size:.8rem;">⚠️ ' + err.message + '</div>';
         }
-    }}
+    }
     }
 
 window.adminApp = new AdminApp();
