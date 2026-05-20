@@ -273,77 +273,145 @@ INSTRUÇÃO CRÍTICA PARA AS REFERÊNCIAS:
 `;
       },
 
-      cv: () =>
-        `Você é especialista em recursos humanos para o mercado moçambicano. Crie um CURRÍCULO VITAE PROFISSIONAL completo em Markdown.
+      cv: () => {
+        const isPrimeiroEmprego = (data.perfilCV || '').includes('Primeiro Emprego');
+        const temExperiencia    = !!(data.experiencia && data.experiencia.trim());
+        return `Você é especialista sénior em recursos humanos para o mercado moçambicano. Crie um CURRÍCULO VITAE PROFISSIONAL completo e pronto a usar em Markdown.
+
+PERFIL DO CANDIDATO: ${data.perfilCV || 'Com Experiência Profissional'}
 
 DADOS:
 - Nome: ${data.nome} | Cargo pretendido: ${data.cargo}
-- Nascimento: ${data.nascimento || '[a completar]'} | Telefone: ${data.contacto || '[a completar]'}
-- Email: ${data.email || '[a completar]'}
+- Nascimento: ${data.nascimento || '[a completar]'} | Telefone: ${data.contacto}
+- Email: ${data.email || '[a completar]'} | Localização: ${data.localizacao || 'Moçambique'}
+- Línguas: ${data.linguas || 'Português (nativo)'}
 - Formação: ${data.formacao}
-- Experiência: ${data.experiencia || 'Recém-formado'}
-- Habilidades: ${data.habilidades || '[a completar]'}
+- Experiência: ${data.experiencia || 'Sem experiência formal prévia'}
+- Habilidades técnicas: ${data.habilidades || '[a completar]'}
+- Realização de destaque: ${data.exemplo || '[nenhuma fornecida]'}
 - Objectivo: ${data.objectivo || '[a completar]'}${ocrBlock}
 
 REGRAS OBRIGATÓRIAS:
-1. Use VERBOS DE ACÇÃO no passado com resultados mensuráveis: "Gerenciei equipa de 5 pessoas", "Reduzi custos em 15%"
-2. NUNCA: "profissional dedicado", "trabalho em equipa", "orientado para resultados" sem exemplo concreto
+1. Use VERBOS DE ACÇÃO no passado com resultados mensuráveis — use os dados de "Realização de destaque" como base real, não invente
+2. NUNCA: "profissional dedicado", "trabalho em equipa" sem contexto específico
 3. Máximo 2 páginas A4. NUNCA inclua foto, estado civil, religião, filiação política
 4. Formação: do mais recente para o mais antigo
+5. ${isPrimeiroEmprego ? 'PERFIL PRIMEIRO EMPREGO: enfatize formação, voluntariado, estágios, actividades extra-curriculares e potencial. Use secção "Experiências de Formação / Estágios / Voluntariado"' : 'PERFIL EXPERIENTE: cada cargo com bullets de realizações com impacto mensurável'}
+6. Línguas: inclua SEMPRE a secção de línguas com os níveis fornecidos
+7. A secção "Realização de destaque" deve ser usada literalmente com os factos concretos fornecidos
 
 ESTRUTURA OBRIGATÓRIA:
 
 # ${data.nome}
 **${data.cargo}**
-📞 ${data.contacto || '[telefone]'} | ✉️ ${data.email || '[email]'} | 📍 Moçambique
+📞 ${data.contacto} | ✉️ ${data.email || '[email]'} | 📍 ${data.localizacao || 'Moçambique'}
 
 ---
 
 ## Objectivo Profissional
-[2-3 frases específicas: competência principal + valor que oferece + tipo de organização pretendida]
+[2-3 frases específicas baseadas em "${data.objectivo || data.cargo}": competência principal + valor concreto que oferece + tipo de organização pretendida]
 
 ---
 
 ## Formação Académica
-[**Grau — Curso** | Instituição | Ano de conclusão — do mais recente para o mais antigo]
+[Formate cada entrada: **Grau — Curso** | Instituição | Ano — do mais recente para o mais antigo]
 
 ---
 
-## Experiência Profissional
-[**Cargo** | Empresa | Período]
-[- Acção específica com resultado mensurável]
-[- Acção específica com resultado mensurável]
+## ${isPrimeiroEmprego && !temExperiencia ? 'Experiências de Formação / Estágios / Voluntariado' : 'Experiência Profissional'}
+[Para cada cargo/experiência: **Cargo** | Organização | Período — seguido de 2-3 bullets com acções e resultados concretos]
+
+---
+
+## Realização de Destaque
+[Expanda e estruture o seguinte exemplo fornecido pelo candidato: "${data.exemplo || 'a preencher'}"]
 
 ---
 
 ## Competências Técnicas
-[Informática | Línguas (nível) | Ferramentas específicas]
+${data.habilidades || '[ferramentas, software, equipamentos]'}
+
+---
+
+## Línguas
+[Formate: Língua — Nível (Nativo / Fluente / Avançado / Intermédio / Básico)]
 
 ---
 
 ## Referências
-Disponíveis mediante solicitação.`,
+Disponíveis mediante solicitação.`;
+      },
+      carta: () => {
+        const tipo = data.tipo || 'Pedido Formal';
+        const isReclamacao   = tipo === 'Reclamação';
+        const isDemissao     = tipo === 'Demissão';
+        const isCandidatura  = tipo === 'Candidatura a Emprego' || tipo === 'Carta de Motivação';
+        const isComercial    = tipo === 'Apresentação Comercial';
 
-      carta: () =>
-        `Você é especialista em comunicação formal moçambicana. Redija uma CARTA FORMAL COMPLETA do tipo "${data.tipo}".
+        const blocoCondicional = isReclamacao
+          ? `\n- N.º de referência / encomenda: ${data.refReclamacao || '[indicar referência]'}`
+          : isDemissao
+          ? `\n- Data de saída pretendida: ${data.dataSaida || '[a indicar]'}\n- Aviso prévio: ${data.avisoPrevio || 'Sim (30 dias)'}`
+          : '';
+
+        const estruturaPorTipo = isCandidatura
+          ? `[§1 — Apresentação directa: quem é, para que vaga/função se candidata e como soube da oportunidade. 2-3 linhas sem "venho por este meio"]
+
+[§2 — Correspondência perfil/vaga: mostre como a sua formação (${data.formacao || 'não indicada'}) e experiência se encaixam directamente nos requisitos. 4-5 linhas com exemplos concretos]
+
+[§3 — Motivação genuína: por que esta empresa/organização especificamente. 3-4 linhas]
+
+[§4 — Chamada à acção: solicita entrevista com disponibilidade concreta]`
+          : isReclamacao
+          ? `[§1 — Identificação do problema: descreva de forma factual o que aconteceu, quando, e qual o impacto. Mencione a ref. ${data.refReclamacao || '[referência]'}. 3-4 linhas]
+
+[§2 — Evidências e tentativas anteriores: o que já foi comunicado ou tentado resolver, sem resultado. 3-4 linhas]
+
+[§3 — Pedido específico e prazo: o que pretende exactamente (reembolso / substituição / explicação) e em que prazo razoável. 2-3 linhas]
+
+[§4 — Aviso: consequências caso não haja resposta (reclamação no Livro de Reclamações / entidade reguladora)]`
+          : isDemissao
+          ? `[§1 — Comunicação directa da demissão: data de entrada na empresa, cargo, e data de saída pretendida (${data.dataSaida || '[data]'}). ${data.avisoPrevio ? 'Mencione o aviso prévio: ' + data.avisoPrevio : ''}. 2-3 linhas]
+
+[§2 — Motivação (opcional e diplomática): razão genérica sem queimar pontes. 2-3 linhas]
+
+[§3 — Comprometimento com transição: disponibilidade para formar substituto, entregar trabalhos pendentes, garantir continuidade. 3-4 linhas]
+
+[§4 — Agradecimento genuíno pela oportunidade e experiência]`
+          : isComercial
+          ? `[§1 — Apresentação da empresa/serviço: o que oferece, para quem, e por que é relevante para o destinatário específico. 3-4 linhas]
+
+[§2 — Proposta de valor concreta: dados, resultados, casos de sucesso. 4-5 linhas]
+
+[§3 — Oferta específica e próximo passo: reunião, demonstração, proposta formal. 2-3 linhas]`
+          : `[§1 — Apresentação e propósito directo: 2-3 linhas sem "venho por este meio"]
+
+[§2 — Desenvolvimento do ponto principal: factos e fundamentos. 4-5 linhas]
+
+[§3 — Pontos complementares se existirem. 3-4 linhas]
+
+[§4 — Pedido claro com prazo: "Solicito a V.ª Ex.ª que... até [data]"]`;
+
+        return `Você é especialista em comunicação formal moçambicana. Redija uma CARTA FORMAL COMPLETA do tipo "${tipo}" — adapte RIGOROSAMENTE o tom, estrutura e linguagem a este tipo específico.
 
 DADOS:
+- Tipo: ${tipo}
 - Remetente: ${data.remetenteNome}, ${data.remetenteLocal || 'Maputo'}
 - Destinatário: ${data.destinatarioNome} — ${data.destinatarioEnti}
 - Assunto: ${data.assunto}
-- Pontos a abordar: ${data.pontos}${ocrBlock}
+- O que comunicar: ${data.pontos}${blocoCondicional}${ocrBlock}
 
 REGRAS:
-1. NUNCA use "Venho por este meio" — comece directamente com a apresentação
-2. Máximo 1 página A4. Tom adaptado ao tipo "${data.tipo}"
+1. NUNCA use "Venho por este meio" — comece directamente
+2. Máximo 1 página A4. Tom 100% adaptado ao tipo "${tipo}"
 3. Cada parágrafo: UMA única ideia, 3-5 linhas
 4. Data por extenso: ${data.remetenteLocal || 'Maputo'}, [dia] de [mês] de [ano]
+5. Para Reclamação: tom assertivo mas respeitoso, nunca agressivo
+6. Para Demissão: tom positivo, agradecido, profissional — nunca crítico
 
 ESTRUTURA OBRIGATÓRIA:
 
 **${data.remetenteNome}**
-[Cargo/Endereço se aplicável] | ${data.contacto || '[contacto]'}
-
 ${data.remetenteLocal || 'Maputo'}, [data por extenso]
 
 Exmo(a). Sr(a). ${data.destinatarioNome}
@@ -351,68 +419,72 @@ ${data.destinatarioEnti}
 
 **Assunto: ${data.assunto}**
 
-[Saudação adequada],
+[Saudação adequada ao tipo "${tipo}"],
 
-[§1 — Apresentação e propósito directo: 2-3 linhas sem "venho por este meio"]
-
-[§2 — Desenvolvimento do ponto principal de "${data.pontos}": factos e fundamentos. 4-5 linhas]
-
-[§3 — Pontos complementares se existirem. 3-4 linhas]
-
-[§4 — Pedido claro com prazo: "Solicito a V.ª Ex.ª que... até [data]"]
+${estruturaPorTipo}
 
 Com os melhores cumprimentos,
 
 _______________________________
-**${data.remetenteNome}**`,
+**${data.remetenteNome}**`;
+      },
+      orcamento: () => {
+        const anoAtual = new Date().getFullYear();
+        const temInfra = data.infraestrutura && !data.infraestrutura.includes('Não aplicável');
+        return `Você é engenheiro civil experiente com 15 anos de obra em Moçambique. Elabore um ORÇAMENTO DE CONSTRUÇÃO DETALHADO em Markdown.
 
-      orcamento: () =>
-        `Você é engenheiro civil experiente em Moçambique. Elabore um ORÇAMENTO DE CONSTRUÇÃO DETALHADO em Markdown.
-
-DADOS:
-- Obra: ${data.tipoObra}
-- Área: ${data.area || 'a calcular'} m² | Local: ${data.local}
-- Acabamento: ${data.acabamento || 'Médio/Padrão'}
+DADOS DA OBRA:
+- Tipo de obra: ${data.tipoObra}
+- Área: ${data.area || 'a calcular'} m² | N.º de pisos: ${data.nPisos || 'Térreo (R/C)'}
+- Localização: ${data.local}
+- Acabamento: ${data.acabamento || 'Médio / Padrão'}
 - Fase: ${data.fase}
-- Prazo: ${data.prazo || 60} dias
+- Cobertura: ${data.cobertura || 'Laje de betão'}
+- Infraestrutura: ${data.infraestrutura || 'a verificar'}
+- Prazo desejado: ${data.prazo || 60} dias
 - Detalhes: ${data.extra || 'padrão'}${ocrBlock}
 
-REGRAS:
-1. Preços de mercado moçambicano ${new Date().getFullYear()} em MZN (cimento ≈ 850-950 MZN/saco, tijolo ≈ 5-8 MZN/un, ferro 12mm ≈ 480 MZN/vara)
-2. Quantidades calculadas com base na área e tipo de obra fornecidos
-3. Tabelas com separador de milhares: 12 500,00 MZN (não "12500MZN")
-4. NUNCA invente preços que não existem — use intervalos realistas do mercado
+REGRAS CRÍTICAS:
+1. Preços de mercado moçambicano ${anoAtual} em MZN — use intervalos realistas; NÃO use valores fixos desactualizados
+2. Preços de referência actuais: cimento 50kg ≈ 900–1.000 MZN/saco | tijolo cerâmico ≈ 6–9 MZN/un | ferro 12mm ≈ 500–550 MZN/vara | areia ≈ 1.800–2.200 MZN/m³ | brita ≈ 2.200–2.600 MZN/m³
+3. Quantidades calculadas com base na área (${data.area || '?'} m²), n.º de pisos (${data.nPisos || 'R/C'}) e tipo de obra fornecidos
+4. Tabelas com separador de milhares: 12 500,00 MZN (nunca "12500MZN")
+5. Cobertura "${data.cobertura || 'Laje de betão'}": inclua materiais e mão-de-obra específicos a este tipo
+6. ${temInfra ? `Infraestrutura "${data.infraestrutura}": inclua secção específica de instalações` : 'Infraestrutura não indicada: mencione que orçamento de instalações é separado'}
+7. Adicione linha de imprevistos (10%) e imposto (IVA 16% se aplicável)
+8. Nota de validade do orçamento: 30 dias (preços sujeitos a variação)
 
 ESTRUTURA OBRIGATÓRIA:
 
 # Orçamento de ${data.tipoObra}
-**${data.local} | ${new Date().toLocaleDateString('pt-MZ')}**
+**${data.local} | ${new Date().toLocaleDateString('pt-MZ')} | Válido por 30 dias**
 
 ## Resumo da Obra
-[Descrição técnica: tipo, área, localização, padrão de acabamento, prazo]
+[Descrição técnica: tipo, área, n.º pisos, cobertura, localização, padrão de acabamento, prazo]
 
 ## 1. Materiais de Construção
 
-| Material | Unid. | Qtd. Estimada | Preço Unit. (MZN) | Total (MZN) |
+| Material | Unid. | Qtd. Est. | Preço Unit. (MZN) | Total (MZN) |
 |---|---|---|---|---|
-| Cimento (50kg) | Saco | [qtd] | [900] | [total] |
-| Tijolo cerâmico | Unid. | [qtd] | [7] | [total] |
-| Areia (m³) | m³ | [qtd] | [1 800] | [total] |
-| Brita | m³ | [qtd] | [2 200] | [total] |
-| Ferro 12mm | Vara | [qtd] | [480] | [total] |
-| Telha (tipo) | m² | [qtd] | [variável] | [total] |
-| [outros materiais específicos à obra] | | | | |
+| Cimento (50kg) | Saco | [qtd calculada] | [900–1.000] | [total] |
+| Tijolo cerâmico | Unid. | [qtd calculada] | [7–9] | [total] |
+| Areia | m³ | [qtd] | [1.900] | [total] |
+| Brita | m³ | [qtd] | [2.400] | [total] |
+| Ferro 12mm | Vara | [qtd] | [520] | [total] |
+| [Materiais de cobertura para ${data.cobertura || 'laje'}] | [unid] | [qtd] | [preço] | [total] |
+| [Outros materiais específicos à obra] | | | | |
 | **TOTAL MATERIAIS** | | | | **[total]** |
 
 ## 2. Mão-de-Obra
 
 | Profissional | Dias | Diária (MZN) | Total (MZN) |
 |---|---|---|---|
-| Mestre de obras | [n] | [1 200] | [total] |
-| Pedreiro | [n] | [900] | [total] |
-| Servente | [n] | [600] | [total] |
-| Electricista (se aplicável) | [n] | [1 100] | [total] |
-| Canalizador (se aplicável) | [n] | [1 100] | [total] |
+| Mestre de obras | [n] | [1.300] | [total] |
+| Pedreiro | [n] | [950] | [total] |
+| Servente | [n] | [650] | [total] |
+| Carpinteiro (cofragem) | [n] | [1.100] | [total] |
+| Electricista | [n] | [1.100] | [total] |
+| Canalizador | [n] | [1.100] | [total] |
 | **TOTAL MÃO-DE-OBRA** | | | **[total]** |
 
 ## 3. Equipamentos e Alugueres
@@ -431,41 +503,63 @@ ESTRUTURA OBRIGATÓRIA:
 | Mão-de-obra | [total] |
 | Equipamentos | [total] |
 | Imprevistos (10%) | [total] |
-| **TOTAL GERAL** | **[TOTAL]** |
+| **TOTAL GERAL (sem IVA)** | **[TOTAL]** |
 
 ## 5. Condições Comerciais
-- Validade do orçamento: 30 dias
-- Prazo de execução: ${data.prazo || 60} dias úteis após início
-- Pagamento: [condições a acordar]
-- Garantia de mão-de-obra: 6 meses
-- [Nota: preços sujeitos a variação cambial do USD/MZN]`,
-
-      arrendamento: () =>
-        `Você é advogado especialista em direito imobiliário moçambicano. Redija um CONTRATO DE ARRENDAMENTO juridicamente válido e completo.
+- **Validade:** 30 dias a contar de ${new Date().toLocaleDateString('pt-MZ')}
+- **Prazo de execução:** ${data.prazo || 60} dias úteis após inicio
+- **Pagamento sugerido:** 30% mobilização + 40% a meio da obra + 30% na entrega
+- **Garantia de mão-de-obra:** 6 meses para defeitos de execução
+- **Nota:** Preços sujeitos a variação cambial USD/MZN e disponibilidade de mercado`;
+      },
+      arrendamento: () => {
+        const _numPorExtenso2 = (val) => {
+          const n = parseInt(val || 0);
+          if (n === 0) return 'zero';
+          const u = ['','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezasseis','dezassete','dezoito','dezanove'];
+          const d = ['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+          const c = ['','cem','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+          if (n < 20) return u[n];
+          if (n < 100) return d[Math.floor(n/10)] + (n%10 ? ' e ' + u[n%10] : '');
+          if (n < 1000) return (n===100?'cem':c[Math.floor(n/100)]) + (n%100 ? ' e ' + _numPorExtenso2(n%100) : '');
+          if (n < 1000000) { const m=Math.floor(n/1000); const r=n%1000; return (m===1?'mil':_numPorExtenso2(m)+' mil')+(r?' e '+_numPorExtenso2(r):''); }
+          return n.toLocaleString('pt-MZ') + ' (por extenso)';
+        };
+        const isComercial = data.tipoImovel?.includes('Comercial') || data.tipoImovel?.includes('Escritório') || data.tipoImovel?.includes('Loja');
+        const avisoPrazo = data.duracao === '6 meses' ? '30 (trinta)' : '60 (sessenta)';
+        const districtName = data.local?.includes('Maputo') ? 'KaMpfumo' : data.local?.includes('Matola') ? 'Matola' : (data.local?.split(',')[0] || 'Maputo');
+        return `Você é advogado especialista em direito imobiliário moçambicano. Redija um CONTRATO DE ARRENDAMENTO juridicamente válido e completo.
 
 BASE LEGAL OBRIGATÓRIA:
 - Lei n.º 19/2013, de 23 de Setembro (Lei do Arrendamento Urbano de Moçambique)
 - Código Civil de Moçambique (Decreto n.º 47344, de 25 de Novembro de 1966, com alterações)
-- Lei n.º 7/2015, de 6 de Outubro (Lei da Mediação e Arbitragem — para resolução de conflitos)
+- Lei n.º 7/2015, de 6 de Outubro (Lei da Mediação e Arbitragem)
 - Decreto n.º 61/2006, de 26 de Dezembro (Regulamento do Arrendamento Urbano)
+- Lei n.º 32/2007 e Decreto n.º 21/2004 (obrigações fiscais sobre rendimentos prediais)
 
 DADOS:
 - Tipo de imóvel: ${data.tipoImovel}
-- Senhorio: ${data.proprietario}
-- Inquilino: ${data.locatario}
+- Finalidade: ${isComercial ? 'comercial/profissional' : 'habitacional'}
+- Senhorio: ${data.proprietario} | BI: ${data.biProprietario}
+- Inquilino: ${data.locatario} | BI: ${data.biLocatario}
 - Localização: ${data.local}
-- Renda: ${parseInt(data.valor || 0).toLocaleString('pt-MZ')} MZN/mês (${_numPorExtenso(data.valor)} meticais)
+- Renda: ${parseInt(data.valor || 0).toLocaleString('pt-MZ')} MZN/mês (${_numPorExtenso2(data.valor)} meticais)
+- Método de pagamento: ${data.metodoPagamento || 'a acordar'}
 - Duração: ${data.duracao}
 - Caução: ${data.caucao}
+- Água e electricidade: ${data.quemPagaServicos || 'a acordar'}
 - Condições especiais: ${data.condicoes || 'Nenhuma'}${ocrBlock}
 
 REGRAS DE QUALIDADE:
-1. NUNCA deixar campos em branco sem orientação — use "____________________" com nota "(a preencher)"
+1. NUNCA deixar campos obrigatórios em branco — use os dados fornecidos
 2. Valor da renda SEMPRE por extenso E em algarismos
 3. Data de início OBRIGATÓRIA — use "[DATA DE INÍCIO: ____/____/______]" se não fornecida
 4. Multa de mora máxima 3% ao mês conforme Lei n.º 19/2013, art. 22.º
-5. Aviso prévio de rescisão: mínimo 30 dias (arrendamento ≤ 1 ano) ou 60 dias (> 1 ano), nos termos do art. 34.º
-6. Cláusulas em MAIÚSCULAS e NEGRITO, numeradas
+5. Aviso prévio de rescisão: ${avisoPrazo} dias, nos termos do art. 34.º
+6. Incluir cláusula específica sobre método de pagamento: ${data.metodoPagamento || 'a definir'}
+7. Incluir cláusula clara sobre quem paga água e electricidade: ${data.quemPagaServicos}
+8. ${isComercial ? 'Contrato COMERCIAL: incluir cláusula sobre horário de funcionamento, uso exclusivamente comercial, e obrigação de licença comercial pelo Inquilino' : 'Contrato HABITACIONAL: incluir cláusula sobre uso exclusivamente habitacional e proibição de subarrendamento'}
+9. Obrigações fiscais: Senhorio obrigado a declarar rendas ao IRPS (imposto sobre rendimentos prediais)
 
 ESTRUTURA OBRIGATÓRIA:
 
@@ -475,13 +569,13 @@ ESTRUTURA OBRIGATÓRIA:
 
 **ENTRE:**
 
-**SENHORIO:** ${data.proprietario}, portador(a) do Bilhete de Identidade n.º ________________, residente em ________________________________, doravante designado(a) **"Senhorio"**;
+**SENHORIO:** ${data.proprietario}, portador(a) do Bilhete de Identidade n.º **${data.biProprietario}**, residente em ________________________________, doravante designado(a) **"Senhorio"**;
 
 **E**
 
-**INQUILINO:** ${data.locatario}, portador(a) do Bilhete de Identidade n.º ________________, residente em ________________________________, doravante designado(a) **"Inquilino"**;
+**INQUILINO:** ${data.locatario}, portador(a) do Bilhete de Identidade n.º **${data.biLocatario}**, residente em ________________________________, doravante designado(a) **"Inquilino"**;
 
-Celebram, de mútuo acordo e boa-fé, o presente Contrato de Arrendamento, que se rege pelas seguintes cláusulas e pelas disposições da Lei n.º 19/2013, de 23 de Setembro, e do Código Civil de Moçambique:
+Celebram, de mútuo acordo e boa-fé, o presente Contrato de Arrendamento, regido pela Lei n.º 19/2013, de 23 de Setembro, e pelo Código Civil de Moçambique:
 
 ---
 
@@ -489,7 +583,7 @@ Celebram, de mútuo acordo e boa-fé, o presente Contrato de Arrendamento, que s
 
 1.1 O Senhorio cede ao Inquilino, para uso exclusivo como ${data.tipoImovel}, o imóvel sito em **${data.local}**, composto por ________________________________ (descrever: n.º de divisões, características).
 
-1.2 O imóvel destina-se exclusivamente a fins **${data.tipoImovel.includes('Comercial') || data.tipoImovel.includes('Escritório') || data.tipoImovel.includes('Loja') ? 'comerciais/profissionais' : 'habitacionais'}**, sendo expressamente proibida a sublocação ou alteração de finalidade sem autorização escrita do Senhorio, nos termos do artigo 14.º da Lei n.º 19/2013.
+1.2 O imóvel destina-se exclusivamente a fins **${isComercial ? 'comerciais/profissionais' : 'habitacionais'}**, sendo expressamente proibida a sublocação ou alteração de finalidade sem autorização escrita do Senhorio, nos termos do artigo 14.º da Lei n.º 19/2013.
 
 ---
 
@@ -497,25 +591,25 @@ Celebram, de mútuo acordo e boa-fé, o presente Contrato de Arrendamento, que s
 
 2.1 O presente contrato tem início em **[DATA DE INÍCIO: ____/____/______]** e vigorará pelo período de **${data.duracao}**, findando em **[DATA DE TÉRMINO: ____/____/______]**.
 
-2.2 Findo o prazo, o contrato renovar-se-á automaticamente por iguais períodos, salvo comunicação escrita de não renovação com antecedência mínima de **${data.duracao === '6 meses' ? '30 (trinta)' : '60 (sessenta)'} dias**, conforme artigo 34.º da Lei n.º 19/2013.
+2.2 Findo o prazo, o contrato renovar-se-á automaticamente por iguais períodos, salvo comunicação escrita de não renovação com antecedência mínima de **${avisoPrazo} dias**, conforme artigo 34.º da Lei n.º 19/2013.
 
 ---
 
 ## **CLÁUSULA 3.ª — RENDA E CONDIÇÕES DE PAGAMENTO**
 
-3.1 A renda mensal é fixada em **${parseInt(data.valor || 0).toLocaleString('pt-MZ')} MZN (${_numPorExtenso(data.valor)} meticais)**, devida até ao dia **5 (cinco)** de cada mês.
+3.1 A renda mensal é fixada em **${parseInt(data.valor || 0).toLocaleString('pt-MZ')} MZN (${_numPorExtenso2(data.valor)} meticais)**, devida até ao dia **5 (cinco)** de cada mês.
 
-3.2 O pagamento será efectuado por [M-Pesa / transferência bancária / dinheiro] para a conta/número: ________________________________.
+3.2 O pagamento será efectuado por **${data.metodoPagamento || '________________________________'}**${data.metodoPagamento === 'M-Pesa' ? ' para o número: ________________________________' : data.metodoPagamento === 'Transferência Bancária' || data.metodoPagamento === 'Depósito Bancário' ? ' para a conta n.º ________________________________, Banco ________________________________' : ''}.
 
 3.3 Em caso de mora no pagamento, o Inquilino pagará ao Senhorio uma multa de **3% (três por cento)** sobre o valor em dívida por cada mês de atraso, nos termos do artigo 22.º da Lei n.º 19/2013, sem prejuízo de juros legais.
 
-3.4 A renda poderá ser actualizada anualmente de acordo com o índice de inflação oficial publicado pelo INE — Instituto Nacional de Estatística de Moçambique, com pré-aviso de 30 dias.
+3.4 A renda poderá ser actualizada anualmente de acordo com o índice de inflação oficial publicado pelo INE — Instituto Nacional de Estatística de Moçambique, com pré-aviso de 30 dias, a partir do segundo ano de vigência do contrato.
 
 ---
 
 ## **CLÁUSULA 4.ª — CAUÇÃO**
 
-4.1 O Inquilino entrega ao Senhorio, a título de caução, o montante de **${data.caucao}**, correspondente a _____ meses de renda, no acto da assinatura deste contrato.
+4.1 O Inquilino entrega ao Senhorio, a título de caução, o montante de **${data.caucao}**, no acto da assinatura deste contrato.
 
 4.2 A caução destina-se a garantir o cumprimento das obrigações contratuais, incluindo reparação de danos causados ao imóvel além do desgaste normal.
 
@@ -523,7 +617,15 @@ Celebram, de mútuo acordo e boa-fé, o presente Contrato de Arrendamento, que s
 
 ---
 
-## **CLÁUSULA 5.ª — OBRIGAÇÕES DO SENHORIO**
+## **CLÁUSULA 5.ª — ENCARGOS (ÁGUA, ELECTRICIDADE E SERVIÇOS)**
+
+5.1 **${data.quemPagaServicos === 'Incluídas na renda' ? 'As despesas de água e electricidade estão INCLUÍDAS no valor da renda mensal acordada.' : data.quemPagaServicos === 'Proprietário' ? 'As despesas de água e electricidade são da responsabilidade do SENHORIO.' : data.quemPagaServicos === 'Inquilino (separado da renda)' ? 'As despesas de água e electricidade são da responsabilidade EXCLUSIVA do INQUILINO, a pagar directamente às entidades fornecedoras (FIPAG / EDM), não estando incluídas no valor da renda.' : 'As despesas de água e electricidade serão acordadas separadamente entre as partes.'}**
+
+5.2 Outras despesas de condomínio, lixo, segurança ou manutenção de espaços comuns: ________________________________.
+
+---
+
+## **CLÁUSULA 6.ª — OBRIGAÇÕES DO SENHORIO**
 
 O Senhorio obriga-se a:
 
@@ -531,15 +633,15 @@ a) Entregar o imóvel em boas condições de habitabilidade e com todos os equip
 b) Assegurar o gozo pacífico do imóvel pelo Inquilino durante o período contratual;
 c) Realizar as obras de conservação estrutural necessárias para manter o imóvel em boas condições;
 d) Não proceder a vistoria do imóvel sem aviso prévio de 48 horas, salvo em caso de emergência;
-e) Cumprir as obrigações fiscais relativas às rendas recebidas, nos termos da legislação tributária moçambicana.
+e) Cumprir as obrigações fiscais relativas às rendas recebidas (IRPS — rendimentos prediais), nos termos da legislação tributária moçambicana.
 
 ---
 
-## **CLÁUSULA 6.ª — OBRIGAÇÕES DO INQUILINO**
+## **CLÁUSULA 7.ª — OBRIGAÇÕES DO INQUILINO**
 
 O Inquilino obriga-se a:
 
-a) Pagar a renda no prazo e local acordados;
+a) Pagar a renda no prazo e pelo método acordados na Cláusula 3.ª;
 b) Usar o imóvel exclusivamente para o fim estipulado na Cláusula 1.ª;
 c) Conservar o imóvel, efectuando as reparações de pequena conservação a seu cargo;
 d) Não realizar obras de transformação sem autorização escrita do Senhorio;
@@ -549,35 +651,43 @@ g) Entregar o imóvel nas mesmas condições em que o recebeu, salvo desgaste no
 
 **Condições especiais acordadas:** ${data.condicoes || 'Nenhuma condição especial além das estabelecidas por lei.'}
 
----
+${isComercial ? `---
 
-## **CLÁUSULA 7.ª — RESCISÃO**
+## **CLÁUSULA 8.ª — DISPOSIÇÕES ESPECIAIS (ARRENDAMENTO COMERCIAL)**
 
-7.1 **Por iniciativa do Inquilino:** Mediante comunicação escrita ao Senhorio com antecedência mínima de **${data.duracao === '6 meses' ? '30' : '60'} (${data.duracao === '6 meses' ? 'trinta' : 'sessenta'}) dias**, nos termos do artigo 35.º da Lei n.º 19/2013.
+8.1 O Inquilino obriga-se a obter e manter válidas todas as licenças e autorizações administrativas necessárias ao exercício da sua actividade, não podendo imputar ao Senhorio qualquer responsabilidade por atrasos ou recusas.
 
-7.2 **Por iniciativa do Senhorio:** Nas condições previstas no artigo 36.º da Lei n.º 19/2013, nomeadamente: falta de pagamento de renda por período superior a 60 dias; uso indevido do imóvel; realização de obras não autorizadas; subarrendamento não autorizado.
-
-7.3 Em caso de rescisão com justa causa imputável ao Inquilino, este perderá o direito à devolução da caução, sem prejuízo de indemnização por danos adicionais.
+8.2 O Inquilino pode adaptar o imóvel às suas necessidades comerciais, desde que autorizado por escrito pelo Senhorio e revertendo as obras ao estado original no final do contrato, salvo acordo em contrário.` : ''}
 
 ---
 
-## **CLÁUSULA 8.ª — RESOLUÇÃO DE CONFLITOS E FORO**
+## **CLÁUSULA ${isComercial ? '9' : '8'}.ª — RESCISÃO**
 
-8.1 As partes comprometem-se a resolver amigavelmente quaisquer litígios emergentes do presente contrato.
+${isComercial ? '9' : '8'}.1 **Por iniciativa do Inquilino:** Mediante comunicação escrita ao Senhorio com antecedência mínima de **${avisoPrazo} dias**, nos termos do artigo 35.º da Lei n.º 19/2013.
 
-8.2 Não sendo possível a resolução amigável, as partes poderão recorrer à mediação nos termos da Lei n.º 7/2015, de 6 de Outubro.
+${isComercial ? '9' : '8'}.2 **Por iniciativa do Senhorio:** Nas condições previstas no artigo 36.º da Lei n.º 19/2013, nomeadamente: falta de pagamento de renda por período superior a 60 dias; uso indevido do imóvel; realização de obras não autorizadas; subarrendamento não autorizado.
 
-8.3 Para os litígios que não possam ser resolvidos por mediação, fica eleito o **Tribunal Judicial de Distrito de ${data.local?.includes('Maputo') ? 'KaMpfumo' : data.local?.includes('Matola') ? 'Matola' : data.local?.split(',')[0] || 'Maputo'}**, com renúncia expressa de qualquer outro.
+${isComercial ? '9' : '8'}.3 Em caso de rescisão com justa causa imputável ao Inquilino, este perderá o direito à devolução da caução, sem prejuízo de indemnização por danos adicionais.
 
 ---
 
-## **CLÁUSULA 9.ª — DISPOSIÇÕES FINAIS**
+## **CLÁUSULA ${isComercial ? '10' : '9'}.ª — RESOLUÇÃO DE CONFLITOS E FORO**
 
-9.1 O presente contrato é celebrado em dois exemplares de igual valor, ficando um na posse de cada parte.
+${isComercial ? '10' : '9'}.1 As partes comprometem-se a resolver amigavelmente quaisquer litígios emergentes do presente contrato.
 
-9.2 Tudo o que não estiver expressamente previsto neste contrato reger-se-á pela Lei n.º 19/2013, de 23 de Setembro, e pelo Código Civil de Moçambique.
+${isComercial ? '10' : '9'}.2 Não sendo possível a resolução amigável, as partes poderão recorrer à mediação nos termos da Lei n.º 7/2015, de 6 de Outubro.
 
-9.3 A nulidade de qualquer cláusula não afecta a validade das restantes, que subsistirão em pleno vigor.
+${isComercial ? '10' : '9'}.3 Para os litígios que não possam ser resolvidos por mediação, fica eleito o **Tribunal Judicial de Distrito de ${districtName}**, com renúncia expressa de qualquer outro.
+
+---
+
+## **CLÁUSULA ${isComercial ? '11' : '10'}.ª — DISPOSIÇÕES FINAIS**
+
+${isComercial ? '11' : '10'}.1 O presente contrato é celebrado em dois exemplares de igual valor, ficando um na posse de cada parte.
+
+${isComercial ? '11' : '10'}.2 Tudo o que não estiver expressamente previsto neste contrato reger-se-á pela Lei n.º 19/2013, de 23 de Setembro, e pelo Código Civil de Moçambique.
+
+${isComercial ? '11' : '10'}.3 A nulidade de qualquer cláusula não afecta a validade das restantes, que subsistirão em pleno vigor.
 
 ---
 
@@ -587,7 +697,7 @@ g) Entregar o imóvel nas mesmas condições em que o recebeu, salvo desgaste no
 |---|---|
 | **O SENHORIO** | **O INQUILINO** |
 | ${data.proprietario} | ${data.locatario} |
-| BI: ________________ | BI: ________________ |
+| BI: ${data.biProprietario} | BI: ${data.biLocatario} |
 | ___________________________ | ___________________________ |
 | *(Assinatura)* | *(Assinatura)* |
 
@@ -601,51 +711,22 @@ g) Entregar o imóvel nas mesmas condições em que o recebeu, salvo desgaste no
 | *(Assinatura)* | *(Assinatura)* |
 
 ---
-*Reconhecimento de assinaturas recomendado para contratos com renda superior a 50.000 MZN/mês ou duração superior a 12 meses.*`,
-
+*Reconhecimento de assinaturas recomendado para contratos com renda superior a 50.000 MZN/mês ou duração superior a 12 meses.*
+*Nota fiscal: o Senhorio é obrigado a declarar as rendas recebidas ao IRPS (rendimentos prediais) junto da Autoridade Tributária de Moçambique.*`;
+      },
       procuracao: () => {
         const hoje = new Date();
         const dataFmt = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
-        return `Você é advogado especialista em direito civil moçambicano. Redija uma PROCURAÇÃO / MANDATO juridicamente válida e completa.
+        const tipoProc = data.tipoProc || 'Especial (acto específico)';
+        const isGeral = tipoProc === 'Geral (todos os actos)';
+        const isImóvel = tipoProc === 'Venda de Imóvel';
+        const isBancaria = tipoProc === 'Bancária';
+        const isJudicial = tipoProc === 'Judicial';
+        const tipoDocIdent = data.tipoDocIdent || 'Bilhete de Identidade (BI)';
+        const subMandato = data.subMandato || 'Não (poderes intransmissíveis)';
 
-BASE LEGAL OBRIGATÓRIA:
-- Código Civil de Moçambique, artigos 262.º a 294.º (Representação e Procuração)
-- Código do Notariado de Moçambique (Decreto n.º 47619, de 31 de Março de 1967, com alterações)
-- Lei n.º 4/2013, de 22 de Fevereiro (Lei do Notariado — reconhecimento de assinaturas)
-- Para procurações bancárias: Aviso n.º 01/GBM/2017 do Banco de Moçambique
-
-DADOS:
-- Tipo: ${data.tipoProc}
-- Outorgante: ${data.outorgante} | BI: ${data.biOutorgante}
-- Procurador/Mandatário: ${data.procurador} | BI: ${data.biProcurador}
-- Poderes/Acto: ${data.acto}
-- Validade: ${data.validade}
-- Local: ${data.local}${ocrBlock}
-
-REGRAS CRÍTICAS:
-1. O documento DEVE ter conteúdo completo e não pode ser gerado em branco
-2. NUNCA use "[a preencher]" nos campos obrigatórios — use os dados fornecidos
-3. Para procuração especial: descreva os poderes com MÁXIMA especificidade
-4. Para procuração geral: liste EXPLICITAMENTE os actos autorizados E os excluídos
-5. Inclua SEMPRE cláusula de sub-mandato (se é permitido ou não)
-6. O reconhecimento notarial é OBRIGATÓRIO para actos que envolvam imóveis ou valores > 100.000 MZN
-
-ESTRUTURA OBRIGATÓRIA — ESCREVA O DOCUMENTO COMPLETO AGORA:
-
----
-
-# PROCURAÇÃO ${data.tipoProc.toUpperCase()}
-
-**OUTORGANTE (quem dá o poder):**
-Eu, **${data.outorgante}**, portador(a) do Bilhete de Identidade n.º **${data.biOutorgante}**, [nacionalidade moçambicana/outra], residente em ________________________________, no pleno uso das minhas faculdades civis e jurídicas,
-
-**NOMEIO E CONSTITUO MEU PROCURADOR/MANDATÁRIO:**
-
-**${data.procurador}**, portador(a) do Bilhete de Identidade n.º **${data.biProcurador}**, residente em ________________________________,
-
-**CONFERINDO-LHE OS SEGUINTES PODERES:**
-
-${data.tipoProc === 'Geral (todos os actos)' ? `**PODERES GERAIS:**
+        const poderesPorTipo = isGeral
+          ? `**PODERES GERAIS:**
 Para em meu nome e representação praticar todos os actos de administração ordinária e extraordinária, incluindo, mas não se limitando a:
 
 1. Representar-me perante quaisquer entidades públicas e privadas, incluindo ministérios, repartições, tribunais, bancos, seguradoras e serviços notariais;
@@ -655,12 +736,43 @@ Para em meu nome e representação praticar todos os actos de administração or
 5. Representar-me em processos administrativos e judiciais;
 6. Praticar quaisquer actos necessários à prossecução dos meus interesses.
 
-**PODERES EXCLUÍDOS (o procurador NÃO pode):**
-- Alienar, hipotecar ou onerar bens imóveis sem nova procuração específica;
-- Contrair empréstimos em meu nome acima de [valor];
+**PODERES EXPRESSAMENTE EXCLUÍDOS (o procurador NÃO pode, sem nova procuração específica):**
+- Alienar, hipotecar ou onerar bens imóveis;
+- Contrair empréstimos em meu nome acima de 100.000 MZN;
 - Fazer doações em meu nome;
-- Nomear sub-procuradores.` :
-`**PODERES ESPECIAIS PARA:**
+- Nomear sub-procuradores${subMandato.includes('Não') ? '.' : ' (salvo autorização abaixo).'}`
+          : isImóvel
+          ? `**PODERES ESPECIAIS PARA VENDA DE IMÓVEL:**
+O mandatário fica expressamente autorizado a:
+
+1. Representar-me na negociação e celebração da escritura pública de compra e venda do imóvel sito em ________________________________, com a descrição predial n.º _______ da Conservatória do Registo Predial de _______;
+2. Assinar a escritura pública de compra e venda, declarações e demais documentos necessários à formalização da venda;
+3. Fixar o preço de venda e respectivas condições de pagamento;
+4. Receber o preço de venda e dar quitação;
+5. Praticar todos os demais actos necessários ao registo da transmissão junto da Conservatória do Registo Predial.
+
+**PODERES EXCLUÍDOS:** O mandatário NÃO está autorizado a praticar quaisquer actos que extravasem o objecto específico da venda acima identificada.`
+          : isBancaria
+          ? `**PODERES ESPECIAIS BANCÁRIOS:**
+O mandatário fica expressamente autorizado a, junto das instituições bancárias onde o outorgante seja titular de contas:
+
+1. Movimentar, a débito e a crédito, as contas bancárias do outorgante;
+2. Efectuar depósitos, levantamentos e transferências bancárias;
+3. Requerer extratos, comprovativos e outros documentos bancários;
+4. Assinar contratos de crédito ou outros instrumentos bancários (valor máximo: _________________ MZN);
+5. Representar o outorgante perante o Banco de Moçambique e demais entidades de supervisão financeira.
+
+*Conforme o Aviso n.º 01/GBM/2017 do Banco de Moçambique, esta procuração deve ser apresentada no banco para registo.*`
+          : isJudicial
+          ? `**PODERES ESPECIAIS JUDICIAIS:**
+O mandatário (advogado/procurador judicial) fica expressamente autorizado a:
+
+1. Representar-me em todos os actos e termos do processo n.º _______ (ou a identificar) perante o Tribunal _______;
+2. Praticar todos os actos processuais, incluindo apresentação de petições, respostas, recursos e incidentes;
+3. Transigir, desistir, confessar, reconvir e praticar quaisquer actos que a lei permita;
+4. Receber notificações e citações em meu nome;
+5. Substabelecer os poderes aqui conferidos a outros advogados (mandatário judicial).`
+          : `**PODERES ESPECIAIS PARA:**
 ${data.acto}
 
 O mandatário fica expressamente autorizado a:
@@ -670,13 +782,66 @@ O mandatário fica expressamente autorizado a:
 4. Receber e dar quitação de valores directamente relacionados com o mandato.
 
 **O mandatário NÃO está autorizado a:**
-- Praticar actos que extravasem o objeto específico deste mandato;
-- Nomear sub-procuradores sem autorização escrita;
-- Efectuar actos a título gratuito em meu nome.`}
+- Praticar actos que extravasem o objecto específico deste mandato;
+- Efectuar actos a título gratuito em meu nome.`;
 
-**VALIDADE:** A presente procuração é válida por **${data.validade}** a contar da data de assinatura${data.validade === 'Até revogação' || data.validade === 'Indeterminada' ? ', podendo ser revogada a qualquer momento mediante comunicação escrita ao mandatário' : ''}.
+        const clausulaSubMandato = subMandato.includes('Não')
+          ? 'O mandatário NÃO pode substabelecer os poderes aqui conferidos, sendo os mesmos intransmissíveis.'
+          : subMandato.includes('todo')
+          ? 'O mandatário PODE substabelecer os poderes aqui conferidos no todo, mediante comunicação escrita ao outorgante.'
+          : 'O mandatário PODE substabelecer os poderes aqui conferidos em parte, mediante comunicação escrita ao outorgante.';
 
-**SUB-MANDATO:** O mandatário [pode / não pode — escolha conforme o caso] substabelecer os poderes aqui conferidos, no todo ou em parte.
+        const reconhecimentoObrigatorio = isImóvel || isGeral || isBancaria || isJudicial;
+
+        return `Você é advogado especialista em direito civil e notariado moçambicano. Redija uma PROCURAÇÃO / MANDATO juridicamente válida, completa e lista para uso em ${tipoProc}.
+
+BASE LEGAL OBRIGATÓRIA:
+- Código Civil de Moçambique, artigos 262.º a 294.º (Representação e Procuração)
+- Código do Notariado de Moçambique (Decreto n.º 47619, de 31 de Março de 1967, com alterações)
+- Lei n.º 4/2013, de 22 de Fevereiro (Lei do Notariado — reconhecimento de assinaturas)
+${isBancaria ? '- Aviso n.º 01/GBM/2017 do Banco de Moçambique (procurações bancárias)' : ''}
+${isImóvel ? '- Lei n.º 19/2013, de 23 de Setembro (negócios imobiliários); Lei de Terras n.º 19/1997' : ''}
+${isJudicial ? '- Código de Processo Civil de Moçambique; Estatuto da Ordem dos Advogados (Lei n.º 7/1994)' : ''}
+
+DADOS:
+- Tipo: ${tipoProc}
+- Tipo de documento de identidade: ${tipoDocIdent}
+- Outorgante: ${data.outorgante} | ${tipoDocIdent}: ${data.biOutorgante}
+- Morada do Outorgante: ${data.moradaOutorgante}
+- Procurador/Mandatário: ${data.procurador} | ${tipoDocIdent}: ${data.biProcurador}
+- Morada do Procurador: ${data.moradaProcurador}
+- Poderes/Acto: ${data.acto}
+- Sub-mandato: ${subMandato}
+- Validade: ${data.validade}
+- Local: ${data.local}${ocrBlock}
+
+REGRAS CRÍTICAS:
+1. Use os dados fornecidos — NUNCA deixe campos obrigatórios em branco
+2. Para procuração sobre imóveis: reconhecimento notarial é SEMPRE obrigatório (art. 80.º do Código do Notariado)
+3. Para procuração geral: liste EXPLICITAMENTE os actos excluídos
+4. Inclua SEMPRE a cláusula de sub-mandato conforme instrução: "${subMandato}"
+
+DOCUMENTO COMPLETO:
+
+---
+
+# PROCURAÇÃO ${tipoProc.toUpperCase()}
+
+**OUTORGANTE (quem dá o poder):**
+Eu, **${data.outorgante}**, portador(a) de ${tipoDocIdent} n.º **${data.biOutorgante}**, [nacionalidade moçambicana / outra: ______], residente em **${data.moradaOutorgante}**, no pleno uso das minhas faculdades civis e jurídicas,
+
+**NOMEIO E CONSTITUO MEU PROCURADOR/MANDATÁRIO:**
+
+**${data.procurador}**, portador(a) de ${tipoDocIdent} n.º **${data.biProcurador}**, residente em **${data.moradaProcurador}**,
+
+**CONFERINDO-LHE OS SEGUINTES PODERES:**
+
+${poderesPorTipo}
+
+**CLÁUSULA DE SUB-MANDATO:**
+${clausulaSubMandato}
+
+**VALIDADE:** A presente procuração é válida por **${data.validade}** a contar da data de assinatura${data.validade === 'Até revogação' || data.validade === 'Indeterminada' ? ', podendo ser revogada a qualquer momento mediante comunicação escrita ao mandatário e a terceiros' : ''}.
 
 Esta procuração é outorgada nos termos dos artigos 262.º e seguintes do Código Civil de Moçambique.
 
@@ -688,7 +853,7 @@ Esta procuração é outorgada nos termos dos artigos 262.º e seguintes do Cód
 |---|---|
 | **O OUTORGANTE** | **O PROCURADOR** |
 | ${data.outorgante} | ${data.procurador} |
-| BI: ${data.biOutorgante} | BI: ${data.biProcurador} |
+| ${tipoDocIdent}: ${data.biOutorgante} | ${tipoDocIdent}: ${data.biProcurador} |
 | ___________________________ | ___________________________ |
 | *(Assinatura)* | *(Aceite e assinatura)* |
 
@@ -702,22 +867,64 @@ Esta procuração é outorgada nos termos dos artigos 262.º e seguintes do Cód
 
 ---
 
-**RECONHECIMENTO NOTARIAL** *(obrigatório para actos sobre imóveis e valores superiores a 100.000 MZN)*
+**RECONHECIMENTO NOTARIAL** *(${reconhecimentoObrigatorio ? 'OBRIGATÓRIO para este tipo de procuração' : 'recomendado para maior segurança jurídica'})*
 
 Reconheço a assinatura aposta neste documento como sendo do próprio punho de **${data.outorgante}**, nos termos da Lei n.º 4/2013, de 22 de Fevereiro.
 
 **Notário/Conservador:** ___________________________ | **Data:** ___/___/______
 **Livro n.º:** _______ | **Folha:** _______ | **Verba n.º:** _______
-**Selo:** [espaço para selo notarial]`;
+**Emolumentos pagos:** _______ MZN | **Selo:** [espaço para selo notarial]`;
       },
-
       requerimento: () => {
         const hoje = new Date();
         const dataFormatada = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
-        return `Redija um REQUERIMENTO OFICIAL completo e juridicamente estruturado para repartição pública em Moçambique.
+        const entidade = data.entidade || 'Outra';
+
+        const legalMapEntidade = {
+          'Conservatória dos Registos': {
+            lei: 'Lei n.º 8/2004, de 21 de Julho (Lei dos Registos e Identificação Civil), e Decreto n.º 10/2006, de 12 de Abril (Regulamento dos Registos Civis)',
+            cargo: 'Conservador dos Registos Civis',
+          },
+          'Direcção Provincial de Educação': {
+            lei: 'Lei n.º 6/92, de 6 de Maio (Lei do Sistema Nacional de Educação), e Diploma Ministerial aplicável ao nível de ensino',
+            cargo: 'Director(a) Provincial de Educação',
+          },
+          'Hospital Provincial': {
+            lei: 'Lei n.º 14/2014, de 11 de Setembro (Lei de Saúde), e Regulamento Geral dos Hospitais Públicos',
+            cargo: 'Director(a) Clínico(a) / Director(a) de Administração',
+          },
+          'INSS': {
+            lei: 'Lei n.º 7/2009, de 11 de Março (Regime Jurídico da Segurança Social Obrigatória), e Decreto n.º 49/2009, de 11 de Setembro',
+            cargo: 'Director(a) do Instituto Nacional de Segurança Social',
+          },
+          'Direcção de Migração': {
+            lei: 'Lei n.º 5/1993, de 28 de Dezembro (Lei dos Estrangeiros), e Decreto n.º 108/2014, de 31 de Dezembro (Regulamento da Lei dos Estrangeiros)',
+            cargo: 'Director(a) Nacional de Migração',
+          },
+          'Câmara Municipal': {
+            lei: 'Lei n.º 2/97, de 18 de Fevereiro (Lei dos Órgãos Locais do Estado — LOLE), e Regulamento Municipal aplicável',
+            cargo: 'Presidente do Conselho Municipal',
+          },
+          'Repartição de Finanças': {
+            lei: 'Lei n.º 15/2002, de 26 de Junho (Lei de Bases do Sistema Tributário), e Decreto n.º 6/2006 (Regulamento da Autoridade Tributária)',
+            cargo: 'Chefe da Repartição de Finanças',
+          },
+          'Outra': {
+            lei: 'legislação moçambicana aplicável à matéria em causa',
+            cargo: 'Responsável / Director(a) do Serviço',
+          },
+        };
+
+        const entInfo = legalMapEntidade[entidade] || legalMapEntidade['Outra'];
+
+        return `Redija um REQUERIMENTO OFICIAL completo, juridicamente fundamentado e estruturado, destinado à ${entidade} em Moçambique.
+
+BASE LEGAL APLICÁVEL À ${entidade.toUpperCase()}:
+${entInfo.lei}
 
 DADOS:
-- Entidade destinatária: ${data.entidade}
+- Entidade destinatária: ${entidade}
+- Cargo do responsável: ${entInfo.cargo}
 - Assunto: ${data.assunto}
 - Requerente: ${data.remetente} | BI n.º: ${data.bi} | Tel: ${data.contacto}
 - Endereço do requerente: ${data.endereco}
@@ -726,37 +933,37 @@ DADOS:
 
 ESTRUTURA LEGAL MOÇAMBICANA OBRIGATÓRIA:
 
-Exmo(a). Sr(a). [Cargo e nome do responsável, ex: Director(a) dos Serviços de...]
-${data.entidade}
-[Cidade]
+Exmo(a). Sr(a). ${entInfo.cargo}
+${entidade}
+[Cidade/Localidade]
 
 **ASSUNTO: ${data.assunto.toUpperCase()}**
 
 **N.º de Processo:** ___/____/____ *(a preencher pela repartição)*
 
-Eu, **${data.remetente}**, portador(a) do Bilhete de Identidade n.º **${data.bi}**, residente em **${data.endereco}**, contacto **${data.contacto}**, nos termos da legislação moçambicana em vigor, venho, respeitosamente, expor e requerer o seguinte:
+Eu, **${data.remetente}**, portador(a) do Bilhete de Identidade n.º **${data.bi}**, residente em **${data.endereco}**, contacto **${data.contacto}**, nos termos do disposto na ${entInfo.lei.split(',')[0]}, venho, respeitosamente, expor e requerer o seguinte:
 
 **I. EXPOSIÇÃO DOS FACTOS**
 
-[Parágrafo 1 — Contextualização (4-5 linhas): apresenta quem é o requerente, a sua situação actual e o contexto que motiva o pedido. Seja específico e factual.]
+[Parágrafo 1 — Contextualização (4-5 linhas): apresenta quem é o requerente, a sua situação actual e o contexto que motiva o pedido. Seja específico e factual, baseando-se em: "${data.fundamento}"]
 
-[Parágrafo 2 — Necessidade e justificação (4-5 linhas): explica com precisão por que é necessário o que está a pedir, quais as consequências de não obter o pedido, e como isso afecta os seus direitos ou obrigações legais.]
+[Parágrafo 2 — Necessidade e justificação (4-5 linhas): explica com precisão por que é necessário o que está a pedir, quais as consequências de não obter o pedido, e como isso afecta os direitos ou obrigações legais do requerente.]
 
-[Parágrafo 3 — Fundamento legal (3-4 linhas): cita a base legal aplicável — por exemplo, "ao abrigo do disposto no artigo [X] da Lei n.º [Y]/[ano], de [data]" — ou fundamenta no direito administrativo geral.]
+[Parágrafo 3 — Fundamento legal (3-4 linhas): ao abrigo do disposto na ${entInfo.lei.split(',')[0]}, o(a) requerente tem direito a _____________________, sendo este requerimento o meio adequado para o exercício desse direito.]
 
 **II. DO PEDIDO**
 
-Face ao exposto, e nos termos legais aplicáveis, vem o(a) requerente REQUERER a V.ª Ex.ª que se digne:
+Face ao exposto, e nos termos da ${entInfo.lei.split(',')[0]}, vem o(a) requerente REQUERER a V.ª Ex.ª que se digne:
 
-1. [Pedido principal específico e concreto — use linguagem formal: "...determinar", "...autorizar", "...emitir", "...deferir"]
+1. [Pedido principal específico e concreto — use linguagem formal: "...determinar", "...autorizar", "...emitir", "...deferir" — baseado no assunto: "${data.assunto}"]
 2. [Pedido secundário, se aplicável]
-3. Que seja notificado(a) do resultado do presente requerimento através do contacto ${data.contacto} ou por escrito no endereço acima indicado.
+3. Que seja notificado(a) do resultado do presente requerimento através do contacto ${data.contacto} ou por escrito no endereço acima indicado, no prazo máximo de [30/60] dias.
 
 **III. ANEXOS**
 
 Junta-se ao presente requerimento os seguintes documentos:
 
-${data.anexos ? data.anexos.split(/[,;]/).map((a, i) => (i+1) + '. ' + a.trim()).join('\n') : '1. Cópia do Bilhete de Identidade\n2. [Outros documentos relevantes]'}
+${data.anexos ? data.anexos.split(/[,;]/).map((a, i) => (i+1) + '. ' + a.trim()).join('\n') : '1. Cópia do Bilhete de Identidade\n2. [Outros documentos relevantes conforme exigência da entidade]'}
 
 **IV. COMPROMISSO**
 
@@ -775,7 +982,6 @@ _________________________________________
 *Para uso da repartição:*
 Data de entrada: ____/____/______ | N.º de Processo: _______ | Recebido por: _____________`;
       },
-
       residencia: () => {
         const hoje = new Date();
         const dataFmt = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -864,130 +1070,155 @@ Contacto: ________________________________
         const hoje = new Date();
         const dataFmt = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
         const valorNum = parseInt(data.valorTotal || 0);
+        const _n2 = (val) => {
+          const n = parseInt(val || 0);
+          if (n === 0) return 'zero';
+          const u = ['','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezasseis','dezassete','dezoito','dezanove'];
+          const d = ['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+          const c = ['','cem','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+          if (n < 20) return u[n];
+          if (n < 100) return d[Math.floor(n/10)] + (n%10 ? ' e ' + u[n%10] : '');
+          if (n < 1000) return (n===100?'cem':c[Math.floor(n/100)]) + (n%100 ? ' e ' + _n2(n%100) : '');
+          if (n < 1000000) { const m=Math.floor(n/1000); const r=n%1000; return (m===1?'mil':_n2(m)+' mil')+(r?' e '+_n2(r):''); }
+          return n.toLocaleString('pt-MZ') + ' (por extenso)';
+        };
+        const incluiMat = data.incluiMateriais || 'Não — apenas mão-de-obra';
+        const temPI = !!(data.propriedadeInt && data.propriedadeInt.trim());
         return `Você é advogado especialista em direito comercial moçambicano. Redija um CONTRATO DE PRESTAÇÃO DE SERVIÇOS juridicamente válido e completo.
 
 BASE LEGAL OBRIGATÓRIA:
 - Código Civil de Moçambique, artigos 1154.º a 1156.º (Contrato de Prestação de Serviços)
+- Código Civil, artigos 1207.º a 1230.º (Empreitada — aplicável quando há entrega de obra física)
 - Lei n.º 3/1993, de 24 de Junho (Lei das Actividades Comerciais)
-- Código do Trabalho de Moçambique (Lei n.º 23/2007, de 1 de Agosto) — para distinção prestação/emprego
-- Lei n.º 32/2007, de 31 de Dezembro (Sistema Tributário — IVA 16%)
-- Lei n.º 7/2015, de 6 de Outubro (Mediação e Arbitragem)
+- Lei n.º 4/2004 (Trabalho por Conta Própria e Protecção Social Independente)
+- Código de Processo Civil de Moçambique (resolução de conflitos)
 
 DADOS:
-- Serviço: ${data.servico}
+- Tipo de serviço: ${data.servico}
+- Inclui materiais: ${incluiMat}
 - Prestador: ${data.prestador} | NUIT: ${data.nuitPrestador || 'N/A'}
+- Morada do Prestador: ${data.moradaPrestador}
 - Cliente: ${data.cliente} | BI: ${data.biCliente || 'N/A'}
-- Valor total: ${valorNum.toLocaleString('pt-MZ')} MZN | Pagamento: ${data.pagamento}
+- Local de execução: ${data.localExecucao}
+- Valor total: ${valorNum.toLocaleString('pt-MZ')} MZN (${_n2(data.valorTotal)} meticais)
 - Prazo: ${data.prazo} dias
+- Condições de pagamento: ${data.pagamento}
 - Descrição: ${data.descricao}
+- Propriedade intelectual / entregáveis: ${data.propriedadeInt || 'não especificado'}
 - Penalidades: ${data.penalidades || '1% do valor por dia de atraso'}${ocrBlock}
+
+REGRAS:
+1. Use o regime de PRESTAÇÃO DE SERVIÇOS (arts. 1154.º ss.) para trabalho intelectual/técnico sem entrega de obra física; use EMPREITADA (arts. 1207.º ss.) quando há entrega de obra ou resultado tangível
+2. Materiais: ${incluiMat} — reflicta isso claramente na cláusula de objecto e preço
+3. ${temPI ? 'Incluir cláusula de propriedade intelectual baseada no que foi fornecido: "' + data.propriedadeInt + '"' : 'Incluir cláusula padrão de propriedade intelectual: entregáveis passam para o cliente após pagamento total'}
+4. Incluir cláusula de confidencialidade
+5. Incluir cláusula de resolução de conflitos com foro eleito
+
+ESTRUTURA COMPLETA:
 
 ---
 
 # CONTRATO DE PRESTAÇÃO DE SERVIÇOS
 
-**ENTRE AS PARTES:**
+**ENTRE:**
 
-**PRESTADOR:** ${data.prestador}, portador(a) do BI/NUIT n.º **${data.nuitPrestador || '____________________'}**, com sede/domicílio em ________________________________, doravante designado(a) **"Prestador"**;
+**PRESTADOR:** ${data.prestador}${data.nuitPrestador ? ', NUIT n.º ' + data.nuitPrestador : ''}, com sede/domicílio profissional em **${data.moradaPrestador}**, doravante designado **"Prestador"**;
 
 **E**
 
-**CLIENTE:** ${data.cliente}, portador(a) do Bilhete de Identidade n.º **${data.biCliente || '____________________'}**, residente em ________________________________, doravante designado(a) **"Cliente"**;
+**CLIENTE:** ${data.cliente}${data.biCliente ? ', portador(a) do BI n.º ' + data.biCliente : ''}, doravante designado **"Cliente"**;
 
-Celebram, nos termos dos artigos 1154.º e seguintes do Código Civil de Moçambique, o presente Contrato de Prestação de Serviços, sujeito às seguintes cláusulas:
+Celebram o presente Contrato de Prestação de Serviços nos termos dos artigos 1154.º e seguintes do Código Civil de Moçambique:
 
 ---
 
 ## **CLÁUSULA 1.ª — OBJECTO**
 
-1.1 O Prestador obriga-se a prestar ao Cliente os seguintes serviços: **${data.servico}**.
+1.1 O Prestador obriga-se a realizar, de forma autónoma e independente, os seguintes serviços: **${data.servico}**.
 
-1.2 **Descrição detalhada:** ${data.descricao}
+1.2 Descrição detalhada: ${data.descricao}
 
-1.3 O âmbito do serviço inclui especificamente: [listar materiais, equipamentos, software, deliverables concretos incluídos].
+1.3 **Materiais:** ${incluiMat === 'Sim — materiais incluídos no valor' ? 'Os materiais necessários à execução do serviço estão INCLUÍDOS no valor total acordado, sendo fornecidos pelo Prestador.' : incluiMat === 'Não — apenas mão-de-obra' ? 'O presente contrato abrange EXCLUSIVAMENTE mão-de-obra. Os materiais são fornecidos e custeados pelo Cliente.' : 'A responsabilidade pelos materiais é parcial: o Prestador fornece ___________________; o Cliente fornece ___________________ . Detalhe na descrição acima.'}
 
-1.4 Estão expressamente **excluídos** do presente contrato: [listar o que não está incluído].
+1.4 Local de execução: **${data.localExecucao}**
 
 ---
 
-## **CLÁUSULA 2.ª — PRAZO DE EXECUÇÃO**
+## **CLÁUSULA 2.ª — PRAZO**
 
-2.1 O serviço terá início em **____/____/______** e deverá estar concluído no prazo de **${data.prazo} (${data.prazo} dias úteis)**, até **____/____/______**.
+2.1 Os serviços serão executados no prazo de **${data.prazo} (${_n2(data.prazo)}) dias** a contar da data de assinatura deste contrato / data de pagamento do adiantamento *(riscar o que não se aplica)*.
 
-2.2 O prazo poderá ser prorrogado por acordo escrito das partes, mediante justificação fundamentada apresentada com antecedência mínima de **5 (cinco) dias úteis**.
+2.2 Em caso de atraso imputável ao Prestador, este pagará ao Cliente uma penalidade de **${data.penalidades || '1% do valor total por dia de atraso'}**, até ao limite de 20% do valor total.
 
-2.3 Consideram-se causas de força maior, suspensivas do prazo: catástrofes naturais, greve geral, pandemia declarada, ou outros factos alheios à vontade do Prestador.
+2.3 O prazo poderá ser prorrogado por acordo escrito entre as partes, em caso de força maior ou por solicitação justificada do Cliente.
 
 ---
 
 ## **CLÁUSULA 3.ª — PREÇO E CONDIÇÕES DE PAGAMENTO**
 
-3.1 O preço total pelos serviços é de **${valorNum.toLocaleString('pt-MZ')} MZN (${_numPorExtenso(data.valorTotal)} meticais)**, ${data.iva === 'Sim' ? `acrescido de IVA à taxa de 16% (dezasseis por cento), nos termos da Lei n.º 32/2007, totalizando **${(valorNum * 1.16).toLocaleString('pt-MZ')} MZN**` : 'isento de IVA'}.
+3.1 O valor total acordado é de **${valorNum.toLocaleString('pt-MZ')} MZN (${_n2(data.valorTotal)} meticais)**, ${incluiMat === 'Sim — materiais incluídos no valor' ? 'incluindo materiais e mão-de-obra' : 'referente exclusivamente a mão-de-obra'}.
 
-3.2 **Condições de pagamento:** ${data.pagamento}.
+3.2 Condições de pagamento: **${data.pagamento}**
 
-3.3 Os pagamentos serão efectuados por [M-Pesa / transferência bancária / cheque] para: ________________________________.
+3.3 O pagamento será efectuado por [M-Pesa / transferência bancária / dinheiro] para ________________________________.
 
-3.4 Em caso de atraso no pagamento, o Cliente pagará ao Prestador uma penalidade de **${data.penalidades || '1% (um por cento) do valor em dívida por cada dia de atraso'}**, sem prejuízo de juros legais nos termos do Código Civil.
-
-3.5 O não pagamento no prazo convencionado por período superior a **15 (quinze) dias** constitui fundamento para suspensão imediata dos serviços pelo Prestador.
+3.4 O não pagamento nas datas acordadas confere ao Prestador o direito de suspender os serviços, sem penalidade, até regularização.
 
 ---
 
-## **CLÁUSULA 4.ª — OBRIGAÇÕES DO PRESTADOR**
+## **CLÁUSULA 4.ª — PROPRIEDADE INTELECTUAL E ENTREGÁVEIS**
 
-O Prestador obriga-se a:
+${temPI ? `4.1 ${data.propriedadeInt}
 
-a) Executar os serviços com diligência, competência técnica e dentro dos prazos acordados;
-b) Utilizar materiais/equipamentos de qualidade adequada à natureza do serviço;
-c) Manter confidencialidade sobre informações do Cliente a que aceda no exercício do mandato;
-d) Comunicar imediatamente ao Cliente qualquer impedimento que possa comprometer o prazo ou qualidade;
-e) Garantir os serviços prestados pelo prazo de **[90 dias / 6 meses / 1 ano — conforme a natureza]** após a entrega;
-f) Cumprir todas as normas legais e regulamentares aplicáveis à actividade.
+4.2 A transferência da propriedade dos entregáveis para o Cliente ocorre apenas após o pagamento integral do valor acordado na Cláusula 3.ª.` : `4.1 Todos os entregáveis (ficheiros, relatórios, obras, designs e quaisquer outros resultados) produzidos no âmbito deste contrato tornam-se propriedade exclusiva do **Cliente** após o pagamento integral do valor acordado.
+
+4.2 Até ao pagamento integral, o Prestador mantém todos os direitos sobre os entregáveis e pode recusar a sua entrega.`}
 
 ---
 
-## **CLÁUSULA 5.ª — OBRIGAÇÕES DO CLIENTE**
+## **CLÁUSULA 5.ª — CONFIDENCIALIDADE**
 
-O Cliente obriga-se a:
+5.1 Ambas as partes comprometem-se a manter em estrita confidencialidade todas as informações, dados, documentos e segredos comerciais a que tenham acesso no âmbito deste contrato.
 
-a) Efectuar os pagamentos nos prazos e condições acordados;
-b) Fornecer ao Prestador todas as informações, documentos e acessos necessários à execução do serviço;
-c) Designar um responsável para acompanhamento e aprovação das etapas do trabalho;
-d) Proceder à vistoria/teste do serviço entregue no prazo de **5 (cinco) dias úteis**; findo este prazo sem reclamação, o serviço considera-se aceite;
-e) Não divulgar a terceiros informações confidenciais do Prestador.
+5.2 Esta obrigação mantém-se por um período de **2 (dois) anos** após a conclusão ou rescisão do contrato.
 
 ---
 
-## **CLÁUSULA 6.ª — PROPRIEDADE INTELECTUAL**
+## **CLÁUSULA 6.ª — GARANTIA**
 
-6.1 Todos os trabalhos, obras e criações produzidos no âmbito deste contrato são, após pagamento integral, propriedade do **Cliente**, incluindo direitos de utilização, reprodução e modificação.
+6.1 O Prestador garante que os serviços serão executados com diligência profissional e de acordo com as regras da arte.
 
-6.2 O Prestador poderá referenciar o trabalho no seu portfólio salvo indicação contrária escrita do Cliente.
+6.2 Em caso de defeito imputável ao Prestador, este obriga-se a corrigir, sem custos adicionais para o Cliente, no prazo de ________________________________.
 
 ---
 
 ## **CLÁUSULA 7.ª — RESCISÃO**
 
-7.1 Qualquer das partes pode rescindir o contrato mediante aviso prévio escrito de **15 (quinze) dias**.
+7.1 Qualquer das partes pode rescindir o contrato mediante comunicação escrita com antecedência mínima de **15 (quinze) dias**.
 
-7.2 Em caso de rescisão pelo Cliente antes da conclusão, o Prestador tem direito ao pagamento proporcional ao trabalho executado, acrescido de **15% (quinze por cento)** a título de indemnização.
+7.2 Em caso de rescisão por iniciativa do Cliente sem justa causa, o Prestador tem direito a receber a proporção do trabalho já executado, acrescida de 10% do valor remanescente a título de indemnização.
 
-7.3 Em caso de rescisão por incumprimento do Prestador, o Cliente tem direito à devolução dos valores pagos referentes ao trabalho não executado, acrescido de indemnização por danos comprovados.
+7.3 Em caso de rescisão por justa causa imputável ao Prestador, o Cliente tem direito à devolução de todos os adiantamentos pagos.
 
 ---
 
 ## **CLÁUSULA 8.ª — RESOLUÇÃO DE CONFLITOS E FORO**
 
-8.1 As partes comprometem-se a resolver amigavelmente quaisquer divergências no prazo de **15 dias**.
+8.1 As partes comprometem-se a resolver amigavelmente qualquer litígio emergente do presente contrato.
 
-8.2 Não sendo possível, recorrerão à mediação nos termos da Lei n.º 7/2015, de 6 de Outubro.
-
-8.3 Para litígios não resolvidos por mediação, fica eleito o **Tribunal Judicial de Comarca de Maputo**, com renúncia a qualquer outro.
+8.2 Para os litígios que não possam ser resolvidos amigavelmente, fica eleito o **Tribunal Judicial de Distrito de ${data.localExecucao?.split(',').pop()?.trim() || 'Maputo'}**, com renúncia expressa de qualquer outro foro.
 
 ---
 
-**${data.local || 'Maputo'}, ${dataFmt}**
+## **CLÁUSULA 9.ª — DISPOSIÇÕES FINAIS**
+
+9.1 O presente contrato é celebrado em dois exemplares de igual valor.
+
+9.2 Qualquer alteração ao presente contrato só é válida se feita por escrito e assinada por ambas as partes.
+
+---
+
+**${data.localExecucao?.split(',').pop()?.trim() || 'Maputo'}, ${dataFmt}**
 
 | | |
 |---|---|
@@ -995,150 +1226,174 @@ e) Não divulgar a terceiros informações confidenciais do Prestador.
 | ${data.prestador} | ${data.cliente} |
 | NUIT: ${data.nuitPrestador || '___________'} | BI: ${data.biCliente || '___________'} |
 | ___________________________ | ___________________________ |
-| *(Assinatura)* | *(Assinatura)* |
-
-**TESTEMUNHAS:**
-
-| Testemunha 1 | Testemunha 2 |
-|---|---|
-| Nome: _____________________ | Nome: _____________________ |
-| BI: _______________________ | BI: _______________________ |
-| ___________________________ | ___________________________ |`;
+| *(Assinatura e carimbo)* | *(Assinatura)* |`;
       },
-
       recibo: () => {
         const hoje = new Date();
         const dataFmt = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
-        const valorNum = parseFloat(data.valor || 0);
-        const temIva   = data.iva === 'Sim';
-        const subtotal = temIva ? valorNum / 1.16 : valorNum;
-        const ivaValor = temIva ? valorNum - subtotal : 0;
-        const numDoc   = Math.floor(Math.random() * 9000) + 1000;
-        return `Você é contabilista experiente em Moçambique. Elabore um ${(data.tipoDoc || 'RECIBO').toUpperCase()} formal e juridicamente válido.
+        const tipoDoc = data.tipoDoc || 'Recibo Simples';
+        const isFactura   = tipoDoc === 'Factura';
+        const isProforma  = tipoDoc === 'Factura Proforma';
+        const isNDebito   = tipoDoc === 'Nota de Débito';
+        const isRecibo    = tipoDoc === 'Recibo Simples';
+        const valorBruto  = parseFloat(data.valor || 0);
+        const comIVA      = data.iva === 'Sim';
+        const valorIVA    = comIVA ? (valorBruto * 0.16).toFixed(2) : 0;
+        const valorLiquido = comIVA ? (valorBruto * 1.16).toFixed(2) : valorBruto.toFixed(2);
 
-BASE LEGAL:
-- Lei n.º 32/2007 (Sistema Tributário — IVA 16%)
-- Decreto n.º 14/2015 (Regulamento do IVA em Moçambique)
-- Lei n.º 20/2013 (Lei das Finanças Públicas — obrigação de facturação)
-- Circular n.º 8/AT/2016 (Autoridade Tributária — requisitos de factura)
+        const nuitObrigatorio = isFactura || isProforma || isNDebito;
+        const validadeProforma = isProforma ? (data.validadeProforma || 30) : null;
+
+        return `Você é contabilista especializado no regime fiscal moçambicano. Elabore um(a) ${tipoDoc.toUpperCase()} completo(a) e conforme a legislação tributária vigente.
+
+BASE LEGAL APLICÁVEL:
+- Lei n.º 32/2007, de 28 de Dezembro (Lei do IVA em Moçambique) — IVA à taxa de 16%
+- Decreto n.º 7/2008 (Regulamento do IVA)
+- Decreto n.º 70/2022, de 31 de Dezembro (Faturação eletrónica — obrigatória para grandes contribuintes)
+- Circular n.º 8/AT/2016 (Autoridade Tributária — requisitos de documentos fiscais)
+- Lei n.º 15/2002, de 26 de Junho (Lei de Bases do Sistema Tributário de Moçambique)
 
 DADOS:
-- Tipo: ${data.tipoDoc} | N.º: ${numDoc}
-- Emitente: ${data.emitente} | NUIT: ${data.nuitEmitente || 'N/A'}
-- Cliente: ${data.cliente} | BI: ${data.biCliente || 'N/A'}
+- Tipo de documento: ${tipoDoc}
+- Emitente: ${data.emitente} | NUIT: ${data.nuitEmitente || '[OBRIGATÓRIO para Factura]'}
+- Endereço/contacto emitente: ${data.enderecoEmitente || '________________________________'}
+- Cliente: ${data.cliente} | BI/NUIT: ${data.biCliente || 'N/A'}
 - Descrição: ${data.descricao}
-- Valor: ${valorNum.toLocaleString('pt-MZ')} MZN | IVA: ${data.iva}
-- Pagamento: ${data.pagamento}
-- Local/Data: ${data.local || dataFmt}${ocrBlock}
+- Valor base: ${valorBruto.toLocaleString('pt-MZ')} MZN
+- IVA: ${data.iva || 'Não (regime simplificado)'}
+- Forma de pagamento: ${data.pagamento}
+- Conta/M-Pesa: ${data.contaBancaria || 'não indicado'}
+${isProforma ? '- Validade da proforma: ' + validadeProforma + ' dias' : ''}
+- Local e data: ${data.local}${ocrBlock}
+
+REGRAS FISCAIS CRÍTICAS:
+1. ${isFactura ? 'FACTURA: NUIT do emitente é OBRIGATÓRIO. Numeração sequencial obrigatória. IVA separado do valor base se aplicável.' : ''}
+2. ${isProforma ? 'FACTURA PROFORMA: é uma ESTIMATIVA, não uma cobrança. NÃO aplique IVA (o IVA só é exigível na factura definitiva). Inclua validade de ' + validadeProforma + ' dias e condições de entrega.' : ''}
+3. ${isRecibo ? 'RECIBO SIMPLES: documento de quitação — confirma pagamento já recebido. Não inclui IVA separado.' : ''}
+4. ${isNDebito ? 'NOTA DE DÉBITO: emitida para cobrar valores adicionais não incluídos na factura original. Deve referenciar a factura original.' : ''}
+5. ${comIVA ? 'IVA calculado: base ' + valorBruto.toLocaleString('pt-MZ') + ' MZN × 16% = ' + parseFloat(valorIVA).toLocaleString('pt-MZ') + ' MZN | Total c/ IVA: ' + parseFloat(valorLiquido).toLocaleString('pt-MZ') + ' MZN' : 'Operação sem IVA — motivo: ' + (data.iva || 'regime simplificado')}
+6. ${nuitObrigatorio && !data.nuitEmitente ? 'ATENÇÃO: NUIT do emitente não foi fornecido — assinale claramente no documento como [OBRIGATÓRIO — INSERIR NUIT]' : ''}
 
 DOCUMENTO COMPLETO:
 
 ---
 
-# ${(data.tipoDoc || 'RECIBO').toUpperCase()} N.º ${numDoc}/${new Date().getFullYear()}
+# ${tipoDoc.toUpperCase()}
+
+**N.º:** ${tipoDoc === 'Recibo Simples' ? 'REC' : tipoDoc === 'Factura' ? 'FT' : tipoDoc === 'Factura Proforma' ? 'FP' : 'ND'}/____/${hoje.getFullYear()}
+**Data:** ${data.local}
+${isProforma ? '**Válida até:** [calcular: ' + validadeProforma + ' dias após data acima]\n**Esta Proforma NÃO constitui cobrança fiscal — sujeita a confirmação de encomenda**' : ''}
+
+---
+
+## EMITENTE
 
 | | |
 |---|---|
-| **Emitente:** | **${data.emitente}** |
-| **NUIT:** | ${data.nuitEmitente || 'N/A'} |
-| **Endereço:** | ________________________________ |
-| **Telefone:** | ________________________________ |
-| **Email:** | ________________________________ |
+| **Nome / Empresa:** | ${data.emitente} |
+| **NUIT:** | ${data.nuitEmitente || (nuitObrigatorio ? '**[INSERIR NUIT — OBRIGATÓRIO]**' : 'N/A (regime simplificado)')} |
+| **Endereço / Contacto:** | ${data.enderecoEmitente || '________________________________'} |
 
----
+## CLIENTE / ADQUIRENTE
 
-**CLIENTE / COMPRADOR:**
-
-| Campo | Dados |
+| | |
 |---|---|
-| Nome | ${data.cliente} |
-| BI/NUIT | ${data.biCliente || 'N/A'} |
-| Endereço | ________________________________ |
+| **Nome:** | ${data.cliente} |
+| **BI / NUIT:** | ${data.biCliente || '________________________________'} |
 
 ---
 
-## Descrição dos Bens / Serviços
+## DESCRIÇÃO ${isNDebito ? '(VALOR ADICIONAL — referente à Factura n.º _________)' : ''}
 
-| N.º | Descrição | Qtd. | Preço Unit. (MZN) | Total (MZN) |
-|---|---|---|---|---|
-${data.descricao.split(/[,;\n]/).map((item, i) => `| ${i+1} | ${item.trim()} | 1 | [valor] | [valor] |`).join('\n')}
-| | | | **Subtotal** | **${subtotal.toLocaleString('pt-MZ', {minimumFractionDigits:2})}** |
-${temIva ? `| | | | **IVA (16%)** | **${ivaValor.toLocaleString('pt-MZ', {minimumFractionDigits:2})}** |` : '| | | | *Isento de IVA* | *—* |'}
-| | | | **TOTAL GERAL** | **${valorNum.toLocaleString('pt-MZ', {minimumFractionDigits:2})} MZN** |
-
-**Por extenso:** ${_numPorExtenso(data.valor)} meticais ${temIva ? '(incluindo IVA)' : ''}
+| Descrição | ${comIVA ? 'Valor Base (MZN)' : 'Valor (MZN)'} |
+|---|---|
+${data.descricao.split('\n').filter(Boolean).map(linha => `| ${linha.trim()} | |`).join('\n')}
+${comIVA ? `| | |
+| **Subtotal (sem IVA):** | **${valorBruto.toLocaleString('pt-MZ')}** |
+| **IVA (16%):** | **${parseFloat(valorIVA).toLocaleString('pt-MZ')}** |
+| **TOTAL (com IVA):** | **${parseFloat(valorLiquido).toLocaleString('pt-MZ')} MZN** |` : `| **TOTAL:** | **${valorBruto.toLocaleString('pt-MZ')} MZN** |`}
 
 ---
 
-**Forma de pagamento:** ${data.pagamento}
-**Estado:** ${data.pagamento === 'A prazo' ? '⏳ A Pagar' : '✅ Pago'}
+## CONDIÇÕES DE PAGAMENTO
 
-${data.tipoDoc?.toLowerCase().includes('recibo') ? `---
+- **Forma:** ${data.pagamento}
+${data.contaBancaria ? '- **Conta / M-Pesa:** ' + data.contaBancaria : ''}
+${isProforma ? `- **Condições de entrega:** [definir: imediata / prazo / condições] \n- **Validade desta proforma:** ${validadeProforma} dias a contar da data acima` : ''}
+${isNDebito ? '- **Prazo de pagamento:** ______ dias a contar da data deste documento' : ''}
+${!isProforma && !isRecibo ? '- **Esta factura é exigível na data indicada acima**' : ''}
 
-**DECLARAÇÃO DE RECEBIMENTO:**
+---
 
-Eu, **${data.emitente}**, portador(a) do NUIT **${data.nuitEmitente || '____________________'}**, DECLARO ter recebido do(a) Sr(a). **${data.cliente}** a quantia de **${valorNum.toLocaleString('pt-MZ', {minimumFractionDigits:2})} MZN (${_numPorExtenso(data.valor)} meticais)**, referente a: ${data.descricao}.
+${isRecibo ? `## DECLARAÇÃO DE QUITAÇÃO
 
-**${data.local || 'Maputo'}, ${dataFmt}**
+Eu, **${data.emitente}**, declaro ter recebido de **${data.cliente}** a quantia de **${valorBruto.toLocaleString('pt-MZ')} MZN** (por extenso: ________________________________), a título de pagamento pelo(s) bem(ns)/serviço(s) acima descritos, dando-lhe a plena e total quitação.` : ''}
+
+**${data.emitente}**
+${data.local}
 
 _________________________________________
-**${data.emitente}**
-*(Assinatura e carimbo)*` : ''}
+*(Assinatura${data.nuitEmitente ? ' e carimbo' : ''})*
 
 ---
 
-*Documento emitido nos termos da Lei n.º 20/2013 e Circular n.º 8/AT/2016 da Autoridade Tributária de Moçambique.*
-*${temIva ? 'IVA incluído à taxa de 16%, conforme Lei n.º 32/2007.' : 'Operação isenta de IVA.'}*`;
+*${comIVA ? 'Documento sujeito a IVA à taxa de 16%, conforme Lei n.º 32/2007, de 28 de Dezembro.' : 'Operação isenta ou não sujeita a IVA — ' + (data.iva || 'regime simplificado') + '.'}*
+${isProforma ? '*Factura Proforma: documento sem valor fiscal. O IVA será aplicado na factura definitiva após confirmação da encomenda.*' : ''}`;
       },
-
       recomendacao: () => {
         const hoje = new Date();
         const dataFmt = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
-        return `Você é ${data.recomendador}, ${data.cargoRec} na ${data.entidadeRec}. Redija uma CARTA DE RECOMENDAÇÃO formal, específica e convincente.
+        const tipoRec = data.tipoRec || 'Recomendação Profissional';
+        const temExemplo = !!(data.exemploConcreto && data.exemploConcreto.trim());
+        return `Você é especialista em comunicação profissional e académica. Redija uma ${tipoRec.toUpperCase()} completa, persuasiva e genuinamente útil para o destinatário.
 
 DADOS:
-- Tipo: ${data.tipoRec}
-- Recomendado: ${data.recomendado} | Para: ${data.cargoRecm}
-- Relação: ${data.relacao}
+- Tipo: ${tipoRec}
+- Recomendador: ${data.recomendador} | Cargo: ${data.cargoRec} | Entidade: ${data.entidadeRec}
+- Recomendado: ${data.recomendado} | Cargo/função pretendida: ${data.cargoRecm}
+- Relação e período: ${data.relacao}
 - Qualidades a destacar: ${data.qualidades}
+- Exemplo concreto fornecido: ${data.exemploConcreto || '[NÃO FORNECIDO — ver regra 3]'}
 - Destinatário: ${data.destinatario || 'A quem possa interessar'}${ocrBlock}
 
 REGRAS CRÍTICAS:
-1. CADA qualidade com EXEMPLO CONCRETO — "demostrou liderança quando [situação real]"
-2. NUNCA: "pessoa dedicada", "trabalha em equipa" sem contexto específico
-3. A conclusão deve ser RECOMENDAÇÃO EXPLÍCITA E INCONDICIONAL
-4. Tom: caloroso mas credível — entusiasta mas não exagerado
+1. USE os dados fornecidos pelo utilizador como base — não invente factos, nomes de projectos ou situações não descritas
+2. Qualidades SEMPRE com contexto específico: nunca "é pontual" sem um exemplo; nunca "é líder" sem uma situação concreta
+3. ${temExemplo ? 'EXEMPLO FORNECIDO: use o exemplo concreto literalmente como base da secção central: "' + data.exemploConcreto + '"' : 'EXEMPLO NÃO FORNECIDO: assinale claramente no parágrafo central com [INSERIR EXEMPLO CONCRETO — o recomendador deve adicionar uma situação real aqui], não invente'}
+4. Tom caloroso mas factual — evite superlativos vazios ("excepcional", "extraordinário") sem base concreta
+5. Máximo 1 página A4 — carta de recomendação longa não é lida
+6. Frase de abertura: NUNCA use "Venho por este meio" — comece directamente com quem é o recomendador e a sua autoridade
 
-DOCUMENTO COMPLETO:
-
----
+ESTRUTURA OBRIGATÓRIA:
 
 **${data.recomendador}**
-${data.cargoRec} — ${data.entidadeRec}
-📞 [contacto] | ✉️ [email]
+${data.cargoRec}
+${data.entidadeRec}
 
 ${dataFmt}
 
-${data.destinatario || 'A quem possa interessar'}
+${data.destinatario || 'A Quem Possa Interessar'}
 
-**Assunto: Carta de Recomendação — ${data.recomendado}**
+---
 
-Exmo(a). Sr(a),
+**Assunto: ${tipoRec} — ${data.recomendado}**
 
-**[PARÁGRAFO 1 — CREDENCIAL DO RECOMENDADOR]**
-Sou ${data.recomendador}, ${data.cargoRec} na ${data.entidadeRec} há [X] anos, com responsabilidade sobre [área específica]. Nesta qualidade, tive a oportunidade de trabalhar directamente com ${data.recomendado} no contexto de ${data.relacao}.
+[Parágrafo 1 — ABERTURA E CREDENCIAL DO RECOMENDADOR (3-4 linhas):
+Comece com uma afirmação directa: "Conheço [nome] desde [período], tendo trabalhado directamente com ele/ela como [relação]."
+Estabeleça a credencial do recomendador para esta recomendação específica.
+Baseie-se em: "${data.relacao}"]
 
-**[PARÁGRAFO 2 — CONTEXTO DA RELAÇÃO]**
-Conheci ${data.recomendado} em [mês/ano] quando [descreva o contexto específico: projecto, equipa, curso]. Durante [período], trabalhamos [diariamente / frequentemente] em [tipo de trabalho], o que me permitiu observar de perto as suas capacidades técnicas e humanas.
+[Parágrafo 2 — CAPACIDADES E QUALIDADES COM CONTEXTO ESPECÍFICO (4-5 linhas):
+Para cada qualidade em "${data.qualidades}", adicione contexto específico da relação de trabalho.
+Exemplo de formato correcto: "A sua [qualidade] ficou demonstrada quando [situação/contexto específico do dia-a-dia de trabalho]."
+NÃO use qualidades soltas sem contexto.]
 
-**[PARÁGRAFO 3 — DESEMPENHO COM EXEMPLOS CONCRETOS]**
-No que respeita às qualidades de "${data.qualidades}", posso afirmar com base em factos concretos: [descreva 2-3 situações específicas em que o recomendado demonstrou cada qualidade mencionada, com resultados mensuráveis. Ex: "No projecto X, ${data.recomendado} liderou uma equipa de Y pessoas, entregou Z resultado em W semanas, superando a expectativa em A%"].
+[Parágrafo 3 — EXEMPLO CONCRETO DE REALIZAÇÃO (4-5 linhas — NÚCLEO DA CARTA):
+${temExemplo ? 'Expanda e estruture o seguinte exemplo real fornecido pelo recomendador: "' + data.exemploConcreto + '". Descreva o contexto, o que o recomendado fez especificamente, e o resultado/impacto.' : '[INSERIR EXEMPLO CONCRETO — o recomendador deve descrever aqui uma situação real que tenha observado, com contexto, acção e resultado. Esta secção é obrigatória para credibilidade.]'}]
 
-**[PARÁGRAFO 4 — REALIZAÇÕES E IMPACTO]**
-Uma realização que ilustra bem o perfil de ${data.recomendado} foi [descreva um projecto, iniciativa ou situação específica com impacto mensurável na ${data.entidadeRec} ou na equipa].
-
-**[PARÁGRAFO 5 — RECOMENDAÇÃO EXPLÍCITA]**
-Recomendo **${data.recomendado} sem reservas** para o cargo/função de **${data.cargoRecm}**. Tenho plena confiança de que trará contribuições significativas e que irá superar as expectativas da vossa organização. Se precisar de informação adicional, estou disponível no contacto acima.
+[Parágrafo 4 — ADEQUAÇÃO PARA A FUNÇÃO E RECOMENDAÇÃO (3-4 linhas):
+Ligue explicitamente as qualidades demonstradas ao cargo/função pretendida: "${data.cargoRecm}".
+Termine com uma recomendação clara e sem reservas: "Recomendo sem reservas..." ou "Não hesito em recomendar..."]
 
 Com os melhores cumprimentos,
 
@@ -1148,278 +1403,322 @@ ${data.cargoRec}
 ${data.entidadeRec}
 [Contacto directo]`;
       },
-
       planonegocio: () => {
         const anoActual = new Date().getFullYear();
-        return `Elabore um PLANO DE NEGÓCIOS PROFISSIONAL para o seguinte empreendimento em Moçambique.
+        const inv = parseInt(data.investimento || 0);
+        const nTrab = parseInt(data.nTrabalhadores || 1);
+        const financParcial = data.financiamentoParcial || 'Não — a candidatar a 100%';
+        const temCapProprio = financParcial.includes('capital próprio');
+        return `Você é consultor sénior de negócios com experiência no mercado moçambicano. Elabore um PLANO DE NEGÓCIOS completo, credível e adequado para candidatura a financiamento bancário ou institucional em Moçambique.
 
-DADOS DO NEGÓCIO:
-- Nome: ${data.nomeNegocio} | Sector: ${data.sector}
-- Proprietário: ${data.proprietario} | Local: ${data.local}
+DADOS:
+- Nome do negócio: ${data.nomeNegocio}
+- Forma jurídica: ${data.formaJuridica}
+- Sector: ${data.sector}
+- Proprietário: ${data.proprietario} | Localização: ${data.local}
 - Descrição: ${data.descricao}
-- Investimento inicial: ${data.investimento} MZN
-- Clientes-alvo: ${data.clientes}
-- Concorrência e diferencial: ${data.concorrencia || 'A definir pelo proprietário'}
+- Investimento total necessário: ${inv.toLocaleString('pt-MZ')} MZN
+- Situação de financiamento: ${financParcial}
+- N.º de trabalhadores previstos: ${nTrab}
+- Público-alvo: ${data.clientes}
+- Concorrência e diferencial: ${data.concorrencia || 'a analisar'}
 - Prazo de retorno esperado: ${data.retorno}${ocrBlock}
 
-REGRAS DE QUALIDADE OBRIGATÓRIAS:
-1. NUNCA use frases genéricas: "uma das principais marcas", "crescimento sustentável e rentável", "qualidade e inovação" — estas são proibidas
-2. CADA secção deve ser específica ao negócio "${data.nomeNegocio}" — nunca genérica
-3. Se um dado não foi fornecido, apresenta campo "[A preencher pelo empreendedor]" — NUNCA inventa valores
-4. Projectões financeiras: se não há dados de base, apresenta tabela com fórmulas e instruções de preenchimento
-5. Use dados reais do mercado moçambicano ${anoActual} (inflação, taxa de câmbio, tendências do sector ${data.sector})
-6. Sem repetições — cada secção traz informação NOVA e ESPECÍFICA
+REGRAS:
+1. Use dados reais do mercado moçambicano ${anoActual} — taxas de juro BCI/BIM/Standard Bank ≈ 23-28% ao ano; inflação ≈ 5-7%; câmbio USD/MZN ≈ consultar BdM
+2. Forma jurídica "${data.formaJuridica}": reflicta os requisitos legais específicos (capital mínimo para Lda = 20.000 MZN; SA = 2.000.000 MZN)
+3. ${temCapProprio ? 'Capital próprio parcial disponível — estruture o plano financeiro mostrando a proporção capital próprio / financiamento externo' : 'Financiamento a 100% — justifique a viabilidade e o colateral disponível'}
+4. N.º de trabalhadores: ${nTrab} — calcule a folha salarial com base no salário mínimo por sector em Moçambique ${anoActual}
+5. Projecções financeiras: 3 anos, com cenário base e pessimista
+6. Incluir análise SWOT com dados específicos do mercado de ${data.local}
 
-ESTRUTURA OBRIGATÓRIA (use ---PAGE_BREAK--- entre cada secção principal):
+ESTRUTURA OBRIGATÓRIA (formato profissional para banco/incubadora):
 
----PAGE_BREAK---
-# ${data.nomeNegocio}
-**Plano de Negócios ${anoActual}**
+---
 
----PAGE_BREAK---
-## Índice
+# PLANO DE NEGÓCIOS — ${data.nomeNegocio.toUpperCase()}
 
-1. Resumo Executivo .................................................. 3
-2. Descrição do Negócio .............................................. 4
-3. Análise de Mercado ................................................. 5
-4. Plano de Marketing ................................................. 6
-5. Plano Operacional .................................................. 7
-6. Plano Financeiro ................................................... 8
-7. Equipa e Estrutura ................................................. 9
-8. Riscos e Mitigação ................................................. 10
-9. Conclusão e Pedido de Apoio ........................................ 11
+**${data.formaJuridica} | ${data.sector} | ${data.local} | ${anoActual}**
+**Elaborado por:** ${data.proprietario}
 
----PAGE_BREAK---
-## 1. Resumo Executivo
+---
 
-[Escreve 3-4 parágrafos concisos e específicos sobre "${data.nomeNegocio}":
-- Parágrafo 1: O que é o negócio, o que vende/oferece, em que contexto do sector ${data.sector} se insere em ${data.local}
-- Parágrafo 2: Modelo de receita específico, proposta de valor diferenciada face à concorrência (${data.concorrencia || 'mercado local'})
-- Parágrafo 3: Investimento de ${data.investimento} MZN — como será utilizado (percentagem por categoria)
-- Parágrafo 4: Retorno esperado em ${data.retorno} com base nas condições do mercado moçambicano]
+## 1. SUMÁRIO EXECUTIVO
 
----PAGE_BREAK---
-## 2. Descrição do Negócio
+[150-200 palavras: síntese do negócio, oportunidade de mercado, necessidade de financiamento (${inv.toLocaleString('pt-MZ')} MZN), retorno esperado (${data.retorno}), e o que torna este negócio viável em ${data.local}. NUNCA genérico — seja específico ao sector e localização.]
 
-[Descreve em 4-5 parágrafos específicos:
-- História e motivação: por que ${data.proprietario} criou este negócio, problema que resolve em ${data.local}
-- Produtos/serviços: lista detalhada com preços de referência em MZN
-- Modelo de operação: como funciona no dia-a-dia (horário, processos, equipa)
-- Vantagem competitiva: o que torna ${data.nomeNegocio} diferente dos concorrentes em ${data.local}
-- Fase actual e próximos passos nos primeiros 6 meses]
+---
 
----PAGE_BREAK---
-## 3. Análise de Mercado
+## 2. DESCRIÇÃO DO NEGÓCIO
 
-[4 parágrafos específicos ao sector ${data.sector} em Moçambique:
-- Tamanho do mercado: dados reais do INE ou Banco de Moçambique sobre o sector ${data.sector}
-- Clientes-alvo: perfil detalhado de ${data.clientes} (localização, rendimento médio, comportamento de compra)
-- Concorrência directa em ${data.local}: nomeia concorrentes reais se possível, analisa pontos fracos
-- Tendências ${anoActual}-${anoActual+2}: oportunidades e ameaças específicas ao sector em Moçambique]
+### 2.1 Missão e Visão
+**Missão:** [frase concisa sobre o propósito]
+**Visão:** [onde quer estar em 3-5 anos]
 
----PAGE_BREAK---
-## 4. Plano de Marketing
+### 2.2 Descrição Detalhada
+${data.descricao}
+[Expanda: o que exactamente vende/oferece, como funciona o processo de serviço/produção/venda, qual o modelo de receita]
 
-[3-4 parágrafos + estratégia específica:
-- Preços: tabela comparativa com concorrência, justificação da margem
-- Canais de venda: presença física em ${data.local}, WhatsApp Business, M-Pesa, redes sociais — com plano de acção concreto
-- Promoção: estratégia de captação dos primeiros 50 clientes (orçamento específico, canais, mensagem)
-- Fidelização: como manter clientes recorrentes no contexto de ${data.local}]
+### 2.3 Forma Jurídica e Constituição
+**Forma:** ${data.formaJuridica}
+[Requisitos legais: capital mínimo, registo na Conservatória do Comércio, licenças necessárias para o sector "${data.sector}" em Moçambique, NUIT, alvará municipal]
 
----PAGE_BREAK---
-## 5. Plano Operacional
+---
 
-[Descreve com detalhe:
-- Localização e instalações: endereço exacto em ${data.local}, custos de renda/espaço
-- Equipamentos e fornecedores: lista de equipamentos necessários com preços MZN, fornecedores locais preferidos
-- Processos diários: fluxo de trabalho do negócio hora a hora
-- Cadeia de abastecimento: de onde vêm os produtos/materiais, prazo de entrega, condições de pagamento]
+## 3. ANÁLISE DE MERCADO
 
----PAGE_BREAK---
-## 6. Plano Financeiro
+### 3.1 Mercado-Alvo
+${data.clientes}
+[Tamanho estimado do mercado em ${data.local}: quantas pessoas/empresas potencialmente, poder de compra, comportamento de consumo]
 
-[Apresenta as seguintes tabelas com valores em MZN:]
+### 3.2 Análise da Concorrência
+${data.concorrencia || '[Identificar 2-3 concorrentes directos e indirectos em ' + data.local + ']'}
+[Para cada concorrente: preço, qualidade, localização, fraquezas que o negócio pode explorar]
 
-### 6.1 Investimento Inicial — Total: ${data.investimento} MZN
+### 3.3 Diferencial Competitivo
+[O que torna ${data.nomeNegocio} diferente e preferível — seja específico, não genérico]
 
-| Item | Valor (MZN) | % do Total |
+### 3.4 Análise SWOT
+
+| | Favoráveis | Desfavoráveis |
 |---|---|---|
-| Equipamentos | [A preencher] | [%] |
-| Stock inicial | [A preencher] | [%] |
-| Renda (3 meses) | [A preencher] | [%] |
-| Marketing inicial | [A preencher] | [%] |
-| Licenças e taxas | [A preencher] | [%] |
-| Reserva de emergência | [A preencher] | [%] |
-| **TOTAL** | **${data.investimento} MZN** | **100%** |
+| **Internos** | **Forças:** [3-4 pontos específicos ao negócio] | **Fraquezas:** [3-4 pontos honestos] |
+| **Externos** | **Oportunidades:** [3-4 oportunidades reais do mercado de ${data.local} em ${anoActual}] | **Ameaças:** [riscos reais: inflação, concorrência, regulação] |
 
-### 6.2 Projecção Financeira — 12 Meses
+---
 
-| Mês | Receita Prevista (MZN) | Custos Fixos (MZN) | Custos Variáveis (MZN) | Lucro/Prejuízo (MZN) |
-|---|---|---|---|---|
-| Mês 1 | [A preencher] | [A preencher] | [A preencher] | [Fórmula: Receita - Custos] |
-| Mês 2-3 | [A preencher] | [A preencher] | [A preencher] | [A preencher] |
-| Mês 4-6 | [A preencher] | [A preencher] | [A preencher] | [A preencher] |
-| Mês 7-12 | [A preencher] | [A preencher] | [A preencher] | [A preencher] |
+## 4. PLANO OPERACIONAL
 
-**Ponto de Equilíbrio:** [Calcule: Custos Fixos Mensais ÷ Margem de Contribuição (%)]
-**Prazo de Retorno do Investimento:** ${data.retorno}
+### 4.1 Estrutura Operacional
+[Como funciona o negócio dia-a-dia: horário, processo de atendimento, ciclo de compra/produção/venda/entrega]
 
----PAGE_BREAK---
-## 7. Equipa e Estrutura
+### 4.2 Localização
+**${data.local}** — [justificativa: proximidade ao cliente-alvo, custo, acessibilidade]
 
-[Descreve quem trabalha no negócio:
-- ${data.proprietario}: função, experiência, dedicação (tempo integral/parcial)
-- Outros colaboradores previstos: número, funções, custo mensal em MZN
-- Organograma simples se aplicável
-- Plano de formação se necessário]
+### 4.3 Equipa e Recursos Humanos
 
----PAGE_BREAK---
-## 8. Riscos e Mitigação
-
-| Risco | Probabilidade | Impacto | Estratégia de Mitigação |
+| Cargo | N.º | Salário mensal est. (MZN) | Total/mês (MZN) |
 |---|---|---|---|
-| Baixa procura inicial | [Alta/Média/Baixa] | Alto | [Acção específica] |
-| Aumento de custos (inflação MZN) | Alta | Médio | Contratos de fornecimento a preço fixo; revisão trimestral |
-| Concorrência agressiva | [A avaliar] | [A avaliar] | [Acção específica] |
-| Problemas de liquidez | Média | Alto | Reserva de emergência de [X] MZN; crédito pré-aprovado |
+| [Proprietário/Gestor] | 1 | [salário mínimo sector + % gestão] | |
+| [Colaboradores operacionais] | ${Math.max(nTrab - 1, 0)} | [salário mínimo sector ${data.sector} ${anoActual}] | |
+| **TOTAL FOLHA SALARIAL** | **${nTrab}** | | **[total/mês]** |
 
----PAGE_BREAK---
-## 9. Conclusão e Pedido de Apoio
+---
 
-[2-3 parágrafos:
-- Síntese do potencial de ${data.nomeNegocio} para o mercado de ${data.local}
-- Pedido específico: tipo de apoio/financiamento pretendido, valor, condições propostas
-- Compromisso do empreendedor: o que oferece em troca (garantias, relatórios, transparência)]
+## 5. PLANO FINANCEIRO
 
-Use dados realistas do mercado moçambicano ${anoActual}.`;
+### 5.1 Investimento Inicial
+
+| Item | Valor (MZN) |
+|---|---|
+| Equipamentos e utensílios | |
+| Stock inicial / Matérias-primas | |
+| Licenças e registos | |
+| Renda (3 meses adiantada) | |
+| Capital de giro (3 meses) | |
+| Outros | |
+| **TOTAL INVESTIMENTO** | **${inv.toLocaleString('pt-MZ')}** |
+
+### 5.2 Fontes de Financiamento
+
+| Fonte | Valor (MZN) | % |
+|---|---|---|
+| ${temCapProprio ? 'Capital próprio do promotor' : '[Capital a financiar]'} | | |
+| [Banco / Instituição financiadora] | | |
+| **TOTAL** | **${inv.toLocaleString('pt-MZ')}** | **100%** |
+
+### 5.3 Projecções de Receita (3 anos)
+
+| | Ano 1 | Ano 2 | Ano 3 |
+|---|---|---|---|
+| Receita bruta estimada (MZN) | | | |
+| Custos operacionais (MZN) | | | |
+| Folha salarial (MZN/ano) | | | |
+| **Resultado líquido (MZN)** | | | |
+| **Margem líquida (%)** | | | |
+
+*Premissas: [crescimento de vendas conservador 10-15%/ano; inflação ${anoActual} ≈ 6%; taxa de juro bancária ≈ 25%/ano se aplicável]*
+
+### 5.4 Ponto de Equilíbrio (Break-Even)
+[Calcular: custos fixos mensais / margem de contribuição unitária = n.º de unidades/clientes necessários para cobrir custos]
+
+**Prazo de retorno do investimento estimado: ${data.retorno}**
+
+---
+
+## 6. GESTÃO DE RISCOS
+
+| Risco | Probabilidade | Impacto | Mitigação |
+|---|---|---|---|
+| Inflação / depreciação do MZN | Alta | Alto | Ajuste trimestral de preços |
+| Concorrência de novos entrantes | Média | Médio | Fidelização de clientes, qualidade |
+| Inadimplência de clientes | Média | Alto | Pagamento adiantado / a pronto |
+| [Risco específico do sector ${data.sector}] | | | |
+
+---
+
+## 7. CONCLUSÃO E PEDIDO DE FINANCIAMENTO
+
+[Síntese do potencial do negócio em ${data.local}, a necessidade específica de ${inv.toLocaleString('pt-MZ')} MZN, o retorno esperado para o financiador em ${data.retorno}, e o compromisso do promotor. Mencione a criação de ${nTrab} postos de trabalho como impacto social positivo.]
+
+---
+
+*Use dados realistas do mercado moçambicano ${anoActual}.*`;
       },
-
       licenca: () => {
         const hoje = new Date();
         const dataFmt = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
-        const leiMap = {
-          'Licença Comercial (Alvará)': 'Lei n.º 3/1993, de 24 de Junho (Lei das Actividades Comerciais), Decreto n.º 43/2015 (Regulamento de Licenciamento Simplificado), Lei n.º 15/2013 (Lei do Ambiente — para actividades com impacto ambiental)',
-          'Licença de Construção': 'Lei n.º 19/2007, de 18 de Julho (Lei de Ordenamento Territorial), Regulamento de Construção Urbana, Decreto n.º 23/2008 (Regulamento sobre o Processo Construtivo)',
-          'Autorização de Evento': 'Lei n.º 7/2013 (Lei das Assembleias, Reuniões e Manifestações), Decreto Municipal aplicável da Câmara competente',
-          'Licença de Transporte': 'Lei n.º 26/2006, de 23 de Agosto (Lei dos Transportes Terrestres), Decreto n.º 12/2010 (Regulamento dos Transportes)',
-          'Licença Ambiental': 'Lei n.º 20/1997, de 1 de Outubro (Lei do Ambiente), Decreto n.º 54/2015 (Regulamento de Avaliação de Impacto Ambiental), Decreto n.º 25/2011',
-        };
-        const leiAplicavel = leiMap[data.tipoLicenca] || 'legislação municipal e nacional aplicável à actividade em causa';
-        return `Você é jurista especialista em direito administrativo e licenciamento empresarial em Moçambique. Redija um PEDIDO DE LICENÇA formal, completo e juridicamente fundamentado.
+        const tipoLicenca = data.tipoLicenca || 'Licença Comercial (Alvará)';
+        const tipoEstabelec = data.tipoEstabelec || 'Permanente (estrutura fixa)';
 
-BASE LEGAL: ${leiAplicavel}
+        const leiMap = {
+          'Licença Comercial (Alvará)': {
+            lei: 'Lei n.º 3/1993, de 24 de Junho (Lei das Actividades Comerciais); Decreto n.º 43/2004, de 1 de Setembro (Regulamento de Licenciamento das Actividades Comerciais); Regulamento Municipal correspondente',
+            entidade: 'Câmara Municipal / Conselho Municipal',
+            prazo: '30 a 60 dias úteis',
+            docs: 'Certidão comercial, planta de localização, alvará de construção (se aplicável), comprovativo de NUIT, documento de identidade do requerente, parecer de conformidade técnica',
+          },
+          'Licença de Construção': {
+            lei: 'Regulamento Geral de Construção e Habitação Urbana (Decreto n.º 28/1994); Lei do Ordenamento do Território (Lei n.º 19/2007, de 18 de Julho); Decreto n.º 23/2008 (Regulamento de Licenciamento de Construção)',
+            entidade: 'Direcção Municipal de Infra-estruturas / DINOTER',
+            prazo: '45 a 90 dias úteis',
+            docs: 'Projecto de construção aprovado, levantamento topográfico, título de uso e aproveitamento da terra (DUAT), certidão de não dívida fiscal',
+          },
+          'Autorização de Evento': {
+            lei: 'Regulamento Municipal de Eventos; Decreto n.º 66/2010 (Segurança em Eventos Públicos); Lei n.º 7/2017 (Prevenção e Combate ao Branqueamento de Capitais — para eventos de grande dimensão)',
+            entidade: 'Câmara Municipal; Polícia da República de Moçambique (para eventos públicos)',
+            prazo: '15 a 30 dias úteis — submeter com mínimo 30 dias de antecedência',
+            docs: 'Plano do evento, local, capacidade, medidas de segurança, seguro de responsabilidade civil (recomendado), carta do proprietário do espaço',
+          },
+          'Licença de Transporte': {
+            lei: 'Lei n.º 21/2008, de 31 de Dezembro (Lei de Transportes Rodoviários); Decreto n.º 26/2011 (Regulamento de Transportes Rodoviários); Diploma Ministerial n.º 64/2007',
+            entidade: 'Instituto Nacional de Transportes Terrestres (INATTER)',
+            prazo: '30 a 45 dias úteis',
+            docs: 'Registo do(s) veículo(s), carta de condução válida, seguro obrigatório, certificado de inspecção técnica, certidão comercial',
+          },
+          'Licença Ambiental': {
+            lei: 'Lei n.º 20/97, de 1 de Outubro (Lei do Ambiente); Decreto n.º 54/2015, de 31 de Dezembro (Regulamento de Avaliação de Impacto Ambiental); Lei n.º 5/2017 (Gestão de Resíduos)',
+            entidade: 'Ministério da Terra e Ambiente (MITADER) / Direcção Provincial do Ambiente',
+            prazo: '60 a 180 dias úteis (dependendo da categoria ambiental: A, B ou C)',
+            docs: 'Relatório de Avaliação de Impacto Ambiental (EIA ou EPDA), plano de gestão ambiental, certidão de não dívida, termos de referência aprovados',
+          },
+          'Outra': {
+            lei: 'legislação específica aplicável ao tipo de licença/autorização requerida',
+            entidade: data.entidade || 'Entidade competente',
+            prazo: 'a confirmar junto da entidade',
+            docs: 'conforme exigência específica da entidade',
+          },
+        };
+
+        const lic = leiMap[tipoLicenca] || leiMap['Outra'];
+
+        return `Você é especialista em direito administrativo e licenciamento em Moçambique. Redija um PEDIDO DE LICENÇA / REQUERIMENTO DE AUTORIZAÇÃO formal, juridicamente fundamentado e completo.
+
+BASE LEGAL APLICÁVEL A "${tipoLicenca}":
+${lic.lei}
 
 DADOS:
-- Tipo: ${data.tipoLicenca}
+- Tipo de licença: ${tipoLicenca}
 - Requerente: ${data.requerente} | NUIT: ${data.nuit} | Tel: ${data.contacto}
-- Entidade: ${data.entidade}
-- Objecto: ${data.objecto}
-- Local: ${data.local}
-- Documentos: ${data.documentos || 'listados abaixo'}${ocrBlock}
+- Entidade destinatária: ${data.entidade}
+- Objecto do pedido: ${data.objecto}
+- Tipo de estabelecimento: ${tipoEstabelec}
+- Área: ${data.areaM2 ? data.areaM2 + ' m²' : 'não indicada'}
+- Horário de funcionamento: ${data.horario || 'a definir'}
+- N.º de postos de trabalho previstos: ${data.nPostosTrabalho || 'a indicar'}
+- Local exacto: ${data.local}
+- Documentos a anexar: ${data.documentos || lic.docs}${ocrBlock}
 
-DOCUMENTO COMPLETO:
+REGRAS:
+1. Mencionar a base legal específica para "${tipoLicenca}" — não usar linguagem genérica
+2. Tipo de estabelecimento "${tipoEstabelec}": reflectir nas condições do pedido (permanente vs temporário vs ambulante)
+3. Prazo esperado de resposta para este tipo: ${lic.prazo}
+4. Lista de documentos obrigatórios específicos a este tipo de licença
+5. Frase de abertura: NUNCA "Venho por este meio" — comece directamente
 
----
-
-**${data.requerente}**
-NUIT: ${data.nuit} | Tel: ${data.contacto}
-${data.local}
-
-${dataFmt}
-
-**Exmo(a). Sr(a). Presidente / Director(a)**
-${data.entidade}
-[Cidade/Localidade]
-
-**Assunto: PEDIDO DE ${data.tipoLicenca.toUpperCase()}**
-**Ref.ª:** ___/______/[Serviço] *(a preencher pela entidade)*
+REQUERIMENTO COMPLETO:
 
 ---
 
-Exmo(a). Sr(a),
+# PEDIDO DE ${tipoLicenca.toUpperCase()}
 
-**${data.requerente}**, com NUIT n.º **${data.nuit}**, com sede/domicílio em **${data.local}**, contacto **${data.contacto}**, vem, respeitosamente, nos termos da ${leiAplicavel.split(',')[0]}, REQUERER a V.ª Ex.ª a emissão de **${data.tipoLicenca}** para o exercício da seguinte actividade:
+Exmo(a). Sr(a). Presidente / Director(a)
+**${data.entidade}**
+[Localidade]
 
----
+**Assunto: Pedido de ${tipoLicenca} — ${data.objecto.substring(0, 60)}...**
 
-**I. IDENTIFICAÇÃO DO REQUERENTE E DA ACTIVIDADE**
-
-O requerente exerce / pretende exercer a actividade de **${data.objecto}**, no local sito em **${data.local}**, tratando-se de [descrever: estabelecimento permanente / temporário / obra / evento], com início previsto em ____/____/______.
-
-[Descreva em 3-4 linhas: dimensão do estabelecimento, número de trabalhadores previstos, capacidade, horário de funcionamento, impacto esperado na comunidade local.]
+Eu/A empresa **${data.requerente}**, com NUIT n.º **${data.nuit}**, contacto **${data.contacto}**, ao abrigo do disposto na ${lic.lei.split(';')[0]}, requer a V.ª Ex.ª a concessão de **${tipoLicenca}** para os fins abaixo descritos:
 
 ---
 
-**II. FUNDAMENTAÇÃO LEGAL**
+## I. IDENTIFICAÇÃO DO REQUERENTE
 
-O presente pedido é apresentado ao abrigo do disposto na ${leiAplicavel}, sendo que:
-
-1. A actividade em causa enquadra-se na categoria de [categoria legal específica];
-2. O requerente reúne todas as condições técnicas, financeiras e legais exigidas pela legislação aplicável;
-3. A instalação/actividade cumpre [ou cumprirá após vistoria] com todas as normas de segurança, higiene e ambiente em vigor.
-
----
-
-**III. BENEFÍCIOS PARA A COMUNIDADE**
-
-A concessão da presente licença contribuirá para:
-
-a) Criação de [N] postos de trabalho directos e [N] indirectos na comunidade local;
-b) Dinamização da economia do bairro/cidade de [localidade];
-c) Prestação de [serviço/produto] que actualmente não existe ou é deficitário na área;
-d) Aumento da base tributária municipal e nacional.
+| | |
+|---|---|
+| **Nome / Razão Social:** | ${data.requerente} |
+| **NUIT:** | ${data.nuit} |
+| **Telefone:** | ${data.contacto} |
+| **Endereço:** | ${data.local} |
 
 ---
 
-**IV. COMPROMISSOS DO REQUERENTE**
+## II. OBJECTO DO PEDIDO
 
-O requerente compromete-se a:
+**Tipo de ${tipoLicenca.toLowerCase().includes('licença') ? 'estabelecimento' : 'actividade'}:** ${data.objecto}
 
-1. Cumprir rigorosamente todas as normas legais e regulamentares aplicáveis;
-2. Obter todas as licenças e autorizações complementares que se revelem necessárias;
-3. Permitir vistorias e inspecções pelas autoridades competentes;
-4. Não iniciar a actividade antes da emissão da licença requerida;
-5. Comunicar à entidade licenciadora qualquer alteração substancial das condições que fundamentam este pedido.
+**Tipo:** ${tipoEstabelec}
 
----
+**Local exacto:** ${data.local}
 
-**V. DOCUMENTOS ANEXOS**
-
-Junta-se ao presente pedido os seguintes documentos:
-
-${data.documentos ? data.documentos.split(/[,;\n]/).map((d, i) => `${i+1}. ${d.trim()}`).join('\n') : `1. Cópia do Bilhete de Identidade / Certidão Comercial
-2. Comprovativo de NUIT
-3. Mapa de localização do estabelecimento/obra
-4. Memória descritiva da actividade
-5. [Outros conforme exigência específica da entidade]`}
+${data.areaM2 ? '**Área:** ' + data.areaM2 + ' m²' : ''}
+${data.horario ? '**Horário de funcionamento pretendido:** ' + data.horario : ''}
+${data.nPostosTrabalho ? '**Postos de trabalho a criar:** ' + data.nPostosTrabalho : ''}
 
 ---
 
-**VI. PEDIDO**
+## III. FUNDAMENTAÇÃO LEGAL
 
-Face ao exposto, vem o(a) requerente PEDIR a V.ª Ex.ª que se digne:
+O presente pedido fundamenta-se no disposto na seguinte legislação:
 
-1. Analisar e **deferir** o presente pedido de ${data.tipoLicenca};
-2. Emitir o respectivo documento de licenciamento/autorização;
-3. Comunicar ao requerente o resultado através do contacto **${data.contacto}** ou por escrito no endereço indicado.
+${lic.lei.split(';').map((l, i) => (i+1) + '. ' + l.trim()).join('\n')}
 
-**Pede e aguarda deferimento.**
+O requerente declara cumprir todos os requisitos legais e regulamentares exigidos para a actividade pretendida, comprometendo-se a observar todas as normas aplicáveis durante o exercício da mesma.
 
 ---
 
-**${data.local?.split(',').pop()?.trim() || 'Maputo'}, ${dataFmt}**
+## IV. DOCUMENTOS ANEXOS
+
+O requerente junta ao presente pedido os seguintes documentos:
+
+${(data.documentos || lic.docs).split(/[,;]/).map((d, i) => (i+1) + '. ' + d.trim()).join('\n')}
+
+---
+
+## V. COMPROMISSO E DECLARAÇÃO
+
+O requerente declara, sob compromisso de honra:
+
+a) Que todos os dados constantes do presente pedido são verdadeiros e correspondem à realidade;
+b) Que não existem dívidas fiscais ou contributivas em seu nome junto da Autoridade Tributária de Moçambique;
+c) Que cumprirá todas as condições e obrigações decorrentes da licença, caso concedida;
+d) Que aceita a realização de vistorias e inspecções por parte das entidades competentes.
+
+---
+
+Nestes termos, pede deferimento no prazo previsto na lei (${lic.prazo}).
+
+**${data.local}, ${dataFmt}**
 
 _________________________________________
 **${data.requerente}**
-NUIT: ${data.nuit}
-*(Assinatura e carimbo, se empresa)*
+*(Assinatura e carimbo, se aplicável)*
 
 ---
 
-*Para uso dos serviços:*
+*Para uso da entidade destinatária:*
 Data de entrada: ____/____/______ | N.º de processo: _______ | Recebido por: _______________`;
       },
-
       acta: () => {
         const hoje = new Date();
         const dataFmt = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });

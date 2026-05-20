@@ -43,6 +43,8 @@ import { SERVICES } from '../services/ServiceDefinitions.js';
 export const DocumentView = {
   renderForm(svc, formBodyEl, formFootEl) {
     formBodyEl.innerHTML = this._buildFieldsHTML(svc.fields);
+    // Wire up conditional field visibility (e.g. Demissão/Reclamação fields in carta)
+    this.bindConditionalFields(formBodyEl);
     if (svc.hasAI) {
       const cost = svc.cost || 1;
       const costLabel = cost === 1 ? '1 crédito' : `${cost} créditos`;
@@ -85,12 +87,56 @@ export const DocumentView = {
       const extras = [f.min ? `min="${f.min}"` : '', f.max ? `max="${f.max}"` : '', f.val ? `value="${f.val}"` : ''].filter(Boolean).join(' ');
       input = `<input type="${f.type}" id="${f.id}" ${req} placeholder="${f.ph || ''}" ${extras} />`;
     }
+    // Conditional fields: hidden by default, shown when trigger field matches condValue
+    const isConditional = !!(f.conditional && f.condValue);
+    const conditionalAttrs = isConditional
+      ? `data-conditional="${f.conditional}" data-cond-value="${f.condValue}" style="display:none"`
+      : '';
     return `
-      <div class="field-group">
+      <div class="field-group" ${conditionalAttrs}>
         <label for="${f.id}">${f.label}${f.required ? ' *' : ''}</label>
         ${input}
       </div>
     `;
+  },
+
+  // Call after rendering form to wire up conditional field visibility
+  bindConditionalFields(formEl) {
+    if (!formEl) return;
+    const conditionalGroups = formEl.querySelectorAll('[data-conditional]');
+    if (!conditionalGroups.length) return;
+
+    const updateVisibility = () => {
+      conditionalGroups.forEach(group => {
+        const triggerFieldId = group.dataset.conditional;
+        const condValue      = group.dataset.condValue;
+        const triggerEl      = formEl.querySelector(`#${triggerFieldId}`);
+        if (!triggerEl) return;
+        const show = triggerEl.value === condValue;
+        group.style.display = show ? '' : 'none';
+        // Remove required attr when hidden to avoid browser blocking submission
+        const input = group.querySelector('input, select, textarea');
+        if (input) {
+          if (show) {
+            if (group.dataset.wasRequired === 'true') input.setAttribute('required', '');
+          } else {
+            group.dataset.wasRequired = input.hasAttribute('required') ? 'true' : 'false';
+            input.removeAttribute('required');
+            input.value = '';
+          }
+        }
+      });
+    };
+
+    // Collect unique trigger field IDs and attach listeners
+    const triggerIds = new Set([...conditionalGroups].map(g => g.dataset.conditional));
+    triggerIds.forEach(id => {
+      const el = formEl.querySelector(`#${id}`);
+      if (el) el.addEventListener('change', updateVisibility);
+    });
+
+    // Run once on load to set initial state
+    updateVisibility();
   },
 
   showLoader(steps = []) {
@@ -245,7 +291,14 @@ export const DocumentView = {
 
   collectData(fields) {
     const data = {};
-    const collect = f => { const el = document.getElementById(f.id); if (el) data[f.id] = el.value.trim(); };
+    const collect = f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      // Skip hidden conditional fields
+      const group = el.closest('[data-conditional]');
+      if (group && group.style.display === 'none') return;
+      data[f.id] = el.value.trim();
+    };
     fields.forEach(f => f.row ? f.items.forEach(collect) : collect(f));
     return data;
   },
