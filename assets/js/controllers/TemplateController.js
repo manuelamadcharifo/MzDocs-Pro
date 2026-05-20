@@ -148,26 +148,16 @@ export class TemplateController {
     this._clearBanner();
     const banner = document.createElement('div');
     banner.id = 'templateBanner';
-    banner.style.cssText = [
-      'margin:10px 0 4px',
-      'padding:9px 14px',
-      'background:linear-gradient(135deg,#eff6ff,#dbeafe)',
-      'border:1.5px solid #93c5fd',
-      'border-radius:10px',
-      'font-size:13px',
-      'color:#1e40af',
-      'font-weight:600',
-      'display:flex',
-      'align-items:center',
-      'gap:8px'
-    ].join(';');
+    banner.className = 'template-banner-ocr';
     banner.innerHTML = `
-      <span>📄</span>
-      <span>Modelo activo: <em style="font-weight:400">${filename}</em></span>
+      <span>📄 Modelo activo: <em style="font-weight:400">${filename}</em></span>
       <button id="btnClearTemplate" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:15px;color:#1e40af;line-height:1" title="Remover modelo">✕</button>
     `;
-    const foot = document.getElementById('formFoot');
-    if (foot) foot.insertAdjacentElement('beforebegin', banner);
+    // Insert before the ocr-divider ("ou preencha os dados directamente")
+    const divider = document.querySelector('#ocrZone .ocr-divider');
+    const ocrZone = document.getElementById('ocrZone');
+    if (divider) divider.insertAdjacentElement('beforebegin', banner);
+    else if (ocrZone) ocrZone.appendChild(banner);
     document.getElementById('btnClearTemplate')?.addEventListener('click', () => {
       this.reset();
       NotificationView.info('Modelo removido. A IA gerará o documento do zero.');

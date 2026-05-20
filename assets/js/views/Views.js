@@ -52,10 +52,6 @@ export const DocumentView = {
           <span>✨ Gerar com IA</span>
           <small>${costLabel}</small>
         </button>
-        <button id="btnUseTemplate" class="btn-template" type="button" title="Use o seu próprio modelo de documento como base">
-          <span>📄 Usar modelo próprio</span>
-        </button>
-        <input type="file" id="templateInput" accept="image/*,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/msword,.doc" style="display:none"/>
       `;
     } else {
       formFootEl.innerHTML = `

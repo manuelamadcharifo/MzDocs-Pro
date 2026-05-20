@@ -125,6 +125,9 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .btn-wa-direct:hover{transform:translateY(-2px)}
 .btn-template{width:100%;padding:12px 16px;background:#f8faff;color:#1e40af;border:1.5px solid #93c5fd;border-radius:var(--rs);font-family:'Bricolage Grotesque',sans-serif;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:var(--t)}
 .btn-template:hover{background:#dbeafe;border-color:#3b82f6;transform:translateY(-1px)}
+.btn-template-ocr{display:block;width:calc(100% - 36px);margin:0 18px 10px;padding:10px 14px;background:#f0f6ff;color:#1e40af;border:1.5px solid #bfdbfe;border-radius:var(--rs);font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:700;cursor:pointer;text-align:center;transition:var(--t)}
+.btn-template-ocr:hover{background:#dbeafe;border-color:#3b82f6}
+#templateBanner,.template-banner-ocr{margin:0 18px 10px;padding:9px 14px;background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;border-radius:var(--rs);font-size:13px;color:#1e40af;font-weight:600;display:flex;align-items:center;gap:8px}
 
 /* ============================================================
    ADIÇÕES — Estilização de formulários sem classes específicas

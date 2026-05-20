@@ -269,6 +269,10 @@
         <button id="btnFile">📁 Escolher Ficheiro</button>
       </div>
       <input type="file" id="ocrInput" accept="image/*,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/msword,.doc" style="display:none"/>
+      <button id="btnUseTemplate" class="btn-template-ocr" type="button" title="Use o seu próprio modelo de documento como base">
+        📄 Usar modelo próprio
+      </button>
+      <input type="file" id="templateInput" accept="image/*,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/msword,.doc" style="display:none"/>
       <div id="ocrBar" style="display:none">
         <div class="bar-track"><div class="bar-fill" id="ocrFill"></div></div>
         <span id="ocrStatusTxt"></span>
