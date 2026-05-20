@@ -29,8 +29,11 @@ export class OCRController {
   async processFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      NotificationView.error('Imagem muito grande (máx. 5MB)');
+
+    const maxSize = 10 * 1024 * 1024; // 10 MB para PDF/Word; 5 MB para imagens
+    const isImage = file.type.startsWith('image/');
+    if (file.size > maxSize || (isImage && file.size > 5 * 1024 * 1024)) {
+      NotificationView.error(`Ficheiro muito grande (máx. ${isImage ? '5' : '10'}MB)`);
       return;
     }
 

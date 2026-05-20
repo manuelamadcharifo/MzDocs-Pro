@@ -8,6 +8,7 @@ import { Validator } from '../utils/Formatter.js';
 import { DocumentEditor } from '../components/DocumentEditor.js';
 import { Storage } from '../utils/Storage.js';
 import { offlineDB } from '../utils/IndexedDB.js';
+import { TemplateController } from './TemplateController.js';
 
 // ─── documentState: single source of truth for generated content ─────────────
 export const documentState = {
@@ -35,6 +36,7 @@ export class DocumentController {
  this.queue = new QueueModel();
  this.openRouter = new OpenRouterService();
  this.longEngine = new LongDocumentEngine();
+ this.templateCtrl = new TemplateController(this.docModel, this.openRouter);
  this._genIv = null;
  this._menuOutside = null;
  this._longRunning = false;
@@ -97,6 +99,10 @@ export class DocumentController {
 
  DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
 
+ // Bind template controller after form is rendered (btn exists now)
+ this.templateCtrl.reset();
+ this.templateCtrl.bindEvents();
+
  setTimeout(() => {
  const btnGen = document.getElementById('btnGen');
  const btnWa = document.getElementById('btnWaDirect');
@@ -111,6 +117,7 @@ export class DocumentController {
  ModalView.close('formOverlay');
  DocumentView.hideLoader(this._genIv);
  this.docModel.reset();
+ this.templateCtrl.reset();
  if (this._longRunning) {
  this.longEngine.abort();
  this._longRunning = false;
@@ -159,7 +166,7 @@ export class DocumentController {
  try {
  const result = await Promise.race([
  this.queue.add(() =>
- this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost)
+ this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost, this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null)
  ),
  timeout,
  ]);

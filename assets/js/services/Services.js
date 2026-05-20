@@ -13,8 +13,8 @@ export class OpenRouterService {
     this.currentModel = this.models.primary;
   }
 
-  async generate(serviceType, formData, ocrText = null, credits = null, cost = 1) {
-    const prompt = this._buildPrompt(serviceType, formData, ocrText);
+  async generate(serviceType, formData, ocrText = null, credits = null, cost = 1, templateData = null) {
+    const prompt = this._buildPrompt(serviceType, formData, ocrText, templateData);
     return await this._callBackend(serviceType, prompt, credits, cost);
   }
 
@@ -152,7 +152,25 @@ export class OpenRouterService {
     return result;
   }
 
-  _buildPrompt(type, data, ocr) {
+  _buildPrompt(type, data, ocr, templateData = null) {
+    // ── Bloco de template próprio (se o utilizador carregou um modelo) ─────
+    const templateBlock = (() => {
+      if (!templateData) return '';
+      const src = templateData.text || '';
+      if (!src) return ''; // imagem — enviada como conteúdo visual separado
+      return `
+
+MODELO DO UTILIZADOR (estrutura/layout a respeitar):
+O utilizador forneceu o seguinte modelo. Mantenha a estrutura, cabeçalhos, secções e estilo exactamente como estão. Substitua apenas os marcadores de conteúdo com os dados reais fornecidos abaixo.
+
+--- INÍCIO DO MODELO ---
+${src.slice(0, 3000)}
+--- FIM DO MODELO ---
+
+INSTRUÇÃO CRÍTICA: Preencha o modelo acima com os dados reais. NÃO gere um documento diferente. Mantenha o layout, a sequência e o estilo do modelo.
+`;
+    })();
+
     // Utilitário: número por extenso em MZN (simplificado)
     const _numPorExtenso = (val) => {
       const n = parseInt(val || 0);
@@ -1845,7 +1863,9 @@ Nada mais havendo a tratar, o(a) Presidente declarou encerrada a reunião pelas 
 
     };
 
-    return (builders[type] || builders.trabalho)();
+    const basePrompt = (builders[type] || builders.trabalho)();
+    // Injectar bloco de template no início do prompt (antes das instruções)
+    return templateBlock ? templateBlock + '\n\n' + basePrompt : basePrompt;
   }
 }
 
