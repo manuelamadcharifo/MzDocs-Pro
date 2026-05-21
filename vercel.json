@@ -67,6 +67,22 @@
       "destination": "/api/admin/index"
     },
     {
+      "source": "/api/admin/delete-user",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/admin/analytics",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/admin/static-pages",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/feedback",
+      "destination": "/api/admin/index"
+    },
+    {
       "source": "/api/admin/:action",
       "destination": "/api/admin/index"
     },
@@ -191,5 +207,8 @@
   ],
   "buildCommand": "node scripts/inject-version.js",
   "installCommand": "npm install",
-  "cleanUrls": true
+  "cleanUrls": true,
+  "env": {
+    "SITE_URL": "https://mzdocs.co.mz"
+  }
 }

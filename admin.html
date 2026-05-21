@@ -45,6 +45,9 @@
         <span class="nav-icon">📝</span><span class="nav-label">Blog / Páginas</span>
         <span class="nav-badge" id="navBadgeBlog">0</span>
       </a>
+      <a class="nav-item" data-section="analytics">
+        <span class="nav-icon">📈</span><span class="nav-label">Analytics</span>
+      </a>
       <a class="nav-item" data-section="settings">
         <span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span>
       </a>
@@ -112,6 +115,13 @@
 
       <!-- Row 2: Secondary KPIs -->
       <div class="stats-grid" style="margin-top:12px;">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#F0FDF4;">🟢</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statOnlineNow">—</div>
+            <div class="stat-label">Online Agora</div>
+          </div>
+        </div>
         <div class="stat-card">
           <div class="stat-icon" style="background:#F0FDF4;">🆕</div>
           <div class="stat-body">
@@ -286,6 +296,54 @@
         <div style="font-size:2.5rem;margin-bottom:12px;">📝</div>
         <p>Ainda não há páginas. Crie a sua primeira!</p>
         <button class="btn-primary" style="margin-top:12px" onclick="adminApp.openPageEditor()">＋ Criar Página</button>
+      </div>
+
+      <!-- Páginas Estáticas do Repositório -->
+      <div style="margin-top:28px;">
+        <h3 style="font-size:.95rem;font-weight:700;color:#0F172A;margin-bottom:12px;">📁 Páginas Estáticas (pasta /pages)</h3>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr><th>Slug</th><th>Ficheiro</th><th>Modificado</th><th>Acções</th></tr>
+            </thead>
+            <tbody id="staticPagesTable">
+              <tr><td colspan="4" style="text-align:center;padding:16px;color:#94a3b8">A carregar…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ANALYTICS ──────────────────────────────────────────── -->
+    <section id="section-analytics" class="admin-section">
+      <div class="stats-grid" style="margin-bottom:16px;">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#F0FDF4;">🟢</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statOnlineNowAnalytics">—</div>
+            <div class="stat-label">Online Agora (5 min)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <h3 class="chart-title">📅 Visitas por Dia (últimos 7 dias)</h3>
+          <canvas id="visitsChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">🏆 Serviços Mais Usados (30 dias)</h3>
+          <div id="topServicesList" style="padding:.5rem 0;"></div>
+        </div>
+      </div>
+
+      <div class="chart-card" style="margin-top:16px;">
+        <h3 class="chart-title">⭐ Avaliações dos Utilizadores por Serviço</h3>
+        <div id="feedbackList" style="padding:.5rem 0;"></div>
+      </div>
+
+      <div style="margin-top:16px;text-align:right;">
+        <button class="btn-primary" onclick="adminApp._loadAnalytics()">🔄 Actualizar</button>
       </div>
     </section>
 

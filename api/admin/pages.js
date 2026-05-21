@@ -7,7 +7,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const ws  = require('ws');
 
-const SITE_URL = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', SITE_URL);

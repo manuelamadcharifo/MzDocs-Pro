@@ -24,7 +24,7 @@ const swPath = path.join(__dirname, '..', 'sw.js');
 let   sw     = fs.readFileSync(swPath, 'utf8');
 
 const oldPattern = /const CACHE_VERSION = '[^']+';[^\n]*/;
-const newLine    = `const CACHE_VERSION = 'v7-${stamp}'; // auto-gerado pelo build — não editar manualmente`;
+const newLine    = `const CACHE_VERSION = 'v9-${stamp}'; // auto-gerado pelo build — não editar manualmente`;
 
 if (oldPattern.test(sw)) {
     sw = sw.replace(oldPattern, newLine);

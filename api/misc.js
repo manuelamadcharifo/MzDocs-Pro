@@ -2,7 +2,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 
-const SITE_URL = (process.env.SITE_URL || 'https://mz-docs-pro.vercel.app').replace(/\/$/, '');
+const SITE_URL = (process.env.SITE_URL || 'https://mzdocs.co.mz').replace(/\/$/, '');
 
 const STATIC_PAGES = [
   { loc: '/',           priority: '1.0', changefreq: 'weekly'  },

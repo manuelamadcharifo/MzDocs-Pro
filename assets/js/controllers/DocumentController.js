@@ -209,6 +209,13 @@ export class DocumentController {
  this._bindEditBtn();
  NotificationView.success('✅ Documento gerado!');
 
+ // Feedback widget — aparece 4s após para não interromper a leitura do documento
+ setTimeout(() => {
+   if (typeof window.showFeedbackWidget === 'function') {
+     window.showFeedbackWidget(svc);
+   }
+ }, 4000);
+
  // Aviso de último crédito — 2s após para o utilizador ver o documento primeiro
  if (isLastCreditNormal) {
  const accountType = window.authManager?.profile?.account_type || 'normal';

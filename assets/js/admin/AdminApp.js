@@ -41,6 +41,7 @@ class AdminApp {
         this._bindNav();
         this._bindEvents();
         await this._loadDashboard();
+        this._loadAnalytics().catch(() => {});
     }
 
     // ── NAVEGAÇÃO ───────────────────────────────────────────────────────
@@ -63,17 +64,19 @@ class AdminApp {
         const titles = {
             dashboard: 'Dashboard', users: 'Utilizadores',
             transactions: 'Transações', documents: 'Documentos',
-            blog: 'Blog / Páginas', settings: 'Configurações'
+            blog: 'Blog / Páginas', settings: 'Configurações',
+            analytics: 'Analytics', staticpages: 'Páginas Estáticas'
         };
         document.getElementById('pageTitle').textContent = titles[section] || section;
         this._section = section;
 
-        if (section === 'dashboard')    this._loadDashboard();
+        if (section === 'dashboard')    { this._loadDashboard(); this._loadAnalytics(); }
         if (section === 'users')        this._loadUsers();
         if (section === 'transactions') this._loadTransactions();
         if (section === 'documents')    this._loadDocuments();
-        if (section === 'blog')         this._loadBlog();
+        if (section === 'blog')         { this._loadBlog(); this._loadStaticPages(); }
         if (section === 'settings')     this._loadSettings();
+        if (section === 'analytics')    this._loadAnalytics();
     }
 
     refresh() { this.nav(this._section); }
@@ -563,18 +566,19 @@ USING (EXISTS (
     async _doDeleteUser(userId) {
         this.closeModal();
         try {
-            // Eliminar documentos primeiro (evitar violação FK)
-            await this.supabase.from('documents').delete().eq('user_id', userId);
-            // Eliminar transações
-            await this.supabase.from('transactions').delete().eq('user_id', userId);
-            // Eliminar perfil
-            const { error } = await this.supabase.from('profiles').delete().eq('id', userId);
-            if (error) throw error;
-            this._notify('✅ Utilizador eliminado com sucesso!');
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/delete-user', {
+                method:  'DELETE',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body:    JSON.stringify({ userId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao eliminar');
+            this._notify('✅ Utilizador eliminado permanentemente!');
             this._loadUsers();
             this._loadDashboard();
         } catch (err) {
-            this._notify('❌ Erro ao eliminar: ' + err.message + ' (pode precisar de service_role para eliminar do Auth)', 'error');
+            this._notify('❌ ' + err.message, 'error');
         }
     }
 
@@ -870,7 +874,7 @@ USING (EXISTS (
                 + '<td style="font-size:12px;color:#64748b;">' + date + '</td>'
                 + '<td>'
                 + '<button class="btn-ghost" style="font-size:12px;" onclick="adminApp.openPageEditor(\'' + p.id + '\')">✏️ Editar</button> '
-                + '<a href="/pages/' + p.slug + '.html" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none;">🔗 Ver</a> '
+                + '<a href="/pages/' + p.slug + '" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none;">🔗 Ver</a> '
                 + '<button class="btn-danger" style="font-size:12px;" onclick="adminApp.deletePage(\'' + p.id + '\',\'' + safeTitle + '\')">🗑️</button>'
                 + '</td>'
                 + '</tr>';
@@ -1072,7 +1076,109 @@ USING (EXISTS (
 
 
     // ════════════════════════════════════════════════════════════════════
-    // SYSTEM SETTINGS (live from DB)
+    // ANALYTICS — visitas, online, serviços mais usados
+    // ════════════════════════════════════════════════════════════════════
+
+    async _loadAnalytics() {
+        const el = id => document.getElementById(id);
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/analytics?days=7', {
+                headers: { Authorization: 'Bearer ' + token }
+            });
+            if (!res.ok) return;
+            const d = await res.json();
+
+            // Online agora
+            if (el('statOnlineNow')) el('statOnlineNow').textContent = d.onlineNow || 0;
+            if (el('statOnlineNowAnalytics')) el('statOnlineNowAnalytics').textContent = d.onlineNow || 0;
+
+            // Visitas por dia — chart
+            const visitLabels = Object.keys(d.visitsByDay || {});
+            const visitData   = visitLabels.map(k => d.visitsByDay[k]);
+            const vc = el('visitsChart');
+            if (vc && typeof Chart !== 'undefined') {
+                if (this.charts.visits) this.charts.visits.destroy();
+                this.charts.visits = new Chart(vc, {
+                    type: 'line',
+                    data: {
+                        labels: visitLabels,
+                        datasets: [{ label: 'Visitas', data: visitData,
+                            borderColor: '#8B5CF6', backgroundColor: 'rgba(139,92,246,.1)',
+                            tension: .4, fill: true, pointRadius: 4 }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                });
+            }
+
+            // Top serviços
+            const topEl = el('topServicesList');
+            if (topEl && d.topServices) {
+                const max = d.topServices[0]?.count || 1;
+                topEl.innerHTML = d.topServices.map(s => {
+                    const pct = Math.round((s.count / max) * 100);
+                    const label = { trabalho:'📚 Trabalho', cv:'📋 CV', carta:'✉️ Carta',
+                        orcamento:'🏗️ Orçamento', impressao:'🖨️ Impressão',
+                        foto:'📷 Foto', conversao:'🔄 Conversão' }[s.name] || s.name;
+                    return `<div style="margin:.4rem 0">
+                        <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:2px">
+                            <span>${label}</span><span style="font-weight:700">${s.count}</span>
+                        </div>
+                        <div style="background:#e2e8f0;border-radius:4px;height:6px">
+                            <div style="background:#3B82F6;height:6px;border-radius:4px;width:${pct}%"></div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            // Feedback médio por serviço
+            const fbEl = el('feedbackList');
+            if (fbEl && d.feedbackSummary) {
+                fbEl.innerHTML = d.feedbackSummary.length
+                    ? d.feedbackSummary.map(f => {
+                        const stars = '⭐'.repeat(Math.round(f.avg));
+                        return `<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid #f1f5f9;font-size:.82rem">
+                            <span>${f.service}</span>
+                            <span>${stars} <strong>${f.avg}</strong>/5 <span style="color:#94a3b8">(${f.count})</span></span>
+                        </div>`;
+                    }).join('')
+                    : '<div style="color:#94a3b8;font-size:.8rem">Ainda sem avaliações.</div>';
+            }
+        } catch (err) { console.error('[Admin] Analytics:', err); }
+    }
+
+    // Lista de páginas estáticas da pasta /pages do repo
+    async _loadStaticPages() {
+        const tbody = document.getElementById('staticPagesTable');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#94a3b8">A carregar…</td></tr>';
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/static-pages', { headers: { Authorization: 'Bearer ' + token } });
+            const data  = await res.json();
+            const pages = data.pages || [];
+
+            if (!pages.length) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#94a3b8">Nenhuma página estática encontrada</td></tr>';
+                return;
+            }
+            tbody.innerHTML = pages.map(p => `
+                <tr>
+                    <td><code style="font-size:11px">${p.slug}</code></td>
+                    <td style="font-size:11px;color:#64748b">${p.filename}</td>
+                    <td style="font-size:11px">${new Date(p.modified).toLocaleDateString('pt-MZ')}</td>
+                    <td>
+                        <a href="${p.url}" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none">🔗 Ver</a>
+                    </td>
+                </tr>
+            `).join('');
+            const badge = document.getElementById('navBadgeStaticPages');
+            if (badge) badge.textContent = pages.length;
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:16px;color:#ef4444">❌ ${err.message}</td></tr>`;
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
 
     async _loadSettings() {

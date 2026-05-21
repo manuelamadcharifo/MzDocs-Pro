@@ -1,6 +1,6 @@
 // api/config.js — Configuração pública do Supabase (nunca expõe service key)
 module.exports = async function handler(req, res) {
-    const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+    const origin = process.env.SITE_URL || 'https://mzdocs.co.mz';
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

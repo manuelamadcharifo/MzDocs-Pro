@@ -1,7 +1,7 @@
 // api/process-payment.js
 const { createClient } = require('@supabase/supabase-js');
 
-const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+const origin = process.env.SITE_URL || 'https://mzdocs.co.mz';
 const WA_NUMBER = process.env.WA_SUPPORT_NUMBER || '258858695506';
 
 const PACKAGES = {

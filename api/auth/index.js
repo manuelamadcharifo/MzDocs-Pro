@@ -15,7 +15,7 @@ const SUPABASE_OPTS_SERVICE = () => ({ auth: { autoRefreshToken: false, persistS
 //   /api/auth/reset-password  → recuperação de password via email
 //   /api/auth/verify-otp      → deprecated, devolve 410
 
-const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+const origin = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin);

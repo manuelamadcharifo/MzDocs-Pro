@@ -3,7 +3,7 @@ const ws = require('ws');
 // api/verify-credits.js
 // Verificação de saldo de créditos — tabela profiles (corrigido)
 
-const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+const origin = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin);

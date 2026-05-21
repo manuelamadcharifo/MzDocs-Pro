@@ -12,7 +12,7 @@ const ws = require('ws');
 //   stats            → estatísticas agregadas do dashboard
 //   transactions     → lista de transações
 
-const origin = process.env.SITE_URL || 'https://mz-docs-pro.vercel.app';
+const origin = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin);
@@ -41,6 +41,10 @@ module.exports = async function handler(req, res) {
     case 'transactions':    return handleTransactions(req, res);
     case 'settings':        return handleSettings(req, res);
     case 'audit-log':       return handleAuditLog(req, res);
+    case 'delete-user':     return handleDeleteUser(req, res);
+    case 'analytics':       return handleAnalytics(req, res);
+    case 'feedback':        return handleFeedback(req, res);
+    case 'static-pages':    return handleStaticPages(req, res);
     default:
       return res.status(404).json({ error: `Acção desconhecida: "${action}". Use: confirm-payment, confirm-avulso, fix-profiles, stats, transactions` });
   }
@@ -185,7 +189,7 @@ async function handleConfirmAvulso(req, res) {
         reference_id: ref, phone_number: normPhone,
         confirmed_by: auth.user.id, confirmed_at: new Date().toISOString(),
       });
-      const origin  = req.headers.origin || req.headers.referer?.split('/').slice(0,3).join('/') || 'https://mz-docs-pro.vercel.app';
+      const origin  = req.headers.origin || req.headers.referer?.split('/').slice(0,3).join('/') || 'https://mzdocs.co.mz';
       const waPhone = cleanPhone.startsWith('258') ? cleanPhone : '258' + cleanPhone;
       const waMsg   = [
         `✅ *Conta MzDocs Pro criada — Referência ${ref}*`, ``,
@@ -373,10 +377,10 @@ async function handleStats(req, res) {
       supabase.from('transactions').select('*', { count: 'exact', head: true })
         .eq('status', 'pending'),
 
-      supabase.from('blog_posts').select('*', { count: 'exact', head: true })
-        .eq('status', 'published'),
-      supabase.from('blog_posts').select('*', { count: 'exact', head: true })
-        .eq('status', 'draft'),
+      supabase.from('blog_pages').select('*', { count: 'exact', head: true })
+        .eq('published', true),
+      supabase.from('blog_pages').select('*', { count: 'exact', head: true })
+        .eq('published', false),
     ]);
 
     // ── 7-day chart data ─────────────────────────────────────────────────
@@ -539,6 +543,234 @@ async function handleAuditLog(req, res) {
     return res.status(200).json({ success: true, logs: data || [] });
   } catch (err) {
     console.error('[admin/audit-log]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE USER — elimina do Auth + DB (service_role)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleDeleteUser(req, res) {
+  if (req.method !== 'DELETE' && req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const body  = parseBody(req);
+  if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
+  const { userId } = body;
+  if (!userId) return res.status(400).json({ error: 'userId é obrigatório' });
+
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    // Impedir auto-eliminação
+    if (auth.user.id === userId) return res.status(400).json({ error: 'Não pode eliminar a sua própria conta' });
+
+    // Eliminar dados relacionados primeiro (FK)
+    await supabase.from('documents').delete().eq('user_id', userId);
+    await supabase.from('transactions').delete().eq('user_id', userId);
+    await supabase.from('credit_usage_log').delete().eq('user_id', userId);
+
+    // Eliminar perfil da tabela profiles
+    await supabase.from('profiles').delete().eq('id', userId);
+
+    // Eliminar do Supabase Auth (requer service_role)
+    const { error: authDelErr } = await supabase.auth.admin.deleteUser(userId);
+    if (authDelErr) {
+      console.warn('[delete-user] Auth delete falhou (perfil já removido):', authDelErr.message);
+      // Não falhar: o perfil já foi eliminado; o utilizador não consegue autenticar
+    }
+
+    // Log da acção
+    await supabase.from('admin_logs').insert({
+      admin_id:    auth.user.id,
+      action:      'delete_user',
+      target_type: 'user',
+      target_id:   userId,
+      created_at:  new Date().toISOString(),
+    }).catch(() => {});
+
+    return res.status(200).json({ success: true, message: 'Utilizador eliminado do sistema' });
+  } catch (err) {
+    console.error('[admin/delete-user]', err);
+    return res.status(500).json({ error: err.message || 'Erro interno' });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANALYTICS — visitas por dia, online agora, serviços mais usados
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleAnalytics(req, res) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    if (req.method === 'POST') {
+      // Registar visita (chamado pelo front-end)
+      const body = parseBody(req);
+      const page  = (body?.page || '/').slice(0, 200);
+      const today = new Date().toISOString().split('T')[0];
+      // Incremento atómico via função SQL (evita race condition e substitução por 1)
+      await supabase.rpc('increment_page_view', { p_page: page, p_date: today }).catch(() => {});
+      // Actualizar presença online (TTL 5 min via updated_at)
+      const sid = (body?.session || 'anon').slice(0, 64);
+      await supabase.from('online_sessions').upsert(
+        { session_id: sid, page, updated_at: new Date().toISOString() },
+        { onConflict: 'session_id' }
+      ).catch(() => {});
+      return res.status(200).json({ ok: true });
+    }
+
+    if (req.method === 'GET') {
+      const days = parseInt(req.query?.days || '7', 10);
+      const since = new Date(); since.setDate(since.getDate() - days);
+
+      // Visitas por dia (últimos N dias)
+      const { data: pvData } = await supabase
+        .from('page_views')
+        .select('date, page, views')
+        .gte('date', since.toISOString().split('T')[0])
+        .order('date', { ascending: true });
+
+      // Agrupar por dia
+      const byDay = {};
+      (pvData || []).forEach(r => {
+        byDay[r.date] = (byDay[r.date] || 0) + (r.views || 0);
+      });
+
+      // Online agora (sessões actualizadas nos últimos 5 min)
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { count: onlineNow } = await supabase
+        .from('online_sessions')
+        .select('*', { count: 'exact', head: true })
+        .gte('updated_at', fiveMinAgo);
+
+      // Serviços mais usados (credit_usage_log — últimos 30 dias)
+      const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30);
+      const { data: usageData } = await supabase
+        .from('credit_usage_log')
+        .select('document_type')
+        .gte('used_at', monthAgo.toISOString());
+
+      const serviceCounts = {};
+      (usageData || []).forEach(r => {
+        if (r.document_type) serviceCounts[r.document_type] = (serviceCounts[r.document_type] || 0) + 1;
+      });
+      const topServices = Object.entries(serviceCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([name, count]) => ({ name, count }));
+
+      // Feedback resumo
+      const { data: fbData } = await supabase
+        .from('user_feedback')
+        .select('service, rating')
+        .gte('created_at', monthAgo.toISOString());
+
+      const fbByService = {};
+      (fbData || []).forEach(r => {
+        if (!fbByService[r.service]) fbByService[r.service] = { total: 0, count: 0 };
+        fbByService[r.service].total += r.rating;
+        fbByService[r.service].count += 1;
+      });
+      const feedbackSummary = Object.entries(fbByService).map(([service, v]) => ({
+        service,
+        avg: Math.round((v.total / v.count) * 10) / 10,
+        count: v.count,
+      })).sort((a, b) => b.count - a.count);
+
+      return res.status(200).json({
+        success: true,
+        visitsByDay: byDay,
+        onlineNow:   onlineNow || 0,
+        topServices,
+        feedbackSummary,
+      });
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (err) {
+    console.error('[admin/analytics]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEEDBACK — guardar reacção/rating do utilizador
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleFeedback(req, res) {
+  // Este endpoint é público (não requer admin)
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+
+  const body = parseBody(req);
+  if (!body) return res.status(400).json({ error: 'Body inválido' });
+  const { service, rating, comment, session_id } = body;
+  if (!service || !rating || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'service e rating (1-5) são obrigatórios' });
+  }
+
+  try {
+    const supabase = await getAdminClient();
+    // Tentar obter user_id do token (opcional)
+    let userId = null;
+    const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+    if (token) {
+      const { data: { user } } = await supabase.auth.getUser(token).catch(() => ({ data: {} }));
+      userId = user?.id || null;
+    }
+
+    await supabase.from('user_feedback').insert({
+      service,
+      rating:     parseInt(rating),
+      comment:    (comment || '').slice(0, 500),
+      user_id:    userId,
+      session_id: session_id || null,
+      created_at: new Date().toISOString(),
+    });
+
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[feedback]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATIC PAGES — lista as páginas .html da pasta /pages (ficheiros no repo)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleStaticPages(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    const fs   = require('fs');
+    const path = require('path');
+    const dir  = path.join(process.cwd(), 'pages');
+    let files  = [];
+    try {
+      files = fs.readdirSync(dir)
+        .filter(f => f.endsWith('.html') && f !== 'index.html' && f !== '_template.html')
+        .map(f => ({
+          filename: f,
+          slug:     f.replace(/\.html$/, ''),
+          url:      '/pages/' + f,
+          size:     fs.statSync(path.join(dir, f)).size,
+          modified: fs.statSync(path.join(dir, f)).mtime.toISOString(),
+        }));
+    } catch (e) { files = []; }
+
+    return res.status(200).json({ success: true, pages: files });
+  } catch (err) {
+    console.error('[static-pages]', err);
     return res.status(500).json({ error: err.message });
   }
 }
