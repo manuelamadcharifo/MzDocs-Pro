@@ -56,10 +56,12 @@ async function bootstrap() {
   const fab = document.getElementById('fabWa');
   if (fab) fab.href = `https://wa.me/${userModel.WA_SUPPORT}`;
 
+  // Sandbox bar sempre oculta (pagamentos em produção)
+  const sandboxBar = document.getElementById('sandboxBar');
+  if (sandboxBar) sandboxBar.style.display = 'none';
+
   try {
-    const cfg        = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
-    const sandboxBar = document.getElementById('sandboxBar');
-    if (sandboxBar) sandboxBar.style.display = cfg.isSandbox ? 'flex' : 'none';
+    await fetch('/api/config').then(r => r.json()).catch(() => ({}));
   } catch { }
 
   if ('serviceWorker' in navigator) {

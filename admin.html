@@ -324,25 +324,41 @@
             <div class="stat-label">Online Agora (5 min)</div>
           </div>
         </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#EFF6FF;">👁</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statTodayViews">—</div>
+            <div class="stat-label">Visitas Hoje</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#FDF4FF;">📊</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statTotalViews">—</div>
+            <div class="stat-label">Total 7 dias</div>
+          </div>
+        </div>
       </div>
 
       <div class="charts-row">
         <div class="chart-card">
           <h3 class="chart-title">📅 Visitas por Dia (últimos 7 dias)</h3>
-          <canvas id="visitsChart"></canvas>
+          <div style="position:relative;height:180px;">
+            <canvas id="visitsChart"></canvas>
+          </div>
         </div>
         <div class="chart-card">
           <h3 class="chart-title">🏆 Serviços Mais Usados (30 dias)</h3>
-          <div id="topServicesList" style="padding:.5rem 0;"></div>
+          <div id="topServicesList" style="padding:.25rem 0;"></div>
         </div>
       </div>
 
-      <div class="chart-card" style="margin-top:16px;">
-        <h3 class="chart-title">⭐ Avaliações dos Utilizadores por Serviço</h3>
-        <div id="feedbackList" style="padding:.5rem 0;"></div>
+      <div class="chart-card" style="margin-top:12px;">
+        <h3 class="chart-title">⭐ Avaliações por Serviço</h3>
+        <div id="feedbackList" style="padding:.25rem 0;"></div>
       </div>
 
-      <div style="margin-top:16px;text-align:right;">
+      <div style="margin-top:12px;text-align:right;">
         <button class="btn-primary" onclick="adminApp._loadAnalytics()">🔄 Actualizar</button>
       </div>
     </section>

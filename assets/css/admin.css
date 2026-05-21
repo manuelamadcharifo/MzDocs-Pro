@@ -572,3 +572,21 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
   .users-cards { display: none; }
   .table-wrap { display: block; }
 }
+
+/* ── MOBILE ANALYTICS & FIXES (< 640px) ─────────────────────── */
+@media (max-width: 639px) {
+  .stat-card { padding: .75rem; gap: .625rem; }
+  .stat-icon { width: 36px; height: 36px; font-size: 1rem; }
+  .stat-value { font-size: 1.1rem; }
+  .stat-label { font-size: .68rem; }
+  .chart-card { padding: .75rem; overflow: hidden; }
+  .chart-title { font-size: .82rem; margin-bottom: .5rem; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .admin-section { padding: .875rem .75rem; }
+  #topServicesList div { font-size: .76rem !important; }
+  #feedbackList div { font-size: .76rem !important; }
+  #visitsChart { max-height: 160px; }
+  .section-toolbar { gap: .375rem; }
+  .filter-select { font-size: .8rem; padding: .35rem .5rem; }
+  .search-input { font-size: .8rem; }
+}

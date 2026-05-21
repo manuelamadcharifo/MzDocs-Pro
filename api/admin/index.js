@@ -45,6 +45,7 @@ module.exports = async function handler(req, res) {
     case 'analytics':       return handleAnalytics(req, res);
     case 'feedback':        return handleFeedback(req, res);
     case 'static-pages':    return handleStaticPages(req, res);
+    case 'documents':       return handleDocuments(req, res);
     default:
       return res.status(404).json({ error: `Acção desconhecida: "${action}". Use: confirm-payment, confirm-avulso, fix-profiles, stats, transactions` });
   }
@@ -311,7 +312,7 @@ async function handleFixProfiles(req, res) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STATS
+// STATS — optimizado: máx 12 queries paralelas, sem loop sequencial
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleStats(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -326,108 +327,87 @@ async function handleStats(req, res) {
     const weekStart  = new Date(now); weekStart.setDate(weekStart.getDate() - 7);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // ── Revenue helpers ─────────────────────────────────────────────────
+    // Helper receita
     const rev = async (from) => {
       const { data } = await supabase.from('transactions').select('amount')
         .eq('status', 'completed').gte('created_at', from);
       return data?.reduce((s, t) => s + (t.amount || 0), 0) || 0;
     };
 
-    // ── Parallel KPI queries ─────────────────────────────────────────────
+    // ── Todas as queries em paralelo (sem loop) ──────────────────────────
     const [
-      revenueToday, revenueWeek, revenueMonth,
-
-      // Users by account_type
-      { count: totalNormal },
-      { count: totalAvulso },
+      revenueMonth,
+      { count: totalUsers },
       { count: newUsers24h },
-
-      // Documents (credit_usage_log)
-      { count: docsToday },
-      { count: docsWeek },
-      { count: docsMonth },
       { count: docsTotal },
-
-      // Pending payments
+      { count: docsToday },
       { count: pending },
-
-      // Blog
       { count: publishedPosts },
-      { count: draftPosts },
-
+      { data: typesRaw },
+      { data: revenueRaw },
+      { data: docsRaw },
     ] = await Promise.all([
-      rev(todayStart), rev(weekStart.toISOString()), rev(monthStart.toISOString()),
+      rev(monthStart.toISOString()),
 
+      supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('profiles').select('*', { count: 'exact', head: true })
-        .or('account_type.eq.normal,account_type.is.null'),
-      supabase.from('profiles').select('*', { count: 'exact', head: true })
-        .eq('account_type', 'avulso'),
-      supabase.from('profiles').select('*', { count: 'exact', head: true })
-        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+        .gte('created_at', new Date(Date.now() - 86400000).toISOString()),
 
-      // Try credit_usage_log first, fall back to documents table
+      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true }),
       supabase.from('credit_usage_log').select('*', { count: 'exact', head: true })
         .gte('used_at', todayStart),
-      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true })
-        .gte('used_at', weekStart.toISOString()),
-      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true })
-        .gte('used_at', monthStart.toISOString()),
-      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true }),
 
       supabase.from('transactions').select('*', { count: 'exact', head: true })
         .eq('status', 'pending'),
 
       supabase.from('blog_pages').select('*', { count: 'exact', head: true })
         .eq('published', true),
-      supabase.from('blog_pages').select('*', { count: 'exact', head: true })
-        .eq('published', false),
+
+      // Top tipos (últimos 30 dias)
+      supabase.from('credit_usage_log').select('document_type')
+        .gte('used_at', monthStart.toISOString()),
+
+      // Revenue últimos 7 dias (uma query só)
+      supabase.from('transactions').select('amount,created_at')
+        .eq('status', 'completed').gte('created_at', weekStart.toISOString()),
+
+      // Docs últimos 7 dias (uma query só)
+      supabase.from('credit_usage_log').select('used_at')
+        .gte('used_at', weekStart.toISOString()),
     ]);
 
-    // ── 7-day chart data ─────────────────────────────────────────────────
-    const dayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    // ── Chart data calculado em JS (sem mais queries) ─────────────────────
+    const dayLabels = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
     const chartLabels = [], chartRevenue = [], chartDocs = [];
     for (let i = 6; i >= 0; i--) {
-      const d        = new Date(); d.setDate(d.getDate() - i);
-      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
-      const dayEnd   = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59).toISOString();
+      const d       = new Date(); d.setDate(d.getDate() - i);
+      const dayStr  = d.toISOString().split('T')[0];
       chartLabels.push(dayLabels[d.getDay()]);
-      const { data: dr } = await supabase.from('transactions').select('amount')
-        .eq('status', 'completed').gte('created_at', dayStart).lte('created_at', dayEnd);
-      chartRevenue.push(dr?.reduce((s, t) => s + (t.amount || 0), 0) || 0);
-      const { count: dd } = await supabase.from('credit_usage_log')
-        .select('*', { count: 'exact', head: true })
-        .gte('used_at', dayStart).lte('used_at', dayEnd);
-      chartDocs.push(dd || 0);
+      chartRevenue.push(
+        (revenueRaw || []).filter(r => r.created_at?.startsWith(dayStr))
+          .reduce((s, r) => s + (r.amount || 0), 0)
+      );
+      chartDocs.push(
+        (docsRaw || []).filter(r => r.used_at?.startsWith(dayStr)).length
+      );
     }
 
-    // ── Document type breakdown (top 6) ─────────────────────────────────
-    const { data: typesRaw } = await supabase.from('credit_usage_log')
-      .select('document_type')
-      .gte('used_at', monthStart.toISOString());
+    // ── Top tipos ────────────────────────────────────────────────────────
     const typeCounts = {};
     (typesRaw || []).forEach(r => {
-      typeCounts[r.document_type] = (typeCounts[r.document_type] || 0) + 1;
+      if (r.document_type) typeCounts[r.document_type] = (typeCounts[r.document_type] || 0) + 1;
     });
-    const topTypes = Object.entries(typeCounts)
-      .sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const topTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
     return res.status(200).json({
-      success: true,
-      revenue:   { today: revenueToday,  week: revenueWeek,  month: revenueMonth  },
-      documents: { today: docsToday || 0, week: docsWeek || 0, month: docsMonth || 0, total: docsTotal || 0 },
-      users: {
-        total:      (totalNormal || 0) + (totalAvulso || 0),
-        normal:     totalNormal  || 0,
-        avulso:     totalAvulso  || 0,
-        new_24h:    newUsers24h  || 0,
-      },
-      pending:       pending        || 0,
-      blog: {
-        published:   publishedPosts || 0,
-        drafts:      draftPosts     || 0,
-      },
-      topDocTypes:   topTypes,
-      chartData:     { labels: chartLabels, revenue: chartRevenue, documents: chartDocs },
+      success:   true,
+      revenue:   { month: revenueMonth, today: chartRevenue[6] || 0, week: chartRevenue.reduce((a,b)=>a+b,0) },
+      documents: { total: docsTotal || 0, today: docsToday || 0, week: chartDocs.reduce((a,b)=>a+b,0) },
+      users:     { total: totalUsers || 0, new_24h: newUsers24h || 0 },
+      pending:   pending || 0,
+      blog:      { published: publishedPosts || 0 },
+      topDocTypes: topTypes,
+      chartData:   { labels: chartLabels, revenue: chartRevenue, documents: chartDocs },
     });
   } catch (err) {
     console.error('[admin/stats]', err);
@@ -774,6 +754,38 @@ async function handleStaticPages(req, res) {
     return res.status(200).json({ success: true, pages: files });
   } catch (err) {
     console.error('[static-pages]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENTS — lista server-side com service_role (evita RLS)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleDocuments(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    const limit  = Math.min(parseInt(req.query?.limit || '100'), 200);
+    const search = (req.query?.q || '').trim();
+
+    let q = supabase
+      .from('documents')
+      .select('id, service_type, title, model_used, created_at, content, profiles(full_name, phone)')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (search) q = q.ilike('service_type', `%${search}%`);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    return res.status(200).json({ success: true, data: data || [] });
+  } catch (err) {
+    console.error('[admin/documents]', err);
     return res.status(500).json({ error: err.message });
   }
 }

@@ -105,36 +105,50 @@ class AdminApp {
     // ── DASHBOARD ───────────────────────────────────────────────────────
     async _loadDashboard() {
         if (!this.supabase) return;
+        const e   = id => document.getElementById(id);
+        const fmt = n  => (n ?? 0).toLocaleString('pt-MZ');
+
+        // Mostrar spinners enquanto carrega
+        ['statTotalUsers','statTotalDocs','statRevenue','statPending','statNewUsers24h','statOnlineNow'].forEach(id => {
+            if (e(id) && e(id).textContent === '—') e(id).textContent = '…';
+        });
+
         try {
             const token = await this._getAdminToken();
-            // Use server-side stats endpoint for richer KPIs
-            const res   = await fetch('/api/admin/stats', {
-                headers: { Authorization: 'Bearer ' + token }
-            });
-            if (!res.ok) throw new Error('Stats endpoint failed: ' + res.status);
+            const res = await Promise.race([
+                fetch('/api/admin/stats', { headers: { Authorization: 'Bearer ' + token } }),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
+            ]);
+            if (!res.ok) throw new Error('Stats ' + res.status);
             const d = await res.json();
 
-            const e   = id => document.getElementById(id);
-            const fmt = n  => (n ?? 0).toLocaleString('pt-MZ');
+            if (e('statTotalUsers'))    e('statTotalUsers').textContent    = fmt(d.users?.total);
+            if (e('statUserSplit'))     e('statUserSplit').textContent      = (d.users?.normal ?? 0) + ' normais · ' + (d.users?.avulso ?? 0) + ' avulso';
+            if (e('statTotalDocs'))     e('statTotalDocs').textContent      = fmt(d.documents?.total);
+            if (e('statDocsToday'))     e('statDocsToday').textContent      = 'Hoje: ' + fmt(d.documents?.today);
+            if (e('statRevenue'))       e('statRevenue').textContent        = fmt(d.revenue?.month) + ' MZN';
+            if (e('statPending'))       e('statPending').textContent        = fmt(d.pending);
+            if (e('statNewUsers24h'))   e('statNewUsers24h').textContent    = fmt(d.users?.new_24h);
+            if (e('statAvulso'))        e('statAvulso').textContent         = fmt(d.users?.avulso);
+            if (e('statBlogPublished')) e('statBlogPublished').textContent  = fmt(d.blog?.published);
+            if (e('statDocsWeek'))      e('statDocsWeek').textContent       = fmt(d.documents?.week);
 
-            if (e('statTotalUsers'))   e('statTotalUsers').textContent   = fmt(d.users?.total);
-            if (e('statUserSplit'))    e('statUserSplit').textContent     = (d.users?.normal ?? 0) + ' normais · ' + (d.users?.avulso ?? 0) + ' avulso';
-            if (e('statTotalDocs'))    e('statTotalDocs').textContent     = fmt(d.documents?.total);
-            if (e('statDocsToday'))    e('statDocsToday').textContent     = 'Hoje: ' + fmt(d.documents?.today);
-            if (e('statRevenue'))      e('statRevenue').textContent       = fmt(d.revenue?.month) + ' MZN';
-            if (e('statPending'))      e('statPending').textContent       = fmt(d.pending);
-            if (e('statNewUsers24h'))  e('statNewUsers24h').textContent   = fmt(d.users?.new_24h);
-            if (e('statAvulso'))       e('statAvulso').textContent        = fmt(d.users?.avulso);
-            if (e('statBlogPublished'))e('statBlogPublished').textContent = fmt(d.blog?.published);
-            if (e('statDocsWeek'))     e('statDocsWeek').textContent      = fmt(d.documents?.week);
+            if (e('navBadgeUsers'))   e('navBadgeUsers').textContent   = fmt(d.users?.total);
+            if (e('navBadgePending')) e('navBadgePending').textContent  = fmt(d.pending);
 
-            // Nav badges
-            if (e('navBadgeUsers'))    e('navBadgeUsers').textContent    = fmt(d.users?.total);
-            if (e('navBadgePending'))  e('navBadgePending').textContent  = fmt(d.pending);
-
-            await this._loadChartsFromData(d.chartData, d.topDocTypes);
-        } catch (err) { console.error('[Admin] Dashboard:', err); }
+            // Charts só se Chart.js estiver disponível
+            if (typeof Chart !== 'undefined') {
+                this._loadChartsFromData(d.chartData, d.topDocTypes).catch(() => {});
+            }
+        } catch (err) {
+            console.error('[Admin] Dashboard:', err.message);
+            // Mostrar '—' em vez de spinner se falhar
+            ['statTotalUsers','statTotalDocs','statRevenue','statPending'].forEach(id => {
+                if (e(id) && e(id).textContent === '…') e(id).textContent = '—';
+            });
+        }
     }
+
 
     async _loadChartsFromData(chartData, topDocTypes) {
         if (typeof Chart === 'undefined') return;
@@ -584,30 +598,27 @@ USING (EXISTS (
 
     // ── TRANSAÇÕES ──────────────────────────────────────────────────────
     async _loadTransactions() {
-        if (!this.supabase) return;
+        const tbody = document.getElementById('transactionsTable');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#94a3b8">A carregar…</td></tr>';
         try {
-            const status = document.getElementById('filterStatus')?.value;
-            const date   = document.getElementById('filterDate')?.value;
+            const token  = await this._getAdminToken();
+            const status = document.getElementById('filterStatus')?.value || 'all';
+            const date   = document.getElementById('filterDate')?.value   || '';
+            const params = new URLSearchParams({ status, date, limit: '100' });
+            const res    = await fetch(`/api/admin/transactions?${params}`, {
+                headers: { Authorization: 'Bearer ' + token },
+                signal: AbortSignal.timeout(10000),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Erro ao carregar');
+            const data = json.data || [];
 
-            let q = this.supabase
-                .from('transactions')
-                .select('*, user_profile:profiles!transactions_user_id_fkey(full_name, phone, email)')
-                .order('created_at', { ascending: false })
-                .limit(200);
-
-            if (status && status !== 'all') q = q.eq('status', status);
-            if (date) q = q.gte('created_at', date).lte('created_at', date + 'T23:59:59');
-
-            const { data, error } = await q;
-            if (error) throw error;
-
-            const tbody = document.getElementById('transactionsTable');
-            if (!tbody) return;
-            tbody.innerHTML = (data || []).map(t => `
+            tbody.innerHTML = data.map(t => `
                 <tr>
                     <td><code style="font-size:.75rem">${t.reference_id || t.id.slice(0,8)}</code></td>
                     <td>
-                        <div style="font-size:.85rem">${t.user_profile?.full_name || t.user_profile?.phone || 'Anónimo'}</div>
+                        <div style="font-size:.85rem">${t.user_profile?.full_name || t.user_profile?.phone || 'An\u00f3nimo'}</div>
                         <div style="font-size:.72rem;color:#64748b">${t.user_profile?.email || ''}</div>
                     </td>
                     <td>${(t.package_id||'-').toUpperCase()}</td>
@@ -618,13 +629,17 @@ USING (EXISTS (
                     <td>
                         ${t.status === 'pending' ? `
                             <div class="action-group">
-                                <button class="btn-success" onclick="adminApp._confirmPayment('${t.id}','${t.user_id}',${t.credits})">✅</button>
-                                <button class="btn-danger" onclick="adminApp._rejectPayment('${t.id}')">❌</button>
+                                <button class="btn-success" onclick="adminApp._confirmPayment('${t.id}','${t.user_id}',${t.credits})">\u2705</button>
+                                <button class="btn-danger" onclick="adminApp._rejectPayment('${t.id}')">\u274c</button>
                             </div>` : '—'}
                     </td>
                 </tr>
-            `).join('') || '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:#94a3b8">Nenhuma transação</td></tr>';
-        } catch (err) { console.error('[Admin] Transações:', err); }
+            `).join('') || '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:#94a3b8">Nenhuma transa\u00e7\u00e3o</td></tr>';
+        } catch (err) {
+            console.error('[Admin] Transa\u00e7\u00f5es:', err);
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:#ef4444">\u274c ${err.message}</td></tr>`;
+        }
+    }
     }
 
     _confirmPayment(txId, userId, credits) {
@@ -667,17 +682,21 @@ USING (EXISTS (
 
     // ── DOCUMENTOS ──────────────────────────────────────────────────────
     async _loadDocuments() {
-        if (!this.supabase) return;
         try {
-            const { data, error } = await this.supabase
-                .from('documents')
-                .select('id, service_type, title, model_used, created_at, content, profiles(full_name, phone)')
-                .order('created_at', { ascending: false })
-                .limit(200);
-            if (error) throw error;
-            this._docs = data || [];
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/documents?limit=100', {
+                headers: { Authorization: 'Bearer ' + token },
+                signal: AbortSignal.timeout(10000),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Erro ao carregar documentos');
+            this._docs = json.data || [];
             this._renderDocs(this._docs);
-        } catch (err) { console.error('[Admin] Documentos:', err); }
+        } catch (err) {
+            console.error('[Admin] Documentos:', err);
+            const tbody = document.getElementById('documentsTable');
+            if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:#ef4444">❌ ${err.message}</td></tr>`;
+        }
     }
 
     filterDocs(query) {
@@ -1081,70 +1100,135 @@ USING (EXISTS (
 
     async _loadAnalytics() {
         const el = id => document.getElementById(id);
+        const setEl = (id, html) => { const e = el(id); if (e) e.innerHTML = html; };
+
+        // Estado de carregamento
+        const analyticsSection = el('section-analytics');
+        if (analyticsSection) {
+            setEl('topServicesList', '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">A carregar…</div>');
+            setEl('feedbackList',    '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">A carregar…</div>');
+        }
+
         try {
             const token = await this._getAdminToken();
             const res   = await fetch('/api/admin/analytics?days=7', {
-                headers: { Authorization: 'Bearer ' + token }
-            });
-            if (!res.ok) return;
+                headers: { Authorization: 'Bearer ' + token },
+                signal: AbortSignal.timeout(10000),
+            }).catch(() => null);
+
+            if (!res || !res.ok) {
+                setEl('topServicesList', '<div style="color:#ef4444;font-size:.8rem">Erro ao carregar dados</div>');
+                setEl('feedbackList', '<div style="color:#ef4444;font-size:.8rem">Erro ao carregar dados</div>');
+                return;
+            }
             const d = await res.json();
 
-            // Online agora
-            if (el('statOnlineNow')) el('statOnlineNow').textContent = d.onlineNow || 0;
-            if (el('statOnlineNowAnalytics')) el('statOnlineNowAnalytics').textContent = d.onlineNow || 0;
+            // ── Online agora ─────────────────────────────────────────
+            const online = d.onlineNow || 0;
+            if (el('statOnlineNow'))          el('statOnlineNow').textContent          = online;
+            if (el('statOnlineNowAnalytics')) el('statOnlineNowAnalytics').textContent = online;
 
-            // Visitas por dia — chart
-            const visitLabels = Object.keys(d.visitsByDay || {});
-            const visitData   = visitLabels.map(k => d.visitsByDay[k]);
+            // ── Total de visitas hoje ────────────────────────────────
+            const today    = new Date().toISOString().split('T')[0];
+            const todayViews = (d.visitsByDay || {})[today] || 0;
+            const totalViews = Object.values(d.visitsByDay || {}).reduce((a, b) => a + b, 0);
+            if (el('statTodayViews'))  el('statTodayViews').textContent  = todayViews;
+            if (el('statTotalViews'))  el('statTotalViews').textContent  = totalViews;
+
+            // ── Gráfico visitas por dia ──────────────────────────────
+            const visitLabels = Object.keys(d.visitsByDay || {}).map(dt => {
+                const [, m, day] = dt.split('-');
+                return `${day}/${m}`;
+            });
+            const visitData = Object.values(d.visitsByDay || {});
             const vc = el('visitsChart');
             if (vc && typeof Chart !== 'undefined') {
-                if (this.charts.visits) this.charts.visits.destroy();
+                if (this.charts && this.charts.visits) {
+                    try { this.charts.visits.destroy(); } catch (_) {}
+                }
+                if (!this.charts) this.charts = {};
                 this.charts.visits = new Chart(vc, {
-                    type: 'line',
+                    type: 'bar',
                     data: {
                         labels: visitLabels,
-                        datasets: [{ label: 'Visitas', data: visitData,
-                            borderColor: '#8B5CF6', backgroundColor: 'rgba(139,92,246,.1)',
-                            tension: .4, fill: true, pointRadius: 4 }]
+                        datasets: [{
+                            label: 'Visitas',
+                            data: visitData,
+                            backgroundColor: 'rgba(139,92,246,.7)',
+                            borderRadius: 6,
+                            borderSkipped: false,
+                        }]
                     },
-                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } } },
+                            x: { ticks: { font: { size: 11 } } },
+                        }
+                    }
                 });
+            } else if (vc) {
+                // Fallback sem Chart.js: tabela simples
+                const parent = vc.parentElement;
+                vc.style.display = 'none';
+                const table = document.createElement('div');
+                table.innerHTML = visitLabels.map((l, i) =>
+                    `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:.8rem">
+                        <span>${l}</span><strong>${visitData[i]}</strong>
+                    </div>`
+                ).join('') || '<span style="color:#94a3b8;font-size:.8rem">Sem dados</span>';
+                parent.appendChild(table);
             }
 
-            // Top serviços
-            const topEl = el('topServicesList');
-            if (topEl && d.topServices) {
-                const max = d.topServices[0]?.count || 1;
-                topEl.innerHTML = d.topServices.map(s => {
+            // ── Top serviços ─────────────────────────────────────────
+            const serviceLabels = {
+                trabalho:'📚 Trabalho Escolar', cv:'📋 Curriculum Vitae',
+                carta:'✉️ Carta', orcamento:'🏗️ Orçamento de Obra',
+                impressao:'🖨️ Impressão', foto:'📷 Foto Documentos',
+                conversao:'🔄 Conversão', declaracao:'📄 Declaração',
+                contrato:'📑 Contrato', procuracao:'⚖️ Procuração',
+                requerimento:'📋 Requerimento',
+            };
+            const topSvcs = d.topServices || [];
+            if (!topSvcs.length) {
+                setEl('topServicesList', '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">Sem dados ainda</div>');
+            } else {
+                const max = topSvcs[0]?.count || 1;
+                setEl('topServicesList', topSvcs.map(s => {
                     const pct = Math.round((s.count / max) * 100);
-                    const label = { trabalho:'📚 Trabalho', cv:'📋 CV', carta:'✉️ Carta',
-                        orcamento:'🏗️ Orçamento', impressao:'🖨️ Impressão',
-                        foto:'📷 Foto', conversao:'🔄 Conversão' }[s.name] || s.name;
-                    return `<div style="margin:.4rem 0">
-                        <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:2px">
-                            <span>${label}</span><span style="font-weight:700">${s.count}</span>
+                    const label = serviceLabels[s.name] || s.name;
+                    return `<div style="margin:.5rem 0">
+                        <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px">
+                            <span>${label}</span><strong>${s.count}</strong>
                         </div>
-                        <div style="background:#e2e8f0;border-radius:4px;height:6px">
-                            <div style="background:#3B82F6;height:6px;border-radius:4px;width:${pct}%"></div>
+                        <div style="background:#e2e8f0;border-radius:4px;height:7px">
+                            <div style="background:#3B82F6;height:7px;border-radius:4px;width:${pct}%;transition:width .4s"></div>
                         </div>
                     </div>`;
-                }).join('');
+                }).join(''));
             }
 
-            // Feedback médio por serviço
-            const fbEl = el('feedbackList');
-            if (fbEl && d.feedbackSummary) {
-                fbEl.innerHTML = d.feedbackSummary.length
-                    ? d.feedbackSummary.map(f => {
-                        const stars = '⭐'.repeat(Math.round(f.avg));
-                        return `<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid #f1f5f9;font-size:.82rem">
-                            <span>${f.service}</span>
-                            <span>${stars} <strong>${f.avg}</strong>/5 <span style="color:#94a3b8">(${f.count})</span></span>
-                        </div>`;
-                    }).join('')
-                    : '<div style="color:#94a3b8;font-size:.8rem">Ainda sem avaliações.</div>';
+            // ── Feedback por serviço ──────────────────────────────────
+            const fb = d.feedbackSummary || [];
+            if (!fb.length) {
+                setEl('feedbackList', '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">Ainda sem avaliações.</div>');
+            } else {
+                setEl('feedbackList', fb.map(f => {
+                    const stars = '⭐'.repeat(Math.round(f.avg));
+                    const label = serviceLabels[f.service] || f.service;
+                    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;border-bottom:1px solid #f1f5f9;font-size:.82rem">
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px">${label}</span>
+                        <span style="white-space:nowrap">${stars} <strong>${f.avg}</strong>/5 <span style="color:#94a3b8">(${f.count})</span></span>
+                    </div>`;
+                }).join(''));
             }
-        } catch (err) { console.error('[Admin] Analytics:', err); }
+
+        } catch (err) {
+            console.error('[Admin] Analytics:', err);
+            setEl('topServicesList', '<div style="color:#ef4444;font-size:.8rem">Erro: ' + err.message + '</div>');
+        }
     }
 
     // Lista de páginas estáticas da pasta /pages do repo

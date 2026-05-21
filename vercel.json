@@ -79,6 +79,10 @@
       "destination": "/api/admin/index"
     },
     {
+      "source": "/api/admin/documents",
+      "destination": "/api/admin/index"
+    },
+    {
       "source": "/api/feedback",
       "destination": "/api/admin/index"
     },
