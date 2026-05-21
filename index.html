@@ -533,42 +533,53 @@
 <script type="module">
 // ── PWA Install ──────────────────────────────────────────────────────────────
 (function() {
-  let deferredPrompt = null;
-  const banner   = document.getElementById('pwaInstallBanner');
+  let deferredPrompt  = null;
+  let promptAvailable = false;
+  const banner     = document.getElementById('pwaInstallBanner');
   const installBtn = document.getElementById('pwaInstallBtn');
   const closeBtn   = document.getElementById('pwaInstallClose');
 
   window.addEventListener('beforeinstallprompt', e => {
-    e.preventDefault();
-    deferredPrompt = e;
-    // Mostrar banner após 3 segundos se não foi rejeitado antes
+    // Guardar o evento ANTES de prevenir o default
+    deferredPrompt  = e;
+    promptAvailable = true;
+    e.preventDefault(); // suprimir o mini-infobar do browser
+
+    // Só mostrar se utilizador não dispensou antes nesta sessão
     if (!sessionStorage.getItem('pwa_banner_dismissed')) {
-      setTimeout(() => { if (banner) banner.style.display = 'flex'; }, 3000);
+      setTimeout(() => {
+        if (banner && promptAvailable) banner.style.display = 'flex';
+      }, 3000);
     }
   });
 
   if (installBtn) {
-    installBtn.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      banner.style.display = 'none';
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      console.log('[PWA] Install outcome:', outcome);
+    installBtn.addEventListener('click', () => {
+      // prompt() DEVE ser chamado sincronamente no handler de click
+      if (!deferredPrompt || !promptAvailable) return;
+      const p = deferredPrompt;
+      deferredPrompt  = null;
+      promptAvailable = false;
+      if (banner) banner.style.display = 'none';
+      // Chamar prompt() dentro do mesmo tick do evento de utilizador
+      p.prompt();
+      p.userChoice.then(result => {
+        console.log('[PWA] outcome:', result.outcome);
+      }).catch(() => {});
     });
   }
 
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
-      banner.style.display = 'none';
+      if (banner) banner.style.display = 'none';
       sessionStorage.setItem('pwa_banner_dismissed', '1');
     });
   }
 
-  // Esconder banner se já instalado
   window.addEventListener('appinstalled', () => {
     if (banner) banner.style.display = 'none';
-    deferredPrompt = null;
+    deferredPrompt  = null;
+    promptAvailable = false;
   });
 })();
 

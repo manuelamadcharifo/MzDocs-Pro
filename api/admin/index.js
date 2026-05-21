@@ -601,31 +601,37 @@ async function handleDeleteUser(req, res) {
 // ANALYTICS — visitas por dia, online agora, serviços mais usados
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAnalytics(req, res) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
-    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
 
-    if (req.method === 'POST') {
-      // Registar visita (chamado pelo front-end)
-      const body = parseBody(req);
-      const page  = (body?.page || '/').slice(0, 200);
+  // ── POST: registo de visita — PÚBLICO, sem autenticação necessária ────────
+  if (req.method === 'POST') {
+    try {
+      const supabase = await getAdminClient();
+      const body  = parseBody(req) || {};
+      const page  = (body.page || '/').slice(0, 200);
       const today = new Date().toISOString().split('T')[0];
-      // Incremento atómico via função SQL (evita race condition e substitução por 1)
+      const sid   = (body.session || 'anon').slice(0, 64);
       await supabase.rpc('increment_page_view', { p_page: page, p_date: today }).catch(() => {});
-      // Actualizar presença online (TTL 5 min via updated_at)
-      const sid = (body?.session || 'anon').slice(0, 64);
       await supabase.from('online_sessions').upsert(
         { session_id: sid, page, updated_at: new Date().toISOString() },
         { onConflict: 'session_id' }
       ).catch(() => {});
       return res.status(200).json({ ok: true });
+    } catch (err) {
+      return res.status(200).json({ ok: false }); // falha silenciosa — não interromper o utilizador
     }
+  }
 
-    if (req.method === 'GET') {
-      const days = parseInt(req.query?.days || '7', 10);
-      const since = new Date(); since.setDate(since.getDate() - days);
+  // ── GET: painel de analytics — apenas admin ───────────────────────────────
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    const days  = parseInt(req.query?.days || '7', 10);
+    const since = new Date(); since.setDate(since.getDate() - days);
 
       // Visitas por dia (últimos N dias)
       const { data: pvData } = await supabase
@@ -688,9 +694,6 @@ async function handleAnalytics(req, res) {
         topServices,
         feedbackSummary,
       });
-    }
-
-    return res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
     console.error('[admin/analytics]', err);
     return res.status(500).json({ error: err.message });
