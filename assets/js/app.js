@@ -76,7 +76,27 @@ async function bootstrap() {
     }
   }
 
-  console.log('[MzDocs Pro v7.1] Iniciado ✅ | Créditos:', creditModel.value);
+  console.log('[MzDocs Pro v9] Iniciado ✅ | Créditos:', creditModel.value);
+
+  // ── Escape global: fecha qualquer modal aberto ──────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    // Fechar todos os overlays com classe .open
+    document.querySelectorAll('.open[id]').forEach(el => el.classList.remove('open'));
+    document.body.style.overflow = '';
+    // Libertar qualquer botão de geração bloqueado
+    const btnGen = document.getElementById('btnGen');
+    if (btnGen) { btnGen.disabled = false; btnGen.style.opacity = ''; }
+  });
+
+  // ── Watchdog: se body.overflow ficar 'hidden' sem modal aberto, corrigir ─
+  setInterval(() => {
+    const hasOpenModal = !!document.querySelector('.open[id]');
+    if (!hasOpenModal && document.body.style.overflow === 'hidden') {
+      document.body.style.overflow = '';
+      console.warn('[MzDocs] Watchdog: overflow corrigido automaticamente');
+    }
+  }, 3000);
 }
 
 async function _setupPushNotifications(registration) {

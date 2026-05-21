@@ -125,20 +125,24 @@ export class CreditModel {
     }
 
     async _syncFromServer() {
+        // Guard: evitar execuções paralelas
+        if (this._syncing) return;
         // Protecção: se debitámos há menos de 20s, não sincronizar
-        // (evita que o autosync leia um valor desactualizado do Supabase antes de o RPC propagar)
         const lastConsume = this._lastConsumeAt || 0;
         if (Date.now() - lastConsume < 20000) return;
 
-        const data = await this.supabase.syncUser(this.userId).catch(() => null);
-        if (data && typeof data.credits === 'number') {
-            // Nunca repor um valor MAIOR que o actual sem verificação
-            // (protege contra sincronização fora de ordem)
-            if (data.credits !== this.credits) {
-                this.credits = data.credits;
-                Storage.set('credits', this.credits);
-                this._emit();
+        this._syncing = true;
+        try {
+            const data = await this.supabase.syncUser(this.userId).catch(() => null);
+            if (data && typeof data.credits === 'number') {
+                if (data.credits !== this.credits) {
+                    this.credits = data.credits;
+                    Storage.set('credits', this.credits);
+                    this._emit();
+                }
             }
+        } finally {
+            this._syncing = false;
         }
     }
 
@@ -177,13 +181,10 @@ export class CreditModel {
             const user = window.authManager?.user;
             if (!user) return;
 
-            // Detectar conta avulso: campo novo account_type, ou campos legados
-            const profile = window.authManager?.profile;
-            const isAvulso = profile?.account_type === 'avulso';
-
-            // Fallback para detecção legada (emails gerados automaticamente)
-            const email  = user.email || '';
-            const phone  = user.phone || '';
+            const profile    = window.authManager?.profile;
+            const isAvulso   = profile?.account_type === 'avulso';
+            const email      = user.email || '';
+            const phone      = user.phone || '';
             const isLegacyTemp = (
                 email.includes('@temp.mzdocs') ||
                 email.includes('@guest.mzdocs') ||
@@ -193,28 +194,26 @@ export class CreditModel {
 
             if (!isAvulso && !isLegacyTemp) return;
 
-            // Aguardar 3s para garantir que o utilizador viu a mensagem de créditos zerados
+            // Aguardar 3s para o utilizador ver a mensagem de créditos zerados
             await new Promise(r => setTimeout(r, 3000));
 
-            // Chamar endpoint de limpeza da conta temporária
             const { authManager } = await import('../auth/AuthManager.js');
             const token = await authManager.getValidToken().catch(() => null);
             if (token) {
                 await fetch('/api/delete-temp-account', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ userId: user.id }),
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body:    JSON.stringify({ userId: user.id }),
                 }).catch(() => {});
             }
 
-            // Fazer sign out e redirecionar
+            // Cancelar timers antes de sair para evitar erros pós-reload
+            if (this._syncTimer) { clearInterval(this._syncTimer); this._syncTimer = null; }
+
             await authManager.signOut().catch(() => {});
             Storage.clear();
             location.reload();
-        } catch (_) { /* falha silenciosa — não é crítico */ }
+        } catch (_) { /* falha silenciosa */ }
     }
 
     async add(n) {

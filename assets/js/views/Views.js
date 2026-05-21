@@ -24,16 +24,33 @@ export const NotificationView = {
 };
 
 // views/ModalView.js — Abrir/fechar overlays
+let _openCount = 0; // contador de modais abertos — evita body bloqueado se fechar mal
 export const ModalView = {
   open(id) {
     const el = document.getElementById(id);
-    if (el) { el.classList.add('open'); document.body.style.overflow = 'hidden'; }
+    if (!el) return;
+    if (!el.classList.contains('open')) {
+      el.classList.add('open');
+      _openCount++;
+      document.body.style.overflow = 'hidden';
+    }
   },
   close(id) {
     const el = document.getElementById(id);
-    if (el) { el.classList.remove('open'); document.body.style.overflow = ''; }
+    if (!el) return;
+    if (el.classList.contains('open')) {
+      el.classList.remove('open');
+      _openCount = Math.max(0, _openCount - 1);
+      if (_openCount === 0) document.body.style.overflow = '';
+    }
   },
-  isOpen(id) { return document.getElementById(id)?.classList.contains('open'); }
+  // Fechar TODOS os modais abertos (escape de emergência)
+  closeAll() {
+    document.querySelectorAll('.open[id]').forEach(el => el.classList.remove('open'));
+    _openCount = 0;
+    document.body.style.overflow = '';
+  },
+  isOpen(id) { return document.getElementById(id)?.classList.contains('open') ?? false; }
 };
 
 // views/DocumentView.js — Renderizar formulário e resultado

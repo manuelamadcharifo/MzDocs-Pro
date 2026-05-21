@@ -208,8 +208,20 @@ export class PaymentController {
     const manualInfo = document.getElementById('payManualInfo');
     const btnPay     = document.getElementById('btnPay');
     if (mpNote)     mpNote.style.display     = 'none';
-    if (manualInfo) manualInfo.style.display = 'block';
-    if (btnPay)     btnPay.textContent       = 'Confirmar e Abrir WhatsApp';
+    if (manualInfo) {
+      manualInfo.style.display = 'block';
+      // Mostrar nome do recebedor para o utilizador confirmar antes de pagar
+      const receiverEl = document.getElementById('payReceiverInfo');
+      if (receiverEl) {
+        receiverEl.innerHTML =
+          `<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.82rem;">` +
+          `<span style="color:#166534;font-weight:700;">📲 Recebedor M-Pesa:</span><br>` +
+          `<span style="font-size:1rem;font-weight:800;color:#15803d;letter-spacing:.5px;">Manuel Amad Charifo</span><br>` +
+          `<span style="color:#6b7280;font-size:.78rem;">Verifique o nome antes de confirmar o pagamento</span>` +
+          `</div>`;
+      }
+    }
+    if (btnPay)     btnPay.textContent = 'Confirmar e Abrir WhatsApp';
 
     this.onPhoneInput(document.getElementById('phoneInput'));
   }

@@ -37,7 +37,8 @@ export class DocumentController {
  this.openRouter = new OpenRouterService();
  this.longEngine = new LongDocumentEngine();
  this.templateCtrl = new TemplateController(this.docModel, this.openRouter);
- this._genIv = null;
+ this._genIv    = null;
+ this._abortCtrl = null; // AbortController activo — cancelado se gerar novo documento
  this._menuOutside = null;
  this._longRunning = false;
 
@@ -159,8 +160,13 @@ export class DocumentController {
  ];
  this._genIv = DocumentView.showLoader(STEPS);
 
+ // Cancelar qualquer geração anterior pendente
+ if (this._abortCtrl) { try { this._abortCtrl.abort(); } catch (_) {} }
+ this._abortCtrl = new AbortController();
+ const { signal } = this._abortCtrl;
+
  const timeout = new Promise((_, reject) =>
- setTimeout(() => reject(new Error('A geração demorou demasiado. Verifique a sua ligação e tente novamente.')), 90000)
+   setTimeout(() => reject(new Error('A geração demorou demasiado. Verifique a sua ligação e tente novamente.')), 90000)
  );
 
  try {
@@ -169,7 +175,10 @@ export class DocumentController {
  this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost, this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null)
  ),
  timeout,
+ new Promise((_, reject) => { signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }); }),
  ]);
+
+ if (signal.aborted) return; // geração cancelada — não renderizar
 
  DocumentView.hideLoader(this._genIv);
 
@@ -224,9 +233,11 @@ export class DocumentController {
 
  } catch (err) {
  DocumentView.hideLoader(this._genIv);
- if (btn) btn.disabled = false;
 
  const msg = err.message || '';
+
+ // Cancelamento intencional — não mostrar erro
+ if (msg === 'cancelled') return;
 
  if (!navigator.onLine || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
  await this._queueOffline(key, data, cost);
@@ -246,6 +257,10 @@ export class DocumentController {
  } else {
  NotificationView.error('❌ ' + (msg || 'Erro ao gerar. Tente novamente.'));
  }
+ } finally {
+ // Garantia absoluta: botão sempre libertado, independente do caminho de erro
+ if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+ this._genIv = null;
  }
  }
 

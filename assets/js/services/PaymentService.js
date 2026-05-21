@@ -86,7 +86,8 @@ export class PaymentService {
       `*Pagamento MzDocs Pro*\n\n` +
       `Referência: ${transactionId}\n` +
       `Pacote: ${packageName}\n` +
-      `Valor: ${amount} MZN\n\n` +
+      `Valor: ${amount} MZN\n` +
+      `Recebedor M-Pesa: Manuel Amad Charifo\n\n` +
       `Segue o comprovativo de pagamento:`
     );
     window.open(`https://wa.me/${WA_NUMBER}?text=${message}`, '_blank');

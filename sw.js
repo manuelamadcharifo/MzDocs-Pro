@@ -114,7 +114,7 @@ workbox.routing.registerRoute(
     /\/api\/generate-document/,
     new workbox.strategies.NetworkFirst({
         cacheName: `api-cache-${CACHE_VERSION}`,
-        networkTimeoutSeconds: 30,
+        networkTimeoutSeconds: 85, // front-end tem 90s — SW cede primeiro, evita race
         plugins: [
             new workbox.backgroundSync.BackgroundSyncPlugin('document-queue', {
                 maxRetentionTime: 24 * 60,

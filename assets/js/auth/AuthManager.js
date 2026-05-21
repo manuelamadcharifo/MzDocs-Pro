@@ -329,18 +329,35 @@ export class AuthManager {
  getToken() { return this.session?.access_token || null; }
 
  async getValidToken() {
- if (!this.supabase) return null;
- const expiresAt = this.session?.expires_at;
- const nowSecs = Math.floor(Date.now() / 1000);
- if (!this.session || (expiresAt && (expiresAt - nowSecs) < 60)) {
- const { data } = await this.supabase.auth.refreshSession();
- if (data?.session) {
- this.session = data.session;
- this.user = data.session.user;
- }
- }
- return this.session?.access_token || null;
- }
+    if (!this.supabase) return null;
+    const expiresAt = this.session?.expires_at;
+    const nowSecs   = Math.floor(Date.now() / 1000);
+    const needsRefresh = !this.session || (expiresAt && (expiresAt - nowSecs) < 60);
+    if (!needsRefresh) return this.session?.access_token || null;
+
+    // Mutex: se já há um refresh em curso, esperar o mesmo promise
+    if (this._refreshPromise) return this._refreshPromise;
+
+    this._refreshPromise = (async () => {
+      try {
+        const { data } = await Promise.race([
+          this.supabase.auth.refreshSession(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('refresh timeout')), 8000)),
+        ]);
+        if (data?.session) {
+          this.session = data.session;
+          this.user    = data.session.user;
+        }
+      } catch (err) {
+        console.warn('[AuthManager] refresh falhou:', err.message);
+      } finally {
+        this._refreshPromise = null;
+      }
+      return this.session?.access_token || null;
+    })();
+
+    return this._refreshPromise;
+  }
 
  onChange(callback) {
  this._listeners.push(callback);
