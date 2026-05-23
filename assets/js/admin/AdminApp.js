@@ -43,8 +43,44 @@ class AdminApp {
         await this._loadDashboard();
         this._loadAnalytics().catch(() => {});
 
-        // Polling: actualizar "Online Agora" a cada 10s automaticamente
-        this._onlinePoller = setInterval(() => this._pollOnline(), 10000);
+        // Realtime: subscrever mudanças na tabela online_sessions via Supabase Realtime
+        this._startOnlineRealtime();
+        // Polling de fallback a cada 20s (caso realtime falhe)
+        this._onlinePoller = setInterval(() => this._pollOnline(), 20000);
+    }
+
+    _updateOnlineUI(n) {
+        const el = id => document.getElementById(id);
+        if (el('statOnlineNow'))          el('statOnlineNow').textContent          = n;
+        if (el('statOnlineNowAnalytics')) el('statOnlineNowAnalytics').textContent = n;
+        const dot = el('onlineDot');
+        if (dot) dot.style.background = n > 0 ? '#22c55e' : '#94a3b8';
+    }
+
+    async _startOnlineRealtime() {
+        if (!this.supabase) return;
+        const fiveMinAgo = () => new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+        // Função para recontagem directa no Supabase (anon key tem SELECT em online_sessions via policy admin)
+        // Usar RPC ou COUNT via API admin para evitar RLS
+        const recount = async () => { await this._pollOnline(); };
+
+        // Canal Realtime — escuta INSERT, UPDATE, DELETE em online_sessions
+        this._realtimeChannel = this.supabase
+            .channel('online-sessions-watch')
+            .on('postgres_changes',
+                { event: '*', schema: 'public', table: 'online_sessions' },
+                () => { recount(); }
+            )
+            .subscribe((status) => {
+                const dot = document.getElementById('onlineDot');
+                if (dot) {
+                    // Indicador de ligação realtime: pulsa quando conectado
+                    if (status === 'SUBSCRIBED') {
+                        dot.title = 'Realtime activo';
+                    }
+                }
+            });
     }
 
     async _pollOnline() {
@@ -56,13 +92,7 @@ class AdminApp {
             });
             if (!res.ok) return;
             const d = await res.json();
-            const n = d.onlineNow || 0;
-            const el = id => document.getElementById(id);
-            if (el('statOnlineNow'))          el('statOnlineNow').textContent          = n;
-            if (el('statOnlineNowAnalytics')) el('statOnlineNowAnalytics').textContent = n;
-            // Actualizar badge visual
-            const dot = el('onlineDot');
-            if (dot) dot.style.background = n > 0 ? '#22c55e' : '#94a3b8';
+            this._updateOnlineUI(d.onlineNow || 0);
         } catch (_) {}
     }
 
@@ -1251,24 +1281,124 @@ USING (EXISTS (
             }
 
             // ── Feedback por serviço ──────────────────────────────────
-            const fb = d.feedbackSummary || [];
-            if (!fb.length) {
-                setEl('feedbackList', '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">Ainda sem avaliações.</div>');
-            } else {
-                setEl('feedbackList', fb.map(f => {
-                    const stars = '⭐'.repeat(Math.min(5, Math.round(f.avg || 0)));
-                    const label = resolveServiceLabel(f.service);
-                    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;border-bottom:1px solid #f1f5f9;font-size:.82rem;overflow:hidden;gap:8px">
-                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span>
-                        <span style="white-space:nowrap;flex-shrink:0">${stars} <strong>${f.avg}</strong>/5 <span style="color:#94a3b8">(${f.count})</span></span>
-                    </div>`;
-                }).join(''));
-            }
+            // ── Avaliações: tabela completa com filtro ────────────────
+            const fbList    = d.feedbackList    || [];
+            const fbSummary = d.feedbackSummary || [];
+
+            // Guardar dados para filtro interactivo
+            this._feedbackAll     = fbList;
+            this._feedbackSummary = fbSummary;
+            this._renderFeedback(fbList, fbSummary, null);
 
         } catch (err) {
             console.error('[Admin] Analytics:', err);
             setEl('topServicesList', '<div style="color:#ef4444;font-size:.8rem">Erro: ' + err.message + '</div>');
         }
+    }
+
+    // ── Avaliações: renderizar tabela com filtro por serviço ────────────────
+    _renderFeedback(fbList, fbSummary, activeFilter) {
+        const setEl = (id, h) => { const e = document.getElementById(id); if (e) e.innerHTML = h; };
+
+        const serviceLabels = {
+            trabalho:'📚 Trabalho Escolar', cv:'📋 Curriculum Vitae',
+            carta:'✉️ Carta', orcamento:'🏗️ Orçamento de Obra',
+            impressao:'🖨️ Impressão', foto:'📷 Foto Documentos',
+            conversao:'🔄 Conversão', declaracao:'📄 Declaração',
+            contrato:'📑 Contrato', procuracao:'⚖️ Procuração',
+            requerimento:'📋 Requerimento', recibo:'🧾 Recibo',
+            atestado:'📄 Atestado', geral:'⭐ Geral',
+        };
+        const resolveLabel = raw => {
+            if (!raw) return 'Geral';
+            const s = String(raw).trim();
+            if (s.startsWith('{')) { try { return JSON.parse(s).title || 'Serviço'; } catch(_) {} }
+            return serviceLabels[s] || s;
+        };
+        const starHtml = n => {
+            const full  = Math.round(Math.min(5, n || 0));
+            return '⭐'.repeat(full) + '<span style="color:#ddd">☆</span>'.repeat(5 - full);
+        };
+        const fmtDate = dt => {
+            if (!dt) return '—';
+            const d = new Date(dt);
+            return d.toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                 + ' ' + d.toLocaleTimeString('pt-MZ', { hour: '2-digit', minute: '2-digit' });
+        };
+
+        // Filtros de serviço
+        const filterOptions = fbSummary.map(f =>
+            `<button onclick="adminApp._filterFeedback('${f.service}')"
+                style="border:none;padding:3px 10px;border-radius:20px;cursor:pointer;font-size:.75rem;margin:2px;
+                    background:${activeFilter === f.service ? '#3B82F6' : '#e2e8f0'};
+                    color:${activeFilter === f.service ? '#fff' : '#374151'}">
+                ${resolveLabel(f.service)} (${f.count})
+            </button>`
+        ).join('');
+
+        const clearBtn = activeFilter
+            ? `<button onclick="adminApp._filterFeedback(null)"
+                style="border:none;padding:3px 10px;border-radius:20px;cursor:pointer;font-size:.75rem;margin:2px;background:#fee2e2;color:#dc2626">
+                ✕ Limpar filtro
+               </button>`
+            : '';
+
+        const filtered = activeFilter ? fbList.filter(f => f.service === activeFilter) : fbList;
+
+        if (!filtered.length) {
+            setEl('feedbackList',
+                `<div style="padding:4px 0 8px">
+                    <div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:8px">${filterOptions}${clearBtn}</div>
+                    <div style="color:#94a3b8;font-size:.8rem;padding:.5rem">
+                        ${fbList.length ? 'Nenhuma avaliação para este serviço.' : 'Ainda sem avaliações.'}
+                    </div>
+                </div>`
+            );
+            return;
+        }
+
+        const rows = filtered.map(f => `
+            <tr style="border-bottom:1px solid #f1f5f9">
+                <td style="padding:6px 8px;font-size:.8rem;white-space:nowrap;color:${f.is_logged ? '#1e293b' : '#94a3b8'}">
+                    ${f.is_logged ? '👤' : '👻'} ${f.user_name}
+                </td>
+                <td style="padding:6px 8px;font-size:.8rem;white-space:nowrap">${resolveLabel(f.service)}</td>
+                <td style="padding:6px 4px;white-space:nowrap;font-size:.85rem">${starHtml(f.rating)} <strong>${f.rating}</strong>/5</td>
+                <td style="padding:6px 8px;font-size:.78rem;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    ${f.comment || '<span style="color:#cbd5e1">—</span>'}
+                </td>
+                <td style="padding:6px 8px;font-size:.75rem;color:#94a3b8;white-space:nowrap">${fmtDate(f.created_at)}</td>
+            </tr>`).join('');
+
+        setEl('feedbackList', `
+            <div style="padding:4px 0 8px">
+                <div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:8px">${filterOptions}${clearBtn}</div>
+                <div style="overflow-x:auto">
+                    <table style="width:100%;border-collapse:collapse;min-width:400px">
+                        <thead>
+                            <tr style="background:#f8fafc;font-size:.75rem;color:#64748b;text-transform:uppercase">
+                                <th style="padding:6px 8px;text-align:left;font-weight:600">Utilizador</th>
+                                <th style="padding:6px 8px;text-align:left;font-weight:600">Serviço</th>
+                                <th style="padding:6px 4px;text-align:left;font-weight:600">Rating</th>
+                                <th style="padding:6px 8px;text-align:left;font-weight:600">Comentário</th>
+                                <th style="padding:6px 8px;text-align:left;font-weight:600">Data</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+                <div style="font-size:.75rem;color:#94a3b8;margin-top:6px;text-align:right">
+                    ${filtered.length} avaliação${filtered.length !== 1 ? 'ões' : ''}
+                    ${activeFilter ? ' · filtrado por ' + resolveLabel(activeFilter) : ''}
+                </div>
+            </div>`
+        );
+    }
+
+    _filterFeedback(service) {
+        const fbList    = this._feedbackAll     || [];
+        const fbSummary = this._feedbackSummary || [];
+        this._renderFeedback(fbList, fbSummary, service || null);
     }
 
     // Lista de páginas estáticas da pasta /pages do repo

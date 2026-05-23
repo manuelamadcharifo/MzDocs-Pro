@@ -703,10 +703,12 @@
   }
 
   function _ping() {
+    // Incluir user_id se o utilizador estiver autenticado
+    var uid = (window.authManager && window.authManager.user && window.authManager.user.id) || null;
     fetch('/api/admin/analytics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ page: window.location.pathname, session: _sid }),
+      body: JSON.stringify({ page: window.location.pathname, session: _sid, user_id: uid }),
       keepalive: true,
     }).catch(function() {});
   }

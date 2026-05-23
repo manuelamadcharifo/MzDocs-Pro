@@ -605,8 +605,10 @@ async function handleAnalytics(req, res) {
       const body  = parseBody(req) || {};
       const page  = (body.page || '/').slice(0, 200);
       const today = new Date().toISOString().split('T')[0];
-      const sid   = (body.session || ('anon_' + Math.random().toString(36).slice(2))).toString().slice(0, 64);
-      const now   = new Date().toISOString();
+      const sid    = (body.session || ('anon_' + Math.random().toString(36).slice(2))).toString().slice(0, 64);
+      const now    = new Date().toISOString();
+      const userId = body.user_id && typeof body.user_id === 'string' && body.user_id.length === 36
+        ? body.user_id : null;
 
       // Incrementar contagem de visitas (RPC atómica; fallback manual se RPC falhar)
       const { error: rpcErr } = await supabase
@@ -628,11 +630,11 @@ async function handleAnalytics(req, res) {
       }
 
       // Actualizar presença online (TTL = 5 min controlado pelo GET)
+      const sessionRow = { session_id: sid, page, updated_at: now };
+      if (userId) sessionRow.user_id = userId;
       await supabase.from('online_sessions')
-        .upsert(
-          { session_id: sid, page, updated_at: now },
-          { onConflict: 'session_id', ignoreDuplicates: false }
-        ).catch(() => {});
+        .upsert(sessionRow, { onConflict: 'session_id', ignoreDuplicates: false })
+        .catch(() => {});
 
       // Limpeza assíncrona de sessões com mais de 6 min (margem de segurança)
       const cutoff = new Date(Date.now() - 6 * 60 * 1000).toISOString();
@@ -692,21 +694,53 @@ async function handleAnalytics(req, res) {
         .slice(0, 8)
         .map(([name, count]) => ({ name, count }));
 
-      // Feedback resumo
-      const { data: fbData } = await supabase
+      // Feedback completo — linhas individuais com nome do utilizador
+      const serviceFilter = req.query?.service || null;
+      let fbQuery = supabase
         .from('user_feedback')
-        .select('service, rating')
-        .gte('created_at', monthAgo.toISOString());
+        .select('id, service, rating, comment, created_at, user_id, session_id')
+        .gte('created_at', monthAgo.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (serviceFilter) fbQuery = fbQuery.eq('service', serviceFilter);
+      const { data: fbRows } = await fbQuery;
 
+      // Buscar nomes dos utilizadores em batch
+      const userIds = [...new Set((fbRows || []).map(r => r.user_id).filter(Boolean))];
+      const userMap = {};
+      if (userIds.length) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone')
+          .in('id', userIds);
+        (profiles || []).forEach(p => { userMap[p.id] = p; });
+      }
+
+      // Montar lista completa com nome
+      const feedbackList = (fbRows || []).map(r => {
+        const profile = r.user_id ? userMap[r.user_id] : null;
+        return {
+          id:         r.id,
+          service:    r.service,
+          rating:     r.rating,
+          comment:    r.comment || '',
+          created_at: r.created_at,
+          user_name:  profile?.full_name || (r.session_id ? 'Visitante' : 'Anónimo'),
+          user_phone: profile?.phone || null,
+          is_logged:  !!r.user_id,
+        };
+      });
+
+      // Resumo por serviço (para o filtro)
       const fbByService = {};
-      (fbData || []).forEach(r => {
+      (fbRows || []).forEach(r => {
         if (!fbByService[r.service]) fbByService[r.service] = { total: 0, count: 0 };
         fbByService[r.service].total += r.rating;
         fbByService[r.service].count += 1;
       });
       const feedbackSummary = Object.entries(fbByService).map(([service, v]) => ({
         service,
-        avg: Math.round((v.total / v.count) * 10) / 10,
+        avg:   Math.round((v.total / v.count) * 10) / 10,
         count: v.count,
       })).sort((a, b) => b.count - a.count);
 
@@ -715,6 +749,7 @@ async function handleAnalytics(req, res) {
         visitsByDay: byDay,
         onlineNow:   onlineNow || 0,
         topServices,
+        feedbackList,
         feedbackSummary,
       });
   } catch (err) {
