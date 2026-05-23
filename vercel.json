@@ -75,6 +75,10 @@
       "destination": "/api/admin/index"
     },
     {
+      "source": "/api/affiliate/:action",
+      "destination": "/api/affiliate"
+    },
+    {
       "source": "/api/admin/static-pages",
       "destination": "/api/admin/index"
     },
