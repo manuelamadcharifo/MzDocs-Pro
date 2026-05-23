@@ -43,8 +43,8 @@ class AdminApp {
         await this._loadDashboard();
         this._loadAnalytics().catch(() => {});
 
-        // Polling: actualizar "Online Agora" a cada 30s automaticamente
-        this._onlinePoller = setInterval(() => this._pollOnline(), 30000);
+        // Polling: actualizar "Online Agora" a cada 10s automaticamente
+        this._onlinePoller = setInterval(() => this._pollOnline(), 10000);
     }
 
     async _pollOnline() {
@@ -64,7 +64,6 @@ class AdminApp {
             const dot = el('onlineDot');
             if (dot) dot.style.background = n > 0 ? '#22c55e' : '#94a3b8';
         } catch (_) {}
-    }
     }
 
     // ── NAVEGAÇÃO ───────────────────────────────────────────────────────
@@ -1211,19 +1210,38 @@ USING (EXISTS (
                 impressao:'🖨️ Impressão', foto:'📷 Foto Documentos',
                 conversao:'🔄 Conversão', declaracao:'📄 Declaração',
                 contrato:'📑 Contrato', procuracao:'⚖️ Procuração',
-                requerimento:'📋 Requerimento',
+                requerimento:'📋 Requerimento', recibo:'🧾 Recibo',
+                atestado:'📄 Atestado', geral:'⭐ Geral',
             };
+
+            // Resolve qualquer formato de service para um label legível:
+            // aceita chave simples "trabalho", JSON string '{"title":"..."}', ou texto livre
+            function resolveServiceLabel(raw) {
+                if (!raw) return 'Geral';
+                const s = String(raw).trim();
+                // JSON object string
+                if (s.startsWith('{')) {
+                    try {
+                        const obj = JSON.parse(s);
+                        return (obj.title || obj.name || 'Serviço');
+                    } catch (_) {}
+                }
+                // JSON array string (improvável mas defensivo)
+                if (s.startsWith('[')) return 'Serviço';
+                // Chave mapeada
+                return serviceLabels[s] || s;
+            }
             const topSvcs = d.topServices || [];
             if (!topSvcs.length) {
                 setEl('topServicesList', '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">Sem dados ainda</div>');
             } else {
                 const max = topSvcs[0]?.count || 1;
                 setEl('topServicesList', topSvcs.map(s => {
-                    const pct = Math.round((s.count / max) * 100);
-                    const label = serviceLabels[s.name] || s.name;
-                    return `<div style="margin:.5rem 0">
-                        <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px">
-                            <span>${label}</span><strong>${s.count}</strong>
+                    const pct   = Math.round((s.count / max) * 100);
+                    const label = resolveServiceLabel(s.name);
+                    return `<div style="margin:.5rem 0;overflow:hidden">
+                        <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px;gap:4px">
+                            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span><strong style="white-space:nowrap;flex-shrink:0">${s.count}</strong>
                         </div>
                         <div style="background:#e2e8f0;border-radius:4px;height:7px">
                             <div style="background:#3B82F6;height:7px;border-radius:4px;width:${pct}%;transition:width .4s"></div>
@@ -1238,17 +1256,11 @@ USING (EXISTS (
                 setEl('feedbackList', '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">Ainda sem avaliações.</div>');
             } else {
                 setEl('feedbackList', fb.map(f => {
-                    const stars = '⭐'.repeat(Math.round(f.avg));
-                    // Protecção: se service for JSON bruto, extrair title ou usar 'geral'
-                    let rawSvc = f.service || 'geral';
-                    let svcKey = rawSvc;
-                    if (rawSvc.startsWith('{')) {
-                        try { svcKey = JSON.parse(rawSvc)?.title || 'Serviço'; } catch (_) { svcKey = 'Serviço'; }
-                    }
-                    const label = serviceLabels[svcKey] || svcKey;
-                    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;border-bottom:1px solid #f1f5f9;font-size:.82rem">
-                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px">${label}</span>
-                        <span style="white-space:nowrap">${stars} <strong>${f.avg}</strong>/5 <span style="color:#94a3b8">(${f.count})</span></span>
+                    const stars = '⭐'.repeat(Math.min(5, Math.round(f.avg || 0)));
+                    const label = resolveServiceLabel(f.service);
+                    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;border-bottom:1px solid #f1f5f9;font-size:.82rem;overflow:hidden;gap:8px">
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span>
+                        <span style="white-space:nowrap;flex-shrink:0">${stars} <strong>${f.avg}</strong>/5 <span style="color:#94a3b8">(${f.count})</span></span>
                     </div>`;
                 }).join(''));
             }

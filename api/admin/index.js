@@ -605,16 +605,15 @@ async function handleAnalytics(req, res) {
       const body  = parseBody(req) || {};
       const page  = (body.page || '/').slice(0, 200);
       const today = new Date().toISOString().split('T')[0];
-      const sid   = (body.session || 'anon_' + Date.now()).toString().slice(0, 64);
+      const sid   = (body.session || ('anon_' + Math.random().toString(36).slice(2))).toString().slice(0, 64);
+      const now   = new Date().toISOString();
 
-      // Tentar RPC atómica; se falhar, fazer upsert manual
-      const rpcOk = await supabase
-        .rpc('increment_page_view', { p_page: page, p_date: today })
-        .then(r => !r.error)
-        .catch(() => false);
+      // Incrementar contagem de visitas (RPC atómica; fallback manual se RPC falhar)
+      const { error: rpcErr } = await supabase
+        .rpc('increment_page_view', { p_page: page, p_date: today });
 
-      if (!rpcOk) {
-        // Fallback: SELECT + UPDATE ou INSERT
+      if (rpcErr) {
+        // Fallback: upsert manual
         const { data: existing } = await supabase
           .from('page_views').select('id, views').eq('page', page).eq('date', today).maybeSingle();
         if (existing) {
@@ -628,19 +627,20 @@ async function handleAnalytics(req, res) {
         }
       }
 
-      // Actualizar presença online — upsert com INSERT OR UPDATE explícito
+      // Actualizar presença online (TTL = 5 min controlado pelo GET)
       await supabase.from('online_sessions')
         .upsert(
-          { session_id: sid, page, updated_at: new Date().toISOString() },
+          { session_id: sid, page, updated_at: now },
           { onConflict: 'session_id', ignoreDuplicates: false }
         ).catch(() => {});
 
-      // Limpar sessões com mais de 6 minutos (leve, assíncrono)
+      // Limpeza assíncrona de sessões com mais de 6 min (margem de segurança)
       const cutoff = new Date(Date.now() - 6 * 60 * 1000).toISOString();
       supabase.from('online_sessions').delete().lt('updated_at', cutoff).catch(() => {});
 
       return res.status(200).json({ ok: true });
     } catch (err) {
+      console.error('[analytics/POST]', err.message);
       return res.status(200).json({ ok: false }); // silencioso — não interromper o utilizador
     }
   }

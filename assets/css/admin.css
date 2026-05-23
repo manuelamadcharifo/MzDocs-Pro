@@ -226,6 +226,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
   padding: 1rem;
   box-shadow: var(--shadow);
   border: 1px solid var(--border);
+  overflow: hidden;
 }
 .chart-title { font-size: .9rem; font-weight: 700; margin-bottom: .75rem; color: var(--ink); }
 

@@ -695,17 +695,18 @@
   };
 
   // ── Registo de visita + heartbeat online ───────────────────────────────
-  var _heartbeatUrl = '/api/admin/analytics';
-  var _heartbeatBody = function() {
-    return JSON.stringify({ page: window.location.pathname, session: sessionId });
-  };
+  // Usar localStorage para manter o mesmo session_id entre recargas (mesmo visitante)
+  var _sid = localStorage.getItem('mz_sid');
+  if (!_sid) {
+    _sid = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    try { localStorage.setItem('mz_sid', _sid); } catch(_) {}
+  }
 
-  // Função de ping com fallback: tenta fetch, não bloqueia em caso de erro
   function _ping() {
-    fetch(_heartbeatUrl, {
+    fetch('/api/admin/analytics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: _heartbeatBody(),
+      body: JSON.stringify({ page: window.location.pathname, session: _sid }),
       keepalive: true,
     }).catch(function() {});
   }
@@ -713,8 +714,8 @@
   // Registo imediato ao carregar (conta como visita)
   _ping();
 
-  // Heartbeat a cada 4 minutos para manter sessão online activa (TTL = 5 min)
-  setInterval(_ping, 4 * 60 * 1000);
+  // Heartbeat a cada 90s para manter sessão online activa (TTL no servidor = 5 min)
+  setInterval(_ping, 90 * 1000);
 
   // Registar também quando o utilizador volta ao separador
   document.addEventListener('visibilitychange', function() {
