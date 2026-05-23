@@ -117,10 +117,12 @@
       <!-- Row 2: Secondary KPIs -->
       <div class="stats-grid" style="margin-top:12px;">
         <div class="stat-card">
-          <div class="stat-icon" style="background:#F0FDF4;">🟢</div>
+          <div class="stat-icon" style="background:#F0FDF4;">
+            <span id="onlineDot" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#94a3b8;animation:pulse 2s infinite"></span>
+          </div>
           <div class="stat-body">
             <div class="stat-value" id="statOnlineNow">—</div>
-            <div class="stat-label">Online Agora</div>
+            <div class="stat-label">Online Agora <span style="font-size:.65rem;color:#94a3b8">(actualiza 30s)</span></div>
           </div>
         </div>
         <div class="stat-card">

@@ -221,7 +221,7 @@ export class DocumentController {
  // Feedback widget — aparece 4s após para não interromper a leitura do documento
  setTimeout(() => {
    if (typeof window.showFeedbackWidget === 'function') {
-     window.showFeedbackWidget(svc);
+     window.showFeedbackWidget(this.docModel.service); // chave ex: 'trabalho', 'cv'
    }
  }, 4000);
 

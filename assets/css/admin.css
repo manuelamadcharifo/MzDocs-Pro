@@ -590,3 +590,9 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
   .filter-select { font-size: .8rem; padding: .35rem .5rem; }
   .search-input { font-size: .8rem; }
 }
+
+/* ── Online dot pulse ────────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: .5; transform: scale(.85); }
+}

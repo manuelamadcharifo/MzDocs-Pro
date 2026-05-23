@@ -592,6 +592,36 @@
   const submitBtn = document.getElementById('feedbackSubmit');
   const sessionId = Math.random().toString(36).slice(2);
 
+  // ── Capturar link de afiliado (?ref=MZ-XXXXXX) ──────────────────────────
+  (function() {
+    var params  = new URLSearchParams(window.location.search);
+    var refCode = params.get('ref');
+    if (!refCode || !/^MZ-[A-Z0-9]{6}$/.test(refCode)) return;
+
+    // Guardar em sessionStorage para associar ao registo
+    sessionStorage.setItem('mz_ref', refCode);
+
+    // Registar clique na API
+    fetch('/api/affiliate/click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref_code: refCode, page: window.location.pathname }),
+      keepalive: true,
+    }).catch(function() {});
+
+    // Mostrar banner "Convidado por parceiro"
+    fetch('/api/affiliate/check?ref=' + encodeURIComponent(refCode))
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.valid) return;
+        var bar = document.createElement('div');
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#009A44;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.8rem;font-weight:600';
+        bar.innerHTML = '🎁 Convidado por <strong>' + (d.name || 'um parceiro') + '</strong> · Registe-se e ganhe 1 crédito grátis! <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:.5rem;font-size:14px">✕</button>';
+        document.body.prepend(bar);
+        setTimeout(function() { if (bar.parentElement) bar.remove(); }, 8000);
+      }).catch(function() {});
+  })();
+
   // Activar estrelas
   stars.forEach(s => {
     s.addEventListener('click', () => {
@@ -630,30 +660,66 @@
     });
   }
 
+  // Mapa de chaves → nomes legíveis (espelha serviceLabels do admin)
+  var SERVICE_NAMES = {
+    trabalho:     '📚 Trabalho Escolar',
+    cv:           '📋 Currículo (CV)',
+    carta:        '✉️ Carta',
+    orcamento:    '🏗️ Orçamento de Obra',
+    impressao:    '🖨️ Impressão',
+    foto:         '📷 Foto Documentos',
+    conversao:    '🔄 Conversão de Ficheiros',
+    declaracao:   '📄 Declaração',
+    contrato:     '📑 Contrato',
+    procuracao:   '⚖️ Procuração / Mandato',
+    requerimento: '📋 Requerimento',
+    atestado:     '📄 Atestado',
+    recibo:       '🧾 Recibo',
+    geral:        '⭐ Geral',
+  };
+
   // Expor função global para abrir o widget após gerar documento
-  window.showFeedbackWidget = function(serviceName) {
-    _fbService = serviceName || 'geral';
+  window.showFeedbackWidget = function(serviceKey) {
+    var key   = (typeof serviceKey === 'string') ? serviceKey : 'geral';
+    var label = SERVICE_NAMES[key] || key;
+    _fbService = key;
     _fbRating  = 0;
-    stars.forEach(s => { s.style.opacity = '.4'; });
-    const sn = document.getElementById('feedbackServiceName');
-    if (sn) sn.textContent = 'Serviço: ' + (serviceName || 'geral');
-    const cmtEl = document.getElementById('feedbackComment');
+    stars.forEach(function(s) { s.style.opacity = '.4'; });
+    var sn = document.getElementById('feedbackServiceName');
+    if (sn) sn.textContent = 'Serviço: ' + label;
+    var cmtEl = document.getElementById('feedbackComment');
     if (cmtEl) cmtEl.value = '';
-    const btn = document.getElementById('feedbackSubmit');
+    var btn = document.getElementById('feedbackSubmit');
     if (btn) { btn.disabled = false; btn.textContent = 'Enviar Avaliação'; }
     if (widget) widget.style.display = 'block';
   };
 
-  // Registar visita (analytics)
-  (async () => {
-    try {
-      await fetch('/api/admin/analytics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page: window.location.pathname, session: sessionId }),
-      });
-    } catch (_) {}
-  })();
+  // ── Registo de visita + heartbeat online ───────────────────────────────
+  var _heartbeatUrl = '/api/admin/analytics';
+  var _heartbeatBody = function() {
+    return JSON.stringify({ page: window.location.pathname, session: sessionId });
+  };
+
+  // Função de ping com fallback: tenta fetch, não bloqueia em caso de erro
+  function _ping() {
+    fetch(_heartbeatUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: _heartbeatBody(),
+      keepalive: true,
+    }).catch(function() {});
+  }
+
+  // Registo imediato ao carregar (conta como visita)
+  _ping();
+
+  // Heartbeat a cada 4 minutos para manter sessão online activa (TTL = 5 min)
+  setInterval(_ping, 4 * 60 * 1000);
+
+  // Registar também quando o utilizador volta ao separador
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') _ping();
+  });
 })();
 </script>
 </body>

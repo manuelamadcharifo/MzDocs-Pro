@@ -137,6 +137,16 @@ async function handleSignup(req, res) {
       account_type: 'normal',
       credits_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     };
+
+    // Verificar se veio com link de afiliado
+    const refCode = (parseBody(req) || {}).ref_code;
+    if (refCode && typeof refCode === 'string' && /^MZ-[A-Z0-9]{6}$/.test(refCode)) {
+      const { data: affProfile } = await supabaseAdmin
+        .from('profiles').select('id, is_affiliate').eq('ref_code', refCode).maybeSingle();
+      if (affProfile) {
+        profilePayload.referred_by = affProfile.id;
+      }
+    }
     // Responder imediatamente ao cliente — não bloquear na gravação do perfil.
     // O perfil é gravado em background; o cliente faz login logo a seguir.
     res.status(201).json({

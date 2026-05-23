@@ -80,3 +80,23 @@ CREATE POLICY "feedback_admin_read" ON user_feedback
 -- ============================================================
 -- FIM DA MIGRAÇÃO v9
 -- ============================================================
+
+-- ── Patch v9.1 — políticas UPDATE em falta ───────────────────────────────────
+
+-- page_views: service_role via API (sem RLS directa pois API usa service_role)
+-- Adicionar política INSERT pública para o fallback
+CREATE POLICY IF NOT EXISTS "page_views_insert_any" ON page_views
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY IF NOT EXISTS "page_views_update_any" ON page_views
+  FOR UPDATE USING (true);
+
+-- online_sessions: INSERT e UPDATE necessários para o upsert funcionar
+CREATE POLICY IF NOT EXISTS "online_sessions_insert_any" ON online_sessions
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY IF NOT EXISTS "online_sessions_update_any" ON online_sessions
+  FOR UPDATE USING (true);
+
+CREATE POLICY IF NOT EXISTS "online_sessions_delete_any" ON online_sessions
+  FOR DELETE USING (true);

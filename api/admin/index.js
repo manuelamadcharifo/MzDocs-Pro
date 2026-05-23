@@ -131,8 +131,23 @@ async function handleConfirmPayment(req, res) {
       .update({ status: 'completed', confirmed_by: auth.user.id, confirmed_at: new Date().toISOString() })
       .eq('id', transactionId);
     if (updateErr) throw updateErr;
+
+    // Adicionar créditos ao utilizador
     const { data: newCredits, error: rpcErr } = await supabase.rpc('add_credits', { user_id: userId, amount: credits });
     if (rpcErr) throw rpcErr;
+
+    // Processar comissão de afiliado (assíncrono — não bloqueia resposta)
+    const { data: txFull } = await supabase
+      .from('transactions').select('package_id, amount, user_id').eq('id', transactionId).single();
+    if (txFull) {
+      supabase.rpc('process_affiliate_commission', {
+        p_transaction_id: transactionId,
+        p_user_id:        txFull.user_id,
+        p_package_id:     txFull.package_id,
+        p_amount:         txFull.amount,
+      }).catch(e => console.warn('[affiliate commission]', e.message));
+    }
+
     return res.status(200).json({ success: true, newCredits: newCredits || credits, message: `${credits} créditos adicionados com sucesso` });
   } catch (err) {
     console.error('[admin/confirm-payment]', err);
@@ -590,15 +605,43 @@ async function handleAnalytics(req, res) {
       const body  = parseBody(req) || {};
       const page  = (body.page || '/').slice(0, 200);
       const today = new Date().toISOString().split('T')[0];
-      const sid   = (body.session || 'anon').slice(0, 64);
-      await supabase.rpc('increment_page_view', { p_page: page, p_date: today }).catch(() => {});
-      await supabase.from('online_sessions').upsert(
-        { session_id: sid, page, updated_at: new Date().toISOString() },
-        { onConflict: 'session_id' }
-      ).catch(() => {});
+      const sid   = (body.session || 'anon_' + Date.now()).toString().slice(0, 64);
+
+      // Tentar RPC atómica; se falhar, fazer upsert manual
+      const rpcOk = await supabase
+        .rpc('increment_page_view', { p_page: page, p_date: today })
+        .then(r => !r.error)
+        .catch(() => false);
+
+      if (!rpcOk) {
+        // Fallback: SELECT + UPDATE ou INSERT
+        const { data: existing } = await supabase
+          .from('page_views').select('id, views').eq('page', page).eq('date', today).maybeSingle();
+        if (existing) {
+          await supabase.from('page_views')
+            .update({ views: (existing.views || 0) + 1 })
+            .eq('id', existing.id);
+        } else {
+          await supabase.from('page_views')
+            .insert({ page, date: today, views: 1 })
+            .catch(() => {});
+        }
+      }
+
+      // Actualizar presença online — upsert com INSERT OR UPDATE explícito
+      await supabase.from('online_sessions')
+        .upsert(
+          { session_id: sid, page, updated_at: new Date().toISOString() },
+          { onConflict: 'session_id', ignoreDuplicates: false }
+        ).catch(() => {});
+
+      // Limpar sessões com mais de 6 minutos (leve, assíncrono)
+      const cutoff = new Date(Date.now() - 6 * 60 * 1000).toISOString();
+      supabase.from('online_sessions').delete().lt('updated_at', cutoff).catch(() => {});
+
       return res.status(200).json({ ok: true });
     } catch (err) {
-      return res.status(200).json({ ok: false }); // falha silenciosa — não interromper o utilizador
+      return res.status(200).json({ ok: false }); // silencioso — não interromper o utilizador
     }
   }
 
@@ -693,10 +736,22 @@ async function handleFeedback(req, res) {
 
   const body = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body inválido' });
-  const { service, rating, comment, session_id } = body;
+  let { service, rating, comment, session_id } = body;
   if (!service || !rating || rating < 1 || rating > 5) {
     return res.status(400).json({ error: 'service e rating (1-5) são obrigatórios' });
   }
+
+  // Normalizar: se service for JSON bruto (objecto serializado), extrair a chave ou título
+  if (typeof service === 'object') {
+    service = service.key || service.id || 'geral';
+  } else if (typeof service === 'string' && service.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(service);
+      service = parsed.key || parsed.id || parsed.title || 'geral';
+    } catch (_) { service = 'geral'; }
+  }
+  // Garantir que é uma string curta e limpa (chave como 'trabalho', 'cv', etc.)
+  service = String(service).slice(0, 50).toLowerCase().replace(/[^a-z0-9_-]/g, '');
 
   try {
     const supabase = await getAdminClient();

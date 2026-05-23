@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="pt" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="robots" content="noindex"/>
+  <title>Painel de Afiliado — MzDocs Pro</title>
+  <link rel="icon" href="/assets/img/favicon.png"/>
+  <link rel="stylesheet" href="/assets/css/style.css"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,sans-serif;background:#F8FAFC;color:#0F172A;min-height:100vh}
+    .aff-header{background:#0F172A;color:#fff;padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between}
+    .aff-header .logo{font-size:1.1rem;font-weight:800;color:#fff;text-decoration:none}
+    .aff-header .logo span{color:#009A44}
+    .aff-wrap{max-width:900px;margin:0 auto;padding:1.5rem 1rem 4rem}
+    .aff-title{font-size:1.4rem;font-weight:800;margin-bottom:.25rem}
+    .aff-sub{color:#64748b;font-size:.875rem;margin-bottom:1.5rem}
+    .aff-status{display:inline-flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:700;padding:.3rem .8rem;border-radius:20px;margin-bottom:1.5rem}
+    .aff-status.approved{background:#dcfce7;color:#166534}
+    .aff-status.pending{background:#fef9c3;color:#854d0e}
+    .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.875rem;margin-bottom:1.5rem}
+    @media(min-width:640px){.stats-grid{grid-template-columns:repeat(4,1fr)}}
+    .stat-box{background:#fff;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+    .stat-box .val{font-size:1.5rem;font-weight:800;color:#0F172A}
+    .stat-box .lbl{font-size:.72rem;color:#64748b;margin-top:.15rem}
+    .card{background:#fff;border-radius:14px;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.07);margin-bottom:1rem}
+    .card-title{font-size:.9rem;font-weight:700;margin-bottom:.875rem;display:flex;align-items:center;gap:.4rem}
+    .link-box{background:#f1f5f9;border-radius:10px;padding:.875rem 1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+    .link-text{font-size:.8rem;color:#3B82F6;word-break:break-all;flex:1;font-family:monospace}
+    .btn{border:none;border-radius:8px;padding:.6rem 1.1rem;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s}
+    .btn:active{opacity:.8}
+    .btn-green{background:#009A44;color:#fff}
+    .btn-blue{background:#3B82F6;color:#fff}
+    .btn-dark{background:#0F172A;color:#fff}
+    .btn-ghost{background:#f1f5f9;color:#0F172A}
+    .btn-wa{background:#25D366;color:#fff;display:flex;align-items:center;gap:.4rem}
+    .table{width:100%;border-collapse:collapse;font-size:.8rem}
+    .table th{text-align:left;padding:.5rem .75rem;color:#64748b;font-weight:600;border-bottom:2px solid #f1f5f9}
+    .table td{padding:.6rem .75rem;border-bottom:1px solid #f8fafc}
+    .badge{display:inline-block;padding:.2rem .5rem;border-radius:6px;font-size:.7rem;font-weight:700}
+    .badge-pending{background:#fef9c3;color:#854d0e}
+    .badge-approved{background:#dcfce7;color:#166534}
+    .badge-paid{background:#dbeafe;color:#1e40af}
+    .badge-cancelled{background:#fee2e2;color:#991b1b}
+    .input{width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:.6rem .875rem;font-size:.85rem;font-family:inherit;outline:none;transition:border-color .15s}
+    .input:focus{border-color:#3B82F6}
+    .empty{text-align:center;padding:2rem;color:#94a3b8;font-size:.82rem}
+    .rates-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem}
+    @media(min-width:480px){.rates-grid{grid-template-columns:repeat(5,1fr)}}
+    .rate-pill{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:.5rem;text-align:center}
+    .rate-pill .pkg{font-size:.68rem;color:#64748b;margin-bottom:.15rem}
+    .rate-pill .pct{font-size:1rem;font-weight:800;color:#009A44}
+    #notApproved{background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;font-size:.85rem;color:#92400e}
+    #registerSection{text-align:center;padding:3rem 1rem}
+    #registerSection .big{font-size:1.8rem;margin-bottom:.5rem}
+    #registerSection h2{font-size:1.2rem;font-weight:800;margin-bottom:.5rem}
+    #registerSection p{color:#64748b;font-size:.85rem;margin-bottom:1.5rem;max-width:380px;margin-left:auto;margin-right:auto}
+    .withdraw-form{display:grid;gap:.75rem}
+    #msg{display:none;padding:.75rem 1rem;border-radius:8px;font-size:.82rem;font-weight:600;margin-top:.5rem}
+    #msg.ok{background:#dcfce7;color:#166534}
+    #msg.err{background:#fee2e2;color:#991b1b}
+    .share-btns{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.75rem}
+    .loading{text-align:center;padding:4rem;color:#94a3b8}
+  </style>
+</head>
+<body>
+
+<header class="aff-header">
+  <a class="logo" href="/">MzDocs<span>Pro</span></a>
+  <a href="/" style="color:#94a3b8;font-size:.8rem;text-decoration:none">← Voltar ao site</a>
+</header>
+
+<div class="aff-wrap">
+  <div id="loadingState" class="loading">A carregar…</div>
+
+  <!-- Não autenticado -->
+  <div id="notAuth" style="display:none;text-align:center;padding:3rem 1rem">
+    <div style="font-size:2.5rem;margin-bottom:.5rem">🔒</div>
+    <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:.5rem">Necessário iniciar sessão</h2>
+    <p style="color:#64748b;font-size:.85rem;margin-bottom:1.5rem">Para aceder ao painel de afiliado, entre na sua conta MzDocs Pro.</p>
+    <a href="/?auth=login" class="btn btn-green">Entrar na conta</a>
+  </div>
+
+  <!-- Registo como afiliado -->
+  <div id="registerSection" style="display:none">
+    <div class="big">🤝</div>
+    <h2>Torne-se Parceiro MzDocs Pro</h2>
+    <p>Partilhe o seu link único e ganhe comissão em cada pagamento dos seus referidos. Simples, gratuito e sem risco.</p>
+    <div class="rates-grid" style="max-width:400px;margin:0 auto 1.5rem">
+      <div class="rate-pill"><div class="pkg">Avulso</div><div class="pct">10%</div></div>
+      <div class="rate-pill"><div class="pkg">Starter</div><div class="pct">15%</div></div>
+      <div class="rate-pill"><div class="pkg">Básico</div><div class="pct">15%</div></div>
+      <div class="rate-pill"><div class="pkg">Pro</div><div class="pct">20%</div></div>
+      <div class="rate-pill"><div class="pkg">Empresa</div><div class="pct">20%</div></div>
+    </div>
+    <button class="btn btn-green" id="btnRegister" style="font-size:.95rem;padding:.75rem 2rem">
+      ✅ Quero ser Afiliado
+    </button>
+    <div id="registerMsg" style="margin-top:.75rem;font-size:.82rem;color:#64748b"></div>
+  </div>
+
+  <!-- Dashboard do afiliado -->
+  <div id="dashboard" style="display:none">
+    <div class="aff-title">Painel de Afiliado</div>
+    <div class="aff-sub">Acompanhe os seus ganhos e partilhe o seu link</div>
+
+    <div id="statusBadge"></div>
+    <div id="notApproved" style="display:none">
+      ⏳ <strong>Aprovação pendente.</strong> O seu pedido está em análise. Enquanto aguarda, já pode partilhar o seu link — as comissões serão registadas assim que for aprovado.
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-box"><div class="val" id="statBalance">—</div><div class="lbl">💰 Saldo (MZN)</div></div>
+      <div class="stat-box"><div class="val" id="statEarned">—</div><div class="lbl">📈 Total Ganho</div></div>
+      <div class="stat-box"><div class="val" id="statClicks">—</div><div class="lbl">👆 Cliques</div></div>
+      <div class="stat-box"><div class="val" id="statConversions">—</div><div class="lbl">✅ Conversões</div></div>
+    </div>
+
+    <!-- Link de afiliado -->
+    <div class="card">
+      <div class="card-title">🔗 O Seu Link de Partilha</div>
+      <div class="link-box">
+        <span class="link-text" id="affLink">—</span>
+        <button class="btn btn-blue" id="btnCopyLink" onclick="copyLink()">Copiar</button>
+      </div>
+      <div class="share-btns">
+        <button class="btn btn-wa" onclick="shareWhatsApp()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          WhatsApp
+        </button>
+        <button class="btn btn-ghost" onclick="shareFacebook()">📘 Facebook</button>
+        <button class="btn btn-ghost" onclick="shareNative()">📤 Partilhar</button>
+      </div>
+      <div style="margin-top:.75rem;font-size:.72rem;color:#94a3b8">Taxa de conversão: <strong id="statRate">—</strong>% · Código: <strong id="affCode">—</strong></div>
+    </div>
+
+    <!-- Comissões -->
+    <div class="card">
+      <div class="card-title">💳 Comissões Recentes</div>
+      <div style="overflow-x:auto">
+        <table class="table">
+          <thead><tr><th>Data</th><th>Pacote</th><th>Venda</th><th>Comissão</th><th>Estado</th></tr></thead>
+          <tbody id="commissionsTable"><tr><td colspan="5" class="empty">Sem comissões ainda</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Levantamento -->
+    <div class="card">
+      <div class="card-title">💸 Pedir Levantamento</div>
+      <p style="font-size:.8rem;color:#64748b;margin-bottom:.875rem">Mínimo: <strong id="minWithdraw">200</strong> MZN · Processado em até 48h via M-Pesa</p>
+      <div class="withdraw-form">
+        <div>
+          <label style="font-size:.78rem;color:#64748b;margin-bottom:.3rem;display:block">Valor (MZN)</label>
+          <input type="number" id="withdrawAmount" class="input" placeholder="Ex: 500" min="200" step="50"/>
+        </div>
+        <div>
+          <label style="font-size:.78rem;color:#64748b;margin-bottom:.3rem;display:block">Número M-Pesa</label>
+          <input type="tel" id="withdrawPhone" class="input" placeholder="258 8X XXX XXXX"/>
+        </div>
+        <button class="btn btn-green" id="btnWithdraw" onclick="submitWithdraw()">Pedir Levantamento</button>
+        <div id="msg"></div>
+      </div>
+    </div>
+
+    <!-- Levantamentos anteriores -->
+    <div class="card">
+      <div class="card-title">📋 Histórico de Levantamentos</div>
+      <div style="overflow-x:auto">
+        <table class="table">
+          <thead><tr><th>Data</th><th>Valor</th><th>M-Pesa</th><th>Estado</th></tr></thead>
+          <tbody id="withdrawalsTable"><tr><td colspan="4" class="empty">Sem levantamentos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Taxas de comissão -->
+    <div class="card">
+      <div class="card-title">📊 Taxas de Comissão por Pacote</div>
+      <div class="rates-grid">
+        <div class="rate-pill"><div class="pkg">Avulso (50 MZN)</div><div class="pct">10%</div><div style="font-size:.65rem;color:#94a3b8">= 5 MZN</div></div>
+        <div class="rate-pill"><div class="pkg">Starter (120 MZN)</div><div class="pct">15%</div><div style="font-size:.65rem;color:#94a3b8">= 18 MZN</div></div>
+        <div class="rate-pill"><div class="pkg">Básico (280 MZN)</div><div class="pct">15%</div><div style="font-size:.65rem;color:#94a3b8">= 42 MZN</div></div>
+        <div class="rate-pill"><div class="pkg">Pro (600 MZN)</div><div class="pct">20%</div><div style="font-size:.65rem;color:#94a3b8">= 120 MZN</div></div>
+        <div class="rate-pill"><div class="pkg">Empresa (1500 MZN)</div><div class="pct">20%</div><div style="font-size:.65rem;color:#94a3b8">= 300 MZN</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { authManager } from '/assets/js/auth/AuthManager.js';
+
+let _token = null;
+let _affLink = '';
+
+async function init() {
+  await authManager.ready();
+  const user = authManager.user;
+  document.getElementById('loadingState').style.display = 'none';
+
+  if (!user) {
+    document.getElementById('notAuth').style.display = 'block';
+    return;
+  }
+
+  _token = await authManager.getValidToken();
+  await loadDashboard();
+}
+
+async function loadDashboard() {
+  const res  = await fetch('/api/affiliate/dashboard', {
+    headers: { Authorization: 'Bearer ' + _token },
+  }).catch(() => null);
+
+  if (!res || res.status === 404) {
+    // Ainda não é afiliado — mostrar ecrã de registo
+    document.getElementById('registerSection').style.display = 'block';
+    setupRegister();
+    return;
+  }
+
+  const d = await res.json();
+  if (!d.success) {
+    document.getElementById('registerSection').style.display = 'block';
+    setupRegister();
+    return;
+  }
+
+  showDashboard(d);
+}
+
+function showDashboard(d) {
+  document.getElementById('dashboard').style.display = 'block';
+  const p = d.profile;
+
+  _affLink = p.link;
+
+  // Status badge
+  const badge = document.getElementById('statusBadge');
+  badge.innerHTML = p.is_affiliate
+    ? '<div class="aff-status approved">✅ Afiliado Aprovado</div>'
+    : '<div class="aff-status pending">⏳ Aprovação Pendente</div>';
+
+  if (!p.is_affiliate) document.getElementById('notApproved').style.display = 'block';
+
+  // Stats
+  document.getElementById('statBalance').textContent     = p.balance.toLocaleString('pt-MZ');
+  document.getElementById('statEarned').textContent      = p.total_earned.toLocaleString('pt-MZ');
+  document.getElementById('statClicks').textContent      = p.clicks.toLocaleString('pt-MZ');
+  document.getElementById('statConversions').textContent = p.conversions;
+  document.getElementById('statRate').textContent        = p.conversion_rate;
+  document.getElementById('affLink').textContent         = p.link;
+  document.getElementById('affCode').textContent         = p.ref_code;
+
+  const minW = d.config?.aff_min_withdraw || 200;
+  document.getElementById('minWithdraw').textContent = minW;
+  document.getElementById('withdrawAmount').min = minW;
+
+  // Comissões
+  const ct = document.getElementById('commissionsTable');
+  ct.innerHTML = d.commissions.length
+    ? d.commissions.map(c => `
+        <tr>
+          <td>${new Date(c.created_at).toLocaleDateString('pt-MZ')}</td>
+          <td>${c.package_id}</td>
+          <td>${c.sale_amount} MZN</td>
+          <td style="font-weight:700;color:#009A44">+${c.commission_mzn} MZN</td>
+          <td><span class="badge badge-${c.status}">${statusLabel(c.status)}</span></td>
+        </tr>`).join('')
+    : '<tr><td colspan="5" class="empty">Ainda sem comissões. Partilhe o seu link!</td></tr>';
+
+  // Levantamentos
+  const wt = document.getElementById('withdrawalsTable');
+  wt.innerHTML = d.withdrawals.length
+    ? d.withdrawals.map(w => `
+        <tr>
+          <td>${new Date(w.created_at).toLocaleDateString('pt-MZ')}</td>
+          <td style="font-weight:700">${w.amount} MZN</td>
+          <td>${w.mpesa_phone}</td>
+          <td><span class="badge badge-${w.status}">${statusLabel(w.status)}</span></td>
+        </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">Sem levantamentos</td></tr>';
+}
+
+function setupRegister() {
+  document.getElementById('btnRegister').addEventListener('click', async () => {
+    const btn = document.getElementById('btnRegister');
+    btn.disabled = true; btn.textContent = 'A processar…';
+    const res  = await fetch('/api/affiliate/register', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + _token, 'Content-Type': 'application/json' },
+    });
+    const d = await res.json();
+    if (d.success) {
+      document.getElementById('registerSection').style.display = 'none';
+      await loadDashboard();
+    } else {
+      document.getElementById('registerMsg').textContent = d.error || 'Erro ao registar';
+      btn.disabled = false; btn.textContent = 'Quero ser Afiliado';
+    }
+  });
+}
+
+function statusLabel(s) {
+  return { pending:'Pendente', approved:'Aprovado', paid:'Pago', cancelled:'Cancelado',
+           processing:'A processar', completed:'Concluído', rejected:'Rejeitado' }[s] || s;
+}
+
+// ── Partilha ─────────────────────────────────────────────────────────────
+window.copyLink = function() {
+  navigator.clipboard.writeText(_affLink).then(() => {
+    document.getElementById('btnCopyLink').textContent = '✅ Copiado!';
+    setTimeout(() => { document.getElementById('btnCopyLink').textContent = 'Copiar'; }, 2000);
+  });
+};
+
+window.shareWhatsApp = function() {
+  const msg = encodeURIComponent(
+    `📄 *MzDocs Pro — Documentos profissionais em segundos!*\n\n` +
+    `Trabalhos escolares, CVs, cartas, orçamentos e muito mais — feito por IA em segundos.\n\n` +
+    `Registe-se aqui e ganhe 1 crédito grátis: ${_affLink}`
+  );
+  window.open('https://wa.me/?text=' + msg, '_blank');
+};
+
+window.shareFacebook = function() {
+  window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(_affLink), '_blank');
+};
+
+window.shareNative = function() {
+  if (navigator.share) {
+    navigator.share({ title: 'MzDocs Pro', text: 'Documentos profissionais em segundos!', url: _affLink });
+  } else {
+    window.copyLink();
+  }
+};
+
+// ── Levantamento ─────────────────────────────────────────────────────────
+window.submitWithdraw = async function() {
+  const amount = parseInt(document.getElementById('withdrawAmount').value || 0);
+  const phone  = document.getElementById('withdrawPhone').value.trim();
+  const msg    = document.getElementById('msg');
+  const btn    = document.getElementById('btnWithdraw');
+
+  const show = (text, ok) => {
+    msg.style.display = 'block';
+    msg.className = ok ? 'ok' : 'err';
+    msg.textContent = text;
+  };
+
+  btn.disabled = true; btn.textContent = 'A processar…';
+  const res = await fetch('/api/affiliate/withdraw', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + _token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount, phone }),
+  });
+  const d = await res.json();
+  btn.disabled = false; btn.textContent = 'Pedir Levantamento';
+  if (d.success) { show(d.message, true); await loadDashboard(); }
+  else show(d.error || 'Erro', false);
+};
+
+init();
+</script>
+</body>
+</html>

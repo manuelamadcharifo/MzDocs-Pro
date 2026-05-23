@@ -42,6 +42,29 @@ class AdminApp {
         this._bindEvents();
         await this._loadDashboard();
         this._loadAnalytics().catch(() => {});
+
+        // Polling: actualizar "Online Agora" a cada 30s automaticamente
+        this._onlinePoller = setInterval(() => this._pollOnline(), 30000);
+    }
+
+    async _pollOnline() {
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/analytics?days=1', {
+                headers: { Authorization: 'Bearer ' + token },
+                signal: AbortSignal.timeout(5000),
+            });
+            if (!res.ok) return;
+            const d = await res.json();
+            const n = d.onlineNow || 0;
+            const el = id => document.getElementById(id);
+            if (el('statOnlineNow'))          el('statOnlineNow').textContent          = n;
+            if (el('statOnlineNowAnalytics')) el('statOnlineNowAnalytics').textContent = n;
+            // Actualizar badge visual
+            const dot = el('onlineDot');
+            if (dot) dot.style.background = n > 0 ? '#22c55e' : '#94a3b8';
+        } catch (_) {}
+    }
     }
 
     // ── NAVEGAÇÃO ───────────────────────────────────────────────────────
@@ -1216,7 +1239,13 @@ USING (EXISTS (
             } else {
                 setEl('feedbackList', fb.map(f => {
                     const stars = '⭐'.repeat(Math.round(f.avg));
-                    const label = serviceLabels[f.service] || f.service;
+                    // Protecção: se service for JSON bruto, extrair title ou usar 'geral'
+                    let rawSvc = f.service || 'geral';
+                    let svcKey = rawSvc;
+                    if (rawSvc.startsWith('{')) {
+                        try { svcKey = JSON.parse(rawSvc)?.title || 'Serviço'; } catch (_) { svcKey = 'Serviço'; }
+                    }
+                    const label = serviceLabels[svcKey] || svcKey;
                     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;border-bottom:1px solid #f1f5f9;font-size:.82rem">
                         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px">${label}</span>
                         <span style="white-space:nowrap">${stars} <strong>${f.avg}</strong>/5 <span style="color:#94a3b8">(${f.count})</span></span>
