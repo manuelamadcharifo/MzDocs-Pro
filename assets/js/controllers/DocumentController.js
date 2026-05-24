@@ -9,6 +9,9 @@ import { DocumentEditor } from '../components/DocumentEditor.js';
 import { Storage } from '../utils/Storage.js';
 import { offlineDB } from '../utils/IndexedDB.js';
 import { TemplateController } from './TemplateController.js';
+import { templatePicker } from '../marketplace/TemplatePicker.js';
+import { academicUI } from '../academic/AcademicUI.js';
+import { getTemplates } from '../marketplace/TemplateLibrary.js';
 
 // ─── documentState: single source of truth for generated content ─────────────
 export const documentState = {
@@ -64,6 +67,42 @@ export class DocumentController {
  document.getElementById('btnCopy')?.addEventListener('click', () => this.copyDoc());
  document.getElementById('btnDl')?.addEventListener('click', () => this.downloadDoc());
  document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
+
+    // Botão "Escolher Modelo" — abre o TemplatePicker
+    document.getElementById('btnTemplate')?.addEventListener('click', () => {
+      const key     = this.docModel.service;
+      const content = documentState.currentContent;
+      const svc     = SERVICES[key];
+      if (!content) return;
+      // Só abre se o serviço tiver templates visuais
+      if (!getTemplates(key).length) {
+        import('../components/PDFExporter.js').then(({ pdfExporter }) => {
+          pdfExporter.export(content, `mzdocs-${key}-${Date.now()}.pdf`, this._buildMeta());
+        });
+        return;
+      }
+      templatePicker.open({
+        serviceKey:   key,
+        content:      content,
+        svc:          svc,
+        onApply:      (tpl) => { this._applyTemplate(tpl); },
+        onDownloadPDF:  (tpl) => { this._downloadWithTemplate(tpl, 'pdf'); },
+        onDownloadWord: (tpl) => { this._downloadWithTemplate(tpl, 'word'); },
+      });
+    });
+
+    // Botão "Referências APA" — abre o painel académico
+    document.getElementById('btnAcademic')?.addEventListener('click', () => {
+      academicUI.open((bibMarkdown) => {
+        const current = documentState.currentContent;
+        const withBib = current + '\n\n' + bibMarkdown;
+        this.docModel.setGenerated(withBib, this.docModel.model);
+        documentState.set(withBib, this.docModel.service);
+        const svc = SERVICES[this.docModel.service];
+        DocumentView.renderResult(withBib, svc, this.creditModel.value, this.docModel.model);
+        NotificationView.success('✅ Referências inseridas!');
+      });
+    });
  document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
 
  document.addEventListener('editor:closed', (e) => {
@@ -463,6 +502,36 @@ export class DocumentController {
  document.addEventListener('click', this._menuOutside);
  }, 100);
  }
+
+    // ── Template Picker integration ──────────────────────────────────────
+    _applyTemplate(tpl) {
+        if (!tpl) return;
+        this._activeTemplate = tpl;
+        const content = documentState.currentContent;
+        const svc     = SERVICES[this.docModel.service];
+        if (content && svc) {
+            DocumentView.renderResult(content, svc, this.creditModel.value, this.docModel.model, tpl.css);
+        }
+        NotificationView.success(`✅ Modelo "${tpl.name}" aplicado!`);
+    }
+
+    _downloadWithTemplate(tpl, format) {
+        const content = documentState.currentContent;
+        if (!content) return;
+        const filename = `mzdocs-${this.docModel.service}-${Date.now()}`;
+        if (format === 'pdf') {
+            import('../components/PDFExporter.js').then(({ pdfExporter }) => {
+                pdfExporter.export(content, `${filename}.pdf`, {
+                    ...this._buildMeta(),
+                    templateCss: tpl?.css,
+                });
+            });
+        } else {
+            import('../components/WordExporter.js').then(({ wordExporter }) => {
+                wordExporter.export(content, `${filename}.docx`, this._buildMeta());
+            });
+        }
+    }
 
  _getDocType(serviceKey) {
  const map = {

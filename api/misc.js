@@ -52,7 +52,14 @@ module.exports = async function handler(req, res) {
   if (action === 'page-view')                       return handlePageView(req, res);
   if (action === 'sitemap.xml' || action === 'sitemap') return handleSitemap(req, res);
 
-  return res.status(404).json({ error: `Rota desconhecida: "${action}". Use: page-view, sitemap.xml, affiliate/*` });
+  // ── Marketplace de templates (/api/templates/:action) ──────────────
+  const isTemplates = pathParts.includes('templates');
+  if (isTemplates) {
+    const tplAction = lastSegment === 'templates' ? (req.query?.action || 'list') : lastSegment;
+    return handleTemplates(tplAction, req, res);
+  }
+
+  return res.status(404).json({ error: `Rota desconhecida: "${action}". Use: page-view, sitemap.xml, affiliate/*, templates/*` });
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -112,6 +119,163 @@ ${allPages.map(p => `  <url>
 </urlset>`;
 
   return res.status(200).send(xml);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MARKETPLACE DE TEMPLATES  (/api/templates/:action)
+// ════════════════════════════════════════════════════════════════════════════
+async function handleTemplates(action, req, res) {
+  res.setHeader('Access-Control-Allow-Origin', ORIGIN);
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const supabase = makeClient();
+
+  switch (action) {
+    case 'list':     return tplList(req, res, supabase);
+    case 'submit':   return tplSubmit(req, res, supabase);
+    case 'rate':     return tplRate(req, res, supabase);
+    case 'download': return tplDownload(req, res, supabase);
+    case 'approve':  return tplApprove(req, res, supabase);
+    case 'reject':   return tplReject(req, res, supabase);
+    case 'pending':  return tplPending(req, res, supabase);
+    default:         return res.status(404).json({ error: 'Acção de template não encontrada' });
+  }
+}
+
+// Listar templates públicos aprovados (opcional: filtrar por service_type)
+async function tplList(req, res, supabase) {
+  const service = req.query?.service || null;
+  const limit   = Math.min(parseInt(req.query?.limit || 50), 100);
+
+  let q = supabase
+    .from('templates_custom')
+    .select('id,service_type,template_name,description,thumbnail_url,template_css,downloads,likes,rating_sum,rating_count,created_at')
+    .eq('status', 'approved')
+    .eq('is_public', true)
+    .order('downloads', { ascending: false })
+    .limit(limit);
+
+  if (service) q = q.eq('service_type', service);
+
+  const { data, error } = await q;
+  if (error) return res.status(500).json({ error: error.message });
+
+  const templates = (data || []).map(t => ({
+    ...t,
+    avg_rating: t.rating_count > 0 ? Math.round((t.rating_sum / t.rating_count) * 10) / 10 : null,
+  }));
+
+  return res.status(200).json({ success: true, templates });
+}
+
+// Submeter novo template
+async function tplSubmit(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const { data: { user } } = await supabase.auth.getUser(token).catch(() => ({ data: {} }));
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+
+  const body = parseBody(req);
+  const { service_type, template_name, description, template_css, thumbnail_url, template_file } = body;
+
+  if (!service_type || !template_name || !template_css)
+    return res.status(400).json({ error: 'service_type, template_name e template_css são obrigatórios' });
+
+  const { data, error } = await supabase.from('templates_custom').insert({
+    user_id:       user.id,
+    service_type:  service_type.trim().slice(0, 50),
+    template_name: template_name.trim().slice(0, 100),
+    description:   (description || '').trim().slice(0, 300),
+    template_css:  template_css.slice(0, 20000),
+    thumbnail_url: thumbnail_url || null,
+    template_file: template_file || null,
+    status:        'pending',
+    is_public:     false,
+  }).select('id').single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(201).json({ success: true, id: data.id, message: 'Template submetido! Aguarda aprovação.' });
+}
+
+// Avaliar template
+async function tplRate(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const { data: { user } } = await supabase.auth.getUser(token).catch(() => ({ data: {} }));
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+
+  const { template_id, rating, comment } = parseBody(req);
+  if (!template_id || !rating || rating < 1 || rating > 5)
+    return res.status(400).json({ error: 'template_id e rating (1-5) são obrigatórios' });
+
+  const { data, error } = await supabase.rpc('rate_template', {
+    p_template_id: template_id, p_user_id: user.id,
+    p_rating: parseInt(rating), p_comment: (comment || '').slice(0, 500),
+  });
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ success: true, ...data });
+}
+
+// Registar download
+async function tplDownload(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const { template_id, session_id } = parseBody(req);
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+
+  await supabase.rpc('increment_template_downloads', { p_template_id: template_id }).catch(() => {});
+  await supabase.from('template_downloads').insert({ template_id, session_id: session_id || null }).catch(() => {});
+  return res.status(200).json({ ok: true });
+}
+
+// Admin — aprovar template
+async function tplApprove(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const { data: { user } } = await supabase.auth.getUser(token).catch(() => ({ data: {} }));
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+
+  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+  if (!profile?.is_admin) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { template_id } = parseBody(req);
+  await supabase.rpc('approve_template', { p_template_id: template_id });
+  return res.status(200).json({ success: true });
+}
+
+// Admin — rejeitar template
+async function tplReject(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const { data: { user } } = await supabase.auth.getUser(token).catch(() => ({ data: {} }));
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+
+  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+  if (!profile?.is_admin) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { template_id, note } = parseBody(req);
+  await supabase.rpc('reject_template', { p_template_id: template_id, p_note: note || '' });
+  return res.status(200).json({ success: true });
+}
+
+// Admin — listar templates pendentes
+async function tplPending(req, res, supabase) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const { data: { user } } = await supabase.auth.getUser(token).catch(() => ({ data: {} }));
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+
+  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+  if (!profile?.is_admin) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { data } = await supabase
+    .from('templates_custom')
+    .select('id,service_type,template_name,description,thumbnail_url,status,created_at,user_id')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+
+  return res.status(200).json({ success: true, templates: data || [] });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
