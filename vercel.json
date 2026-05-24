@@ -42,7 +42,7 @@
       "maxDuration": 10
     },
     "api/misc.js": {
-      "maxDuration": 10
+      "maxDuration": 15
     }
   },
   "rewrites": [
@@ -76,7 +76,7 @@
     },
     {
       "source": "/api/affiliate/:action",
-      "destination": "/api/affiliate"
+      "destination": "/api/misc/affiliate/:action"
     },
     {
       "source": "/api/admin/static-pages",
@@ -97,6 +97,14 @@
     {
       "source": "/api/auth/:action",
       "destination": "/api/auth/index"
+    },
+    {
+      "source": "/api/templates/:action",
+      "destination": "/api/misc/templates/:action"
+    },
+    {
+      "source": "/api/templates",
+      "destination": "/api/misc/templates/list"
     },
     {
       "source": "/(.*)",

@@ -60,9 +60,33 @@ async function bootstrap() {
   const sandboxBar = document.getElementById('sandboxBar');
   if (sandboxBar) sandboxBar.style.display = 'none';
 
+  let _config = {};
   try {
-    await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+    _config = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
   } catch { }
+
+  // ── Contador público de documentos gerados ──────────────────────────────
+  if (_config.docsGenerated != null) {
+    const bar = document.getElementById('docCounterBar');
+    const num = document.getElementById('docCounterNum');
+    if (bar && num) {
+      // Animar o número de 0 até o valor real
+      const target = Math.max(0, _config.docsGenerated);
+      if (target > 0) {
+        bar.style.display = 'block';
+        let current = Math.max(0, target - 50);
+        const step  = Math.ceil((target - current) / 40);
+        const timer = setInterval(() => {
+          current = Math.min(current + step, target);
+          num.textContent = current.toLocaleString('pt-MZ');
+          if (current >= target) clearInterval(timer);
+        }, 30);
+      }
+    }
+  }
+
+  // ── Onboarding de 15 segundos (só na primeira visita) ──────────────────
+  _showOnboardingIfNeeded();
 
   if ('serviceWorker' in navigator) {
     try {
@@ -202,6 +226,122 @@ function _setupAuthHeader() {
       if (fabLogout) fabLogout.style.display = 'none';
     }
   });
+}
+
+// ── Onboarding 15 segundos ────────────────────────────────────────────────
+function _showOnboardingIfNeeded() {
+  try {
+    if (localStorage.getItem('mz_onboarded')) return;
+  } catch (_) { return; }
+
+  const CSS = `
+#mzOnboard{position:fixed;inset:0;z-index:800;background:rgba(7,16,31,.82);backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;padding:16px;animation:tplFadeIn .3s ease;}
+#mzOnboardBox{background:#fff;border-radius:20px;width:100%;max-width:360px;overflow:hidden;
+  box-shadow:0 24px 64px rgba(0,0,0,.3);animation:tplSlideUp .4s cubic-bezier(.34,1.1,.64,1);}
+.mzob-step{display:none;padding:28px 24px 20px;}
+.mzob-step.active{display:block;}
+.mzob-icon{font-size:44px;text-align:center;margin-bottom:14px;}
+.mzob-title{font-size:17px;font-weight:800;color:#0f172a;text-align:center;margin-bottom:8px;}
+.mzob-desc{font-size:13.5px;color:#475569;text-align:center;line-height:1.6;margin-bottom:20px;}
+.mzob-dots{display:flex;justify-content:center;gap:6px;margin-bottom:20px;}
+.mzob-dot{width:8px;height:8px;border-radius:50%;background:#e2e8f0;transition:background .2s;}
+.mzob-dot.active{background:#3B82F6;}
+.mzob-bar-wrap{height:3px;background:#f1f5f9;margin:0 -24px;margin-bottom:16px;}
+.mzob-bar{height:3px;background:linear-gradient(90deg,#3B82F6,#10b981);width:0%;transition:width .1s linear;}
+.mzob-btns{display:flex;gap:8px;}
+.mzob-btn-skip{flex:1;padding:11px;border:1.5px solid #e2e8f0;border-radius:12px;background:#fff;
+  font-size:13px;font-weight:600;color:#64748b;cursor:pointer;font-family:inherit;}
+.mzob-btn-next{flex:2;padding:11px;border:none;border-radius:12px;
+  background:linear-gradient(135deg,#1e40af,#3B82F6);color:#fff;
+  font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;}
+@keyframes tplFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes tplSlideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}`;
+
+  const STEPS = [
+    { icon:'📄', title:'Bem-vindo ao MzDocs Pro!', desc:'Crie documentos profissionais em segundos com Inteligência Artificial. Rápido, simples e pensado para Moçambique.' },
+    { icon:'🎯', title:'Escolha o seu documento', desc:'Trabalho escolar, currículo, carta formal, orçamento de obra e muito mais — basta clicar no serviço que precisa.' },
+    { icon:'🤖', title:'A IA faz o trabalho', desc:'Preencha um formulário rápido e a nossa IA gera o documento completo em segundos, já formatado e pronto a usar.' },
+    { icon:'🎨', title:'Personalize o modelo', desc:'Escolha entre 5 estilos visuais por serviço. Exporte em PDF ou Word com um toque.' },
+    { icon:'🚀', title:'Pronto a começar!', desc:'Toque em qualquer serviço na lista abaixo. O primeiro documento de demonstração é gratuito.' },
+  ];
+
+  const TOTAL_MS = 15000;
+  const step_ms  = TOTAL_MS / STEPS.length;
+
+  // Injectar CSS
+  const style = document.createElement('style');
+  style.textContent = CSS;
+  document.head.appendChild(style);
+
+  // Criar overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'mzOnboard';
+  overlay.innerHTML = `
+    <div id="mzOnboardBox">
+      <div class="mzob-bar-wrap"><div class="mzob-bar" id="mzobBar"></div></div>
+      <div class="mzob-dots">${STEPS.map((_,i) => `<div class="mzob-dot${i===0?' active':''}"></div>`).join('')}</div>
+      ${STEPS.map((s,i) => `
+        <div class="mzob-step${i===0?' active':''}">
+          <div class="mzob-icon">${s.icon}</div>
+          <div class="mzob-title">${s.title}</div>
+          <div class="mzob-desc">${s.desc}</div>
+        </div>`).join('')}
+      <div style="padding:0 24px 20px;">
+        <div class="mzob-btns">
+          <button class="mzob-btn-skip" id="mzobSkip">Saltar</button>
+          <button class="mzob-btn-next" id="mzobNext">Próximo →</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  let currentStep = 0;
+  let elapsed     = 0;
+  let timer       = null;
+
+  const dots    = overlay.querySelectorAll('.mzob-dot');
+  const steps   = overlay.querySelectorAll('.mzob-step');
+  const bar     = document.getElementById('mzobBar');
+  const btnNext = document.getElementById('mzobNext');
+  const btnSkip = document.getElementById('mzobSkip');
+
+  function goTo(idx) {
+    steps.forEach((s,i)  => s.classList.toggle('active', i === idx));
+    dots.forEach((d,i)   => d.classList.toggle('active', i === idx));
+    currentStep = idx;
+    elapsed     = 0;
+    if (idx === STEPS.length - 1) btnNext.textContent = '✅ Começar!';
+    else btnNext.textContent = 'Próximo →';
+  }
+
+  function finish() {
+    clearInterval(timer);
+    try { localStorage.setItem('mz_onboarded','1'); } catch(_) {}
+    overlay.style.animation = 'none';
+    overlay.style.opacity   = '0';
+    overlay.style.transition = 'opacity .3s';
+    setTimeout(() => overlay.remove(), 300);
+  }
+
+  // Auto-advance timer
+  const TICK = 100; // ms
+  timer = setInterval(() => {
+    elapsed += TICK;
+    const totalElapsed = currentStep * step_ms + elapsed;
+    if (bar) bar.style.width = Math.min(100, (totalElapsed / TOTAL_MS) * 100) + '%';
+    if (elapsed >= step_ms) {
+      if (currentStep < STEPS.length - 1) goTo(currentStep + 1);
+      else finish();
+    }
+  }, TICK);
+
+  btnNext.addEventListener('click', () => {
+    if (currentStep < STEPS.length - 1) goTo(currentStep + 1);
+    else finish();
+  });
+  btnSkip.addEventListener('click', finish);
+  overlay.addEventListener('click', e => { if (e.target === overlay) finish(); });
 }
 
 if (document.readyState === 'loading') {

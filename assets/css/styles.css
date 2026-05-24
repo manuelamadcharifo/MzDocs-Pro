@@ -63,7 +63,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .sc-ai{position:absolute;top:10px;right:10px;font-size:9.5px;font-weight:800;background:linear-gradient(90deg,var(--blue),var(--green-l));color:#fff;padding:2px 7px;border-radius:10px;letter-spacing:.4px}
 .sc-ico{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
 .sc-name{font-size:14px;font-weight:800;color:var(--ink);line-height:1.2}
-.sc-desc{font-size:11.5px;color:var(--muted);line-height:1.5;flex:1}
+.sc-desc{font-size:11.5px;color:var(--muted);line-height:1.5;flex:1;overflow:visible;word-break:normal;}
 .sc-foot{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
 .cost{font-size:11.5px;font-weight:700;color:var(--blue);background:var(--blue-s);padding:3px 8px;border-radius:6px}
 .cost.free{color:var(--green);background:var(--green-s)}
@@ -259,7 +259,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .res-preview table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
 .res-preview td,.res-preview th{border:1px solid var(--border);padding:6px 8px;text-align:left}
 .res-preview th{background:var(--surface);font-weight:700}
-.res-actions{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:8px;padding:14px 18px}
+.res-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 18px}
 .res-actions button{padding:12px 8px;border-radius:var(--rs);border:none;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:var(--t)}
 .res-actions button:first-child,.res-actions button:nth-child(2){background:var(--surface);color:var(--dim);border:1.5px solid var(--border)}
 .res-actions button:first-child:hover,.res-actions button:nth-child(2):hover{background:var(--border)}

@@ -10,17 +10,17 @@ const PICKER_CSS  = `
 #templatePickerOverlay {
   display: none; position: fixed; inset: 0;
   background: rgba(7,16,31,.72); backdrop-filter: blur(10px);
-  z-index: 500; align-items: center; justify-content: center;
+  z-index: 600; align-items: center; justify-content: center;
   padding: 12px;
 }
-#templatePickerOverlay.open { display: flex; animation: fadeIn .18s ease; }
+#templatePickerOverlay.open { display: flex; animation: tplFadeIn .18s ease; }
 
 #tplPickerSheet {
   background: #fff; border-radius: 20px;
   width: 100%; max-width: 760px; max-height: 92vh;
   overflow: hidden; display: flex; flex-direction: column;
   box-shadow: 0 32px 80px rgba(0,0,0,.25);
-  animation: slideUp .3s cubic-bezier(.34,1.1,.64,1);
+  animation: tplSlideUp .3s cubic-bezier(.34,1.1,.64,1);
 }
 
 .tpl-hdr {
@@ -112,6 +112,8 @@ const PICKER_CSS  = `
   .tpl-thumb { height: 40px; }
   .tpl-preview-iframe { width: 100%; min-height: 400px; }
 }
+@keyframes tplFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tplSlideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 `;
 
 export class TemplatePicker {
