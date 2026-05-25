@@ -89,9 +89,7 @@ export class DocumentController {
       // Abrir picker — mesmo sem content mostra os templates com preview vazio
       templatePicker.open({
         serviceKey:     key,
-        content:        content || '# Documento
-
-Conteúdo gerado pelo MzDocs Pro.',
+        content:        content || '# Documento\n\nConteúdo gerado pelo MzDocs Pro.',
         svc:            svc,
         onApply:        (tpl) => { this._applyTemplate(tpl); },
         onDownloadPDF:  (tpl) => { this._downloadWithTemplate(tpl, 'pdf'); },
