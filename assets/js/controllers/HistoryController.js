@@ -314,6 +314,11 @@ export class HistoryController {
       window.docController.docModel.content = doc.content;
       window.docController.docModel.service = doc.service_type;
     }
+    // Sincronizar documentState para que btnTemplate, btnCopy, btnDl funcionem
+    // correctamente com documentos abertos do histórico
+    if (window.documentState) {
+      window.documentState.set(doc.content, doc.service_type);
+    }
     import('../views/Views.js').then(({ ModalView }) => {
       ModalView.open('resultOverlay');
       // Re-bind do botão editar para este documento

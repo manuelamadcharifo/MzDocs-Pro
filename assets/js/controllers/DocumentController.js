@@ -72,7 +72,7 @@ export class DocumentController {
     document.getElementById('btnTemplate')?.addEventListener('click', () => {
       const key     = this.docModel?.service || documentState.serviceType || '';
       const content = documentState.currentContent
-                   || document.getElementById('resPreview')?.innerText?.trim()
+                   || this.docModel?.content
                    || '';
       const svc     = SERVICES[key] || {};
 
