@@ -3,7 +3,21 @@
 // Funções: adicionar fonte manual, upload PDF, extrair por URL, copiar citação, exportar
 
 import { AcademicEngine } from './AcademicEngine.js';
-import { NotificationView } from '../views/Views.js';
+// Notificação inline — sem dependência de Views.js
+function _notify(msg) {
+  const stack = document.getElementById('notif-stack') || (() => {
+    const s = document.createElement('div');
+    s.id = 'notif-stack';
+    s.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none';
+    document.body.appendChild(s);
+    return s;
+  })();
+  const n = document.createElement('div');
+  n.style.cssText = 'background:#0f172a;color:#fff;padding:10px 20px;border-radius:24px;font-size:13px;font-weight:700;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.3);animation:tplFadeIn .2s ease';
+  n.textContent = msg;
+  stack.appendChild(n);
+  setTimeout(() => n.remove(), 3000);
+}
 
 const PANEL_CSS = `
 #academicPanel {
@@ -216,9 +230,9 @@ export class AcademicUI {
           AcademicEngine.removeReference(id);
           this._renderRefs();
         } else if (action === 'copy-cite') {
-          navigator.clipboard?.writeText(ref.citation || '').then(() => NotificationView.success('✅ Citação copiada!'));
+          navigator.clipboard?.writeText(ref.citation || '').then(() => _notify('✅ Citação copiada!'));
         } else if (action === 'copy-apa') {
-          navigator.clipboard?.writeText(ref.apa || '').then(() => NotificationView.success('✅ Referência APA copiada!'));
+          navigator.clipboard?.writeText(ref.apa || '').then(() => _notify('✅ Referência APA copiada!'));
         }
       });
     });
@@ -337,16 +351,16 @@ export class AcademicUI {
       edition:    g('acEdition'),
     };
 
-    if (!source.title) { NotificationView.warn('Insira o título da fonte.'); return; }
+    if (!source.title) { _notify('Insira o título da fonte.'); return; }
 
     const ref = AcademicEngine.addReference(source);
     if (ref) {
-      NotificationView.success('✅ Referência adicionada!');
+      _notify('✅ Referência adicionada!');
       this._tab = 'refs';
       document.querySelectorAll('.ac-tab').forEach((b,i) => b.classList.toggle('active', i===0));
       this._renderRefs();
     } else {
-      NotificationView.warn('Esta fonte já foi adicionada.');
+      _notify('Esta fonte já foi adicionada.');
     }
   }
 
@@ -428,7 +442,7 @@ export class AcademicUI {
               if (AcademicEngine.addReference(r)) added++;
             }
           });
-          NotificationView.success(`✅ ${added} referência(s) adicionada(s)!`);
+          _notify(`✅ ${added} referência(s) adicionada(s)!`);
           this._updateCount();
         });
         refsEl.appendChild(addBtn);
@@ -504,7 +518,7 @@ export class AcademicUI {
 
     document.getElementById('acBtnUrl')?.addEventListener('click', () => {
       const url = document.getElementById('acUrlInput')?.value.trim();
-      if (!url) { NotificationView.warn('Insira um URL.'); return; }
+      if (!url) { _notify('Insira um URL.'); return; }
 
       const extra = {
         title:   document.getElementById('acUrlTitle')?.value.trim() || null,
@@ -531,10 +545,10 @@ export class AcademicUI {
     document.getElementById('acBtnAddUrl')?.addEventListener('click', () => {
       if (!_currentSource) return;
       if (AcademicEngine.addReference(_currentSource)) {
-        NotificationView.success('✅ Referência adicionada!');
+        _notify('✅ Referência adicionada!');
         this._updateCount();
       } else {
-        NotificationView.warn('Esta fonte já foi adicionada.');
+        _notify('Esta fonte já foi adicionada.');
       }
     });
   }
@@ -564,18 +578,18 @@ export class AcademicUI {
   // ── Acções globais ────────────────────────────────────────────────────
   _insertBib() {
     const refs = AcademicEngine.getReferences();
-    if (!refs.length) { NotificationView.warn('Sem referências para inserir.'); return; }
+    if (!refs.length) { _notify('Sem referências para inserir.'); return; }
     const bib = AcademicEngine.generateBibliography(refs);
     this._onInsert?.(bib);
-    NotificationView.success('✅ Referências inseridas no documento!');
+    _notify('✅ Referências inseridas no documento!');
     this.close();
   }
 
   _copyBib() {
     const refs = AcademicEngine.getReferences();
-    if (!refs.length) { NotificationView.warn('Sem referências para copiar.'); return; }
+    if (!refs.length) { _notify('Sem referências para copiar.'); return; }
     const bib = AcademicEngine.generateBibliography(refs);
-    navigator.clipboard?.writeText(bib).then(() => NotificationView.success('✅ Bibliografia copiada!'));
+    navigator.clipboard?.writeText(bib).then(() => _notify('✅ Bibliografia copiada!'));
   }
 }
 

@@ -62,8 +62,8 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .sc:hover .sc-line{transform:scaleX(1)}
 .sc-ai{position:absolute;top:10px;right:10px;font-size:9.5px;font-weight:800;background:linear-gradient(90deg,var(--blue),var(--green-l));color:#fff;padding:2px 7px;border-radius:10px;letter-spacing:.4px}
 .sc-ico{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
-.sc-name{font-size:14px;font-weight:800;color:var(--ink);line-height:1.2}
-.sc-desc{font-size:11.5px;color:var(--muted);line-height:1.5;flex:1;overflow:visible;word-break:normal;}
+.sc-name{font-size:14px;font-weight:800;color:var(--ink);line-height:1.2;word-break:normal;overflow-wrap:break-word}
+.sc-desc{font-size:11.5px;color:var(--muted);line-height:1.5;flex:1;overflow:visible;overflow-wrap:break-word;hyphens:auto;}
 .sc-foot{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
 .cost{font-size:11.5px;font-weight:700;color:var(--blue);background:var(--blue-s);padding:3px 8px;border-radius:6px}
 .cost.free{color:var(--green);background:var(--green-s)}

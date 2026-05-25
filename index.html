@@ -16,13 +16,13 @@
   <meta property="og:title"       content="MzDocs Pro — Documentos com IA para Moçambique"/>
   <meta property="og:description" content="Crie CVs, cartas, trabalhos e orçamentos profissionais em segundos com IA gratuita."/>
   <meta property="og:url"         content="https://mzdocs.co.mz"/>
-  <meta property="og:image"       content="https://mzdocs.co.mz/assets/screenshots/screen-mobile.png"/>
+  <meta property="og:image" content="/assets/icons/mzdocs-pro-dark.svg"/>
   <meta property="og:locale"      content="pt_MZ"/>
   <!-- Twitter Card -->
   <meta name="twitter:card"        content="summary_large_image"/>
   <meta name="twitter:title"       content="MzDocs Pro"/>
   <meta name="twitter:description" content="Documentos profissionais com IA para Moçambique"/>
-  <meta name="twitter:image"       content="https://mzdocs.co.mz/assets/screenshots/screen-mobile.png"/>
+  <meta name="twitter:image" content="/assets/icons/mzdocs-pro-dark.svg"/>
 
   <title>MzDocs Pro — Documentos com IA</title>
   <link rel="manifest" href="manifest.json"/>
@@ -40,8 +40,15 @@
 <!-- HEADER -->
 <header class="hdr">
   <div class="hdr-l">
-    <div class="logo-badge">📄</div>
-    <div class="logo-text"><span class="lt-name">MzDocs</span><span class="lt-pro">Pro</span></div>
+    <a href="/" style="display:flex;align-items:center;text-decoration:none;gap:0">
+      <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro"
+           style="height:36px;width:auto;display:block;"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div style="display:none;align-items:center;gap:8px">
+        <div class="logo-badge">📄</div>
+        <div class="logo-text"><span class="lt-name">MzDocs</span><span class="lt-pro">Pro</span></div>
+      </div>
+    </a>
   </div>
   <div class="hdr-r">
     <button class="btn-auth" id="authBtn">🔐 Entrar</button>

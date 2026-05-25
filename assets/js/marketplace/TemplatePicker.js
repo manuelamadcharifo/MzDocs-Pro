@@ -3,7 +3,22 @@
 // Integra-se no fluxo: IA gera → TemplatePicker → Download PDF/DOCX
 
 import { getTemplates, getDefaultTemplate, getTemplateById } from './TemplateLibrary.js';
-import { NotificationView } from '../views/Views.js';
+
+// Notificação inline — não depende de Views.js para evitar erros de import em cadeia
+function _notify(msg, type = 'warn') {
+  const stack = document.getElementById('notif-stack') || (() => {
+    const s = document.createElement('div');
+    s.id = 'notif-stack';
+    s.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none';
+    document.body.appendChild(s);
+    return s;
+  })();
+  const n = document.createElement('div');
+  n.style.cssText = 'background:#0f172a;color:#fff;padding:10px 20px;border-radius:24px;font-size:13px;font-weight:700;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.3);animation:tplFadeIn .2s ease';
+  n.textContent = msg;
+  stack.appendChild(n);
+  setTimeout(() => n.remove(), 3000);
+}
 
 const OVERLAY_ID  = 'templatePickerOverlay';
 const PICKER_CSS  = `
@@ -289,7 +304,7 @@ export class TemplatePicker {
   // ── Acções ────────────────────────────────────────────────────────────
   _apply() {
     if (!this._selectedTpl) {
-      NotificationView.warn('Seleccione um modelo primeiro.');
+      _notify('Seleccione um modelo primeiro.');
       return;
     }
     this._onApply?.(this._selectedTpl);
@@ -297,12 +312,12 @@ export class TemplatePicker {
   }
 
   _downloadPDF() {
-    if (!this._selectedTpl) { NotificationView.warn('Seleccione um modelo primeiro.'); return; }
+    if (!this._selectedTpl) { _notify('Seleccione um modelo primeiro.'); return; }
     this._onDownloadPDF?.(this._selectedTpl);
   }
 
   _downloadWord() {
-    if (!this._selectedTpl) { NotificationView.warn('Seleccione um modelo primeiro.'); return; }
+    if (!this._selectedTpl) { _notify('Seleccione um modelo primeiro.'); return; }
     this._onDownloadWord?.(this._selectedTpl);
   }
 

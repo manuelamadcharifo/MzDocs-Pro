@@ -70,26 +70,50 @@ export class DocumentController {
 
     // Botão "Escolher Modelo" — abre o TemplatePicker
     document.getElementById('btnTemplate')?.addEventListener('click', () => {
-      const key     = this.docModel.service;
-      const content = documentState.currentContent;
-      const svc     = SERVICES[key];
-      if (!content) return;
-      // Só abre se o serviço tiver templates visuais
-      if (!getTemplates(key).length) {
-        import('../components/PDFExporter.js').then(({ pdfExporter }) => {
-          pdfExporter.export(content, `mzdocs-${key}-${Date.now()}.pdf`, this._buildMeta());
-        });
+      const key     = this.docModel?.service || documentState.serviceType || '';
+      const content = documentState.currentContent
+                   || document.getElementById('resPreview')?.innerText?.trim()
+                   || '';
+      const svc     = SERVICES[key] || {};
+
+      // Se não há templates para este serviço, fazer download PDF directo
+      const templates = getTemplates(key);
+      if (!templates.length) {
+        if (!content) { _notifyInline('Gere um documento primeiro.'); return; }
+        import('../components/PDFExporter.js')
+          .then(({ pdfExporter }) => pdfExporter.export(content, `mzdocs-${key || 'doc'}-${Date.now()}.pdf`, {}))
+          .catch(err => console.error('[btnTemplate] PDF export:', err));
         return;
       }
+
+      // Abrir picker — mesmo sem content mostra os templates com preview vazio
       templatePicker.open({
-        serviceKey:   key,
-        content:      content,
-        svc:          svc,
-        onApply:      (tpl) => { this._applyTemplate(tpl); },
+        serviceKey:     key,
+        content:        content || '# Documento
+
+Conteúdo gerado pelo MzDocs Pro.',
+        svc:            svc,
+        onApply:        (tpl) => { this._applyTemplate(tpl); },
         onDownloadPDF:  (tpl) => { this._downloadWithTemplate(tpl, 'pdf'); },
         onDownloadWord: (tpl) => { this._downloadWithTemplate(tpl, 'word'); },
       });
     });
+
+    // Helper de notificação inline para o controller
+    function _notifyInline(msg) {
+      const s = document.getElementById('notif-stack') || (() => {
+        const el = document.createElement('div');
+        el.id = 'notif-stack';
+        el.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none';
+        document.body.appendChild(el);
+        return el;
+      })();
+      const n = document.createElement('div');
+      n.style.cssText = 'background:#0f172a;color:#fff;padding:10px 20px;border-radius:24px;font-size:13px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+      n.textContent = msg;
+      s.appendChild(n);
+      setTimeout(() => n.remove(), 3000);
+    }
 
     // Botão "Referências APA" — abre o painel académico
     document.getElementById('btnAcademic')?.addEventListener('click', () => {

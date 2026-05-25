@@ -37,27 +37,38 @@ module.exports = async function handler(req, res) {
   const urlPath     = (req.url || '').split('?')[0];
   const pathParts   = urlPath.split('/').filter(Boolean);
   const lastSegment = pathParts[pathParts.length - 1];
+  const q           = req.query || {};
 
-  // Detect affiliate sub-routes: /api/affiliate/register, /api/affiliate/dashboard …
-  const isAffiliate = pathParts.includes('affiliate');
-  if (isAffiliate) {
-    const action = lastSegment === 'affiliate' ? (req.query?.action || '') : lastSegment;
+  // ── Roteamento via query params (_ns = namespace, _a = action) ──────
+  // Usado por rewrites do Vercel: /api/affiliate/:action → /api/misc?_ns=affiliate&_a=:action
+  if (q._ns === 'affiliate') {
+    const action = q._a || lastSegment || '';
     return handleAffiliate(action, req, res);
   }
-
-  const action = (lastSegment && lastSegment !== 'misc')
-    ? lastSegment
-    : (req.query?.action || '');
-
-  if (action === 'page-view')                       return handlePageView(req, res);
-  if (action === 'sitemap.xml' || action === 'sitemap') return handleSitemap(req, res);
-
-  // ── Marketplace de templates (/api/templates/:action) ──────────────
-  const isTemplates = pathParts.includes('templates');
-  if (isTemplates) {
-    const tplAction = lastSegment === 'templates' ? (req.query?.action || 'list') : lastSegment;
+  if (q._ns === 'templates') {
+    const tplAction = q._a || 'list';
     return handleTemplates(tplAction, req, res);
   }
+
+  // ── Roteamento via path (rewrites com path explícito) ───────────────
+  const isAffiliate = pathParts.includes('affiliate');
+  if (isAffiliate) {
+    const action = lastSegment === 'affiliate' ? (q.action || '') : lastSegment;
+    return handleAffiliate(action, req, res);
+  }
+  const isTemplates = pathParts.includes('templates');
+  if (isTemplates) {
+    const tplAction = lastSegment === 'templates' ? (q.action || 'list') : lastSegment;
+    return handleTemplates(tplAction, req, res);
+  }
+
+  // ── Rotas simples via lastSegment ───────────────────────────────────
+  const action = (lastSegment && lastSegment !== 'misc')
+    ? lastSegment
+    : (q.action || '');
+
+  if (action === 'page-view')                           return handlePageView(req, res);
+  if (action === 'sitemap.xml' || action === 'sitemap') return handleSitemap(req, res);
 
   return res.status(404).json({ error: `Rota desconhecida: "${action}". Use: page-view, sitemap.xml, affiliate/*, templates/*` });
 };
