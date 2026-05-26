@@ -46,6 +46,8 @@ module.exports = async function handler(req, res) {
     case 'feedback':        return handleFeedback(req, res);
     case 'static-pages':    return handleStaticPages(req, res);
     case 'documents':       return handleDocuments(req, res);
+    case 'pages':           return handleBlogPages(req, res);
+    case 'generate-page':  return handleGeneratePage(req, res);
     default:
       return res.status(404).json({ error: `Acção desconhecida: "${action}". Use: confirm-payment, confirm-avulso, fix-profiles, stats, transactions` });
   }
@@ -878,4 +880,218 @@ async function handleDocuments(req, res) {
     console.error('[admin/documents]', err);
     return res.status(500).json({ error: err.message });
   }
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BLOG PAGES — CRUD (merged from api/admin/pages.js)
+// ═════════════════════════════════════════════════════════════════════════════
+async function handleBlogPages(req, res) {
+  const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ error: 'Token em falta' });
+
+  try {
+    const supabase = await getAdminClient();
+    const auth = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    if (req.method === 'GET') {
+      const { slug } = req.query;
+      if (slug) {
+        const { data, error } = await supabase.from('blog_pages').select('*').eq('slug', slug).single();
+        if (error) return res.status(404).json({ error: 'Página não encontrada' });
+        return res.status(200).json(data);
+      }
+      const { data, error } = await supabase
+        .from('blog_pages')
+        .select('id, slug, title, meta_description, published, views, ai_generated, created_at, updated_at')
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return res.status(200).json(data || []);
+    }
+
+    if (req.method === 'POST') {
+      const { slug, title, meta_description, content_html, published = false, ai_generated = false } = req.body;
+      if (!slug || !title || !content_html) return res.status(400).json({ error: 'slug, title e content_html são obrigatórios' });
+      const cleanSlug = _slugify(slug);
+      const { data, error } = await supabase
+        .from('blog_pages')
+        .insert({ slug: cleanSlug, title, meta_description, content_html, published, ai_generated, author_id: auth.user.id })
+        .select().single();
+      if (error) {
+        if (error.code === '23505') return res.status(409).json({ error: 'Já existe uma página com este slug' });
+        throw error;
+      }
+      if (published) await _generateStaticPage(data, SITE_URL);
+      return res.status(201).json({ success: true, page: data });
+    }
+
+    if (req.method === 'PUT') {
+      const { id, slug, title, meta_description, content_html, published, ai_generated } = req.body;
+      if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+      const updates = {};
+      if (slug !== undefined)             updates.slug             = _slugify(slug);
+      if (title !== undefined)            updates.title            = title;
+      if (meta_description !== undefined) updates.meta_description = meta_description;
+      if (content_html !== undefined)     updates.content_html     = content_html;
+      if (published !== undefined)        updates.published        = published;
+      if (ai_generated !== undefined)     updates.ai_generated     = ai_generated;
+      const { data, error } = await supabase.from('blog_pages').update(updates).eq('id', id).select().single();
+      if (error) throw error;
+      if (data?.published) await _generateStaticPage(data, SITE_URL);
+      return res.status(200).json({ success: true, page: data });
+    }
+
+    if (req.method === 'DELETE') {
+      const { id } = req.body;
+      if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+      const { data: page } = await supabase.from('blog_pages').select('slug').eq('id', id).single();
+      const { error } = await supabase.from('blog_pages').delete().eq('id', id);
+      if (error) throw error;
+      return res.status(200).json({ success: true, deleted_slug: page?.slug });
+    }
+
+    return res.status(405).json({ error: 'Método não permitido' });
+  } catch (err) {
+    console.error('[admin/pages]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GENERATE PAGE — IA gera artigo de blog HTML (merged from api/admin/generate-page.js)
+// ═════════════════════════════════════════════════════════════════════════════
+async function handleGeneratePage(req, res) {
+  const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+
+  const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ error: 'Token em falta' });
+
+  try {
+    const supabase = await getAdminClient();
+    const auth = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    const { title, keywords = '', tone = 'informativo', word_count = 600 } = req.body;
+    if (!title) return res.status(400).json({ error: 'title é obrigatório' });
+
+    const prompt = `És um especialista em SEO e redacção de conteúdo para o mercado moçambicano.
+
+Escreve um artigo de blog completo sobre: "${title}"
+Palavras-chave a incluir naturalmente: ${keywords || 'documentos, Moçambique'}
+Tom: ${tone}
+Extensão aproximada: ${word_count} palavras
+
+REGRAS OBRIGATÓRIAS:
+- Escreve em português europeu (não brasileiro)
+- Conteúdo específico para Moçambique (exemplos locais, instituições moçambicanas, M-Pesa, etc.)
+- Inclui H2 e H3, e uma secção FAQ com 3-4 perguntas no final
+- Menciona que o MzDocs Pro pode ajudar a criar estes documentos rapidamente com IA
+- NÃO incluis <html>, <head>, <body> ou <!DOCTYPE> — apenas conteúdo do artigo
+- Devolve APENAS HTML válido: <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>
+- Não uses Markdown, apenas HTML puro
+
+Começa directamente com o conteúdo HTML, sem preâmbulo.`;
+
+    let html = null, usedProvider = null;
+
+    if (!html && process.env.GROQ_API_KEY) {
+      try {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+          body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], max_tokens: 3000, temperature: 0.4 }),
+        });
+        const d = await r.json();
+        const text = d.choices?.[0]?.message?.content;
+        if (text?.length > 200) { html = _extractHTML(text); usedProvider = 'groq'; }
+      } catch (_) {}
+    }
+
+    if (!html && process.env.GEMINI_API_KEY) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        });
+        const d = await r.json();
+        const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text?.length > 200) { html = _extractHTML(text); usedProvider = 'gemini'; }
+      } catch (_) {}
+    }
+
+    if (!html && process.env.OPENROUTER_API_KEY) {
+      try {
+        const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'HTTP-Referer': SITE_URL },
+          body: JSON.stringify({ model: 'meta-llama/llama-3.3-70b-instruct', messages: [{ role: 'user', content: prompt }], max_tokens: 3000 }),
+        });
+        const d = await r.json();
+        const text = d.choices?.[0]?.message?.content;
+        if (text?.length > 200) { html = _extractHTML(text); usedProvider = 'openrouter'; }
+      } catch (_) {}
+    }
+
+    if (!html) return res.status(503).json({ error: 'Nenhum provider de IA disponível.' });
+
+    const plainText = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const meta_description = plainText.slice(0, 155).trim() + (plainText.length > 155 ? '…' : '');
+    const slug = _slugify(title);
+
+    return res.status(200).json({ success: true, title, slug, meta_description, content_html: html, ai_generated: true, provider: usedProvider });
+  } catch (err) {
+    console.error('[admin/generate-page]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ── Shared utilities for blog pages ──────────────────────────────────────────
+function _slugify(str) {
+  return String(str).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '').trim()
+    .replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 80);
+}
+
+function _extractHTML(text) {
+  return text.replace(/\`\`\`html?\n?/gi, '').replace(/\`\`\`\n?/g, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<html[^>]*>/gi, '').replace(/<\/html>/gi, '')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<body[^>]*>/gi, '').replace(/<\/body>/gi, '').trim();
+}
+
+async function _generateStaticPage(page, SITE_URL) {
+  const owner = process.env.GITHUB_OWNER;
+  const repo  = process.env.GITHUB_REPO;
+  const token = process.env.GITHUB_TOKEN;
+  if (!owner || !repo || !token) { console.warn('[_generateStaticPage] GitHub env vars em falta'); return; }
+
+  const pubDate = new Date().toLocaleDateString('pt-MZ', { year:'numeric', month:'long', day:'numeric' });
+  function escHtml(s = '') {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  const html = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>${escHtml(page.title)} — MzDocs Pro</title><meta name="description" content="${escHtml(page.meta_description||'')}"/><link rel="canonical" href="${SITE_URL}/pages/${page.slug}"/></head><body><h1>${escHtml(page.title)}</h1>${page.content_html}</body></html>`;
+
+  const githubPath = `pages/${page.slug}/index.html`;
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${githubPath}`;
+  let sha;
+  try {
+    const ex = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
+    if (ex.ok) sha = (await ex.json()).sha;
+  } catch (_) {}
+
+  await fetch(apiUrl, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: `Gerar página: ${page.slug}`, content: Buffer.from(html).toString('base64'), sha }),
+  });
 }

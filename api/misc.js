@@ -69,6 +69,8 @@ module.exports = async function handler(req, res) {
 
   if (action === 'page-view')                           return handlePageView(req, res);
   if (action === 'sitemap.xml' || action === 'sitemap') return handleSitemap(req, res);
+  if (action === 'ocr-analyze')                         return handleOcrAnalyze(req, res);
+  if (action === 'config')                              return handleConfig(req, res);
 
   return res.status(404).json({ error: `Rota desconhecida: "${action}". Use: page-view, sitemap.xml, affiliate/*, templates/*` });
 };
@@ -492,4 +494,97 @@ async function affCheck(req, res, supabase) {
     is_affiliate: data.is_affiliate,
     name:         data.full_name || 'Parceiro MzDocs',
   });
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIG — devolve configuração pública (merged from api/config.js)
+// ════════════════════════════════════════════════════════════════════════════
+async function handleConfig(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  try {
+    let docsGenerated = 0;
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const sb = makeClient();
+      const { count } = await sb
+        .from('documents')
+        .select('*', { count: 'exact', head: true })
+        .catch(() => ({ count: 0 }));
+      docsGenerated = count || 0;
+    }
+
+    return res.status(200).json({
+      docsGenerated,
+      features: { mpesa: true, ocr: true, templates: true },
+    });
+  } catch (err) {
+    return res.status(200).json({ docsGenerated: 0, features: { mpesa: true, ocr: true, templates: true } });
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// OCR-ANALYZE — proxy IA para análise de documentos (merged from api/ocr-analyze.js)
+// ════════════════════════════════════════════════════════════════════════════
+async function handleOcrAnalyze(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', ORIGIN);
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST')   return res.status(405).json({ error: 'POST only' });
+
+  const body = parseBody(req);
+  const { ocrText = '', schema = [], serviceType = '', imageBase64, mimeType } = body;
+  if (!schema.length) return res.status(400).json({ error: 'schema required' });
+
+  const schemaDesc = schema.map(f => `- ${f.id}: "${f.label}" (${f.type})`).join('\n');
+  const userPrompt = `TEXTO DO DOCUMENTO:\n${ocrText.slice(0, 3000)}\n\nTIPO: ${serviceType}\n\nCAMPOS A EXTRAIR:\n${schemaDesc}\n\nResponda APENAS em JSON:\n{"fields":{"campo":{"value":"valor","confidence":0.9,"source":"ocr"}},"missing":["campo_nao_encontrado"]}`;
+
+  // 1. Groq
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const messages = [];
+      if (imageBase64 && mimeType?.startsWith('image/')) {
+        messages.push({ role: 'user', content: [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }, { type: 'text', text: userPrompt }] });
+      } else {
+        messages.push({ role: 'user', content: userPrompt });
+      }
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+        body: JSON.stringify({ model: imageBase64 ? 'llama-3.2-11b-vision-preview' : 'llama-3.3-70b-versatile', max_tokens: 1000, temperature: 0.1, messages }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
+        if (parsed?.fields) return res.status(200).json(parsed);
+      }
+    } catch (e) { console.warn('[ocr-analyze] Groq:', e.message); }
+  }
+
+  // 2. Gemini fallback
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const parts = [];
+      if (imageBase64 && mimeType?.startsWith('image/')) parts.push({ inline_data: { mime_type: mimeType, data: imageBase64 } });
+      parts.push({ text: userPrompt });
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts }] }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+        if (parsed?.fields) return res.status(200).json(parsed);
+      }
+    } catch (e) { console.warn('[ocr-analyze] Gemini:', e.message); }
+  }
+
+  return res.status(200).json({ fields: {}, missing: schema.map(f => f.id) });
+}
+
+function _safeJSON(raw) {
+  try { return JSON.parse(raw.replace(/\`\`\`json|\`\`\`/g, '').trim()); } catch (_) { return null; }
 }
