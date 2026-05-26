@@ -1,7 +1,7 @@
 # MzDocs Pro — v10
 
 Plataforma moçambicana de geração de documentos com IA. Construída para o Vercel Hobby (limite: 12 functions), Supabase e PWA.
-a
+
 ---
 
 ## 🗂️ Estrutura do Projecto
