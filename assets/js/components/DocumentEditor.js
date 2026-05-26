@@ -261,7 +261,7 @@ export class DocumentEditor {
     if (!md) return '<p><br></p>';
     let html = md
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/---PAGE_BREAK---/g, '<hr style="page-break-after:always;border:2px dashed #aaa;margin:16px 0;">')
+      .replace(/---PAGE_BREAK---/g, '<div style="page-break-after:always;height:0;margin:0"></div><div style="display:flex;align-items:center;gap:8px;margin:16px 0;"><div style="height:1px;flex:1;background:#d1d5db"></div><span style="font-size:10px;color:#9ca3af;letter-spacing:.5px">— Nova Página —</span><div style="height:1px;flex:1;background:#d1d5db"></div></div>')
       .replace(/^######\s(.+)$/gm, '<h6>$1</h6>')
       .replace(/^#####\s(.+)$/gm,  '<h5>$1</h5>')
       .replace(/^####\s(.+)$/gm,   '<h4>$1</h4>')
@@ -513,7 +513,7 @@ export class DocumentEditor {
     let html = md
       .replace(/---PAGE_BREAK---/g, PAGE_BREAK_PLACEHOLDER)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(new RegExp(PAGE_BREAK_PLACEHOLDER,'g'),'<hr class="page-break" style="page-break-after:always;border:2px dashed #aaa;margin:20px 0;">')
+      .replace(new RegExp(PAGE_BREAK_PLACEHOLDER,'g'),'<div style="page-break-after:always;height:0;margin:0"></div><div style="display:flex;align-items:center;gap:8px;margin:18px 0;"><div style="height:1px;flex:1;background:#d1d5db"></div><span style="font-size:10px;color:#9ca3af;letter-spacing:.5px">— Nova Página —</span><div style="height:1px;flex:1;background:#d1d5db"></div></div>')
       .replace(/^######\s(.+)$/gm,'<h6>$1</h6>')
       .replace(/^#####\s(.+)$/gm, '<h5>$1</h5>')
       .replace(/^####\s(.+)$/gm,  '<h4>$1</h4>')

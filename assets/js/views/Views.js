@@ -279,7 +279,7 @@ export const DocumentView = {
     let html = md
       .replace(/---PAGE_BREAK---/g, PB)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(new RegExp(PB, 'g'), '<div style="page-break-after:always;border-top:2px dashed #aaa;margin:20pt 0;"></div>')
+      .replace(new RegExp(PB, 'g'), '<div style="page-break-after:always;height:0;margin:0;padding:0;"></div><div style="display:flex;align-items:center;justify-content:center;margin:18pt 0 14pt;gap:8px;"><div style="height:1px;flex:1;background:#d1d5db"></div><span style="font-size:9pt;color:#9ca3af;letter-spacing:.5px;white-space:nowrap">— Nova Página —</span><div style="height:1px;flex:1;background:#d1d5db"></div></div>')
       // Headers
       .replace(/^######\s+(.+)$/gm, '<h6>$1</h6>')
       .replace(/^#####\s+(.+)$/gm, '<h5>$1</h5>')
