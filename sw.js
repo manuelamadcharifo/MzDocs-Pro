@@ -48,6 +48,12 @@ workbox.precaching.precacheAndRoute([
     { url: '/assets/js/utils/Storage.js',                    revision: CACHE_VERSION },
     { url: '/assets/js/utils/Formatter.js',                  revision: CACHE_VERSION },
     { url: '/assets/js/utils/IndexedDB.js',                  revision: CACHE_VERSION },
+    // Marketplace & Academic modules
+    { url: '/assets/js/marketplace/TemplatePicker.js',       revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/TemplateLibrary.js',      revision: CACHE_VERSION },
+    { url: '/assets/js/academic/AcademicEngine.js',          revision: CACHE_VERSION },
+    { url: '/assets/js/academic/AcademicUI.js',              revision: CACHE_VERSION },
+    { url: '/assets/js/controllers/TemplateController.js',   revision: CACHE_VERSION },
     // Ícones
     { url: '/assets/icons/icon.svg',            revision: CACHE_VERSION },
     { url: '/assets/icons/icon-192x192.png',    revision: CACHE_VERSION },

@@ -170,56 +170,26 @@ export class SmartOCRService {
 
   // ── Análise via Claude Vision / texto ─────────────────────────
   async _analyzeWithAI(base64, mimeType, ocrText, schema, serviceType) {
-    const schemaDesc = schema.map(f => `- ${f.id}: "${f.label}" (${f.type})`).join('\n');
+    // Chama proxy backend — nunca expõe chaves de API no cliente
+    const body = { ocrText, schema, serviceType };
+    if (base64 && mimeType?.startsWith('image/')) {
+      // Enviar apenas dados puros (sem prefixo data:...)
+      body.imageBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+      body.mimeType    = mimeType;
+    }
 
-    const prompt = `Analise este documento e extraia os campos pedidos.
-
-TEXTO EXTRAÍDO DO DOCUMENTO:
-${ocrText.slice(0, 3000)}
-
-TIPO DE DOCUMENTO: ${serviceType}
-
-CAMPOS A PREENCHER:
-${schemaDesc}
-
-TAREFA:
-1. Para cada campo, encontre o valor correspondente no documento
-2. Se não encontrar, tente inferir pelo contexto
-3. Indique confiança 0-1 e se veio do documento ("ocr") ou foi inferido ("inferred")
-
-Responda APENAS em JSON válido, sem markdown, sem explicações:
-{
-  "fields": {
-    "nome_campo": {"value": "valor encontrado", "confidence": 0.9, "source": "ocr"}
-  },
-  "missing": ["campo_nao_encontrado"]
-}`;
-
-    // Conteúdo da mensagem: imagem + texto (se imagem) ou só texto (PDF/Word)
-    const userContent = base64
-      ? [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: mimeType, data: base64.split(',')[1] }
-          },
-          { type: 'text', text: prompt }
-        ]
-      : [{ type: 'text', text: prompt }];
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('/api/ocr-analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: userContent }]
-      })
+      body: JSON.stringify(body),
     });
 
-    const data = await response.json();
-    const raw = data.content?.find(b => b.type === 'text')?.text || '{}';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    return JSON.parse(clean);
+    if (!response.ok) {
+      console.warn('[SmartOCR] /api/ocr-analyze returned', response.status);
+      return { fields: {}, missing: schema.map(f => f.id) };
+    }
+
+    return response.json();
   }
 
   // ── Aplica campos extraídos ao formulário HTML ─────────────────
