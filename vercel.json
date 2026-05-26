@@ -32,20 +32,19 @@
     "api/admin/index.js": {
       "maxDuration": 30
     },
-    "api/admin/pages.js": {
-      "maxDuration": 15
-    },
-    "api/admin/generate-page.js": {
-      "maxDuration": 60
-    },
-    "api/config.js": {
-      "maxDuration": 10
-    },
     "api/misc.js": {
-      "maxDuration": 15
+      "maxDuration": 30
     }
   },
   "rewrites": [
+    {
+      "source": "/api/config",
+      "destination": "/api/misc"
+    },
+    {
+      "source": "/api/ocr-analyze",
+      "destination": "/api/misc"
+    },
     {
       "source": "/sitemap.xml",
       "destination": "/api/misc/sitemap.xml"
