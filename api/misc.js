@@ -541,49 +541,122 @@ async function handleOcrAnalyze(req, res) {
   const { ocrText = '', schema = [], serviceType = '', imageBase64, mimeType } = body;
   if (!schema.length) return res.status(400).json({ error: 'schema required' });
 
+  const hasImage = !!(imageBase64 && mimeType?.startsWith('image/'));
   const schemaDesc = schema.map(f => `- ${f.id}: "${f.label}" (${f.type})`).join('\n');
-  const userPrompt = `TEXTO DO DOCUMENTO:\n${ocrText.slice(0, 3000)}\n\nTIPO: ${serviceType}\n\nCAMPOS A EXTRAIR:\n${schemaDesc}\n\nResponda APENAS em JSON:\n{"fields":{"campo":{"value":"valor","confidence":0.9,"source":"ocr"}},"missing":["campo_nao_encontrado"]}`;
 
-  // 1. Groq
+  // Prompt robusto: instrui a IA a usar a imagem E o texto para extrair campos
+  const userPrompt = `És um especialista em extracção de dados de documentos moçambicanos.
+${ocrText ? `TEXTO EXTRAÍDO DO DOCUMENTO:\n${ocrText.slice(0, 2000)}\n` : ''}
+TIPO DE DOCUMENTO: ${serviceType}
+
+CAMPOS A EXTRAIR:
+${schemaDesc}
+
+INSTRUÇÕES:
+- Analisa ${hasImage ? 'a imagem e o texto' : 'o texto'} cuidadosamente
+- Para cada campo, extrai o valor exacto que aparece no documento
+- Se o campo não existir, inclui-o em "missing"
+- Responde APENAS com JSON válido, sem markdown, sem explicações
+
+FORMATO OBRIGATÓRIO:
+{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":["campo_ausente"]}`;
+
+  // ── 1. Groq Vision (modelos actuais 2025/2026) ───────────────────────────
   if (process.env.GROQ_API_KEY) {
+    // Modelos vision disponíveis no Groq — tentar por ordem de preferência
+    const visionModels = hasImage
+      ? ['meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.2-90b-vision-preview', 'meta-llama/llama-4-maverick-17b-128e-instruct']
+      : ['llama-3.3-70b-versatile'];
+
+    for (const model of visionModels) {
+      try {
+        const content = hasImage
+          ? [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }, { type: 'text', text: userPrompt }]
+          : userPrompt;
+
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+          body: JSON.stringify({ model, max_tokens: 1500, temperature: 0.1, messages: [{ role: 'user', content }] }),
+        });
+
+        if (r.ok) {
+          const d = await r.json();
+          if (d.error) { console.warn('[ocr-analyze] Groq model error:', model, d.error?.message); continue; }
+          const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
+          if (parsed?.fields && Object.keys(parsed.fields).length > 0) {
+            console.log('[ocr-analyze] Groq OK:', model);
+            return res.status(200).json(parsed);
+          }
+        } else {
+          const err = await r.json().catch(() => ({}));
+          console.warn('[ocr-analyze] Groq HTTP', r.status, model, err?.error?.message);
+        }
+      } catch (e) { console.warn('[ocr-analyze] Groq exception:', model, e.message); }
+    }
+  }
+
+  // ── 2. Gemini Vision ─────────────────────────────────────────────────────
+  if (process.env.GEMINI_API_KEY) {
+    const geminiModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    for (const model of geminiModels) {
+      try {
+        const parts = [];
+        if (hasImage) parts.push({ inline_data: { mime_type: mimeType, data: imageBase64 } });
+        parts.push({ text: userPrompt });
+
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) }
+        );
+
+        if (r.ok) {
+          const d = await r.json();
+          const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+          if (parsed?.fields && Object.keys(parsed.fields).length > 0) {
+            console.log('[ocr-analyze] Gemini OK:', model);
+            return res.status(200).json(parsed);
+          }
+        } else {
+          console.warn('[ocr-analyze] Gemini HTTP', r.status, model);
+        }
+      } catch (e) { console.warn('[ocr-analyze] Gemini exception:', e.message); }
+    }
+  }
+
+  // ── 3. OpenRouter fallback (vision via meta-llama ou google) ────────────
+  if (process.env.OPENROUTER_API_KEY) {
     try {
-      const messages = [];
-      if (imageBase64 && mimeType?.startsWith('image/')) {
-        messages.push({ role: 'user', content: [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }, { type: 'text', text: userPrompt }] });
-      } else {
-        messages.push({ role: 'user', content: userPrompt });
-      }
-      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const content = hasImage
+        ? [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }, { type: 'text', text: userPrompt }]
+        : userPrompt;
+
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-        body: JSON.stringify({ model: imageBase64 ? 'llama-3.2-11b-vision-preview' : 'llama-3.3-70b-versatile', max_tokens: 1000, temperature: 0.1, messages }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'HTTP-Referer': SITE_URL,
+        },
+        body: JSON.stringify({
+          model: hasImage ? 'meta-llama/llama-4-scout' : 'meta-llama/llama-3.3-70b-instruct',
+          max_tokens: 1500, temperature: 0.1,
+          messages: [{ role: 'user', content }],
+        }),
       });
+
       if (r.ok) {
         const d = await r.json();
         const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
-        if (parsed?.fields) return res.status(200).json(parsed);
+        if (parsed?.fields && Object.keys(parsed.fields).length > 0) {
+          console.log('[ocr-analyze] OpenRouter OK');
+          return res.status(200).json(parsed);
+        }
       }
-    } catch (e) { console.warn('[ocr-analyze] Groq:', e.message); }
+    } catch (e) { console.warn('[ocr-analyze] OpenRouter:', e.message); }
   }
 
-  // 2. Gemini fallback
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      const parts = [];
-      if (imageBase64 && mimeType?.startsWith('image/')) parts.push({ inline_data: { mime_type: mimeType, data: imageBase64 } });
-      parts.push({ text: userPrompt });
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts }] }),
-      });
-      if (r.ok) {
-        const d = await r.json();
-        const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
-        if (parsed?.fields) return res.status(200).json(parsed);
-      }
-    } catch (e) { console.warn('[ocr-analyze] Gemini:', e.message); }
-  }
-
+  console.error('[ocr-analyze] Todos os providers falharam. Verificar API keys no Vercel.');
   return res.status(200).json({ fields: {}, missing: schema.map(f => f.id) });
 }
 
