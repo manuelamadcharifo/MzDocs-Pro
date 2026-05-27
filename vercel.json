@@ -47,11 +47,11 @@
     },
     {
       "source": "/sitemap.xml",
-      "destination": "/api/misc/sitemap.xml"
+      "destination": "/api/misc?_a=sitemap.xml"
     },
     {
       "source": "/api/page-view",
-      "destination": "/api/misc/page-view"
+      "destination": "/api/misc?_a=page-view"
     },
     {
       "source": "/api/admin/stats",
@@ -75,7 +75,7 @@
     },
     {
       "source": "/api/affiliate/:action",
-      "destination": "/api/misc/affiliate/:action"
+      "destination": "/api/misc?_ns=affiliate&_a=:action"
     },
     {
       "source": "/api/admin/static-pages",
@@ -99,11 +99,11 @@
     },
     {
       "source": "/api/templates/:action",
-      "destination": "/api/misc/templates/:action"
+      "destination": "/api/misc?_ns=templates&_a=:action"
     },
     {
       "source": "/api/templates",
-      "destination": "/api/misc/templates/list"
+      "destination": "/api/misc?_ns=templates&_a=list"
     },
     {
       "source": "/(.*)",
