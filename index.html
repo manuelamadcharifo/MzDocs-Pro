@@ -493,6 +493,24 @@
 <script type="module" src="assets/js/app.js"></script>
 
 <script>
+// ── Rastreamento de cliques de afiliados (?ref=CÓDIGO) ───────────────────────
+(function() {
+  try {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref && /^[A-Z0-9]{6,12}$/.test(ref)) {
+      // Guardar ref no localStorage para associar a conversões futuras
+      localStorage.setItem('mz_ref', ref);
+      localStorage.setItem('mz_ref_ts', Date.now());
+      // Registar o clique no servidor (fire-and-forget)
+      fetch('/api/affiliate/click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ref_code: ref, page: window.location.pathname }),
+      }).catch(() => {});
+    }
+  } catch (_) {}
+})();
+
 // Guard: se o svcGrid ficar vazio (bug de cache do SW), recarregar sem cache
 (function() {
   function checkGrid() {
