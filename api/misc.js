@@ -70,7 +70,7 @@ module.exports = async function handler(req, res) {
   if (action === 'page-view')                           return handlePageView(req, res);
   if (action === 'sitemap.xml' || action === 'sitemap') return handleSitemap(req, res);
   if (action === 'ocr-analyze')                         return handleOcrAnalyze(req, res);
-  if (action === 'config')                              return handleConfig(req, res);
+  if (action === 'config' || action === 'misc')         return handleConfig(req, res);
 
   return res.status(404).json({ error: `Rota desconhecida: "${action}". Use: page-view, sitemap.xml, affiliate/*, templates/*` });
 };
