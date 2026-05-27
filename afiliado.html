@@ -312,6 +312,9 @@ function setupRegister() {
         if (msg) msg.textContent = '';
         document.getElementById('registerSection').style.display = 'none';
         await loadDashboard();
+      } else if (d.sql_needed) {
+        if (msg) msg.innerHTML = '⚠️ Execute o SQL de migração no Supabase primeiro. <a href="#sql-instructions" style="color:#1d4ed8;text-decoration:underline">Ver instruções abaixo</a>';
+        btn.disabled = false; btn.textContent = 'Quero ser Afiliado';
       } else {
         if (msg) msg.textContent = d.error || 'Erro ao registar. Tente de novo.';
         btn.disabled = false; btn.textContent = 'Quero ser Afiliado';
