@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt" dir="ltr">
 <head>
@@ -301,7 +300,13 @@ function setupRegister() {
         headers: { Authorization: 'Bearer ' + _token, 'Content-Type': 'application/json' },
       });
       let d = {};
-      try { d = await res.json(); } catch (_) { d = { error: 'Resposta inválida do servidor' }; }
+      const rawText = await res.text().catch(() => '');
+      try { d = JSON.parse(rawText); }
+      catch (_) {
+        // Servidor devolveu HTML (erro 500) — mostrar mensagem útil
+        console.error('[affiliate/register] server error:', res.status, rawText.slice(0, 200));
+        d = { error: `Erro do servidor (${res.status}). Verifique as variáveis de ambiente no Vercel.` };
+      }
 
       if (d.success) {
         if (msg) msg.textContent = '';
