@@ -501,28 +501,30 @@ async function affCheck(req, res, supabase) {
 // CONFIG — devolve configuração pública (merged from api/config.js)
 // ════════════════════════════════════════════════════════════════════════════
 async function handleConfig(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'public, max-age=60');
+  res.setHeader('Access-Control-Allow-Origin', ORIGIN);
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  try {
-    let docsGenerated = 0;
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      const sb = makeClient();
-      const { count } = await sb
-        .from('documents')
-        .select('*', { count: 'exact', head: true })
-        .catch(() => ({ count: 0 }));
-      docsGenerated = count || 0;
-    }
+  const supabaseUrl     = process.env.SUPABASE_URL      || '';
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+  const isSandbox       = !process.env.MPESA_API_KEY || !process.env.MPESA_SERVICE_CODE;
 
-    return res.status(200).json({
-      docsGenerated,
-      features: { mpesa: true, ocr: true, templates: true },
-    });
-  } catch (err) {
-    return res.status(200).json({ docsGenerated: 0, features: { mpesa: true, ocr: true, templates: true } });
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return res.status(200).json({ configured: false, isSandbox, message: 'Supabase não configurado' });
   }
+
+  // Contador público de documentos gerados
+  let docsGenerated = null;
+  try {
+    const { count } = await makeClient()
+      .from('credit_usage_log')
+      .select('*', { count: 'exact', head: true });
+    docsGenerated = count || 0;
+  } catch (_) {}
+
+  return res.status(200).json({ configured: true, supabaseUrl, supabaseAnonKey, isSandbox, docsGenerated });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
