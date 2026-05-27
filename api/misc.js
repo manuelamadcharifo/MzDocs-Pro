@@ -300,15 +300,20 @@ async function handleAffiliate(action, req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const supabase = makeClient();
-
-  switch (action) {
-    case 'register':  return affRegister(req, res, supabase);
-    case 'dashboard': return affDashboard(req, res, supabase);
-    case 'click':     return affClick(req, res, supabase);
-    case 'withdraw':  return affWithdraw(req, res, supabase);
-    case 'check':     return affCheck(req, res, supabase);
-    default:          return res.status(404).json({ error: 'Acção de afiliado não encontrada' });
+  // Top-level safety net — garante sempre JSON mesmo em crash inesperado
+  try {
+    const supabase = makeClient();
+    switch (action) {
+      case 'register':  return await affRegister(req, res, supabase);
+      case 'dashboard': return await affDashboard(req, res, supabase);
+      case 'click':     return await affClick(req, res, supabase);
+      case 'withdraw':  return await affWithdraw(req, res, supabase);
+      case 'check':     return await affCheck(req, res, supabase);
+      default:          return res.status(404).json({ error: 'Acção de afiliado não encontrada' });
+    }
+  } catch (err) {
+    console.error('[handleAffiliate] crash:', action, err.message);
+    return res.status(500).json({ error: 'Erro interno: ' + err.message });
   }
 }
 
@@ -320,10 +325,15 @@ async function affRegister(req, res, supabase) {
     const user = await getUser(supabase, req);
     if (!user) return res.status(401).json({ error: 'Sessão inválida' });
 
+    // Usar select(*) para evitar erro se colunas affiliate ainda não existem na BD
     const { data: profile, error: profileErr } = await supabase
-      .from('profiles').select('ref_code, is_affiliate, full_name').eq('id', user.id).single();
+      .from('profiles').select('*').eq('id', user.id).maybeSingle();
 
-    if (profileErr || !profile) return res.status(404).json({ error: 'Perfil não encontrado' });
+    if (profileErr) {
+      console.error('[affRegister] profile fetch error:', profileErr.message);
+      return res.status(500).json({ error: 'Erro ao ler perfil: ' + profileErr.message });
+    }
+    if (!profile) return res.status(404).json({ error: 'Perfil não encontrado. Faça login novamente.' });
 
     // Já tem código — devolver directamente
     if (profile.ref_code) {
