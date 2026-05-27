@@ -105,7 +105,6 @@ export class SmartOCRService {
   // ── OCR simples (texto bruto de imagem) ───────────────────────
   async extractText(imageFile, onProgress) {
     await this._loadTesseract();
-    const objectUrl = URL.createObjectURL(imageFile);
 
     try {
       if (this._worker) {
@@ -124,24 +123,85 @@ export class SmartOCRService {
           }
         });
       } catch (_langErr) {
-        worker = await Tesseract.createWorker('eng', 1, {
-          logger: m => {
-            if (m.status === 'recognizing text' && onProgress) {
-              onProgress(Math.round(m.progress * 100));
+        try {
+          worker = await Tesseract.createWorker('eng', 1, {
+            logger: m => {
+              if (m.status === 'recognizing text' && onProgress) {
+                onProgress(Math.round(m.progress * 100));
+              }
             }
-          }
-        });
+          });
+        } catch (_) {
+          throw new Error('Não foi possível inicializar o motor OCR.');
+        }
       }
       this._worker = worker;
 
-      const result = await this._worker.recognize(objectUrl);
-      return {
-        text: result.data.text.trim(),
-        confidence: Math.round(result.data.confidence)
-      };
+      // Tentar as 4 rotações e escolher a que dá mais confiança
+      // Documentos fotografados de lado (passaportes, BIs) são comuns em mobile
+      const rotations = [0, 90, 270, 180];
+      let bestText = '';
+      let bestConf = 0;
+
+      for (let i = 0; i < rotations.length; i++) {
+        const deg = rotations[i];
+        if (onProgress && i > 0) onProgress(20 + i * 15, `A tentar rotação ${deg}°…`);
+
+        const rotatedBlob = await this._rotateImage(imageFile, deg);
+        const url = URL.createObjectURL(rotatedBlob);
+        try {
+          const result = await this._worker.recognize(url);
+          const conf = Math.round(result.data.confidence);
+          const txt  = result.data.text.trim();
+          if (conf > bestConf && txt.length > 10) {
+            bestConf = conf;
+            bestText = txt;
+          }
+          // Se confiança boa (>60%), não testar mais rotações
+          if (bestConf >= 60) { URL.revokeObjectURL(url); break; }
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+
+      return { text: bestText, confidence: bestConf };
     } finally {
-      URL.revokeObjectURL(objectUrl);
+      // worker terminado quando o serviço é destruído
     }
+  }
+
+  // Roda a imagem num canvas e devolve Blob
+  _rotateImage(file, degrees) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const rad = (degrees * Math.PI) / 180;
+        const swap = degrees === 90 || degrees === 270;
+        const W = swap ? img.height : img.width;
+        const H = swap ? img.width  : img.height;
+
+        // Escalar para max 1600px mantendo proporção
+        const MAX = 1600;
+        const scale = Math.min(1, MAX / Math.max(W, H));
+        const cw = Math.round(W * scale);
+        const ch = Math.round(H * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width  = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        ctx.translate(cw / 2, ch / 2);
+        ctx.rotate(rad);
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+        canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.9);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha ao carregar imagem')); };
+      img.src = url;
+    });
   }
 
   // ── Pipeline inteligente: extracção + IA → campos do formulário ─
@@ -157,17 +217,17 @@ export class SmartOCRService {
       const r = await this._extractWordText(file, onProgress);
       text = r.text; confidence = r.confidence;
     } else {
-      // imagem — Tesseract pode falhar se não conseguir descarregar dados de língua
+      // imagem — OCR com detecção automática de rotação (0°/90°/270°/180°)
       try {
         const r = await this.extractText(file, pct => {
-          if (onProgress) onProgress(pct, 'A reconhecer texto…');
+          if (onProgress) onProgress(Math.round(pct * 0.8), 'A reconhecer texto…');
         });
         text = r.text; confidence = r.confidence;
       } catch (ocrErr) {
-        console.warn('[SmartOCR] Tesseract falhou, a continuar só com visão IA:', ocrErr.message);
+        console.warn('[SmartOCR] Tesseract falhou, a usar só visão IA:', ocrErr.message);
         if (onProgress) onProgress(50, 'OCR indisponível, a usar IA visual…');
-        // Continuar sem texto — a IA usa a imagem directamente
       }
+      // Comprimir imagem para enviar à IA (Groq/Gemini lidam com qualquer orientação)
       base64 = await this._fileToBase64(file);
     }
 
