@@ -160,7 +160,9 @@ export class SmartOCRService {
     }
 
     try {
-      const fields = await this._analyzeWithAI(base64, file.type, text, schema, serviceType);
+      // Após compressão canvas, o base64 é sempre JPEG independente do ficheiro original
+      const compressedMime = base64?.startsWith('data:') ? base64.split(';')[0].replace('data:', '') : file.type;
+      const fields = await this._analyzeWithAI(base64, compressedMime, text, schema, serviceType);
       return { rawText: text, confidence, ...fields };
     } catch (err) {
       console.warn('SmartOCR: IA indisponível, usando texto bruto.', err);
@@ -376,12 +378,42 @@ export class SmartOCRService {
   }
 
   // ── Utilidades ─────────────────────────────────────────────────
+  // Redimensiona e comprime imagem antes de enviar para o backend
+  // Evita "Failed to fetch" causado pelo limite de 4.5MB do Vercel
   _fileToBase64(file) {
-    return new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload = () => res(r.result);
-      r.onerror = rej;
-      r.readAsDataURL(file);
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const MAX = 1024; // px máximo em qualquer dimensão
+        let { width, height } = img;
+
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else                { width = Math.round(width * MAX / height); height = MAX; }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+        // JPEG a 75% de qualidade → tipicamente 80-250KB
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        // Fallback: enviar ficheiro original sem comprimir
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      };
+
+      img.src = objectUrl;
     });
   }
 
