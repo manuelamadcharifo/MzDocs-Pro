@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt" dir="ltr">
 <head>
@@ -292,17 +293,26 @@ function showDashboard(d) {
 function setupRegister() {
   document.getElementById('btnRegister').addEventListener('click', async () => {
     const btn = document.getElementById('btnRegister');
+    const msg = document.getElementById('registerMsg');
     btn.disabled = true; btn.textContent = 'A processar…';
-    const res  = await fetch('/api/affiliate/register', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + _token, 'Content-Type': 'application/json' },
-    });
-    const d = await res.json();
-    if (d.success) {
-      document.getElementById('registerSection').style.display = 'none';
-      await loadDashboard();
-    } else {
-      document.getElementById('registerMsg').textContent = d.error || 'Erro ao registar';
+    try {
+      const res = await fetch('/api/affiliate/register', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + _token, 'Content-Type': 'application/json' },
+      });
+      let d = {};
+      try { d = await res.json(); } catch (_) { d = { error: 'Resposta inválida do servidor' }; }
+
+      if (d.success) {
+        if (msg) msg.textContent = '';
+        document.getElementById('registerSection').style.display = 'none';
+        await loadDashboard();
+      } else {
+        if (msg) msg.textContent = d.error || 'Erro ao registar. Tente de novo.';
+        btn.disabled = false; btn.textContent = 'Quero ser Afiliado';
+      }
+    } catch (err) {
+      if (msg) msg.textContent = 'Sem ligação. Verifique a internet e tente de novo.';
       btn.disabled = false; btn.textContent = 'Quero ser Afiliado';
     }
   });
