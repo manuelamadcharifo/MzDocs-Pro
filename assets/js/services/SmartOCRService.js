@@ -113,13 +113,26 @@ export class SmartOCRService {
         this._worker = null;
       }
 
-      this._worker = await Tesseract.createWorker('por', 1, {
-        logger: m => {
-          if (m.status === 'recognizing text' && onProgress) {
-            onProgress(Math.round(m.progress * 100));
+      // Tentar Português; se falhar (CDN lento/offline), tentar Inglês como fallback
+      let worker = null;
+      try {
+        worker = await Tesseract.createWorker('por', 1, {
+          logger: m => {
+            if (m.status === 'recognizing text' && onProgress) {
+              onProgress(Math.round(m.progress * 100));
+            }
           }
-        }
-      });
+        });
+      } catch (_langErr) {
+        worker = await Tesseract.createWorker('eng', 1, {
+          logger: m => {
+            if (m.status === 'recognizing text' && onProgress) {
+              onProgress(Math.round(m.progress * 100));
+            }
+          }
+        });
+      }
+      this._worker = worker;
 
       const result = await this._worker.recognize(objectUrl);
       return {
@@ -144,11 +157,17 @@ export class SmartOCRService {
       const r = await this._extractWordText(file, onProgress);
       text = r.text; confidence = r.confidence;
     } else {
-      // imagem
-      const r = await this.extractText(file, pct => {
-        if (onProgress) onProgress(pct, 'A reconhecer texto…');
-      });
-      text = r.text; confidence = r.confidence;
+      // imagem — Tesseract pode falhar se não conseguir descarregar dados de língua
+      try {
+        const r = await this.extractText(file, pct => {
+          if (onProgress) onProgress(pct, 'A reconhecer texto…');
+        });
+        text = r.text; confidence = r.confidence;
+      } catch (ocrErr) {
+        console.warn('[SmartOCR] Tesseract falhou, a continuar só com visão IA:', ocrErr.message);
+        if (onProgress) onProgress(50, 'OCR indisponível, a usar IA visual…');
+        // Continuar sem texto — a IA usa a imagem directamente
+      }
       base64 = await this._fileToBase64(file);
     }
 
