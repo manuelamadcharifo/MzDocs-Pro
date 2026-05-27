@@ -333,37 +333,77 @@ async function affRegister(req, res, supabase) {
       console.error('[affRegister] profile fetch error:', profileErr.message);
       return res.status(500).json({ error: 'Erro ao ler perfil: ' + profileErr.message });
     }
-    if (!profile) return res.status(404).json({ error: 'Perfil não encontrado. Faça login novamente.' });
+
+    // Se perfil não existe, criar um básico (pode acontecer se o trigger do Supabase falhou)
+    if (!profile) {
+      const { data: authUser } = await supabase.auth.admin.getUserById(user.id).catch(() => ({ data: null }));
+      const meta = authUser?.user?.user_metadata || {};
+      const { error: insertErr } = await supabase.from('profiles').insert({
+        id:         user.id,
+        email:      user.email || '',
+        full_name:  meta.full_name || meta.name || user.email?.split('@')[0] || 'Utilizador',
+        phone:      meta.phone || null,
+        credits:    0,
+        plan:       'free',
+        is_admin:   false,
+        is_temp:    false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (insertErr) {
+        console.error('[affRegister] profile insert error:', insertErr.message);
+        return res.status(500).json({ error: 'Não foi possível criar o perfil: ' + insertErr.message });
+      }
+      // Reler o perfil recém-criado
+      const { data: newProfile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      if (!newProfile) return res.status(500).json({ error: 'Perfil criado mas não encontrado. Tente de novo.' });
+      Object.assign(profile || {}, newProfile);
+      // Reatribuir para continuar o fluxo
+      return continueRegister(res, supabase, user, newProfile);
+    }
 
     // Já tem código — devolver directamente
     if (profile.ref_code) {
       return res.status(200).json({ success: true, ref_code: profile.ref_code, is_affiliate: profile.is_affiliate });
     }
 
-    // Gerar código único sem depender de RPC do Supabase
-    // Formato: 3 letras do nome + 5 dígitos aleatórios (ex: MAN84721)
+    return continueRegister(res, supabase, user, profile);
+
+  } catch (err) {
+    console.error('[affRegister] exception:', err.message);
+    return res.status(500).json({ error: 'Erro interno. Tente de novo.' });
+  }
+}
+
+// Helper partilhado — gera e guarda o código de referência
+async function continueRegister(res, supabase, user, profile) {
+  try {
+    // Gerar código único sem RPC: 3 letras do nome + 5 dígitos
     const namePart = (profile.full_name || user.email || 'MZD')
-      .replace(/[^a-zA-Z]/g, '')
-      .substring(0, 3)
-      .toUpperCase()
-      .padEnd(3, 'X');
+      .replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
     const ref_code = namePart + Math.floor(10000 + Math.random() * 90000);
 
-    // Verificar unicidade — se existir, adicionar mais um dígito
+    // Verificar unicidade
     const { data: existing } = await supabase
       .from('profiles').select('id').eq('ref_code', ref_code).maybeSingle();
-    const finalCode = existing
-      ? ref_code + Math.floor(Math.random() * 9)
-      : ref_code;
+    const finalCode = existing ? ref_code + Math.floor(Math.random() * 9) : ref_code;
 
+    // Tentar guardar — se colunas não existem, o SQL abaixo resolve
     const { error: updateErr } = await supabase
       .from('profiles')
       .update({ ref_code: finalCode, is_affiliate: false })
       .eq('id', user.id);
 
     if (updateErr) {
+      // Coluna ref_code provavelmente não existe — instruir o utilizador
       console.error('[affRegister] update error:', updateErr.message);
-      return res.status(500).json({ error: 'Erro ao guardar código. Tente de novo.' });
+      if (updateErr.message.includes('column') || updateErr.code === '42703') {
+        return res.status(500).json({
+          error: 'Colunas de afiliado em falta na BD. Execute o SQL de migração no Supabase.',
+          sql_needed: true,
+        });
+      }
+      return res.status(500).json({ error: 'Erro ao guardar código: ' + updateErr.message });
     }
 
     return res.status(200).json({
@@ -372,10 +412,8 @@ async function affRegister(req, res, supabase) {
       is_affiliate: false,
       message: 'Código criado! Aguarde aprovação para começar a ganhar comissões.',
     });
-
   } catch (err) {
-    console.error('[affRegister] exception:', err.message);
-    return res.status(500).json({ error: 'Erro interno. Tente de novo.' });
+    return res.status(500).json({ error: 'Erro ao gerar código: ' + err.message });
   }
 }
 
