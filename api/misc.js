@@ -315,27 +315,58 @@ async function handleAffiliate(action, req, res) {
 // ── Pedir para ser afiliado ───────────────────────────────────────────────
 async function affRegister(req, res, supabase) {
   if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
-  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
 
-  const { data: profile } = await supabase
-    .from('profiles').select('ref_code, is_affiliate, full_name').eq('id', user.id).single();
+  try {
+    const user = await getUser(supabase, req);
+    if (!user) return res.status(401).json({ error: 'Sessão inválida' });
 
-  if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
-  if (profile.ref_code)
-    return res.status(200).json({ success: true, ref_code: profile.ref_code, is_affiliate: profile.is_affiliate });
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles').select('ref_code, is_affiliate, full_name').eq('id', user.id).single();
 
-  const { data: codeData } = await supabase.rpc('generate_ref_code');
-  const ref_code = codeData;
+    if (profileErr || !profile) return res.status(404).json({ error: 'Perfil não encontrado' });
 
-  await supabase.from('profiles').update({ ref_code, is_affiliate: false }).eq('id', user.id);
+    // Já tem código — devolver directamente
+    if (profile.ref_code) {
+      return res.status(200).json({ success: true, ref_code: profile.ref_code, is_affiliate: profile.is_affiliate });
+    }
 
-  return res.status(200).json({
-    success: true,
-    ref_code,
-    is_affiliate: false,
-    message: 'Código criado! Aguarde aprovação para começar a ganhar comissões.',
-  });
+    // Gerar código único sem depender de RPC do Supabase
+    // Formato: 3 letras do nome + 5 dígitos aleatórios (ex: MAN84721)
+    const namePart = (profile.full_name || user.email || 'MZD')
+      .replace(/[^a-zA-Z]/g, '')
+      .substring(0, 3)
+      .toUpperCase()
+      .padEnd(3, 'X');
+    const ref_code = namePart + Math.floor(10000 + Math.random() * 90000);
+
+    // Verificar unicidade — se existir, adicionar mais um dígito
+    const { data: existing } = await supabase
+      .from('profiles').select('id').eq('ref_code', ref_code).maybeSingle();
+    const finalCode = existing
+      ? ref_code + Math.floor(Math.random() * 9)
+      : ref_code;
+
+    const { error: updateErr } = await supabase
+      .from('profiles')
+      .update({ ref_code: finalCode, is_affiliate: false })
+      .eq('id', user.id);
+
+    if (updateErr) {
+      console.error('[affRegister] update error:', updateErr.message);
+      return res.status(500).json({ error: 'Erro ao guardar código. Tente de novo.' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      ref_code: finalCode,
+      is_affiliate: false,
+      message: 'Código criado! Aguarde aprovação para começar a ganhar comissões.',
+    });
+
+  } catch (err) {
+    console.error('[affRegister] exception:', err.message);
+    return res.status(500).json({ error: 'Erro interno. Tente de novo.' });
+  }
 }
 
 // ── Dashboard do afiliado ─────────────────────────────────────────────────
