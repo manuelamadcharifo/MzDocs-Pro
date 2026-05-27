@@ -61,19 +61,50 @@ export class OCRController {
 
       if (ocrBar) ocrBar.style.display = 'none';
 
-      const text   = result.rawText || '';
-      const conf   = result.confidence || 0;
-      const fields = result.fields || {};
-      const missing = result.missing || [];
+      const text     = result.rawText || '';
+      const conf     = result.confidence || 0;
+      const fields   = result.fields   || {};
+      const missing  = result.missing  || [];
+      const fieldCount = Object.keys(fields).length;
+
+      // Calcular confiança real: se a IA preencheu campos, usar a média das confianças
+      // em vez do valor 0% do Tesseract (que pode ter falhado mas a IA funcionou)
+      let displayConf = conf;
+      if (fieldCount > 0) {
+        const confs = Object.values(fields)
+          .map(f => f.confidence || 0)
+          .filter(c => c > 0);
+        if (confs.length) {
+          displayConf = Math.round((confs.reduce((a, b) => a + b, 0) / confs.length) * 100);
+        }
+      }
 
       if (this.docModel) this.docModel.ocrText = text;
 
       const ocrTxt  = document.getElementById('ocrTxt');
       const ocrConf = document.getElementById('ocrConf');
-      if (ocrTxt) ocrTxt.value = text;
-      if (ocrConf) ocrConf.textContent = `Confiança: ${conf}%`;
 
-      const fieldCount = Object.keys(fields).length;
+      // Se a IA preencheu campos mas Tesseract não extraiu texto,
+      // mostrar resumo dos campos extraídos em vez de caixa vazia
+      if (ocrTxt) {
+        if (!text && fieldCount > 0) {
+          const summary = Object.entries(fields)
+            .map(([id, d]) => `${id}: ${d.value}`)
+            .join('\n');
+          ocrTxt.value = summary;
+        } else {
+          ocrTxt.value = text;
+        }
+      }
+      if (ocrConf) {
+        ocrConf.textContent = fieldCount > 0
+          ? `IA: ${displayConf}% confiança`
+          : `Confiança: ${conf}%`;
+        ocrConf.style.color = displayConf >= 70 ? '#16a34a'
+                            : displayConf >= 40 ? '#d97706'
+                            : '#dc2626';
+      }
+
       if (fieldCount > 0) {
         const formBody = document.getElementById('formBody');
         if (formBody) {
@@ -84,10 +115,13 @@ export class OCRController {
 
       if (ocrResultBox) ocrResultBox.style.display = 'block';
 
-      if (conf < 50) {
+      // Notificação correcta: basear no sucesso real da IA, não no Tesseract
+      if (fieldCount > 0) {
+        NotificationView.success(`✅ ${fieldCount} campo(s) preenchido(s) pela IA!`);
+      } else if (!text || conf < 30) {
+        NotificationView.warn('⚠️ Não foi possível extrair dados. Preencha manualmente.');
+      } else {
         NotificationView.warn('⚠️ Reconhecimento com baixa confiança. Revise o texto.');
-      } else if (fieldCount > 0) {
-        NotificationView.success(`✅ ${fieldCount} campo(s) preenchido(s) automaticamente!`);
       }
 
     } catch (err) {
