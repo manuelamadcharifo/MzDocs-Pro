@@ -499,11 +499,38 @@ async function affClick(req, res, supabase) {
   const ip     = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
   const ipHash = crypto.createHash('sha256').update(ip + refCode).digest('hex').slice(0, 16);
 
-  await supabase.rpc('register_affiliate_click', {
-    p_ref_code: refCode,
-    p_ip_hash:  ipHash,
-    p_page:     page,
-  }).catch(() => {});
+  // Verificar se este IP já clicou hoje (evitar duplicados)
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: existing } = await supabase
+    .from('affiliate_clicks')
+    .select('id')
+    .eq('ref_code', refCode)
+    .eq('ip_hash', ipHash)
+    .gte('created_at', today)
+    .maybeSingle()
+    .catch(() => ({ data: null }));
+
+  if (!existing) {
+    // Registar o clique
+    await supabase.from('affiliate_clicks').insert({
+      ref_code:   refCode,
+      ip_hash:    ipHash,
+      page:       page,
+      converted:  false,
+      created_at: new Date().toISOString(),
+    }).catch(() => {});
+
+    // Incrementar contador no perfil
+    await supabase.rpc('increment_aff_clicks', { p_ref_code: refCode })
+      .catch(async () => {
+        // Fallback: update directo se RPC não existir
+        await supabase
+          .from('profiles')
+          .update({ aff_clicks: supabase.sql`aff_clicks + 1` })
+          .eq('ref_code', refCode)
+          .catch(() => {});
+      });
+  }
 
   return res.status(200).json({ ok: true });
 }
