@@ -114,31 +114,17 @@ workbox.routing.registerRoute(
     })
 );
 
+// CORRIGIDO: usar NetworkOnly para generate-document.
+// BackgroundSyncPlugin foi removido intencionalmente:
+// — O crédito é debitado ANTES da chamada à IA pelo cliente.
+// — Um retry silencioso em background não mostra resultado ao utilizador
+//   mas consome o crédito uma segunda vez se o deduct-credit for chamado de novo,
+//   e deixa o utilizador sem feedback (sintoma: "debitou mas não gerou").
+// — Em caso de falha de rede, o DocumentController já trata com _queueOffline()
+//   via IndexedDB + sync manual, que SÍ notifica o utilizador.
 workbox.routing.registerRoute(
     /\/api\/generate-document/,
-    new workbox.strategies.NetworkFirst({
-        cacheName: `api-cache-${CACHE_VERSION}`,
-        networkTimeoutSeconds: 85,
-        plugins: [
-            new workbox.backgroundSync.BackgroundSyncPlugin('document-queue', {
-                maxRetentionTime: 24 * 60,
-                onSync: async ({ queue }) => {
-                    let entry;
-                    while ((entry = await queue.shiftRequest())) {
-                        try {
-                            const response = await fetch(entry.request.clone());
-                            if (!response.ok) {
-                                console.warn('[SW] Background sync: server returned', response.status, '— discarding');
-                            }
-                        } catch (error) {
-                            await queue.unshiftRequest(entry);
-                            throw error;
-                        }
-                    }
-                },
-            })
-        ]
-    })
+    new workbox.strategies.NetworkOnly()
 );
 
 // ── OFFLINE FALLBACK PARA NAVEGAÇÃO ────────────────────────────────────────
@@ -229,17 +215,17 @@ self.addEventListener('activate', event => {
             // 2. Tomar controlo imediato de todos os clientes
             self.clients.claim(),
         ]).then(() => {
-            // CORRIGIDO: após activar nova versão, recarregar todas as tabs abertas
-            // para evitar módulos JS misturados (versão nova + versão antiga na mesma sessão)
-            // que causam botões que param de responder e modais que não abrem.
+            // CORRIGIDO: notificar clientes com postMessage em vez de client.navigate().
+            // client.navigate() forçava reload imediato mesmo com modais abertos ou
+            // documento a ser gerado — causava botões que param de funcionar porque
+            // os event listeners ficavam presos numa instância antiga do controller.
+            // Com postMessage, o cliente decide quando é seguro recarregar
+            // (sem modal aberto e sem geração em curso) — ver listener em app.js.
             return self.clients.matchAll({ type: 'window' }).then(clientList => {
                 clientList.forEach(client => {
-                    if (client.url && 'navigate' in client) {
-                        // Recarregar suavemente — o utilizador mal nota (< 1s)
-                        client.navigate(client.url).catch(() => {
-                            // Alguns browsers não suportam navigate — ignorar silenciosamente
-                        });
-                    }
+                    try {
+                        client.postMessage({ type: 'SW_UPDATED', version: CACHE_VERSION });
+                    } catch (_) { /* ignorar se o cliente já não existe */ }
                 });
             });
         })
