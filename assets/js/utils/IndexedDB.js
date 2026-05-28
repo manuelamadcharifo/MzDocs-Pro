@@ -97,8 +97,12 @@ export class OfflineDB {
             const store = tx.objectStore('documents');
             const request = store.put({
                 ...doc,
-                synced: false,
-                created_at: new Date().toISOString()
+                // CORRIGIDO: preservar a data original do documento.
+                // Antes, sempre sobrescrevia created_at com a hora actual,
+                // o que fazia os documentos aparecer todos com a mesma data
+                // e podia causar problemas de ordenação no histórico.
+                synced: doc.synced ?? false,
+                created_at: doc.created_at || new Date().toISOString(),
             });
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
