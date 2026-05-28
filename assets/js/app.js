@@ -11,6 +11,28 @@ import { authUI } from './auth/AuthUI.js';
 import { authGuard } from './auth/AuthGuard.js';
 import { DocumentEditor } from './components/DocumentEditor.js';
 
+// ── CAPTURA LINK DE AFILIADO (?ref=CODIGO) ─────────────────────────────────
+(function () {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref && ref.length <= 20) {
+      sessionStorage.setItem('mz_ref', ref.trim().toUpperCase());
+      // Chamar API para registar o clique
+      fetch('/api/affiliate/click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ref_code: ref.trim().toUpperCase(), page: window.location.pathname }),
+      }).catch(() => {}); // silencioso — não bloquear o site
+      // Limpar o ?ref= da URL sem recarregar
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete('ref');
+      window.history.replaceState({}, '', clean.toString());
+    }
+  } catch (_) {}
+})();
+// ───────────────────────────────────────────────────────────────────────────
+
 async function bootstrap() {
   await authManager.ready();
 
