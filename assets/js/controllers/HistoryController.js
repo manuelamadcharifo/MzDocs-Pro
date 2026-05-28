@@ -139,7 +139,16 @@ export class HistoryController {
   // ── Carregar documentos (Supabase se online + autenticado, senão IndexedDB) ─
   async _loadDocuments() {
     const supabase = window.authManager?.supabase;
-    const userId   = window.authManager?.user?.id;
+
+    // CORRIGIDO: aguardar authManager estar pronto antes de ler o userId.
+    // Race condition: open() era chamado logo após o bootstrap e o user ainda
+    // não tinha sido resolvido — a query ao Supabase devolvia 0 resultados
+    // e o histórico aparecia vazio mesmo com documentos guardados na nuvem.
+    let userId = window.authManager?.user?.id;
+    if (!userId && window.authManager?.ready) {
+      try { await window.authManager.ready(); } catch (_) {}
+      userId = window.authManager?.user?.id;
+    }
 
     if (supabase && userId && navigator.onLine) {
       try {
