@@ -48,6 +48,7 @@ module.exports = async function handler(req, res) {
     case 'documents':       return handleDocuments(req, res);
     case 'pages':           return handleBlogPages(req, res);
     case 'generate-page':  return handleGeneratePage(req, res);
+    case 'affiliates':     return handleAffiliates(req, res);
     default:
       return res.status(404).json({ error: `Acção desconhecida: "${action}". Use: confirm-payment, confirm-avulso, fix-profiles, stats, transactions` });
   }
@@ -1094,4 +1095,58 @@ async function _generateStaticPage(page, SITE_URL) {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: `Gerar página: ${page.slug}`, content: Buffer.from(html).toString('base64'), sha }),
   });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// AFFILIATES — lista, aprovar, revogar
+// ═════════════════════════════════════════════════════════════════════════════
+async function handleAffiliates(req, res) {
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ error: 'Token em falta' });
+
+  try {
+    const supabase = await getAdminClient();
+    const auth = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    // GET — listar todos os afiliados (utilizadores com ref_code)
+    if (req.method === 'GET') {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, phone, ref_code, is_affiliate, aff_clicks, aff_conversions, aff_balance, aff_total_earned, created_at')
+        .not('ref_code', 'is', null)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return res.status(200).json({ affiliates: data || [] });
+    }
+
+    // POST — aprovar ou revogar
+    if (req.method === 'POST') {
+      const body    = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+      const { action, user_id } = body;
+
+      if (!user_id) return res.status(400).json({ error: 'user_id em falta' });
+      if (!['approve', 'revoke'].includes(action)) return res.status(400).json({ error: 'action inválida' });
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_affiliate: action === 'approve' })
+        .eq('id', user_id);
+
+      if (error) throw error;
+
+      return res.status(200).json({
+        success: true,
+        message: action === 'approve' ? 'Afiliado aprovado.' : 'Aprovação revogada.',
+      });
+    }
+
+    return res.status(405).json({ error: 'Método não permitido' });
+  } catch (err) {
+    console.error('[admin/affiliates]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
 }
