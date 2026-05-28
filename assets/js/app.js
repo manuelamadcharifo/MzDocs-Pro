@@ -114,6 +114,38 @@ async function bootstrap() {
     try {
       const registration = await navigator.serviceWorker.register('/sw.js');
       console.log('[MzDocs] SW registado ✅');
+
+      // CORRIGIDO: listener de actualização do SW.
+      // Quando o Service Worker activa uma nova versão, envia postMessage SW_UPDATED.
+      // Aqui decidimos quando é seguro recarregar: só se não houver modal aberto
+      // e não estiver a gerar um documento — evita congelar a app a meio de uma operação.
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type !== 'SW_UPDATED') return;
+        console.log('[MzDocs] SW actualizado para', event.data.version, '— a verificar se é seguro recarregar…');
+
+        const isSafe = () => {
+          const hasOpenModal  = !!document.querySelector('.open[id]');
+          const isGenerating  = !!window.docController?._generating;
+          return !hasOpenModal && !isGenerating;
+        };
+
+        if (isSafe()) {
+          console.log('[MzDocs] Seguro — a recarregar agora.');
+          location.reload();
+        } else {
+          // Aguardar até não haver modal aberto nem geração em curso
+          console.log('[MzDocs] Modal/geração em curso — aguardar para recarregar…');
+          const check = setInterval(() => {
+            if (isSafe()) {
+              clearInterval(check);
+              console.log('[MzDocs] Livre — a recarregar agora.');
+              location.reload();
+            }
+          }, 1500);
+          // Segurança: recarregar no máximo após 5 min mesmo que algo fique preso
+          setTimeout(() => { clearInterval(check); location.reload(); }, 5 * 60 * 1000);
+        }
+      });
       authManager.onChange(user => {
         if (user && !user.is_anonymous) {
           _setupPushNotifications(registration).catch(() => {});
