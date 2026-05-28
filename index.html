@@ -497,7 +497,7 @@
 (function() {
   try {
     const ref = new URLSearchParams(window.location.search).get('ref');
-    if (ref && /^[A-Z0-9]{6,12}$/.test(ref)) {
+    if (ref && /^MZ-[A-Z0-9]{6}$/.test(ref)) {
       // Guardar ref no localStorage para associar a conversões futuras
       localStorage.setItem('mz_ref', ref);
       localStorage.setItem('mz_ref_ts', Date.now());
