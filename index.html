@@ -497,7 +497,7 @@
 (function() {
   try {
     const ref = new URLSearchParams(window.location.search).get('ref');
-    if (ref && /^MZ-[A-Z0-9]{6}$/.test(ref)) {
+    if (ref && /^[A-Z0-9]{6,12}$/.test(ref)) {
       // Guardar ref no localStorage para associar a conversões futuras
       localStorage.setItem('mz_ref', ref);
       localStorage.setItem('mz_ref_ts', Date.now());
@@ -625,11 +625,13 @@
   const submitBtn = document.getElementById('feedbackSubmit');
   const sessionId = Math.random().toString(36).slice(2);
 
-  // ── Capturar link de afiliado (?ref=MZ-XXXXXX) ──────────────────────────
+  // ── Capturar link de afiliado (?ref=CÓDIGO) ─────────────────────────────
   (function() {
     var params  = new URLSearchParams(window.location.search);
     var refCode = params.get('ref');
-    if (!refCode || !/^MZ-[A-Z0-9]{6}$/.test(refCode)) return;
+    // Aceitar qualquer código alfanumérico (com ou sem hífen), 4-20 chars
+    if (!refCode || !/^[A-Z0-9][A-Z0-9\-]{3,19}$/i.test(refCode)) return;
+    refCode = refCode.toUpperCase();
 
     // Guardar em sessionStorage para associar ao registo
     sessionStorage.setItem('mz_ref', refCode);
