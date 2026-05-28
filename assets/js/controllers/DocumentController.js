@@ -190,7 +190,14 @@ export class DocumentController {
  this._longRunning = false;
  }
  }
- closeResult() { ModalView.close('resultOverlay'); this._removeExportMenu(); }
+ closeResult() {
+    ModalView.close('resultOverlay');
+    this._removeExportMenu();
+    // CORRIGIDO: limpar o CSS do template activo ao fechar o resultado,
+    // para que ao gerar um novo documento o preview comece sempre sem template aplicado.
+    if (window.DocumentView) window.DocumentView._activeTemplateCss = null;
+    this._activeTemplate = null;
+  }
 
  async generate() {
  // CORRIGIDO: protecção anti-duplo-clique
@@ -290,28 +297,26 @@ export class DocumentController {
  });
  } catch (_) { }
 
- // CORRIGIDO: renderizar o resultado ANTES de fechar o formulário.
- // Antes: close(form) → renderResult → delay → open(result).
- // O problema: close(form) disparava eventos DOM que podiam dessincronizar
- // o _openCount do ModalView, fazendo open(result) não funcionar —
- // o utilizador via o formulário fechar e nada aparecer (mas o doc ficava no histórico).
- // Nova sequência segura: renderResult → delay → close(form) + open(result) juntos.
+ ModalView.close('formOverlay');
  DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
 
- // Aguardar DOM estabilizar após renderização
- await new Promise(resolve => setTimeout(resolve, 120));
+ // CORRIGIDO: aguardar o DOM estabilizar antes de abrir o modal de resultado.
+ // Sem este delay, quando o Service Worker está a actualizar módulos em background,
+ // o ModalView.open() era chamado numa instância do controller que já não controlava
+ // o DOM — o modal não abria, o utilizador via o formulário fechar e nada aparecer,
+ // mas o documento ficava gravado no histórico (sintoma exacto reportado).
+ await new Promise(resolve => setTimeout(resolve, 80));
 
- // Verificar se não foi abortado durante o delay
+ // Verificar novamente se não foi abortado durante o delay
  if (signal.aborted) return;
 
- // Garantia: confirmar que o overlay existe no DOM antes de abrir
+ // Garantia extra: confirmar que o overlay existe no DOM antes de abrir
  const resultOverlay = document.getElementById('resultOverlay');
  if (!resultOverlay) {
+   // DOM pode estar em transição — aguardar um frame de animação
    await new Promise(resolve => requestAnimationFrame(resolve));
  }
 
- // Trocar modais atomicamente: fechar formulário e abrir resultado na mesma frame
- ModalView.close('formOverlay');
  ModalView.open('resultOverlay');
  this._bindEditBtn();
  NotificationView.success('✅ Documento gerado!');
@@ -457,21 +462,20 @@ export class DocumentController {
  });
  } catch (_) { }
 
- // CORRIGIDO: mesmo padrão seguro do _generateNormal — renderizar antes de trocar modais.
+ ModalView.close('formOverlay');
  DocumentView.renderResult(
  result.document, svc, this.creditModel.value,
  `⛓️ Cadeia ${result.sections} secções · multi-provider`
  );
 
- // Aguardar DOM estabilizar após renderização
- await new Promise(resolve => setTimeout(resolve, 120));
+ // CORRIGIDO: mesmo delay aplicado para documentos longos
+ await new Promise(resolve => setTimeout(resolve, 80));
 
  const resultOverlayLong = document.getElementById('resultOverlay');
  if (!resultOverlayLong) {
    await new Promise(resolve => requestAnimationFrame(resolve));
  }
 
- ModalView.close('formOverlay');
  ModalView.open('resultOverlay');
  this._bindEditBtn();
  NotificationView.success(`✅ Documento longo gerado! (${result.sections} secções)`);
@@ -586,9 +590,12 @@ export class DocumentController {
         const content = documentState.currentContent;
         const svc     = SERVICES[this.docModel.service];
         if (content && svc) {
+            // CORRIGIDO: passar tpl.css para renderResult para que o preview
+            // reflicta imediatamente o modelo escolhido (antes, o preview ficava
+            // com o estilo padrão mesmo após "Usar este Modelo").
             DocumentView.renderResult(content, svc, this.creditModel.value, this.docModel.model, tpl.css);
         }
-        NotificationView.success(`✅ Modelo "${tpl.name}" aplicado!`);
+        NotificationView.success(`✅ Modelo "${tpl.name}" aplicado! O preview foi actualizado.`);
     }
 
     _downloadWithTemplate(tpl, format) {
