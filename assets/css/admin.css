@@ -334,9 +334,9 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
   border-radius: var(--radius);
   border: 1px solid var(--border);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   box-shadow: var(--shadow);
-  /* hidden on mobile, replaced by cards */
-  display: none;
+  display: block; /* visível em todos os tamanhos — scroll horizontal no mobile */
 }
 .admin-table { width: 100%; border-collapse: collapse; min-width: 600px; }
 .admin-table th {
@@ -582,7 +582,6 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
   .stat-label { font-size: .68rem; }
   .chart-card { padding: .75rem; overflow: hidden; }
   .chart-title { font-size: .82rem; margin-bottom: .5rem; }
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .admin-section { padding: .875rem .75rem; }
   #topServicesList div { font-size: .76rem !important; }
   #feedbackList div { font-size: .76rem !important; }
@@ -590,6 +589,22 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
   .section-toolbar { gap: .375rem; }
   .filter-select { font-size: .8rem; padding: .35rem .5rem; }
   .search-input { font-size: .8rem; }
+
+  /* Tabelas no mobile: scroll horizontal + texto compacto */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 8px;
+  }
+  .admin-table { min-width: 520px; font-size: .72rem; }
+  .admin-table th { padding: .5rem .6rem; font-size: .68rem; }
+  .admin-table td { padding: .5rem .6rem; }
+  .btn-success, .btn-danger, .btn-ghost {
+    padding: 4px 8px;
+    font-size: .7rem;
+  }
+  .status-badge { font-size: .65rem; padding: 2px 6px; }
+  .credit-badge { font-size: .65rem; padding: 2px 6px; }
 }
 
 /* ── Online dot pulse ────────────────────────────────────────── */
