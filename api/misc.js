@@ -492,65 +492,32 @@ async function affDashboard(req, res, supabase) {
 async function affClick(req, res, supabase) {
   if (req.method !== 'POST') return res.status(405).end();
   const body    = parseBody(req);
-  const refCode = body.ref_code;
+  const refCode = (body.ref_code || '').trim().toUpperCase();
   const page    = (body.page || '/').slice(0, 200);
   if (!refCode) return res.status(400).json({ error: 'ref_code em falta' });
-
-  // Resolver o affiliate_id a partir do ref_code
-  // (a tabela affiliate_clicks usa affiliate_id UUID, não ref_code TEXT)
-  const { data: affProfile } = await supabase
-    .from('profiles')
-    .select('id, is_affiliate, aff_clicks')
-    .eq('ref_code', refCode)
-    .maybeSingle()
-    .catch(() => ({ data: null }));
-
-  // Link inválido ou afiliado não aprovado — responder ok para não expor info
-  if (!affProfile) return res.status(200).json({ ok: true });
-
-  const affiliateId = affProfile.id;
 
   const ip     = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
   const ipHash = crypto.createHash('sha256').update(ip + refCode).digest('hex').slice(0, 16);
 
-  // Verificar se este IP já clicou hoje (evitar duplicados)
-  const today = new Date().toISOString().slice(0, 10);
-  const { data: existing } = await supabase
-    .from('affiliate_clicks')
-    .select('id')
-    .eq('affiliate_id', affiliateId)   // ← coluna correcta (UUID)
-    .eq('ip_hash', ipHash)
-    .gte('created_at', today)
-    .maybeSingle()
-    .catch(() => ({ data: null }));
-
-  if (!existing) {
-    // Registar o clique com affiliate_id (UUID) conforme schema da tabela
-    const { error: insertErr } = await supabase.from('affiliate_clicks').insert({
-      affiliate_id: affiliateId,        // ← coluna correcta
-      ip_hash:      ipHash,
-      page:         page,
-      converted:    false,
-      created_at:   new Date().toISOString(),
+  // Usar a RPC register_affiliate_click (SECURITY DEFINER) que:
+  //  1. Resolve affiliate_id a partir do ref_code
+  //  2. Valida que is_affiliate = TRUE
+  //  3. Deduplica (mesmo IP nas últimas 24h)
+  //  4. Insere em affiliate_clicks com affiliate_id correcto
+  //  5. Incrementa aff_clicks no profiles
+  // Tudo num único statement SQL — sem problemas de RLS nem de schema
+  const { data: clickId, error } = await supabase
+    .rpc('register_affiliate_click', {
+      p_ref_code: refCode,
+      p_ip_hash:  ipHash,
+      p_page:     page,
     });
 
-    if (insertErr) {
-      console.error('[affClick] insert error:', insertErr.message);
-    }
-
-    // Incrementar contador aff_clicks no perfil do afiliado
-    const { error: rpcErr } = await supabase
-      .rpc('increment_aff_clicks', { p_ref_code: refCode });
-
-    if (rpcErr) {
-      // Fallback: UPDATE directo se a RPC ainda não existir na BD
-      console.warn('[affClick] RPC increment_aff_clicks falhou, usando UPDATE directo:', rpcErr.message);
-      await supabase
-        .from('profiles')
-        .update({ aff_clicks: (affProfile.aff_clicks || 0) + 1 })
-        .eq('id', affiliateId)
-        .catch(e => console.error('[affClick] fallback UPDATE error:', e.message));
-    }
+  if (error) {
+    console.error('[affClick] register_affiliate_click error:', error.message, '| ref_code:', refCode);
+    // Não falhar o cliente — o clique pode já estar registado (dedup) ou o ref ser inválido
+  } else {
+    console.log('[affClick] click registado:', clickId || 'duplicado/inválido', '| ref:', refCode);
   }
 
   return res.status(200).json({ ok: true });
