@@ -185,15 +185,19 @@ export const DocumentView = {
     if (btn) { btn.style.display = ''; btn.disabled = false; }
   },
 
-  renderResult(content, svc, credits, model) {
+  renderResult(content, svc, credits, model, templateCss = null) {
     document.getElementById('resModel').textContent = model || 'openrouter';
+    // CORRIGIDO: guardar templateCss activo para usar no _renderResultFrame
+    this._activeTemplateCss = templateCss || null;
+
+    // CORRIGIDO: "null créditos restantes" — credits pode ser null quando vem do histórico
+    const creditsLabel = (credits != null && credits !== '') ? `⚡ ${credits} créditos restantes &nbsp;|&nbsp; ` : '';
     document.getElementById('resMeta').innerHTML =
-      `📄 ${svc.title} &nbsp;|&nbsp; ⚡ ${credits} créditos restantes &nbsp;|&nbsp; 🕐 ${new Date().toLocaleTimeString('pt')}`;
+      `📄 ${svc.title} &nbsp;|&nbsp; ${creditsLabel}🕐 ${new Date().toLocaleTimeString('pt')}`;
 
     const previewContainer = document.getElementById('resPreview');
     if (!previewContainer) return;
 
-    // Preview em iframe com estilos A4 reais
     const words = content.trim().split(/\s+/).length;
     const pages = Math.max(1, Math.ceil(content.length / 2800));
 
@@ -211,10 +215,8 @@ export const DocumentView = {
       </div>
     `;
 
-    // Renderiza preview inicial (PDF)
     this._renderResultFrame('pdf', content);
 
-    // Bind tabs
     previewContainer.querySelectorAll('.res-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         previewContainer.querySelectorAll('.res-tab').forEach(b => b.classList.remove('active'));
@@ -232,7 +234,12 @@ export const DocumentView = {
 
     let css = '';
     if (format === 'pdf') {
-      css = `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:18mm 18mm 14mm;}
+      // CORRIGIDO: usar CSS do template activo se existir, senão usar padrão MzDocs.
+      // Isto faz o preview reflectir imediatamente o modelo escolhido pelo utilizador.
+      if (this._activeTemplateCss) {
+        css = this._activeTemplateCss;
+      } else {
+        css = `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:18mm 18mm 14mm;}
         h1{font-size:17pt;text-align:center;margin-bottom:14pt;font-weight:bold;}
         h2{font-size:13pt;font-weight:bold;margin-top:12pt;margin-bottom:6pt;border-bottom:1px solid #bbb;padding-bottom:2pt;}
         h3{font-size:12pt;font-weight:bold;margin-top:8pt;}
@@ -243,6 +250,7 @@ export const DocumentView = {
         th{background:#f0f0f0;font-weight:bold;}
         strong{font-weight:bold;}em{font-style:italic;}hr{border:none;border-top:1px solid #888;margin:10pt 0;}
         div[style*="page-break"]{margin:16pt 0;}`;
+      }
     } else if (format === 'word') {
       css = `body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.15;color:#000;padding:18mm;}
         h1{font-size:16pt;color:#2E74B5;margin-bottom:12pt;}
