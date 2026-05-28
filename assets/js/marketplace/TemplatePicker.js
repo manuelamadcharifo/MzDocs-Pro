@@ -146,6 +146,25 @@ const PICKER_CSS = `
   letter-spacing:.5px;text-align:center;flex-shrink:0;
 }
 
+/* ── Zona de upload de modelo próprio ── */
+.tpl-upload-zone{
+  flex-shrink:0;margin:0 12px 0;
+  border:2px dashed #cbd5e1;border-radius:12px;
+  background:#f8fafc;padding:10px 14px;
+  display:flex;align-items:center;gap:10px;
+  cursor:pointer;transition:border-color .15s,background .15s;
+}
+.tpl-upload-zone:hover,.tpl-upload-zone.drag{border-color:#3B82F6;background:#eff6ff}
+.tpl-upload-zone.active{border-color:#10b981;background:#f0fdf4;border-style:solid}
+.tpl-upload-icon{font-size:22px;flex-shrink:0}
+.tpl-upload-text{flex:1;min-width:0}
+.tpl-upload-title{font-size:12px;font-weight:700;color:#334155}
+.tpl-upload-sub{font-size:10px;color:#64748b;margin-top:1px}
+.tpl-upload-badge{font-size:10px;font-weight:700;color:#10b981;background:#d1fae5;
+  padding:2px 8px;border-radius:20px;flex-shrink:0;display:none}
+.tpl-upload-zone.active .tpl-upload-badge{display:block}
+.tpl-upload-zone.active .tpl-upload-sub{color:#059669}
+
 /* ── Footer com botões ── */
 .tpl-footer{
   flex-shrink:0;padding:10px 12px;
@@ -186,15 +205,19 @@ const PICKER_CSS = `
 // ── Classe principal ──────────────────────────────────────────────────────────
 export class TemplatePicker {
   constructor() {
-    this._key          = null;
-    this._tpl          = null;
-    this._content      = '';
-    this._svc          = null;
-    this._onApply      = null;
-    this._onPDF        = null;
-    this._onWord       = null;
-    this._injected     = false;
+    this._key           = null;
+    this._tpl           = null;
+    this._content       = '';
+    this._svc           = null;
+    this._onApply       = null;
+    this._onPDF         = null;
+    this._onWord        = null;
+    this._injected      = false;
     this._resizeHandler = null;
+    // Modelo próprio carregado pelo utilizador
+    this._customFile    = null;   // File object
+    this._customName    = null;   // nome do ficheiro
+    this._customActive  = false;  // flag: usar modelo próprio em vez dos pré-definidos
   }
 
   open({ serviceKey, content, svc, onApply, onDownloadPDF, onDownloadWord }) {
@@ -222,6 +245,10 @@ export class TemplatePicker {
       window.removeEventListener('resize', this._resizeHandler);
       this._resizeHandler = null;
     }
+    // Limpar estado de upload para próxima abertura
+    this._customFile   = null;
+    this._customName   = null;
+    this._customActive = false;
   }
 
   // ── Injectar HTML + CSS (uma vez) ────────────────────────────────────────
@@ -249,6 +276,18 @@ export class TemplatePicker {
           <div class="tpl-list" id="tplList"></div>
         </div>
         <div class="tpl-sel-bar" id="tplSelBar">Seleccione um modelo acima</div>
+
+        <!-- Zona de upload de modelo próprio -->
+        <div class="tpl-upload-zone" id="tplUploadZone" title="Carregar modelo próprio (imagem, PDF ou Word)">
+          <div class="tpl-upload-icon">📎</div>
+          <div class="tpl-upload-text">
+            <div class="tpl-upload-title">Usar modelo próprio</div>
+            <div class="tpl-upload-sub" id="tplUploadSub">Toque para carregar imagem, PDF ou Word com o seu layout</div>
+          </div>
+          <div class="tpl-upload-badge" id="tplUploadBadge">✅ Activo</div>
+          <input type="file" id="tplUploadInput" accept="image/*,.pdf,.doc,.docx" style="display:none">
+        </div>
+
         <div class="tpl-preview-outer" id="tplPreviewOuter">
           <div class="tpl-loading"><div class="tpl-spinner"></div>A carregar…</div>
         </div>
@@ -265,6 +304,30 @@ export class TemplatePicker {
     document.getElementById('tplBtnApply')?.addEventListener('click', () => this._apply());
     document.getElementById('tplBtnPDF')?.addEventListener('click',   () => this._onPDF?.(this._tpl));
     document.getElementById('tplBtnWord')?.addEventListener('click',  () => this._onWord?.(this._tpl));
+
+    // ── Upload de modelo próprio ──────────────────────────────────────────
+    const uploadZone  = document.getElementById('tplUploadZone');
+    const uploadInput = document.getElementById('tplUploadInput');
+
+    uploadZone?.addEventListener('click', e => {
+      if (e.target !== uploadInput) uploadInput?.click();
+    });
+
+    // Drag-and-drop
+    uploadZone?.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+    uploadZone?.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+    uploadZone?.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag');
+      const file = e.dataTransfer?.files?.[0];
+      if (file) this._handleUpload(file);
+    });
+
+    uploadInput?.addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (file) this._handleUpload(file);
+      e.target.value = '';
+    });
   }
 
   // ── Renderizar lista de templates ─────────────────────────────────────────
@@ -411,9 +474,69 @@ ${tpl.css}
 
   // ── Aplicar template e fechar ────────────────────────────────────────────
   _apply() {
+    // CORRIGIDO: se o utilizador carregou um modelo próprio, aplicá-lo
+    // mesmo que nenhum template pré-definido esteja seleccionado.
+    if (this._customActive) {
+      // O TemplateController já tem o ficheiro carregado e activo.
+      // Apenas fechar o picker — a próxima geração usará o modelo próprio.
+      _notify('✅ Modelo próprio activado! Feche e gere o documento.');
+      this.close();
+      return;
+    }
     if (!this._tpl) { _notify('Seleccione um modelo primeiro.'); return; }
     this._onApply?.(this._tpl);
     this.close();
+  }
+
+  // ── Upload de modelo próprio ─────────────────────────────────────────────
+  async _handleUpload(file) {
+    const MAX = 10 * 1024 * 1024;
+    if (file.size > MAX) { _notify('Ficheiro muito grande (máx. 10MB)'); return; }
+
+    const mime = file.type.toLowerCase();
+    const name = file.name.toLowerCase();
+    const isPdf  = mime === 'application/pdf' || name.endsWith('.pdf');
+    const isWord = mime.includes('wordprocessingml') || mime === 'application/msword'
+                   || name.endsWith('.docx') || name.endsWith('.doc');
+    const isImg  = mime.startsWith('image/');
+
+    if (!isPdf && !isWord && !isImg) {
+      _notify('Formato não suportado. Use imagem, PDF ou Word.');
+      return;
+    }
+
+    // Mostrar estado de carregamento
+    const sub   = document.getElementById('tplUploadSub');
+    const badge = document.getElementById('tplUploadBadge');
+    const zone  = document.getElementById('tplUploadZone');
+    if (sub) sub.textContent = '⏳ A processar…';
+
+    try {
+      // Passar o ficheiro para o TemplateController existente (reutiliza a lógica de extracção)
+      const templateCtrl = window.docController?.templateCtrl;
+      if (templateCtrl) {
+        // Simular o evento de change do input do TemplateController
+        await templateCtrl._handleFile({ target: { files: [file], value: '' } });
+      }
+
+      this._customFile   = file;
+      this._customName   = file.name;
+      this._customActive = true;
+
+      if (zone)  zone.classList.add('active');
+      if (badge) badge.style.display = 'block';
+      if (sub)   sub.textContent = `✅ ${file.name} — A IA usará o seu layout ao gerar`;
+
+      // Desseleccionar templates pré-definidos (modelo próprio tem prioridade)
+      document.querySelectorAll('.tpl-card').forEach(c => c.classList.remove('selected'));
+      const selBar = document.getElementById('tplSelBar');
+      if (selBar) selBar.textContent = `📎 Modelo próprio: ${file.name}`;
+
+      _notify(`✅ Modelo próprio carregado: ${file.name}`);
+    } catch (err) {
+      if (sub) sub.textContent = 'Toque para carregar imagem, PDF ou Word com o seu layout';
+      _notify('Erro ao processar: ' + err.message);
+    }
   }
 
   // ── Markdown + PAGE_BREAK → HTML de uma única página ────────────────────
