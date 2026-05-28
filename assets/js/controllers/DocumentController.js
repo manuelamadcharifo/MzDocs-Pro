@@ -41,9 +41,12 @@ export class DocumentController {
  this.longEngine = new LongDocumentEngine();
  this.templateCtrl = new TemplateController(this.docModel, this.openRouter);
  this._genIv    = null;
- this._abortCtrl = null; // AbortController activo — cancelado se gerar novo documento
+ this._abortCtrl = null;
  this._menuOutside = null;
  this._longRunning = false;
+ // CORRIGIDO: flag anti-duplo-clique — impede múltiplas gerações simultâneas
+ // que causavam o modal de resultado não abrir e créditos debitados sem mostrar documento
+ this._generating = false;
 
  if (!window.documentEditor) {
  window.documentEditor = new DocumentEditor();
@@ -180,6 +183,8 @@ export class DocumentController {
  DocumentView.hideLoader(this._genIv);
  this.docModel.reset();
  this.templateCtrl.reset();
+ // Resetar flag de geração ao fechar o formulário
+ this._generating = false;
  if (this._longRunning) {
  this.longEngine.abort();
  this._longRunning = false;
@@ -188,6 +193,15 @@ export class DocumentController {
  closeResult() { ModalView.close('resultOverlay'); this._removeExportMenu(); }
 
  async generate() {
+ // CORRIGIDO: protecção anti-duplo-clique
+ // O utilizador às vezes clicava várias vezes quando a geração demorava,
+ // causando múltiplas chamadas à API, múltiplas deduções de crédito,
+ // e race conditions onde o modal voltava ao estado inicial.
+ if (this._generating) {
+   console.log('[DocumentController] generate() ignorado — já em curso');
+   return;
+ }
+
  const key = this.docModel.service;
  const svc = SERVICES[key];
  if (!svc) return;
@@ -226,6 +240,9 @@ export class DocumentController {
  this._abortCtrl = new AbortController();
  const { signal } = this._abortCtrl;
 
+ // CORRIGIDO: activar flag de geração
+ this._generating = true;
+
  const timeout = new Promise((_, reject) =>
    setTimeout(() => reject(new Error('A geração demorou demasiado. Verifique a sua ligação e tente novamente.')), 90000)
  );
@@ -239,7 +256,7 @@ export class DocumentController {
  new Promise((_, reject) => { signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }); }),
  ]);
 
- if (signal.aborted) return; // geração cancelada — não renderizar
+ if (signal.aborted) return;
 
  DocumentView.hideLoader(this._genIv);
 
@@ -275,6 +292,24 @@ export class DocumentController {
 
  ModalView.close('formOverlay');
  DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
+
+ // CORRIGIDO: aguardar o DOM estabilizar antes de abrir o modal de resultado.
+ // Sem este delay, quando o Service Worker está a actualizar módulos em background,
+ // o ModalView.open() era chamado numa instância do controller que já não controlava
+ // o DOM — o modal não abria, o utilizador via o formulário fechar e nada aparecer,
+ // mas o documento ficava gravado no histórico (sintoma exacto reportado).
+ await new Promise(resolve => setTimeout(resolve, 80));
+
+ // Verificar novamente se não foi abortado durante o delay
+ if (signal.aborted) return;
+
+ // Garantia extra: confirmar que o overlay existe no DOM antes de abrir
+ const resultOverlay = document.getElementById('resultOverlay');
+ if (!resultOverlay) {
+   // DOM pode estar em transição — aguardar um frame de animação
+   await new Promise(resolve => requestAnimationFrame(resolve));
+ }
+
  ModalView.open('resultOverlay');
  this._bindEditBtn();
  NotificationView.success('✅ Documento gerado!');
@@ -282,7 +317,7 @@ export class DocumentController {
  // Feedback widget — aparece 4s após para não interromper a leitura do documento
  setTimeout(() => {
    if (typeof window.showFeedbackWidget === 'function') {
-     window.showFeedbackWidget(this.docModel.service); // chave ex: 'trabalho', 'cv'
+     window.showFeedbackWidget(this.docModel.service);
    }
  }, 4000);
 
@@ -297,7 +332,6 @@ export class DocumentController {
 
  const msg = err.message || '';
 
- // Cancelamento intencional — não mostrar erro
  if (msg === 'cancelled') return;
 
  if (!navigator.onLine || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
@@ -319,7 +353,8 @@ export class DocumentController {
  NotificationView.error('❌ ' + (msg || 'Erro ao gerar. Tente novamente.'));
  }
  } finally {
- // Garantia absoluta: botão sempre libertado, independente do caminho de erro
+ // CORRIGIDO: garantia absoluta de que a flag e o botão são sempre libertados
+ this._generating = false;
  if (btn) { btn.disabled = false; btn.style.opacity = ''; }
  this._genIv = null;
  }
@@ -356,6 +391,8 @@ export class DocumentController {
 
  async _generateLong(key, svc, data, cost, btn) {
  this._longRunning = true;
+ // CORRIGIDO: activar flag de geração também para documentos longos
+ this._generating = true;
 
  const estSecs = key === 'planonegocio' ? 8 : Math.max(3, Math.round((parseInt(data.paginas || 10) - 3) / 1.5));
  const STEPS = [
@@ -385,6 +422,7 @@ export class DocumentController {
 
  if (!result) {
  this._longRunning = false;
+ this._generating = false;
  DocumentView.hideLoader(this._genIv);
  NotificationView.info('ℹ️ A usar geração normal…');
  if (btn) btn.disabled = false;
@@ -422,11 +460,19 @@ export class DocumentController {
  result.document, svc, this.creditModel.value,
  `⛓️ Cadeia ${result.sections} secções · multi-provider`
  );
+
+ // CORRIGIDO: mesmo delay aplicado para documentos longos
+ await new Promise(resolve => setTimeout(resolve, 80));
+
+ const resultOverlayLong = document.getElementById('resultOverlay');
+ if (!resultOverlayLong) {
+   await new Promise(resolve => requestAnimationFrame(resolve));
+ }
+
  ModalView.open('resultOverlay');
  this._bindEditBtn();
  NotificationView.success(`✅ Documento longo gerado! (${result.sections} secções)`);
 
- // Aviso de último crédito — 2s após para o utilizador ver o documento primeiro
  const remainingAfterLong = this.creditModel.value;
  if (remainingAfterLong === 0) {
  const accountTypeLong = window.authManager?.profile?.account_type || 'normal';
@@ -436,7 +482,6 @@ export class DocumentController {
  } catch (err) {
  DocumentView.hideLoader(this._genIv);
  this._longRunning = false;
- if (btn) btn.disabled = false;
 
  if (err.message === 'Abortado pelo utilizador') {
  NotificationView.warn('⚠️ Geração cancelada.');
@@ -445,6 +490,8 @@ export class DocumentController {
 
  console.warn('[DocController] Cadeia falhou, a tentar geração normal:', err.message);
  NotificationView.warn('⚠️ Modo cadeia falhou — a tentar geração normal…');
+ // Resetar flag antes de tentar geração normal para não bloquear
+ this._generating = false;
  try {
  await this._generateNormal(key, svc, data, cost, btn);
  } catch (e2) {
@@ -454,6 +501,10 @@ export class DocumentController {
  NotificationView.error('❌ ' + (e2.message || 'Erro ao gerar.'));
  }
  }
+ } finally {
+ // CORRIGIDO: garantir que a flag é sempre libertada
+ this._generating = false;
+ if (btn) { btn.disabled = false; }
  }
  }
 
@@ -645,7 +696,6 @@ export class DocumentController {
   _bindEditBtn() {
     const btn = document.getElementById('btnEdit');
     if (!btn) return;
-    // Guard: if already bound, skip — prevents duplicate listeners from multiple calls
     if (btn.dataset.bound === '1') return;
     btn.dataset.bound = '1';
     btn.addEventListener('click', (e) => {
@@ -667,7 +717,6 @@ export class DocumentController {
  window.documentEditor = new DocumentEditor();
  }
 
-    // Validate content before passing to editor (Bug 3: remove rAF+setTimeout race)
     const editorContent = (content && typeof content === 'string' && content.trim().length > 0)
       ? content
       : documentState.get();
