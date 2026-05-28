@@ -24,13 +24,14 @@ module.exports = async function handler(req, res) {
   try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
   catch { return res.status(400).json({ error: 'Body JSON inválido' }); }
 
-  const packageId    = body.packageId;
-  const rawPhone     = body.phone || body.phoneNumber || '';
-  const mode         = body.mode || 'manual';
-  const userId       = body.userId || null;
-  const provider     = body.provider || 'mpesa';
+  const packageId = body.packageId;
+  const rawPhone  = body.phone || body.phoneNumber || '';
+  const mode      = body.mode || 'manual';
+  // userId pode ser UUID real (utilizador autenticado) ou string anon — guardamos o que vier,
+  // mas só associamos à transação se parecer um UUID válido do Supabase
+  const rawUserId = body.userId || null;
 
-  console.log('[process-payment] Recebido:', { packageId, rawPhone, mode, userId });
+  console.log('[process-payment] Recebido:', { packageId, rawPhone, mode, rawUserId });
 
   if (!rawPhone) {
     return res.status(400).json({ error: 'Número de telemóvel é obrigatório (campo: phone ou phoneNumber)' });
@@ -39,21 +40,31 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'Pacote inválido', available: Object.keys(PACKAGES) });
   }
 
-  const pkg            = PACKAGES[packageId];
-  const cleanPhone     = rawPhone.replace(/\D/g, '');
+  const pkg             = PACKAGES[packageId];
+  const cleanPhone      = rawPhone.replace(/\D/g, '');
   const normalizedPhone = cleanPhone.startsWith('258') ? `+${cleanPhone}` : `+258${cleanPhone}`;
+
+  // Determinar userId real: só aceitar UUIDs reais (formato xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const userId = rawUserId && UUID_REGEX.test(rawUserId) ? rawUserId : null;
 
   // ── Modo manual (WhatsApp) ────────────────────────────────────────────────
   if (mode === 'manual') {
     const referenceId = `MZ-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
 
-    // Guardar pedido na tabela transactions (lida pelo AdminTransactions.js)
-    try {
-      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-        await supabase.from('transactions').insert({
+    // ── CORRIGIDO: usar SUPABASE_SERVICE_ROLE_KEY (nome correcto da env var) ──
+    const supabaseUrl     = process.env.SUPABASE_URL;
+    const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // era SUPABASE_SERVICE_KEY — ERRADO
+
+    if (supabaseUrl && supabaseRoleKey) {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseRoleKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+
+        const { error: insertErr } = await supabase.from('transactions').insert({
           reference_id:   referenceId,
-          user_id:        userId || null,
+          user_id:        userId,          // null se anónimo — válido, coluna aceita NULL
           package_id:     packageId,
           credits:        pkg.credits,
           amount:         pkg.price,
@@ -61,9 +72,21 @@ module.exports = async function handler(req, res) {
           payment_method: 'manual',
           phone_number:   normalizedPhone,
         });
+
+        if (insertErr) {
+          // Logar o erro real para debug no Vercel — não falhar silenciosamente
+          console.error('[process-payment] ERRO ao gravar transação:', insertErr.message, insertErr.code);
+        } else {
+          console.log('[process-payment] Transação gravada:', referenceId, '| user_id:', userId || 'anónimo');
+        }
+      } catch (dbErr) {
+        console.error('[process-payment] Excepção Supabase:', dbErr.message);
       }
-    } catch (dbErr) {
-      console.warn('[process-payment] Supabase insert falhou (não crítico):', dbErr.message);
+    } else {
+      console.warn('[process-payment] Supabase não configurado — transação NÃO gravada. Vars em falta:',
+        !supabaseUrl ? 'SUPABASE_URL ' : '',
+        !supabaseRoleKey ? 'SUPABASE_SERVICE_ROLE_KEY' : ''
+      );
     }
 
     const waMessage = encodeURIComponent(
