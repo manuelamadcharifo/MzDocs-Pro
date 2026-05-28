@@ -1603,7 +1603,7 @@ USING (EXISTS (
     // AFILIADOS
     // ══════════════════════════════════════════════════════════════════════════
     async _loadAffiliates() {
-        const token   = await this._getToken();
+        const token   = await this._getAdminToken();
         const loading = document.getElementById('affLoading');
         const table   = document.getElementById('affTable');
         if (loading) loading.style.display = 'block';
@@ -1676,7 +1676,7 @@ USING (EXISTS (
 
     async _approveAffiliate(userId) {
         if (!confirm('Aprovar este afiliado?')) return;
-        const token = await this._getToken();
+        const token = await this._getAdminToken();
         const res   = await fetch('/api/admin/affiliates', {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -1690,7 +1690,7 @@ USING (EXISTS (
 
     async _revokeAffiliate(userId) {
         if (!confirm('Revogar aprovação?')) return;
-        const token = await this._getToken();
+        const token = await this._getAdminToken();
         const res   = await fetch('/api/admin/affiliates', {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -1735,9 +1735,7 @@ USING (EXISTS (
         modal.style.display = 'flex';
     }
 
-    async _getToken() {
-        return await window.authManager?.getValidToken().catch(() => '') || '';
-    }
+
 
     }
 
