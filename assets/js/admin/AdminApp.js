@@ -88,7 +88,7 @@ class AdminApp {
             const token = await this._getAdminToken();
             const res   = await fetch('/api/admin/analytics?days=1', {
                 headers: { Authorization: 'Bearer ' + token },
-                signal: AbortSignal.timeout(5000),
+                signal: (AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined),
             });
             if (!res.ok) return;
             const d = await res.json();
@@ -662,7 +662,7 @@ USING (EXISTS (
             const params = new URLSearchParams({ status, date, limit: '100' });
             const res    = await fetch(`/api/admin/transactions?${params}`, {
                 headers: { Authorization: 'Bearer ' + token },
-                signal: AbortSignal.timeout(10000),
+                signal: (AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined),
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || 'Erro ao carregar');
@@ -739,7 +739,7 @@ USING (EXISTS (
             const token = await this._getAdminToken();
             const res   = await fetch('/api/admin/documents?limit=100', {
                 headers: { Authorization: 'Bearer ' + token },
-                signal: AbortSignal.timeout(10000),
+                signal: (AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined),
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || 'Erro ao carregar documentos');
@@ -1166,7 +1166,7 @@ USING (EXISTS (
             const token = await this._getAdminToken();
             const res   = await fetch('/api/admin/analytics?days=7', {
                 headers: { Authorization: 'Bearer ' + token },
-                signal: AbortSignal.timeout(10000),
+                signal: (AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined),
             }).catch(() => null);
 
             if (!res || !res.ok) {
