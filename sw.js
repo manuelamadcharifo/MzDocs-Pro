@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v9-20260528'; // bumped: fix table-wrap mobile + AbortSignal compat
+const CACHE_VERSION = 'v10-20260528'; // fix: page freeze + modal reset + template image
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
@@ -63,9 +63,6 @@ workbox.precaching.precacheAndRoute([
 
 // ── ESTRATÉGIAS DE CACHE ────────────────────────────────────────────────────
 // Google Fonts — usar NetworkFirst com fallback silencioso.
-// A CSP do documento inclui fonts.googleapis.com e fonts.gstatic.com no connect-src,
-// mas o SW herdava uma CSP antiga em cache. NetworkFirst tenta a rede e,
-// se falhar (ex: offline), serve do cache sem lançar erro.
 workbox.routing.registerRoute(
     /^https:\/\/fonts\.googleapis\.com\//,
     new workbox.strategies.NetworkFirst({
@@ -74,7 +71,6 @@ workbox.routing.registerRoute(
         plugins: [
             new workbox.expiration.ExpirationPlugin({ maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 }),
             {
-                // Capturar erros de rede/CSP silenciosamente — não bloquear a página
                 fetchDidFail: async () => { /* silencioso */ },
                 handlerDidError: async () => Response.error(),
             }
@@ -97,10 +93,15 @@ workbox.routing.registerRoute(
     })
 );
 
+// CORRIGIDO: CDN (jsdelivr) usa NetworkFirst em vez de StaleWhileRevalidate.
+// StaleWhileRevalidate servia versões antigas de módulos JS enquanto carregava novas
+// em background — isso causava módulos misturados na mesma sessão e os event
+// listeners ficavam "pendurados" em instâncias antigas (botões que param de funcionar).
 workbox.routing.registerRoute(
     /^https:\/\/cdn\.jsdelivr\.net\//,
-    new workbox.strategies.StaleWhileRevalidate({
+    new workbox.strategies.NetworkFirst({
         cacheName: `cdn-libraries-${CACHE_VERSION}`,
+        networkTimeoutSeconds: 5,
         plugins: [new workbox.expiration.ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 60 * 60 })]
     })
 );
@@ -113,14 +114,11 @@ workbox.routing.registerRoute(
     })
 );
 
-// NOTE: BackgroundSync is only triggered on actual network failures (fetch throws),
-// NOT on server errors (409, 500 etc.). The NetworkFirst strategy handles the routing;
-// BackgroundSyncPlugin only queues when the network request cannot be made at all.
 workbox.routing.registerRoute(
     /\/api\/generate-document/,
     new workbox.strategies.NetworkFirst({
         cacheName: `api-cache-${CACHE_VERSION}`,
-        networkTimeoutSeconds: 85, // front-end tem 90s — SW cede primeiro, evita race
+        networkTimeoutSeconds: 85,
         plugins: [
             new workbox.backgroundSync.BackgroundSyncPlugin('document-queue', {
                 maxRetentionTime: 24 * 60,
@@ -129,13 +127,10 @@ workbox.routing.registerRoute(
                     while ((entry = await queue.shiftRequest())) {
                         try {
                             const response = await fetch(entry.request.clone());
-                            // Only consider it a success if the server returned 2xx
                             if (!response.ok) {
-                                // Server error — do NOT requeue, discard silently
                                 console.warn('[SW] Background sync: server returned', response.status, '— discarding');
                             }
                         } catch (error) {
-                            // Real network failure — requeue for later
                             await queue.unshiftRequest(entry);
                             throw error;
                         }
@@ -147,8 +142,6 @@ workbox.routing.registerRoute(
 );
 
 // ── OFFLINE FALLBACK PARA NAVEGAÇÃO ────────────────────────────────────────
-// IMPORTANTE: /admin.html é EXCLUÍDO do cache — deve sempre ir à rede
-// para que a verificação de autenticação funcione correctamente.
 const navigationHandler = async (params) => {
     try {
         return await new workbox.strategies.NetworkFirst({ cacheName: `pages-${CACHE_VERSION}` }).handle(params);
@@ -223,16 +216,32 @@ self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', event => {
     event.waitUntil(
-        caches.keys()
-            .then(keys => Promise.all(
+        Promise.all([
+            // 1. Apagar caches antigos
+            caches.keys().then(keys => Promise.all(
                 keys
-                    // Apagar todos os caches que NÃO pertencem à versão actual
                     .filter(k => !k.endsWith(CACHE_VERSION) && k !== 'workbox-precache-v2')
                     .map(k => {
                         console.log('[SW] A apagar cache antigo:', k);
                         return caches.delete(k);
                     })
-            ))
-            .then(() => self.clients.claim())
+            )),
+            // 2. Tomar controlo imediato de todos os clientes
+            self.clients.claim(),
+        ]).then(() => {
+            // CORRIGIDO: após activar nova versão, recarregar todas as tabs abertas
+            // para evitar módulos JS misturados (versão nova + versão antiga na mesma sessão)
+            // que causam botões que param de responder e modais que não abrem.
+            return self.clients.matchAll({ type: 'window' }).then(clientList => {
+                clientList.forEach(client => {
+                    if (client.url && 'navigate' in client) {
+                        // Recarregar suavemente — o utilizador mal nota (< 1s)
+                        client.navigate(client.url).catch(() => {
+                            // Alguns browsers não suportam navigate — ignorar silenciosamente
+                        });
+                    }
+                });
+            });
+        })
     );
 });
