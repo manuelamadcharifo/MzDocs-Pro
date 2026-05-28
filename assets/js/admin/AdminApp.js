@@ -117,7 +117,8 @@ class AdminApp {
             dashboard: 'Dashboard', users: 'Utilizadores',
             transactions: 'Transações', documents: 'Documentos',
             blog: 'Blog / Páginas', settings: 'Configurações',
-            analytics: 'Analytics', staticpages: 'Páginas Estáticas'
+            analytics: 'Analytics', staticpages: 'Páginas Estáticas',
+            affiliates: 'Afiliados',
         };
         document.getElementById('pageTitle').textContent = titles[section] || section;
         this._section = section;
@@ -129,6 +130,7 @@ class AdminApp {
         if (section === 'blog')         { this._loadBlog(); this._loadStaticPages(); }
         if (section === 'settings')     this._loadSettings();
         if (section === 'analytics')    this._loadAnalytics();
+        if (section === 'affiliates')   this._loadAffiliates();
     }
 
     refresh() { this.nav(this._section); }
@@ -1596,6 +1598,147 @@ USING (EXISTS (
             container.innerHTML = '<div style="color:#ef4444;font-size:.8rem;">⚠️ ' + err.message + '</div>';
         }
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // AFILIADOS
+    // ══════════════════════════════════════════════════════════════════════════
+    async _loadAffiliates() {
+        const token   = await this._getToken();
+        const loading = document.getElementById('affLoading');
+        const table   = document.getElementById('affTable');
+        if (loading) loading.style.display = 'block';
+        if (table)   table.style.display   = 'none';
+
+        try {
+            const res  = await fetch('/api/admin/affiliates', { headers: { Authorization: 'Bearer ' + token } });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao carregar afiliados');
+
+            this._affData = data.affiliates || [];
+            this._renderAffiliates(this._affData);
+
+            const total    = this._affData.length;
+            const pending  = this._affData.filter(a => !a.is_affiliate && a.ref_code).length;
+            const approved = this._affData.filter(a => a.is_affiliate).length;
+            const clicks   = this._affData.reduce((s, a) => s + (a.aff_clicks || 0), 0);
+            const earned   = this._affData.reduce((s, a) => s + (a.aff_total_earned || 0), 0);
+            const e = id => document.getElementById(id);
+            if (e('affStatTotal'))    e('affStatTotal').textContent    = total;
+            if (e('affStatPending'))  e('affStatPending').textContent  = pending;
+            if (e('affStatApproved')) e('affStatApproved').textContent = approved;
+            if (e('affStatClicks'))   e('affStatClicks').textContent   = clicks.toLocaleString('pt-MZ');
+            if (e('affStatEarned'))   e('affStatEarned').textContent   = earned.toFixed(2) + ' MZN';
+            const badge = document.getElementById('navBadgeAffiliates');
+            if (badge) { badge.textContent = pending; badge.style.display = pending > 0 ? 'inline-flex' : 'none'; }
+        } catch (err) {
+            if (loading) { loading.style.display = 'block'; loading.textContent = '❌ ' + err.message; }
+        }
+    }
+
+    _affFilter(filter) {
+        if (!this._affData) return;
+        let filtered = this._affData;
+        if (filter === 'pending')  filtered = this._affData.filter(a => !a.is_affiliate && a.ref_code);
+        if (filter === 'approved') filtered = this._affData.filter(a => a.is_affiliate);
+        this._renderAffiliates(filtered);
+    }
+
+    _renderAffiliates(list) {
+        const loading = document.getElementById('affLoading');
+        const table   = document.getElementById('affTable');
+        const tbody   = document.getElementById('affTableBody');
+        if (!tbody) return;
+        if (loading) loading.style.display = 'none';
+        if (!list.length) {
+            if (loading) { loading.style.display = 'block'; loading.textContent = 'Nenhum afiliado encontrado.'; }
+            if (table) table.style.display = 'none';
+            return;
+        }
+        if (table) table.style.display = 'table';
+        tbody.innerHTML = list.map(a => {
+            const badge = a.is_affiliate
+                ? '<span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">✅ Aprovado</span>'
+                : '<span style="background:#fef9c3;color:#854d0e;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">⏳ Pendente</span>';
+            const action = !a.is_affiliate
+                ? `<button onclick="adminApp._approveAffiliate('${a.id}')" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px">✅ Aprovar</button>`
+                : `<button onclick="adminApp._revokeAffiliate('${a.id}')" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px">🚫 Revogar</button>`;
+            return `<tr style="border-bottom:1px solid #f1f5f9">
+                <td style="padding:10px 12px"><div style="font-weight:700;font-size:13px">${a.full_name||'—'}</div><div style="font-size:11px;color:#64748b">${a.email||a.phone||'—'}</div></td>
+                <td style="padding:10px 12px;text-align:center"><code style="background:#f1f5f9;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:700">${a.ref_code||'—'}</code></td>
+                <td style="padding:10px 12px;text-align:center">${badge}</td>
+                <td style="padding:10px 12px;text-align:center;font-weight:700">${(a.aff_clicks||0).toLocaleString('pt-MZ')}</td>
+                <td style="padding:10px 12px;text-align:center;font-weight:700">${a.aff_conversions||0}</td>
+                <td style="padding:10px 12px;text-align:center;font-weight:700;color:${(a.aff_balance||0)>0?'#16a34a':'#64748b'}">${(a.aff_balance||0).toFixed(2)}</td>
+                <td style="padding:10px 12px;text-align:center">${action}<button onclick="adminApp._viewAffiliate('${a.id}')" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">👁 Ver</button></td>
+            </tr>`;
+        }).join('');
+    }
+
+    async _approveAffiliate(userId) {
+        if (!confirm('Aprovar este afiliado?')) return;
+        const token = await this._getToken();
+        const res   = await fetch('/api/admin/affiliates', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'approve', user_id: userId }),
+        }).catch(e => ({ ok: false, json: () => ({ error: e.message }) }));
+        const d = await res.json();
+        if (!res.ok) { alert('Erro: ' + d.error); return; }
+        alert('✅ Afiliado aprovado!');
+        this._loadAffiliates();
+    }
+
+    async _revokeAffiliate(userId) {
+        if (!confirm('Revogar aprovação?')) return;
+        const token = await this._getToken();
+        const res   = await fetch('/api/admin/affiliates', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'revoke', user_id: userId }),
+        }).catch(e => ({ ok: false, json: () => ({ error: e.message }) }));
+        const d = await res.json();
+        if (!res.ok) { alert('Erro: ' + d.error); return; }
+        alert('🚫 Aprovação revogada.');
+        this._loadAffiliates();
+    }
+
+    _viewAffiliate(userId) {
+        const aff = (this._affData || []).find(a => a.id === userId);
+        if (!aff) return;
+        const modal   = document.getElementById('affDetailModal');
+        const content = document.getElementById('affDetailContent');
+        if (!modal || !content) return;
+        const refLink = 'https://mzdocs.co.mz/?ref=' + aff.ref_code;
+        content.innerHTML = `<h3 style="font-size:16px;font-weight:800;margin:0 0 16px">${aff.full_name||'Afiliado'}</h3>
+            <div style="display:grid;gap:10px">
+            <div style="background:#f8fafc;border-radius:10px;padding:12px">
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px">CÓDIGO</div>
+                <div style="font-size:18px;font-weight:800;color:#1e40af">${aff.ref_code||'—'}</div>
+            </div>
+            <div style="background:#f8fafc;border-radius:10px;padding:12px">
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px">LINK</div>
+                <div style="font-size:12px;word-break:break-all">${refLink}</div>
+                <button onclick="navigator.clipboard.writeText('${refLink}')" style="margin-top:6px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">📋 Copiar</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div style="background:#f8fafc;border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:#7c3aed">${(aff.aff_clicks||0).toLocaleString()}</div><div style="font-size:11px;color:#64748b">Cliques</div></div>
+                <div style="background:#f8fafc;border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:#0891b2">${aff.aff_conversions||0}</div><div style="font-size:11px;color:#64748b">Conversões</div></div>
+                <div style="background:#f8fafc;border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:#16a34a">${(aff.aff_total_earned||0).toFixed(2)} MZN</div><div style="font-size:11px;color:#64748b">Total Ganho</div></div>
+                <div style="background:#f8fafc;border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:#d97706">${(aff.aff_balance||0).toFixed(2)} MZN</div><div style="font-size:11px;color:#64748b">Saldo</div></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+            ${!aff.is_affiliate
+                ? `<button onclick="adminApp._approveAffiliate('${aff.id}');document.getElementById('affDetailModal').style.display='none'" style="flex:1;background:#16a34a;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer">✅ Aprovar</button>`
+                : `<button onclick="adminApp._revokeAffiliate('${aff.id}');document.getElementById('affDetailModal').style.display='none'" style="flex:1;background:#ef4444;color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer">🚫 Revogar</button>`
+            }
+            </div></div>`;
+        modal.style.display = 'flex';
+    }
+
+    async _getToken() {
+        return await window.authManager?.getValidToken().catch(() => '') || '';
+    }
+
     }
 
 window.adminApp = new AdminApp();
