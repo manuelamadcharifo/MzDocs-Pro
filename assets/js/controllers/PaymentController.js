@@ -7,6 +7,7 @@ import { paymentService } from '../services/PaymentService.js';
 import { ModalView, NotificationView } from '../views/Views.js';
 import { Validator } from '../utils/Formatter.js';
 import { Storage } from '../utils/Storage.js';
+import { authManager } from '../auth/AuthManager.js';
 
 // ─── Definição dos pacotes v8.0 ───────────────────────────────────────────────
 const PACKAGES_V8 = {
@@ -243,7 +244,9 @@ export class PaymentController {
     btn.textContent = '⏳ A processar…';
 
     try {
-      const result = await this.payment.processPayment(this.selectedPkg, phone, Storage.getUserId());
+      // Usar o UUID real do utilizador autenticado; null se anónimo
+      const userId = authManager?.user?.id || null;
+      const result = await this.payment.processPayment(this.selectedPkg, phone, userId);
 
       if (result.mode === 'manual') {
         NotificationView.info('📱 Envie o comprovativo pelo WhatsApp para receber os créditos.');
