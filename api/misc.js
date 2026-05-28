@@ -496,6 +496,20 @@ async function affClick(req, res, supabase) {
   const page    = (body.page || '/').slice(0, 200);
   if (!refCode) return res.status(400).json({ error: 'ref_code em falta' });
 
+  // Resolver o affiliate_id a partir do ref_code
+  // (a tabela affiliate_clicks usa affiliate_id UUID, não ref_code TEXT)
+  const { data: affProfile } = await supabase
+    .from('profiles')
+    .select('id, is_affiliate, aff_clicks')
+    .eq('ref_code', refCode)
+    .maybeSingle()
+    .catch(() => ({ data: null }));
+
+  // Link inválido ou afiliado não aprovado — responder ok para não expor info
+  if (!affProfile) return res.status(200).json({ ok: true });
+
+  const affiliateId = affProfile.id;
+
   const ip     = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
   const ipHash = crypto.createHash('sha256').update(ip + refCode).digest('hex').slice(0, 16);
 
@@ -504,32 +518,39 @@ async function affClick(req, res, supabase) {
   const { data: existing } = await supabase
     .from('affiliate_clicks')
     .select('id')
-    .eq('ref_code', refCode)
+    .eq('affiliate_id', affiliateId)   // ← coluna correcta (UUID)
     .eq('ip_hash', ipHash)
     .gte('created_at', today)
     .maybeSingle()
     .catch(() => ({ data: null }));
 
   if (!existing) {
-    // Registar o clique
-    await supabase.from('affiliate_clicks').insert({
-      ref_code:   refCode,
-      ip_hash:    ipHash,
-      page:       page,
-      converted:  false,
-      created_at: new Date().toISOString(),
-    }).catch(() => {});
+    // Registar o clique com affiliate_id (UUID) conforme schema da tabela
+    const { error: insertErr } = await supabase.from('affiliate_clicks').insert({
+      affiliate_id: affiliateId,        // ← coluna correcta
+      ip_hash:      ipHash,
+      page:         page,
+      converted:    false,
+      created_at:   new Date().toISOString(),
+    });
 
-    // Incrementar contador no perfil
-    await supabase.rpc('increment_aff_clicks', { p_ref_code: refCode })
-      .catch(async () => {
-        // Fallback: update directo se RPC não existir
-        await supabase
-          .from('profiles')
-          .update({ aff_clicks: supabase.sql`aff_clicks + 1` })
-          .eq('ref_code', refCode)
-          .catch(() => {});
-      });
+    if (insertErr) {
+      console.error('[affClick] insert error:', insertErr.message);
+    }
+
+    // Incrementar contador aff_clicks no perfil do afiliado
+    const { error: rpcErr } = await supabase
+      .rpc('increment_aff_clicks', { p_ref_code: refCode });
+
+    if (rpcErr) {
+      // Fallback: UPDATE directo se a RPC ainda não existir na BD
+      console.warn('[affClick] RPC increment_aff_clicks falhou, usando UPDATE directo:', rpcErr.message);
+      await supabase
+        .from('profiles')
+        .update({ aff_clicks: (affProfile.aff_clicks || 0) + 1 })
+        .eq('id', affiliateId)
+        .catch(e => console.error('[affClick] fallback UPDATE error:', e.message));
+    }
   }
 
   return res.status(200).json({ ok: true });
