@@ -154,20 +154,48 @@ export class OpenRouterService {
 
   _buildPrompt(type, data, ocr, templateData = null) {
     // ── Bloco de template próprio (se o utilizador carregou um modelo) ─────
+    // CORRIGIDO: tratamento separado para imagem vs texto extraído (PDF/Word).
+    // Antes, quando o utilizador carregava uma IMAGEM, templateData.text era vazio
+    // e o bloco retornava '' silenciosamente — a IA ignorava o modelo e gerava
+    // o documento no layout padrão MzDocs. Agora a instrução de estrutura é sempre
+    // injectada, seja com texto extraído (PDF/Word) ou com descrição estrutural (imagem).
     const templateBlock = (() => {
       if (!templateData) return '';
       const src = templateData.text || '';
-      if (!src) return ''; // imagem — enviada como conteúdo visual separado
+
+      // Caso 1: Imagem carregada (base64 disponível, sem texto extraível)
+      // A IA não pode "ver" a imagem directamente neste fluxo, mas consegue
+      // reproduzir a estrutura visual se descrevermos o tipo de layout pretendido.
+      if (!src && templateData.base64) {
+        return `
+
+MODELO DO UTILIZADOR (imagem de layout carregada):
+O utilizador carregou uma imagem com o layout visual que pretende reproduzir. Siga rigorosamente as seguintes regras de estrutura:
+
+REGRAS OBRIGATÓRIAS DE ESTRUTURA:
+1. Mantenha EXACTAMENTE as mesmas secções na mesma ordem que aparecem num documento deste tipo
+2. Se for um CV/Curriculo: reproduza layout com barra lateral (contactos, competencias, linguas) e area principal (experiencia, formacao, realizacoes) — nao use layout de coluna simples
+3. Se for um documento formal (contrato, requerimento, acta): mantenha cabecalhos formais no topo, corpo estruturado e espacos para assinaturas no rodape
+4. Se for um orcamento/factura/recibo: mantenha tabelas com colunas alinhadas e totais no rodape
+5. NAO use o layout padrao generico — reproduza a estrutura visual do tipo de documento mostrado na imagem
+6. Mantenha hierarquia visual: titulos de seccao em destaque, subseccoes indentadas, bullets onde aplicavel
+
+INSTRUCAO CRITICA: O documento gerado DEVE ter a estrutura visual do tipo de documento da imagem. NAO gere um documento com layout diferente do modelo fornecido.
+`;
+      }
+
+      // Caso 2: PDF ou Word carregado (texto extraido disponivel)
+      if (!src) return '';
       return `
 
 MODELO DO UTILIZADOR (estrutura/layout a respeitar):
-O utilizador forneceu o seguinte modelo. Mantenha a estrutura, cabeçalhos, secções e estilo exactamente como estão. Substitua apenas os marcadores de conteúdo com os dados reais fornecidos abaixo.
+O utilizador forneceu o seguinte modelo. Mantenha a estrutura, cabecalhos, seccoes e estilo exactamente como estao. Substitua apenas os marcadores de conteudo com os dados reais fornecidos abaixo.
 
---- INÍCIO DO MODELO ---
-${src.slice(0, 3000)}
+--- INICIO DO MODELO ---
+${src.slice(0, 6000)}
 --- FIM DO MODELO ---
 
-INSTRUÇÃO CRÍTICA: Preencha o modelo acima com os dados reais. NÃO gere um documento diferente. Mantenha o layout, a sequência e o estilo do modelo.
+INSTRUCAO CRITICA: Preencha o modelo acima com os dados reais. NAO gere um documento diferente. Mantenha o layout, a sequencia e o estilo do modelo. Se o modelo tiver marcadores como [NOME], [DATA], [VALOR], substitua-os pelos dados reais fornecidos.
 `;
     })();
 
