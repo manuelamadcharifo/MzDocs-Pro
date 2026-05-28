@@ -178,17 +178,16 @@ export class AdminTransactions {
             }
 
             // ── Pacotes normais (starter/basico/pro) ─────────────────────
-            const adminId = authManager.user?.id;
-
-            const { error: txErr } = await this.supabase
-                .from('transactions')
-                .update({ status: 'completed', confirmed_by: adminId, confirmed_at: new Date().toISOString() })
-                .eq('id', id);
-            if (txErr) throw txErr;
-
-            const { data: newCredits, error: rpcErr } = await this.supabase
-                .rpc('add_credits', { user_id: userId, amount: credits });
-            if (rpcErr) throw rpcErr;
+            // CORRIGIDO: usar /api/admin/confirm-payment em vez do Supabase client anon
+            // (o endpoint usa service role key + chama process_affiliate_commission)
+            const token = authManager.getToken();
+            const resp = await fetch('/api/admin/confirm-payment', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body:    JSON.stringify({ transactionId: id, userId, credits }),
+            });
+            const result = await resp.json();
+            if (!resp.ok) throw new Error(result.error || 'Erro ao confirmar pagamento');
 
             document.getElementById('confirmModal').style.display = 'none';
             this.selected = null;
@@ -196,7 +195,7 @@ export class AdminTransactions {
 
             const notif = document.createElement('div');
             notif.style.cssText = 'position:fixed;top:20px;right:20px;padding:16px 20px;background:#10b981;color:#fff;border-radius:12px;font-weight:700;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
-            notif.textContent = `✅ ${credits} créditos adicionados!`;
+            notif.textContent = `✅ ${result.newCredits || credits} créditos adicionados!`;
             document.body.appendChild(notif);
             setTimeout(() => notif.remove(), 3000);
 
