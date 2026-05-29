@@ -549,7 +549,7 @@ export class DocumentController {
  });
 
  const opts = [
- { icon: '📄', label: 'PDF', fn: () => this._exportPDF() },
+ { icon: '📄', label: this._activeTemplate ? '📄 PDF (com modelo)' : '📄 PDF', fn: () => this._exportPDF() },
  { icon: '📃', label: 'Word (.docx)', fn: () => this._exportWord() },
  { icon: '📊', label: 'Excel (.xlsx)', fn: () => this._exportExcel() },
  ];
@@ -602,16 +602,31 @@ export class DocumentController {
         const content = documentState.currentContent;
         if (!content) return;
         const filename = `mzdocs-${this.docModel.service}-${Date.now()}`;
+        const svc      = SERVICES[this.docModel.service];
+        const meta     = this._buildExportMetadata(svc); // CORRIGIDO: _buildMeta não existe
+
         if (format === 'pdf') {
-            import('../components/PDFExporter.js').then(({ pdfExporter }) => {
-                pdfExporter.export(content, `${filename}.pdf`, {
-                    ...this._buildMeta(),
-                    templateCss: tpl?.css,
+            // CORRIGIDO: usar HTMLPDFExporter quando há CSS de template.
+            // O PDFExporter jsPDF ignora completamente o templateCss — o PDF saía
+            // sempre com o layout padrão independentemente do modelo escolhido.
+            if (tpl?.css) {
+                import('../components/HTMLPDFExporter.js').then(({ HTMLPDFExporter }) => {
+                    new HTMLPDFExporter().export(content, filename, {
+                        templateCss: tpl.css,
+                        title: svc?.title || 'Documento MzDocs Pro',
+                    });
+                    if (window.NotificationView) {
+                        NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
+                    }
                 });
-            });
+            } else {
+                import('../components/PDFExporter.js').then(({ pdfExporter }) => {
+                    pdfExporter.export(content, `${filename}.pdf`, meta);
+                });
+            }
         } else {
             import('../components/WordExporter.js').then(({ wordExporter }) => {
-                wordExporter.export(content, `${filename}.docx`, this._buildMeta());
+                wordExporter.export(content, `${filename}.docx`, meta);
             });
         }
     }
@@ -662,16 +677,28 @@ export class DocumentController {
  }
 
  async _exportPDF() {
- NotificationView.info('⏳ A gerar PDF…');
+ NotificationView.info('⏳ A preparar PDF…');
  try {
- const { PDFExporter } = await import('../components/PDFExporter.js');
- const svc = SERVICES[this.docModel.service];
- await new PDFExporter().export(
- this.docModel.content,
- `mzdocs-${this.docModel.service}-${Date.now()}.pdf`,
- this._buildExportMetadata(svc)
- );
- NotificationView.success('✅ PDF descarregado!');
+   const content  = this.docModel.content;
+   const svc      = SERVICES[this.docModel.service];
+   const filename = `mzdocs-${this.docModel.service}-${Date.now()}`;
+
+   // CORRIGIDO: se houver template activo, usar HTMLPDFExporter que aplica o CSS real.
+   // O PDFExporter original usa jsPDF imperativo e ignora completamente o templateCss.
+   const activeCss = this._activeTemplate?.css || null;
+
+   if (activeCss) {
+     const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
+     new HTMLPDFExporter().export(content, filename, {
+       templateCss: activeCss,
+       title: svc?.title || 'Documento MzDocs Pro',
+     });
+     NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
+   } else {
+     const { PDFExporter } = await import('../components/PDFExporter.js');
+     await new PDFExporter().export(content, `${filename}.pdf`, this._buildExportMetadata(svc));
+     NotificationView.success('✅ PDF descarregado!');
+   }
  } catch (err) { NotificationView.error('❌ Erro PDF: ' + err.message); }
  }
 
