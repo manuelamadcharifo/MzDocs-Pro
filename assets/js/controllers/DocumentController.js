@@ -257,7 +257,7 @@ export class DocumentController {
  try {
  const result = await Promise.race([
  this.queue.add(() =>
- this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost, this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null)
+ this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost, this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null, this._activeTemplate || null)
  ),
  timeout,
  new Promise((_, reject) => { signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }); }),
