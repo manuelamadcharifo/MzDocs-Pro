@@ -58,6 +58,11 @@ import { Formatter } from '../utils/Formatter.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 
 export const DocumentView = {
+  // CSS do template activo — null = usar CSS padrão MzDocs
+  // Definido por renderResult() quando um template é escolhido,
+  // limpo por DocumentController.closeResult()
+  _activeTemplateCss: null,
+
   renderForm(svc, formBodyEl, formFootEl) {
     formBodyEl.innerHTML = this._buildFieldsHTML(svc.fields);
     this.bindConditionalFields(formBodyEl);
