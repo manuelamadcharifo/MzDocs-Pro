@@ -81,63 +81,111 @@ export const TEMPLATE_LIBRARY = {
       name: 'Clássico Profissional',
       description: 'Layout tradicional, ideal para cargos formais e empresas estabelecidas',
       preview: { accent: '#1e3a5f', bg: '#fff', font: 'serif', headerBg: '#1e3a5f', headerColor: '#fff' },
-      css: `body{font-family:'Times New Roman',serif;font-size:11pt;line-height:1.4;color:#000;padding:20mm 25mm}
-        h1{font-size:18pt;text-align:center;font-weight:bold;letter-spacing:2px;border-bottom:2px solid #1e3a5f;padding-bottom:6pt;margin-bottom:4pt}
-        h2{font-size:12pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;border-bottom:1px solid #1e3a5f;margin-top:14pt;padding-bottom:2pt}
-        p{margin-bottom:4pt}
-        li{margin-bottom:2pt}`,
+      // CSS linear-safe: funciona com h1/h2/p/ul gerados pelo markdown
+      css: `
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: 'Times New Roman', serif;
+          font-size: 11pt; line-height: 1.5; color: #111;
+          padding: 18mm 22mm; background: #fff; width: 210mm;
+        }
+        h1 {
+          font-size: 20pt; font-weight: bold; text-align: center;
+          letter-spacing: 2px; color: #1e3a5f;
+          border-bottom: 2.5px solid #1e3a5f;
+          padding-bottom: 7pt; margin-bottom: 5pt;
+        }
+        /* Cargo / subtítulo — parágrafo logo abaixo do h1 */
+        h1 + p {
+          text-align: center; font-size: 10.5pt; color: #4b5563;
+          margin-bottom: 10pt;
+        }
+        h2 {
+          font-size: 11pt; font-weight: bold; text-transform: uppercase;
+          letter-spacing: 1.2px; color: #1e3a5f;
+          border-bottom: 1px solid #1e3a5f;
+          margin-top: 14pt; margin-bottom: 5pt; padding-bottom: 2pt;
+        }
+        h3 { font-size: 10.5pt; font-weight: bold; margin-top: 7pt; margin-bottom: 1pt; }
+        p { margin-bottom: 4pt; }
+        ul { padding-left: 16pt; margin-bottom: 5pt; }
+        li { margin-bottom: 2pt; }
+        hr { border: none; border-top: 1px solid #d1d5db; margin: 8pt 0; }
+        strong { color: #1e3a5f; }
+      `,
     },
     {
       id: 'cv-moderno',
       name: 'Moderno Colorido',
-      description: 'Cabeçalho colorido, design contemporâneo para áreas criativas',
+      description: 'Cabeçalho azul, design contemporâneo para áreas criativas',
       preview: { accent: '#0ea5e9', bg: '#f0f9ff', font: 'sans-serif', headerBg: '#0ea5e9', headerColor: '#fff' },
-      // CORRIGIDO: cabeçalho colorido real com faixa azul para nome+info
+      // Cabeçalho azul cobrindo nome + cargo via h1 e h1+p
       css: `
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:Arial,sans-serif;font-size:10.5pt;line-height:1.5;color:#0f172a;background:#fff;width:210mm;padding:0}
-        /* Cabeçalho azul */
-        h1{font-size:22pt;font-weight:800;color:#fff;background:#0284c7;padding:22pt 25pt 6pt;letter-spacing:-.5px;display:block;width:100%}
-        /* Cargo/subtítulo — imediatamente após h1 */
-        h1+p{background:#0284c7;color:rgba(255,255,255,.9);padding:0 25pt 18pt;font-size:10.5pt;border-bottom:4px solid #0ea5e9;display:block}
-        /* Resto do body */
-        h2{font-size:10pt;font-weight:700;color:#0284c7;text-transform:uppercase;letter-spacing:1px;margin:14pt 25pt 5pt;border-bottom:2px solid #bae6fd;padding-bottom:3pt}
-        h3{font-size:10pt;font-weight:700;color:#0f172a;margin:8pt 25pt 1pt}
-        p{margin:0 25pt 5pt;font-size:9.5pt}
-        ul,ol{margin:2pt 25pt 6pt 40pt}
-        li{margin-bottom:2pt;font-size:9.5pt}
-        strong{color:#0c4a6e}
-        hr{border:none;border-top:1px solid #e0f2fe;margin:6pt 25pt}
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: Arial, sans-serif; font-size: 10.5pt;
+          line-height: 1.5; color: #0f172a; background: #fff; width: 210mm;
+        }
+        h1 {
+          font-size: 22pt; font-weight: 800; color: #fff;
+          background: #0284c7; padding: 20pt 22pt 4pt; letter-spacing: -0.5px;
+        }
+        h1 + p {
+          background: #0284c7; color: rgba(255,255,255,.88);
+          padding: 2pt 22pt 16pt; font-size: 10.5pt;
+          border-bottom: 4px solid #38bdf8;
+        }
+        h2 {
+          font-size: 10pt; font-weight: 700; color: #0284c7;
+          text-transform: uppercase; letter-spacing: 1px;
+          border-bottom: 2px solid #bae6fd;
+          margin: 14pt 22pt 5pt; padding-bottom: 3pt;
+        }
+        h3 { font-size: 10pt; font-weight: 700; margin: 8pt 22pt 1pt; color: #0f172a; }
+        p { margin: 0 22pt 5pt; font-size: 9.5pt; }
+        ul, ol { margin: 2pt 22pt 6pt; padding-left: 16pt; }
+        li { margin-bottom: 2pt; font-size: 9.5pt; }
+        hr { border: none; border-top: 1px solid #e0f2fe; margin: 6pt 22pt; }
+        strong { color: #0c4a6e; }
       `,
     },
     {
       id: 'cv-executivo',
       name: 'Executivo Premium',
-      description: 'Duas colunas, sofisticado, para posições de liderança e gestão',
-      preview: { accent: '#1f2937', bg: '#fff', font: 'sans-serif', headerBg: '#1f2937', headerColor: '#fff' },
-      // CORRIGIDO: CSS de duas colunas real — barra lateral azul escura + coluna principal
-      // Inspirado no layout tipo "Mariana López" da imagem de referência
+      description: 'Design sofisticado com barra lateral escura, para liderança e gestão',
+      preview: { accent: '#1e3a5f', bg: '#fff', font: 'sans-serif', headerBg: '#1e3a5f', headerColor: '#fff' },
+      // Barra lateral azul-escura simulada com border-left largo no body
+      // Sem flexbox/grid — funciona com HTML linear puro
       css: `
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:Calibri,Arial,sans-serif;font-size:10pt;line-height:1.5;color:#1f2937;display:flex;min-height:297mm;width:210mm}
-        /* Barra lateral esquerda */
-        body::before{content:'';position:fixed;top:0;left:0;width:33%;height:100%;background:#1e3a5f;z-index:-1}
-        .sidebar,.col-left{width:33%;background:#1e3a5f;color:#fff;padding:20pt 14pt;flex-shrink:0;min-height:100vh}
-        .main,.col-right{flex:1;padding:20pt 18pt}
-        /* Nome no topo fora do layout de colunas — span full width */
-        h1{font-size:22pt;font-weight:800;color:#1e3a5f;letter-spacing:.5px;margin-bottom:4pt;padding-left:2pt}
-        /* Subtítulo (cargo) */
-        h1+p,h1~p:first-of-type{font-size:11pt;color:#4b5563;margin-bottom:12pt;padding-bottom:10pt;border-bottom:1px solid #e5e7eb}
-        /* Secções coluna direita */
-        h2{font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:3pt;margin:14pt 0 6pt}
-        h3{font-size:10pt;font-weight:700;color:#1f2937;margin-top:8pt;margin-bottom:1pt}
-        p{margin-bottom:4pt;font-size:9.5pt}
-        li{margin-bottom:2pt;font-size:9.5pt}
-        ul{padding-left:14pt;margin-bottom:6pt}
-        /* Secções na sidebar */
-        .sidebar h2,.col-left h2{color:#7dd3fc;border-bottom:1px solid #3b6ea8;font-size:9pt;letter-spacing:1px;margin:12pt 0 5pt}
-        .sidebar p,.col-left p,.sidebar li,.col-left li{color:#cbd5e1;font-size:9pt}
-        hr{border:none;border-top:1px solid #e5e7eb;margin:8pt 0}
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: Calibri, Arial, sans-serif;
+          font-size: 10.5pt; line-height: 1.5; color: #1f2937;
+          background: #fff; width: 210mm;
+          border-left: 58mm solid #1e3a5f;
+          padding: 18pt 20pt 18pt 22pt;
+        }
+        h1 {
+          font-size: 22pt; font-weight: 800; color: #1e3a5f;
+          letter-spacing: 0.5px; margin-bottom: 3pt;
+          padding-bottom: 8pt; border-bottom: 3px solid #1e3a5f;
+        }
+        h1 + p {
+          font-size: 10.5pt; color: #4b5563;
+          margin-bottom: 12pt; padding-bottom: 10pt;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        h2 {
+          font-size: 10pt; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 1.5px; color: #fff; background: #1e3a5f;
+          padding: 4pt 10pt; margin: 14pt -20pt 6pt -22pt;
+        }
+        h3 { font-size: 10pt; font-weight: 700; margin-top: 8pt; margin-bottom: 1pt; }
+        p { margin-bottom: 4pt; font-size: 9.5pt; }
+        ul { padding-left: 14pt; margin-bottom: 6pt; }
+        li { margin-bottom: 2pt; font-size: 9.5pt; }
+        hr { border: none; border-top: 1px solid #e5e7eb; margin: 7pt 0; }
+        strong { font-weight: 700; color: #1e3a5f; }
       `,
     },
     {
@@ -145,24 +193,69 @@ export const TEMPLATE_LIBRARY = {
       name: 'Jovem Dinâmico',
       description: 'Design fresco e enérgico para primeiro emprego e jovens profissionais',
       preview: { accent: '#10b981', bg: '#f0fdf4', font: 'sans-serif', headerBg: '#10b981', headerColor: '#fff' },
-      css: `body{font-family:Helvetica,Arial,sans-serif;font-size:10.5pt;line-height:1.5;color:#064e3b;padding:18mm}
-        h1{font-size:20pt;font-weight:900;color:#10b981;text-align:center;letter-spacing:-1px;margin-bottom:4pt}
-        h2{font-size:11pt;font-weight:700;color:#fff;background:#10b981;padding:3pt 10pt;border-radius:3pt;margin-top:14pt;margin-bottom:6pt;display:inline-block}
-        p{color:#065f46;margin-bottom:5pt}
-        li{color:#047857;margin-bottom:3pt}
-        strong{color:#064e3b}`,
+      css: `
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: Helvetica, Arial, sans-serif;
+          font-size: 10.5pt; line-height: 1.5; color: #064e3b;
+          padding: 18mm; background: #fff; width: 210mm;
+        }
+        h1 {
+          font-size: 22pt; font-weight: 900; color: #10b981;
+          text-align: center; letter-spacing: -0.5px; margin-bottom: 4pt;
+        }
+        h1 + p {
+          text-align: center; color: #065f46; font-size: 10.5pt;
+          margin-bottom: 12pt; padding-bottom: 10pt;
+          border-bottom: 2px solid #a7f3d0;
+        }
+        h2 {
+          font-size: 10.5pt; font-weight: 700; color: #fff;
+          background: #10b981; padding: 3pt 10pt;
+          margin-top: 14pt; margin-bottom: 5pt; border-radius: 3pt;
+          display: block; width: fit-content;
+        }
+        h3 { font-size: 10pt; font-weight: 700; color: #047857; margin-top: 7pt; }
+        p { color: #065f46; margin-bottom: 4pt; }
+        ul { padding-left: 15pt; margin-bottom: 5pt; }
+        li { color: #047857; margin-bottom: 2pt; }
+        hr { border: none; border-top: 1px solid #a7f3d0; margin: 8pt 0; }
+        strong { color: #064e3b; font-weight: 700; }
+      `,
     },
     {
       id: 'cv-academia',
       name: 'Académico / Docente',
       description: 'Para professores, investigadores, candidaturas a bolsas',
       preview: { accent: '#7c3aed', bg: '#fff', font: 'serif', headerBg: '#4c1d95', headerColor: '#fff' },
-      css: `body{font-family:'Times New Roman',serif;font-size:11pt;line-height:1.6;color:#000;padding:25mm 30mm}
-        h1{font-size:16pt;text-align:center;font-weight:bold;margin-bottom:4pt;font-variant:small-caps;letter-spacing:2px}
-        p:first-of-type{text-align:center;font-size:10pt;color:#4c1d95;margin-bottom:12pt}
-        h2{font-size:12pt;font-weight:bold;font-variant:small-caps;letter-spacing:1px;border-bottom:1px solid #000;margin-top:18pt;margin-bottom:6pt;padding-bottom:2pt}
-        p{text-align:justify;margin-bottom:5pt}
-        li{margin-bottom:3pt}`,
+      css: `
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: 'Times New Roman', serif;
+          font-size: 11pt; line-height: 1.6; color: #000;
+          padding: 22mm 28mm; background: #fff; width: 210mm;
+        }
+        h1 {
+          font-size: 17pt; text-align: center; font-weight: bold;
+          font-variant: small-caps; letter-spacing: 2px;
+          margin-bottom: 4pt; color: #000;
+        }
+        h1 + p {
+          text-align: center; font-size: 10pt; color: #4c1d95;
+          margin-bottom: 14pt;
+        }
+        h2 {
+          font-size: 11.5pt; font-weight: bold; font-variant: small-caps;
+          letter-spacing: 1px; border-bottom: 1px solid #000;
+          margin-top: 16pt; margin-bottom: 5pt; padding-bottom: 2pt;
+          color: #000;
+        }
+        h3 { font-size: 10.5pt; font-style: italic; margin-top: 8pt; }
+        p { text-align: justify; margin-bottom: 5pt; }
+        ul { padding-left: 18pt; margin-bottom: 6pt; }
+        li { margin-bottom: 3pt; }
+        hr { border: none; border-top: 0.5px solid #888; margin: 8pt 0; }
+      `,
     },
   ],
 
