@@ -92,7 +92,13 @@ export class HTMLPDFExporter {
    */
   export(markdownContent, filename, options = {}) {
     const { templateCss = null, title = 'MzDocs Pro' } = options;
-    const bodyHTML = mdToHtml(markdownContent);
+
+    // ── Detecção automática de HTML vs Markdown ────────────────────────────
+    // Quando o documento foi gerado como HTML estruturado (templates com htmlTemplate),
+    // o conteúdo começa com '<' — usá-lo directamente sem conversão md→html.
+    // Isto preserva layouts de duas colunas, sidebars e estruturas CSS reais.
+    const isRawHTML = markdownContent && markdownContent.trimStart().startsWith('<');
+    const bodyHTML = isRawHTML ? markdownContent : mdToHtml(markdownContent);
     const css = templateCss || DEFAULT_CSS;
 
     const html = `<!DOCTYPE html>
