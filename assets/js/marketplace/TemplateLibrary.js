@@ -92,25 +92,53 @@ export const TEMPLATE_LIBRARY = {
       name: 'Moderno Colorido',
       description: 'Cabeçalho colorido, design contemporâneo para áreas criativas',
       preview: { accent: '#0ea5e9', bg: '#f0f9ff', font: 'sans-serif', headerBg: '#0ea5e9', headerColor: '#fff' },
-      css: `body{font-family:Arial,sans-serif;font-size:10.5pt;line-height:1.45;color:#0f172a;padding:0}
-        .cover,h1+p{background:#0ea5e9;color:#fff;padding:20pt 25pt;margin:-1px}
-        h1{font-size:22pt;font-weight:800;color:#fff;margin-bottom:4pt}
-        body>p:first-of-type{color:rgba(255,255,255,.85);font-size:10pt;margin-bottom:16pt}
-        h2{font-size:11pt;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.8px;margin-top:14pt;margin-bottom:6pt;padding-bottom:2pt;border-bottom:2px solid #bae6fd}
-        p{padding:0 25pt;margin-bottom:5pt}
-        h2{padding:0 25pt}
-        ul,ol{padding:0 25pt 0 40pt}`,
+      // CORRIGIDO: cabeçalho colorido real com faixa azul para nome+info
+      css: `
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;font-size:10.5pt;line-height:1.5;color:#0f172a;background:#fff;width:210mm;padding:0}
+        /* Cabeçalho azul */
+        h1{font-size:22pt;font-weight:800;color:#fff;background:#0284c7;padding:22pt 25pt 6pt;letter-spacing:-.5px;display:block;width:100%}
+        /* Cargo/subtítulo — imediatamente após h1 */
+        h1+p{background:#0284c7;color:rgba(255,255,255,.9);padding:0 25pt 18pt;font-size:10.5pt;border-bottom:4px solid #0ea5e9;display:block}
+        /* Resto do body */
+        h2{font-size:10pt;font-weight:700;color:#0284c7;text-transform:uppercase;letter-spacing:1px;margin:14pt 25pt 5pt;border-bottom:2px solid #bae6fd;padding-bottom:3pt}
+        h3{font-size:10pt;font-weight:700;color:#0f172a;margin:8pt 25pt 1pt}
+        p{margin:0 25pt 5pt;font-size:9.5pt}
+        ul,ol{margin:2pt 25pt 6pt 40pt}
+        li{margin-bottom:2pt;font-size:9.5pt}
+        strong{color:#0c4a6e}
+        hr{border:none;border-top:1px solid #e0f2fe;margin:6pt 25pt}
+      `,
     },
     {
       id: 'cv-executivo',
       name: 'Executivo Premium',
       description: 'Duas colunas, sofisticado, para posições de liderança e gestão',
       preview: { accent: '#1f2937', bg: '#fff', font: 'sans-serif', headerBg: '#1f2937', headerColor: '#fff' },
-      css: `body{font-family:Calibri,Arial,sans-serif;font-size:10.5pt;line-height:1.5;color:#1f2937;padding:0;margin:0}
-        h1{font-size:24pt;font-weight:800;letter-spacing:1px;padding:22pt 24pt 4pt;border-bottom:4px solid #f59e0b;margin-bottom:0}
-        p:first-of-type{padding:4pt 24pt 16pt;color:#4b5563;font-size:10pt;border-bottom:1px solid #e5e7eb}
-        h2{font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#1f2937;background:#f9fafb;padding:6pt 24pt;margin-top:14pt;border-left:4px solid #f59e0b}
-        p,ul,ol{padding:0 24pt;margin-bottom:5pt}`,
+      // CORRIGIDO: CSS de duas colunas real — barra lateral azul escura + coluna principal
+      // Inspirado no layout tipo "Mariana López" da imagem de referência
+      css: `
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Calibri,Arial,sans-serif;font-size:10pt;line-height:1.5;color:#1f2937;display:flex;min-height:297mm;width:210mm}
+        /* Barra lateral esquerda */
+        body::before{content:'';position:fixed;top:0;left:0;width:33%;height:100%;background:#1e3a5f;z-index:-1}
+        .sidebar,.col-left{width:33%;background:#1e3a5f;color:#fff;padding:20pt 14pt;flex-shrink:0;min-height:100vh}
+        .main,.col-right{flex:1;padding:20pt 18pt}
+        /* Nome no topo fora do layout de colunas — span full width */
+        h1{font-size:22pt;font-weight:800;color:#1e3a5f;letter-spacing:.5px;margin-bottom:4pt;padding-left:2pt}
+        /* Subtítulo (cargo) */
+        h1+p,h1~p:first-of-type{font-size:11pt;color:#4b5563;margin-bottom:12pt;padding-bottom:10pt;border-bottom:1px solid #e5e7eb}
+        /* Secções coluna direita */
+        h2{font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:3pt;margin:14pt 0 6pt}
+        h3{font-size:10pt;font-weight:700;color:#1f2937;margin-top:8pt;margin-bottom:1pt}
+        p{margin-bottom:4pt;font-size:9.5pt}
+        li{margin-bottom:2pt;font-size:9.5pt}
+        ul{padding-left:14pt;margin-bottom:6pt}
+        /* Secções na sidebar */
+        .sidebar h2,.col-left h2{color:#7dd3fc;border-bottom:1px solid #3b6ea8;font-size:9pt;letter-spacing:1px;margin:12pt 0 5pt}
+        .sidebar p,.col-left p,.sidebar li,.col-left li{color:#cbd5e1;font-size:9pt}
+        hr{border:none;border-top:1px solid #e5e7eb;margin:8pt 0}
+      `,
     },
     {
       id: 'cv-jovem',
