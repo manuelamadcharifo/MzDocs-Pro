@@ -74,8 +74,22 @@ export class PDFExporter {
             doc.line(ML, y, W - MR, y);
         };
 
-        // ── Limpeza de texto markdown inline ─────────────────────────────
-        const clean = (t = '') => t
+        // ── Limpeza de texto markdown inline ─────────────────
+        // CORRIGIDO: remover emojis/unicode que o jsPDF renderiza como 'Ø=ÛÞ'.
+        const emojiMap = {
+            '📞':'Tel.','☎':'Tel.','📱':'Tel.',
+            '📧':'Email:','✉':'Email:','📍':'Local:',
+            '📌':'Local:','🔗':'','🌐':'Web:',
+            '💼':'','🎓':'','📅':'','🏠':'',
+            '🚀':'','✅':'','❌':'','⚡':'',
+            '🔑':'','💡':'','📝':'','📄':'',
+        };
+        const stripUnicode = (t = '') => {
+            let r = t;
+            for (const [emoji, sub] of Object.entries(emojiMap)) r = r.split(emoji).join(sub);
+            return r.replace(/[^\x00-\xFF\u0100-\u024F]/g, '');
+        };
+        const clean = (t = '') => stripUnicode(t)
             .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
             .replace(/\*\*(.+?)\*\*/g, '$1')
             .replace(/\*(.+?)\*/g, '$1')
