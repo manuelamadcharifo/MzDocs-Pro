@@ -13,8 +13,8 @@ export class OpenRouterService {
     this.currentModel = this.models.primary;
   }
 
-  async generate(serviceType, formData, ocrText = null, credits = null, cost = 1, templateData = null) {
-    const prompt = this._buildPrompt(serviceType, formData, ocrText, templateData);
+  async generate(serviceType, formData, ocrText = null, credits = null, cost = 1, templateData = null, pickerTemplate = null) {
+    const prompt = this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
     return await this._callBackend(serviceType, prompt, credits, cost);
   }
 
@@ -152,7 +152,7 @@ export class OpenRouterService {
     return result;
   }
 
-  _buildPrompt(type, data, ocr, templateData = null) {
+  _buildPrompt(type, data, ocr, templateData = null, pickerTemplate = null) {
     // ── Bloco de template próprio (se o utilizador carregou um modelo) ─────
     // CORRIGIDO: tratamento separado para imagem vs texto extraído (PDF/Word).
     // Antes, quando o utilizador carregava uma IMAGEM, templateData.text era vazio
@@ -219,6 +219,13 @@ INSTRUCAO CRITICA: Preencha o modelo acima com os dados reais. NAO gere um docum
     };
 
     const ocrBlock = ocr ? `\n\nRascunho OCR (use como base, corrija erros):\n${ocr}` : '';
+
+    // ── Picker template: quando um template do marketplace com htmlTemplate está activo ──
+    // O modelo tem um layout HTML estruturado (duas colunas, sidebar, etc.)
+    // Geramos o documento como HTML directamente para fidelidade máxima ao template.
+    if (pickerTemplate?.htmlTemplate && type === 'cv') {
+      return this._buildHTMLPromptCV(type, data, ocr, pickerTemplate);
+    }
 
     const builders = {
       trabalho: () => {
@@ -1895,6 +1902,82 @@ Nada mais havendo a tratar, o(a) Presidente declarou encerrada a reunião pelas 
     // Injectar bloco de template no início do prompt (antes das instruções)
     return templateBlock ? templateBlock + '\n\n' + basePrompt : basePrompt;
   }
+
+  // ── Geração HTML estruturado para CV com template de picker ──────────────
+  // Quando o template tem htmlTemplate, pedimos HTML directamente com as classes CSS do template.
+  // Isto permite layouts de duas colunas reais (sidebar + main) que são impossíveis com markdown linear.
+  _buildHTMLPromptCV(type, data, ocr, pickerTemplate) {
+    const ocrBlock = ocr ? `\n\nRascunho OCR (use como base, corrija erros):\n${ocr}` : '';
+    const htmlStructure = pickerTemplate.htmlTemplate;
+    const templateName = pickerTemplate.name || 'template seleccionado';
+
+    const isPrimeiroEmprego = (data.perfilCV || '').includes('Primeiro Emprego');
+    const temExperiencia    = !!(data.experiencia && data.experiencia.trim());
+
+    // Construir o nome abreviado para o placeholder {{INICIAIS}}
+    const iniciais = (data.nome || 'CV').split(' ').slice(0, 2).map(n => n[0] || '').join('').toUpperCase();
+
+    return `Você é especialista sénior em recursos humanos. Crie um CURRÍCULO VITAE em HTML ESTRUTURADO usando EXACTAMENTE as classes CSS do template "${templateName}".
+
+DADOS DO CANDIDATO:
+- Nome: ${data.nome} | Iniciais: ${iniciais}
+- Cargo pretendido: ${data.cargo}
+- Telefone: ${data.contacto} | Email: ${data.email || '[email]'} | Localização: ${data.localizacao || 'Moçambique'}
+- Nascimento: ${data.nascimento || '[a completar]'}
+- Línguas: ${data.linguas || 'Português (nativo)'}
+- Formação: ${data.formacao}
+- Experiência: ${data.experiencia || 'Sem experiência formal prévia'}
+- Habilidades técnicas: ${data.habilidades || '[ferramentas, software]'}
+- Realização de destaque: ${data.exemplo || '[nenhuma fornecida]'}
+- Objectivo: ${data.objectivo || '[a completar]'}${ocrBlock}
+
+ESTRUTURA HTML OBRIGATÓRIA DO TEMPLATE:
+${htmlStructure}
+
+INSTRUÇÕES CRÍTICAS:
+1. Substitua TODOS os placeholders {{...}} pelos dados reais do candidato
+2. {{NOME}} → ${data.nome}
+3. {{CARGO}} → ${data.cargo}
+4. {{CONTACTO}} → ${data.contacto}
+5. {{EMAIL}} → ${data.email || '[email]'}
+6. {{LOCALIZACAO}} → ${data.localizacao || 'Moçambique'}
+7. {{OBJECTIVO}} → 2-3 frases do objectivo profissional
+8. {{INICIAIS}} → ${iniciais}
+9. {{FORMACAO}} → gere entradas HTML com a classe cv-entry para cada formação
+10. {{EXPERIENCIA}} → gere entradas HTML com a classe cv-entry para cada cargo${isPrimeiroEmprego && !temExperiencia ? ' (estágios, voluntariado, actividades)' : ' com bullets de realizações mensuráveis'}
+11. {{REALIZACAO}} → expanda o exemplo: "${data.exemplo || 'a completar'}"
+12. {{HABILIDADES}} → liste as habilidades: ${data.habilidades || '[ferramentas, software]'}
+13. {{HABILIDADES_LIST}} → gere <li> para cada habilidade
+14. {{LINGUAS}} → gere entradas de línguas com nível
+15. {{EXTRA}} → informação adicional relevante (carta de condução, disponibilidade, etc.)
+
+FORMATO DAS ENTRADAS (cv-entry):
+<div class="cv-entry">
+  <p class="cv-entry-date">PERÍODO (ex: 07/2020 – 12/2024)</p>
+  <p class="cv-entry-title">CARGO OU GRAU</p>
+  <p class="cv-entry-company">EMPRESA OU INSTITUIÇÃO | LOCAL</p>
+  <ul class="cv-entry-bullets">
+    <li>Realização concreta com verbo de acção e resultado mensurável</li>
+  </ul>
+</div>
+
+FORMATO DAS ENTRADAS DE LÍNGUA:
+<div class="cv-entry">
+  <p class="cv-entry-title">LÍNGUA</p>
+  <p class="cv-entry-sub">NÍVEL (Nativo / Fluente / Avançado / Intermédio / Básico)</p>
+  <div class="cv-lang-bar"><div class="cv-lang-fill" style="width:PERCENTAGEM%"></div></div>
+</div>
+
+REGRAS DE QUALIDADE:
+- Use VERBOS DE ACÇÃO no passado com resultados mensuráveis
+- NUNCA: "profissional dedicado", "trabalho em equipa" sem contexto específico
+- Cada cargo: mínimo 2-3 bullets com impacto mensurável
+- Formação: do mais recente para o mais antigo
+- NUNCA inclua foto, estado civil, religião, filiação política
+
+RESPOSTA: Devolva APENAS o HTML completo, começando com <div class="cv-page... e terminando com </div>. SEM markdown, SEM explicações, SEM código fence.`;
+  }
+
 }
 
 // services/MPesaService.js — Integração M-Pesa com detecção de ambiente
