@@ -462,12 +462,29 @@ export class DocumentEditor {
 
   _buildPreviewHTML(format) {
     const isRawHTML = this.content && this.content.trimStart().startsWith('<');
+
     if (isRawHTML) {
-      const templateCss = this._templateCss || 'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;}'; 
+      // Conteúdo HTML estruturado (gerado via htmlTemplate da IA)
+      const templateCss = this._templateCss || 'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;padding:18mm;}';
       return `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;}${templateCss}</style></head><body>${sanitizeHtml(this.content)}</body></html>`;
     }
-    const css  = this._getFormatCSS(format);
+
+    // Conteúdo markdown → converter para HTML
     const body = sanitizeHtml(this._markdownToHTML(this.content));
+
+    // CORRIGIDO: se há templateCss activo, aplicá-lo mesmo para conteúdo markdown.
+    // Bug original: o templateCss só era usado para HTML raw — para markdown usava sempre
+    // _getFormatCSS() genérico, fazendo o editor mostrar um layout completamente diferente
+    // do preview do resultado após o utilizador escolher um template (imagem 4 vs imagem 3).
+    if (this._templateCss) {
+      return `<!DOCTYPE html>
+<html lang="pt">
+<head><meta charset="UTF-8"><style>*{box-sizing:border-box;}${this._templateCss}</style></head>
+<body>${body}</body>
+</html>`;
+    }
+
+    const css = this._getFormatCSS(format);
     return `<!DOCTYPE html>
 <html lang="pt">
 <head><meta charset="UTF-8"><style>${css}</style></head>
