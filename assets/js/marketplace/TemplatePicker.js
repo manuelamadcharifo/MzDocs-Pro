@@ -400,27 +400,32 @@ export class TemplatePicker {
     this._renderPreview(tpl);
   }
 
-  // ── Renderizar preview multi-página ──────────────────────────────────────
+  // ── Renderizar preview ───────────────────────────────────────────────────
   _renderPreview(tpl) {
     const outer = document.getElementById('tplPreviewOuter');
     if (!outer) return;
 
     outer.innerHTML = `<div class="tpl-loading"><div class="tpl-spinner"></div>A renderizar…</div>`;
 
-    setTimeout(() => {
+    // CORRIGIDO: usar requestAnimationFrame + timeout para garantir que o DOM
+    // do overlay já está visível antes de criar os iframes.
+    // Bug anterior: em Android/Chrome o evento 'load' do iframe srcdoc não
+    // disparava se o overlay ainda estava a animar (display:none→flex),
+    // causando o spinner infinito (imagem 2).
+    requestAnimationFrame(() => setTimeout(() => {
+
       // Dividir conteúdo em páginas pelo marcador PAGE_BREAK
-      const pages = this._content
+      const rawContent = this._content || '';
+      const pages = rawContent
         .split(/---PAGE_BREAK---/g)
         .map(p => p.trim())
         .filter(p => p.length > 0);
 
-      // Se não há PAGE_BREAK, tratar como uma única página
-      const pageContents = pages.length > 0 ? pages : [this._content];
+      const pageContents = pages.length > 0 ? pages : [rawContent || ' '];
 
       outer.innerHTML = '';
 
       pageContents.forEach((pageMarkdown, i) => {
-        // Separador entre páginas
         if (i > 0) {
           const sep = document.createElement('div');
           sep.className = 'tpl-page-sep';
@@ -428,9 +433,6 @@ export class TemplatePicker {
           outer.appendChild(sep);
         }
 
-        const pageHtml = this._mdToHtml(pageMarkdown);
-
-        // Folha A4
         const pageEl = document.createElement('div');
         pageEl.className = 'tpl-page';
 
@@ -440,30 +442,39 @@ export class TemplatePicker {
         pageEl.appendChild(iframe);
         outer.appendChild(pageEl);
 
-        // ── Conteúdo da página com o CSS do template ──────────────────────────
-        // Se o template tem htmlTemplate, usar a estrutura HTML directamente para preview fiel.
-        // Substituir os placeholders por texto de demonstração para visualização.
+        // ── Conteúdo do preview ───────────────────────────────────────────────
+        // CORRIGIDO: usar os dados REAIS do documento do utilizador no preview.
+        // Bug anterior: o preview mostrava sempre "Ana Maria Silva Santos" e dados
+        // fictícios — o utilizador confundia o preview do template com o seu documento
+        // e pensava que o conteúdo tinha mudado (imagem 1).
+        //
+        // Agora: se o template tem htmlTemplate, extraímos os dados reais do
+        // conteúdo markdown actual (this._content) e preenchemos os placeholders.
+        // Se não temos dados reais suficientes, usamos o markdown directamente
+        // renderizado com o CSS do template — fiel e sem confusão.
         let previewBody;
         if (tpl.htmlTemplate && i === 0) {
-          // Preview com estrutura real — substituir placeholders por conteúdo de demo
+          // Extrair dados reais do conteúdo markdown do utilizador
+          const rd = this._extractRealData(rawContent);
           previewBody = tpl.htmlTemplate
-            .replace(/\{\{NOME\}\}/g, 'Ana Maria Silva Santos')
-            .replace(/\{\{CARGO\}\}/g, 'Gestora de Projectos Sénior')
-            .replace(/\{\{CONTACTO\}\}/g, '+258 84 000 0000')
-            .replace(/\{\{EMAIL\}\}/g, 'ana.silva@email.com')
-            .replace(/\{\{LOCALIZACAO\}\}/g, 'Maputo, Moçambique')
-            .replace(/\{\{INICIAIS\}\}/g, 'AS')
-            .replace(/\{\{OBJECTIVO\}\}/g, 'Profissional experiente com 10 anos em gestão de projectos, especializada em coordenação de equipas multidisciplinares e entrega de resultados mensuráveis.')
-            .replace(/\{\{FORMACAO\}\}/g, '<div class="cv-entry"><p class="cv-entry-date">2015 – 2018</p><p class="cv-entry-title">Licenciatura em Gestão</p><p class="cv-entry-company">Universidade Eduardo Mondlane | Maputo</p></div>')
-            .replace(/\{\{EXPERIENCIA\}\}/g, '<div class="cv-entry"><p class="cv-entry-date">2019 – 2024</p><p class="cv-entry-title">Gestora de Projectos</p><p class="cv-entry-company">Empresa XYZ | Maputo</p><ul class="cv-entry-bullets"><li>Reduziu o tempo de entrega em 30% através de metodologias ágeis</li><li>Coordenou equipa de 12 pessoas com taxa de sucesso de 95%</li></ul></div>')
-            .replace(/\{\{REALIZACAO\}\}/g, 'Implementou sistema de monitorização que reduziu custos operacionais em 25%, reconhecida como Colaboradora do Ano 2023.')
-            .replace(/\{\{HABILIDADES\}\}/g, 'MS Project, Jira, Scrum, Power BI, Excel Avançado')
-            .replace(/\{\{HABILIDADES_LIST\}\}/g, '<li>MS Project</li><li>Scrum/Kanban</li><li>Power BI</li><li>Liderança de equipas</li>')
-            .replace(/\{\{LINGUAS\}\}/g, '<div class="cv-entry"><p class="cv-entry-title">Português</p><p class="cv-entry-sub">Nativo</p><div class="cv-lang-bar"><div class="cv-lang-fill" style="width:100%"></div></div></div><div class="cv-entry"><p class="cv-entry-title">Inglês</p><p class="cv-entry-sub">Avançado (C1)</p><div class="cv-lang-bar"><div class="cv-lang-fill" style="width:80%"></div></div></div>')
-            .replace(/\{\{EXTRA\}\}/g, 'Carta de condução categoria B. Disponível para deslocações nacionais.')
-            .replace(/\{\{[A-Z_]+\}\}/g, '<span style="color:#94a3b8">[conteúdo]</span>');
+            .replace(/\{\{NOME\}\}/g,          rd.nome)
+            .replace(/\{\{CARGO\}\}/g,          rd.cargo)
+            .replace(/\{\{CONTACTO\}\}/g,       rd.contacto)
+            .replace(/\{\{EMAIL\}\}/g,           rd.email)
+            .replace(/\{\{LOCALIZACAO\}\}/g,    rd.localizacao)
+            .replace(/\{\{INICIAIS\}\}/g,        rd.iniciais)
+            .replace(/\{\{OBJECTIVO\}\}/g,       rd.objectivo)
+            .replace(/\{\{FORMACAO\}\}/g,        rd.formacao)
+            .replace(/\{\{EXPERIENCIA\}\}/g,     rd.experiencia)
+            .replace(/\{\{REALIZACAO\}\}/g,      rd.realizacao)
+            .replace(/\{\{HABILIDADES\}\}/g,     rd.habilidades)
+            .replace(/\{\{HABILIDADES_LIST\}\}/g, rd.habilidadesList)
+            .replace(/\{\{LINGUAS\}\}/g,         rd.linguas)
+            .replace(/\{\{EXTRA\}\}/g,           rd.extra)
+            .replace(/\{\{[A-Z_]+\}\}/g,         '');
         } else {
-          previewBody = pageHtml;
+          // Sem htmlTemplate: renderizar markdown com CSS do template
+          previewBody = `<div style="padding:10mm">${this._mdToHtml(pageMarkdown)}</div>`;
         }
 
         const doc = `<!DOCTYPE html>
@@ -472,22 +483,116 @@ export class TemplatePicker {
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:210mm;min-height:297mm;overflow:hidden}
-${tpl.css}
+${tpl.css || ''}
 </style>
 </head><body>${previewBody}</body></html>`;
 
+        // CORRIGIDO: escalar imediatamente após definir srcdoc, sem depender
+        // do evento 'load' que não dispara consistentemente em Android.
+        // Usamos MutationObserver + fallback por timeout para garantir scaling.
         iframe.srcdoc = doc;
 
-        // Quando o iframe carrega, escalar para caber no contentor visual
-        iframe.addEventListener('load', () => {
+        let scaled = false;
+        const doScale = () => {
+          if (scaled) return;
+          scaled = true;
           this._scalePage(pageEl, iframe);
-        });
+        };
+
+        iframe.addEventListener('load', doScale, { once: true });
+        // Fallback: escalar após 400ms mesmo se 'load' não disparar (Android bug)
+        setTimeout(doScale, 400);
       });
 
-      // Escalar todas as páginas após render
+      // Escalar todas as páginas após render (garante scaling em resize rápido)
       requestAnimationFrame(() => this._scalePages());
 
-    }, 60);
+    }, 80));
+  }
+
+  // ── Extrair dados reais do conteúdo markdown do utilizador ───────────────
+  // Usado para preencher os placeholders do htmlTemplate no preview com dados reais.
+  _extractRealData(md) {
+    if (!md) md = '';
+
+    // Helpers de extracção por padrões comuns no markdown gerado pela IA
+    const line  = (pattern) => (md.match(pattern)?.[1] || '').trim();
+    const block = (start, end) => {
+      const m = md.match(new RegExp(start + '([\\s\\S]*?)(?=' + end + '|$)', 'i'));
+      return (m?.[1] || '').trim();
+    };
+
+    // Nome: geralmente a primeira linha H1 ou H2
+    const nome = line(/^#{1,2}\s+(.+)/m)
+               || line(/\*\*Nome[:\s]+\*\*\s*(.+)/i)
+               || line(/^(.{3,50})$/m) || 'Nome';
+
+    // Iniciais do nome
+    const iniciais = nome.split(' ').slice(0,2).map(w => w[0] || '').join('').toUpperCase() || 'XX';
+
+    // Cargo: linha após o nome, antes dos contactos
+    const cargo = line(/\*\*(.*?)\*\*\s*[\n\r].*(?:📞|☎|\+258|@)/m)
+                || line(/^[*_]{0,2}([^#*\n]{5,60})[*_]{0,2}\s*[\n\r].*(?:📞|\||@)/m)
+                || line(/Cargo[:\s]+(.+)/i) || '';
+
+    // Contacto/telefone
+    const contacto = line(/(?:📞|☎|Tel[:\s]+)[\s*]*([+\d][\d\s\-().]{6,20})/i)
+                   || line(/([+]258[\d\s]{8,12})/i)
+                   || line(/\b(8[234567]\s?\d{3}\s?\d{4})\b/i) || '';
+
+    // Email
+    const email = line(/([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i) || '';
+
+    // Localização
+    const localizacao = line(/(?:📍|Local[:\s]+)([^\n|]{3,50})/i)
+                      || line(/(?:Maputo|Beira|Nampula|Tete|Quelimane|Inhambane|Chimoio)[^\n]*/i)
+                      || 'Moçambique';
+
+    // Extractores de secções (simplificado — pega o texto após o heading)
+    const objectivo  = block('(?:Objectivo|Resumo|Perfil)[^\n]*\n', '\n##') || '';
+    const formacao   = block('(?:Forma[cç][aã]o|Educa[cç][aã]o)[^\n]*\n', '\n##') || '';
+    const experiencia = block('(?:Experi[eê]ncia|Hist[oó]rico)[^\n]*\n', '\n##') || '';
+    const realizacao  = block('(?:Realiza[cç][aã]o|Destaque|Conquista)[^\n]*\n', '\n##') || '';
+    const habilidades = block('(?:Habilidade|Compet[eê]ncia|Skill)[^\n]*\n', '\n##') || '';
+    const extra       = block('(?:Informa[cç][aã]o Adicional|Extra|Outros)[^\n]*\n', '\n##') || '';
+
+    // Línguas
+    const linguasRaw = block('(?:L[ií]ngua|Idioma)[^\n]*\n', '\n##') || 'Português (Nativo)';
+
+    // Converter listas de habilidades em <li>
+    const habilidadesList = habilidades
+      .split(/[,;\n•·\-]/)
+      .map(h => h.trim()).filter(h => h.length > 1)
+      .map(h => `<li>${h}</li>`).join('') || '<li>Competências profissionais</li>';
+
+    // Converter formação em cv-entries
+    const formacaoHTML = formacao
+      ? `<div class="cv-entry"><p class="cv-entry-date"></p><p class="cv-entry-title">${formacao.replace(/\n/g,' ').slice(0,120)}</p></div>`
+      : '';
+
+    // Converter experiência em cv-entries
+    const expLines = experiencia.split('\n').filter(l => l.trim());
+    const experienciaHTML = expLines.length
+      ? `<div class="cv-entry"><p class="cv-entry-date"></p><p class="cv-entry-title">${expLines[0]}</p>${expLines.slice(1).map(l=>`<p class="cv-entry-company">${l}</p>`).join('')}</div>`
+      : '';
+
+    // Converter línguas em items
+    const linguasHTML = linguasRaw.split(/[,;\n•·\-]/)
+      .map(l => l.trim()).filter(l => l.length > 1)
+      .map(l => `<div class="cv-lang-item"><span class="cv-lang-name">${l}</span></div>`)
+      .join('');
+
+    return {
+      nome, iniciais, cargo, contacto, email, localizacao,
+      objectivo:       objectivo  || cargo || '',
+      formacao:        formacaoHTML,
+      experiencia:     experienciaHTML,
+      realizacao:      realizacao || '',
+      habilidades:     habilidades.replace(/\n/g,', ').slice(0,200),
+      habilidadesList,
+      linguas:         linguasHTML || `<div class="cv-lang-item"><span class="cv-lang-name">${linguasRaw}</span></div>`,
+      extra:           extra || '',
+    };
   }
 
   // ── Escalar um iframe A4 para caber na folha visual ───────────────────────
