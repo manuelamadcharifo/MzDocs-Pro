@@ -668,6 +668,12 @@
   outline: none;
   cursor: text;
 }
+/* Quando o editor exibe HTML de template (padding 0 aplicado via JS),
+   o conteúdo já inclui padding/layout próprio — não adicionar margem extra */
+.ed-word-page[style*="padding: 0"] {
+  min-height: auto;
+  box-shadow: 0 2px 16px rgba(0,0,0,.15);
+}
 .ed-word-page:focus { box-shadow: 0 2px 20px rgba(59,130,246,.25); }
 .ed-word-page h1 { font-size:18pt; font-weight:bold; text-align:center; margin-bottom:14pt; color:#1F3864; }
 .ed-word-page h2 { font-size:14pt; font-weight:bold; margin:14pt 0 7pt; color:#2E74B5; border-bottom:1px solid #ddd; padding-bottom:3pt; }
