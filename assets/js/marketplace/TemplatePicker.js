@@ -2,7 +2,7 @@
 // Layout mobile: lista de templates (scroll horizontal) no topo, preview A4 em baixo
 // PAGE_BREAK → folhas A4 separadas com sombra, como um PDF real
 
-import { getTemplates, getDefaultTemplate, getTemplateById, addSessionTemplate, getSessionTemplates } from './TemplateLibrary.js';
+import { getTemplates, getDefaultTemplate, getTemplateById, addSessionTemplate, getSessionTemplates, loadPublicTemplatesFromSupabase } from './TemplateLibrary.js';
 
 // ── Notificação toast ─────────────────────────────────────────────────────────
 function _notify(msg) {
@@ -87,7 +87,7 @@ const PICKER_CSS = `
 }
 .tpl-card:active,.tpl-card:hover{border-color:#93c5fd;background:#eff6ff}
 .tpl-card.selected{border-color:#3B82F6;background:#eff6ff}
-.tpl-thumb{height:48px;border-radius:7px;margin-bottom:5px;overflow:hidden;position:relative}
+.tpl-thumb{height:48px;border-radius:7px;margin-bottom:5px;overflow:hidden;position:relative;}
 .tpl-thumb-inner{position:absolute;inset:0;display:flex;flex-direction:column;padding:5px;gap:3px}
 .tpl-tl{height:3px;border-radius:2px}
 .tpl-card-name{font-size:10px;font-weight:700;color:#0f172a;line-height:1.25;margin-bottom:2px;
@@ -236,6 +236,14 @@ export class TemplatePicker {
 
     this._resizeHandler = () => this._scalePages();
     window.addEventListener('resize', this._resizeHandler);
+
+    // Carregar templates públicos aprovados do Supabase em background
+    loadPublicTemplatesFromSupabase(serviceKey).then(loaded => {
+      if (loaded && loaded.length > 0) {
+        // Re-render lista para incluir templates do marketplace
+        this._render();
+      }
+    }).catch(() => {});
   }
 
   close() {
@@ -353,6 +361,8 @@ export class TemplatePicker {
             <div class="tpl-tl" style="background:${t.preview?.accent||'#3B82F6'};opacity:.2;width:80%"></div>
             <div class="tpl-tl" style="background:${t.preview?.accent||'#3B82F6'};opacity:.15;width:90%"></div>
           </div>
+          ${t._fromMarketplace ? '<div style="position:absolute;top:3px;right:3px;background:#f59e0b;color:#fff;font-size:7px;font-weight:800;padding:1px 5px;border-radius:4px">🌐</div>' : ''}
+          ${t._isCustom ? '<div style="position:absolute;top:3px;right:3px;background:#10b981;color:#fff;font-size:7px;font-weight:800;padding:1px 5px;border-radius:4px">MEU</div>' : ''}
         </div>
         <div class="tpl-card-name">${t.name}</div>
         <div class="tpl-card-desc">${t.description || ''}</div>
@@ -561,15 +571,18 @@ ${tpl.css}
           if (extracted) {
             // Adicionar à sessão e re-renderizar lista para aparecer no topo
             addSessionTemplate(this._key, extracted);
-            this._renderList(); // Re-render para incluir o novo template
+            this._render(); // Re-render para incluir o novo template
 
             // Auto-seleccionar o template extraído
             this._pick(extracted.id);
 
-            if (sub) sub.textContent = `✅ Template "${extracted.name}" adicionado ao marketplace!`;
+            if (sub) sub.textContent = `✅ Template "${extracted.name}" adicionado!`;
             if (zone) zone.classList.add('active');
             if (badge) badge.style.display = 'block';
-            _notify(`✅ Template "${extracted.name}" extraído e adicionado!`);
+            _notify(`✅ Template "${extracted.name}" extraído!`);
+
+            // Guardar no Supabase para revisão do admin (não bloqueia UI)
+            this._saveTemplateToSupabase(extracted).catch(e => console.warn('Supabase save:', e));
 
             // Resetar _customActive — agora temos um template pré-definido seleccionado
             this._customActive = false;
@@ -728,6 +741,36 @@ RESPOSTA: APENAS o JSON válido, sem markdown, sem \`\`\`json, sem explicações
     }).join('\n');
 
     return html;
+  }
+
+  // ── Guardar template extraído no Supabase (pendente de aprovação admin) ──
+  async _saveTemplateToSupabase(extracted) {
+    try {
+      // Obter supabase client do AuthManager
+      const supabase = window.authManager?.supabase;
+      if (!supabase) return; // Modo anónimo — não guardar
+
+      const user = window.authManager?.user;
+
+      const { error } = await supabase.from('templates_custom').insert({
+        user_id:       user?.id || null,
+        service_type:  this._key,
+        template_name: extracted.name,
+        description:   extracted.description || '',
+        template_html: extracted.htmlTemplate || '',
+        template_css:  extracted.css || '',
+        status:        'pending',
+        is_public:     false,
+      });
+
+      if (error) {
+        console.warn('[TemplatePicker] Supabase insert error:', error.message);
+        return;
+      }
+      _notify('📤 Template enviado para revisão do administrador!');
+    } catch (e) {
+      console.warn('[TemplatePicker] _saveTemplateToSupabase falhou:', e.message);
+    }
   }
 }
 
