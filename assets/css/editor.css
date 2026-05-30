@@ -706,6 +706,11 @@
   background: #e8ecf0;
   width: 100%;
   min-height: 0;
+  display: block;
+}
+/* Quando o iframe de template está activo, o ed-edit-wrap NÃO deve ter padding extra */
+.ed-edit-wrap:has(#edTemplateEditFrame[style*="display: block"]) .ed-word-page-wrap {
+  display: none !important;
 }
 
 /* ── MOBILE WORD EDITOR ───────────────────────────────────────── */
