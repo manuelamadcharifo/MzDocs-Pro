@@ -223,8 +223,8 @@ INSTRUCAO CRITICA: Preencha o modelo acima com os dados reais. NAO gere um docum
     // ── Picker template: quando um template do marketplace com htmlTemplate está activo ──
     // O modelo tem um layout HTML estruturado (duas colunas, sidebar, etc.)
     // Geramos o documento como HTML directamente para fidelidade máxima ao template.
-    if (pickerTemplate?.htmlTemplate && type === 'cv') {
-      return this._buildHTMLPromptCV(type, data, ocr, pickerTemplate);
+    if (pickerTemplate?.htmlTemplate) {
+      return this._buildHTMLStructuredPrompt(type, data, ocr, pickerTemplate);
     }
 
     const builders = {
@@ -1903,79 +1903,350 @@ Nada mais havendo a tratar, o(a) Presidente declarou encerrada a reunião pelas 
     return templateBlock ? templateBlock + '\n\n' + basePrompt : basePrompt;
   }
 
-  // ── Geração HTML estruturado para CV com template de picker ──────────────
-  // Quando o template tem htmlTemplate, pedimos HTML directamente com as classes CSS do template.
-  // Isto permite layouts de duas colunas reais (sidebar + main) que são impossíveis com markdown linear.
-  _buildHTMLPromptCV(type, data, ocr, pickerTemplate) {
-    const ocrBlock = ocr ? `\n\nRascunho OCR (use como base, corrija erros):\n${ocr}` : '';
+
+  // ── Geração HTML estruturado para qualquer documento com template de picker ─────
+  // Quando o template tem htmlTemplate, pedimos HTML directamente à IA.
+  // Isto permite layouts fiéis: duas colunas (CV), cabeçalho corporativo (carta),
+  // tabelas estruturadas (orçamento), artigos numerados (contratos), etc.
+  _buildHTMLStructuredPrompt(type, data, ocr, pickerTemplate) {
+    const ocrBlock = ocr ? `\n\nRascunho OCR (use como base):\n${ocr}` : '';
     const htmlStructure = pickerTemplate.htmlTemplate;
-    const templateName = pickerTemplate.name || 'template seleccionado';
+    const templateName  = pickerTemplate.name || 'modelo seleccionado';
+    const templateCss   = (pickerTemplate.css || '').slice(0, 2000);
 
-    const isPrimeiroEmprego = (data.perfilCV || '').includes('Primeiro Emprego');
-    const temExperiencia    = !!(data.experiencia && data.experiencia.trim());
+    const dataBlock = this._buildDataBlock(type, data);
 
-    // Construir o nome abreviado para o placeholder {{INICIAIS}}
-    const iniciais = (data.nome || 'CV').split(' ').slice(0, 2).map(n => n[0] || '').join('').toUpperCase();
+    return `Você é especialista em documentos profissionais moçambicanos. Crie um documento em HTML ESTRUTURADO usando EXACTAMENTE as classes CSS do template "${templateName}".
 
-    return `Você é especialista sénior em recursos humanos. Crie um CURRÍCULO VITAE em HTML ESTRUTURADO usando EXACTAMENTE as classes CSS do template "${templateName}".
+TIPO DE DOCUMENTO: ${type}
 
-DADOS DO CANDIDATO:
-- Nome: ${data.nome} | Iniciais: ${iniciais}
-- Cargo pretendido: ${data.cargo}
-- Telefone: ${data.contacto} | Email: ${data.email || '[email]'} | Localização: ${data.localizacao || 'Moçambique'}
-- Nascimento: ${data.nascimento || '[a completar]'}
-- Línguas: ${data.linguas || 'Português (nativo)'}
-- Formação: ${data.formacao}
-- Experiência: ${data.experiencia || 'Sem experiência formal prévia'}
-- Habilidades técnicas: ${data.habilidades || '[ferramentas, software]'}
-- Realização de destaque: ${data.exemplo || '[nenhuma fornecida]'}
-- Objectivo: ${data.objectivo || '[a completar]'}${ocrBlock}
+DADOS DO DOCUMENTO:
+${dataBlock}${ocrBlock}
 
-ESTRUTURA HTML OBRIGATÓRIA DO TEMPLATE:
+ESTRUTURA HTML OBRIGATÓRIA DO TEMPLATE (substitua os placeholders {{...}} pelos dados reais):
 ${htmlStructure}
 
-INSTRUÇÕES CRÍTICAS:
-1. Substitua TODOS os placeholders {{...}} pelos dados reais do candidato
-2. {{NOME}} → ${data.nome}
-3. {{CARGO}} → ${data.cargo}
-4. {{CONTACTO}} → ${data.contacto}
-5. {{EMAIL}} → ${data.email || '[email]'}
-6. {{LOCALIZACAO}} → ${data.localizacao || 'Moçambique'}
-7. {{OBJECTIVO}} → 2-3 frases do objectivo profissional
-8. {{INICIAIS}} → ${iniciais}
-9. {{FORMACAO}} → gere entradas HTML com a classe cv-entry para cada formação
-10. {{EXPERIENCIA}} → gere entradas HTML com a classe cv-entry para cada cargo${isPrimeiroEmprego && !temExperiencia ? ' (estágios, voluntariado, actividades)' : ' com bullets de realizações mensuráveis'}
-11. {{REALIZACAO}} → expanda o exemplo: "${data.exemplo || 'a completar'}"
-12. {{HABILIDADES}} → liste as habilidades: ${data.habilidades || '[ferramentas, software]'}
-13. {{HABILIDADES_LIST}} → gere <li> para cada habilidade
-14. {{LINGUAS}} → gere entradas de línguas com nível
-15. {{EXTRA}} → informação adicional relevante (carta de condução, disponibilidade, etc.)
+CSS DO TEMPLATE (referência das classes disponíveis):
+${templateCss}
 
-FORMATO DAS ENTRADAS (cv-entry):
+REGRAS ABSOLUTAS:
+1. Substitua TODOS os placeholders {{...}} pelos dados reais fornecidos acima
+2. Use EXACTAMENTE as classes CSS do template — NÃO invente classes novas
+3. Para listas (experiências, cláusulas, itens de tabela) gere múltiplos elementos HTML com as classes do template
+4. Conteúdo REAL e COMPLETO — NUNCA deixe placeholders por substituir
+5. Português formal de Moçambique
+6. VERBOS DE ACÇÃO com resultados mensuráveis nas experiências profissionais
+7. NÃO adicione estilos inline excepto width:% em barras de progresso
+
+FORMATO ENTRADA GENÉRICA (cv-entry, doc-entry):
 <div class="cv-entry">
-  <p class="cv-entry-date">PERÍODO (ex: 07/2020 – 12/2024)</p>
-  <p class="cv-entry-title">CARGO OU GRAU</p>
-  <p class="cv-entry-company">EMPRESA OU INSTITUIÇÃO | LOCAL</p>
-  <ul class="cv-entry-bullets">
-    <li>Realização concreta com verbo de acção e resultado mensurável</li>
-  </ul>
+  <p class="cv-entry-date">PERÍODO</p>
+  <p class="cv-entry-title">TÍTULO/CARGO</p>
+  <p class="cv-entry-company">ORGANIZAÇÃO | LOCAL</p>
+  <ul class="cv-entry-bullets"><li>Realização concreta</li></ul>
 </div>
 
-FORMATO DAS ENTRADAS DE LÍNGUA:
-<div class="cv-entry">
-  <p class="cv-entry-title">LÍNGUA</p>
-  <p class="cv-entry-sub">NÍVEL (Nativo / Fluente / Avançado / Intermédio / Básico)</p>
-  <div class="cv-lang-bar"><div class="cv-lang-fill" style="width:PERCENTAGEM%"></div></div>
-</div>
+RESPOSTA: Devolva APENAS o HTML, começando com a tag raiz do template e terminando com </div>. SEM markdown, SEM explicações, SEM \`\`\`html.`;
+  }
 
-REGRAS DE QUALIDADE:
-- Use VERBOS DE ACÇÃO no passado com resultados mensuráveis
-- NUNCA: "profissional dedicado", "trabalho em equipa" sem contexto específico
-- Cada cargo: mínimo 2-3 bullets com impacto mensurável
-- Formação: do mais recente para o mais antigo
-- NUNCA inclua foto, estado civil, religião, filiação política
+  // ── Dados específicos por tipo de documento para prompt HTML ─────────────
+  _buildDataBlock(type, data) {
+    const num = (v) => parseInt(v || 0).toLocaleString('pt-MZ');
+    const iniciais = (data.nome || 'CV').split(' ').slice(0,2).map(n => n[0] || '').join('').toUpperCase();
 
-RESPOSTA: Devolva APENAS o HTML completo, começando com <div class="cv-page... e terminando com </div>. SEM markdown, SEM explicações, SEM código fence.`;
+    const blocks = {
+      cv: () => `- Nome: ${data.nome || ''}  |  Iniciais: ${iniciais}
+- Cargo: ${data.cargo || ''}
+- Telefone: ${data.contacto || ''}  |  Email: ${data.email || '[email]'}  |  Localização: ${data.localizacao || 'Moçambique'}
+- Nascimento: ${data.nascimento || '[a completar]'}
+- Línguas: ${data.linguas || 'Português (nativo)'}
+- Formação: ${data.formacao || ''}
+- Experiência: ${data.experiencia || 'Sem experiência formal prévia'}
+- Habilidades: ${data.habilidades || '[ferramentas, software]'}
+- Realização de destaque: ${data.exemplo || '[nenhuma fornecida]'}
+- Objectivo: ${data.objectivo || '[a completar]'}
+- Perfil: ${data.perfilCV || 'Com Experiência Profissional'}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{INICIAIS}} = ${iniciais}
+{{NOME}} = ${data.nome || ''}
+{{CARGO}} = ${data.cargo || ''}
+{{CONTACTO}} = ${data.contacto || ''}
+{{EMAIL}} = ${data.email || '[email]'}
+{{LOCALIZACAO}} = ${data.localizacao || 'Moçambique'}
+{{OBJECTIVO}} = 2-3 frases baseadas em "${data.objectivo || data.cargo || ''}"
+{{FORMACAO}} = elementos <div class="cv-entry"> para cada formação (mais recente primeiro)
+{{EXPERIENCIA}} = elementos <div class="cv-entry"> para cada cargo/estágio com bullets de realizações
+{{REALIZACAO}} = parágrafo expandindo: "${data.exemplo || 'a completar'}"
+{{HABILIDADES}} = texto: ${data.habilidades || ''}
+{{HABILIDADES_LIST}} = <li> para cada habilidade de: ${data.habilidades || ''}
+{{LINGUAS}} = elementos de língua com barra de progresso (Português nativo=100%, Inglês básico=30%, etc.)
+{{EXTRA}} = informação adicional (carta de condução, disponibilidades, publicações)`,
+
+      carta: () => {
+        const iniciais = (data.remetenteNome || 'XX').split(' ').slice(0,2).map(n=>n[0]||'').join('').toUpperCase();
+        const ministrioLabel = data.ministerio || data.remetenteNome || '';
+        return `- Tipo: ${data.tipo || 'Formal'}
+- Remetente: ${data.remetenteNome || ''}  |  Cargo: ${data.remetenteCargo || ''}  |  Local: ${data.remetenteLocal || 'Maputo'}
+- Destinatário: ${data.destinatarioNome || ''} — ${data.destinatarioEnti || ''}
+- Assunto: ${data.assunto || ''}
+- Pontos a comunicar: ${data.pontos || ''}
+- Referência: ${data.ref || 'S/Ref.'}
+- Cargo pretendido (candidatura): ${data.cargoPretendido || data.cargo || ''}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{REMETENTE_NOME}} = ${data.remetenteNome || ''}
+{{REMETENTE_CARGO}} = ${data.remetenteCargo || data.cargo || ''}
+{{INICIAIS}} = ${iniciais}
+{{INICIAIS_EMPRESA}} = ${iniciais}
+{{LOCAL}} = ${data.remetenteLocal || 'Maputo'}
+{{DATA}} = data de hoje por extenso (ex: Maputo, 30 de Maio de 2026)
+{{REF}} = ${data.ref || 'S/Ref.'}
+{{MINISTERIO}} = ${ministrioLabel}
+{{REPARTIÇÃO}} = ${data.reparticao || data.remetenteNome || ''}
+{{DESTINATARIO_NOME}} = ${data.destinatarioNome || ''}
+{{DESTINATARIO_ENTI}} = ${data.destinatarioEnti || ''}
+{{ASSUNTO}} = ${data.assunto || ''}
+{{REMETENTE_CARGO_PRETENDIDO}} = ${data.cargoPretendido || data.cargo || ''}
+{{CORPO}} = corpo formal e completo da carta, desenvolvendo os pontos: "${data.pontos || ''}"
+           (mínimo 3 parágrafos; linguagem formal; português de Moçambique)`;
+      },
+
+      orcamento: () => `- Tipo de obra: ${data.tipoObra || ''}
+- Área: ${data.area || '?'} m² | Pisos: ${data.nPisos || 'R/C'} | Local: ${data.local || ''}
+- Acabamento: ${data.acabamento || 'Médio'} | Cobertura: ${data.cobertura || 'Laje'}
+- Prazo: ${data.prazo || 60} dias | Fase: ${data.fase || ''} | Cliente: ${data.cliente || ''}
+- Empresa emitente: ${data.empresa || data.prestador || 'Empresa de Construção'}
+- Detalhes adicionais: ${data.extra || 'padrão'}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{TITULO_OBRA}} = Orçamento de ${data.tipoObra || ''}
+{{LOCAL_DATA}} = ${data.local || 'Maputo'}, hoje por extenso
+{{AREA_PISOS}} = ${data.area || '?'} m² | ${data.nPisos || 'R/C'} piso(s)
+{{EMPRESA}} = ${data.empresa || data.prestador || 'Empresa de Construção'}
+{{CLIENTE}} = ${data.cliente || '[nome do cliente]'}
+{{NUM_ORC}} = ${data.numOrc || '001/' + new Date().getFullYear()}
+{{PRAZO}} = ${data.prazo || 60}
+{{VALIDADE}} = Válido por 30 dias a partir da data de emissão
+{{ITEMS_MATERIAIS}} = gere 8-15 linhas <tr><td>material</td><td>un</td><td>qtd</td><td>preço</td><td>total MZN</td></tr> realistas para "${data.tipoObra || ''}" com acabamento ${data.acabamento || 'Médio'}
+{{ITEMS_MAO_OBRA}} = gere 4-8 linhas <tr><td>profissional</td><td>dias</td><td>diária MZN</td><td>total MZN</td></tr>
+{{ITEMS_TODOS}} = combinar materiais e mão-de-obra numa única tabela (para templates simples)
+{{TOTAL_MATERIAIS}} = calcule o subtotal dos materiais em MZN
+{{TOTAL_MAO_OBRA}} = calcule o subtotal da mão-de-obra em MZN
+{{SUBTOTAL}} = soma de materiais + mão-de-obra
+{{IMPREVISTOS}} = 10% do subtotal
+{{TOTAL_GERAL}} = subtotal + imprevistos (valor final em MZN)`,
+
+      arrendamento: () => `- Tipo: ${data.tipoImovel || ''}
+- Senhorio: ${data.proprietario || ''}  |  BI: ${data.biProprietario || ''}
+- Inquilino: ${data.locatario || ''}  |  BI: ${data.biLocatario || ''}
+- Local: ${data.local || ''}
+- Renda: ${num(data.valor)} MZN/mês  |  Duração: ${data.duracao || ''}
+- Caução: ${data.caucao || ''}  |  Pagamento: ${data.metodoPagamento || ''}
+- Serviços incluídos: ${data.quemPagaServicos || ''}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{SENHORIO_NOME}} = ${data.proprietario || ''}
+{{SENHORIO_BI}} = ${data.biProprietario || ''}
+{{INQUILINO_NOME}} = ${data.locatario || ''}
+{{INQUILINO_BI}} = ${data.biLocatario || ''}
+{{IMOVEL_LOCAL}} = ${data.local || ''}
+{{TIPO_IMOVEL}} = ${data.tipoImovel || ''}
+{{RENDA_VALOR}} = ${num(data.valor)} MZN/mês
+{{RENDA_EXTENSO}} = [escreva o valor por extenso em português]
+{{DURACAO}} = ${data.duracao || ''}
+{{CAUCAO}} = ${data.caucao || ''}
+{{DATA}} = data de hoje por extenso
+{{LOCAL_DATA}} = ${data.local || 'Maputo'}, hoje
+{{CLAUSULAS}} = gere cláusulas completas numeradas (Cláusula 1ª a 12ª) cobrindo:
+  objecto do contrato, identificação do imóvel, prazo (${data.duracao || ''}), renda (${num(data.valor)} MZN),
+  caução (${data.caucao || ''}), forma de pagamento (${data.metodoPagamento || ''}),
+  serviços e encargos (${data.quemPagaServicos || ''}), obrigações do senhorio, obrigações do inquilino,
+  conservação e reparações, rescisão antecipada, foro competente (Tribunal de ${data.local || 'Maputo'})
+  Cada cláusula: <p><strong>Cláusula N.ª — TÍTULO</strong></p><p>texto...</p>`,
+
+      procuracao: () => `- Tipo: ${data.tipoProc || 'Especial'}
+- Outorgante: ${data.outorgante || ''}  |  BI: ${data.biOutorgante || ''}  |  Morada: ${data.moradaOutorgante || ''}
+- Procurador: ${data.procurador || ''}  |  BI: ${data.biProcurador || ''}  |  Morada: ${data.moradaProcurador || ''}
+- Poderes: ${data.acto || ''}
+- Sub-mandato: ${data.subMandato || 'Não'}
+- Validade: ${data.validade || ''}  |  Local: ${data.local || ''}`,
+
+      requerimento: () => `- Entidade: ${data.entidade || ''}
+- Requerente: ${data.remetente || ''}  |  BI: ${data.bi || ''}  |  Contacto: ${data.contacto || ''}
+- Endereço: ${data.endereco || ''}
+- Assunto: ${data.assunto || ''}
+- Fundamento: ${data.fundamento || ''}
+- Anexos: ${data.anexos || ''}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{ENTIDADE}} = ${data.entidade || ''}
+{{REQUERENTE}} = ${data.remetente || ''}
+{{BI}} = ${data.bi || ''}
+{{ENDERECO}} = ${data.endereco || ''}
+{{ASSUNTO}} = ${data.assunto || ''}
+{{LOCAL}} = Maputo
+{{DATA}} = data de hoje por extenso
+{{FUNDAMENTO}} = texto formal desenvolvendo: "${data.fundamento || ''}" (2-3 parágrafos com base legal quando aplicável)
+{{CONTACTO}} = ${data.contacto || ''}`,
+
+      residencia: () => `- Declarante: ${data.declarante || ''}  |  BI: ${data.bi || ''}
+- Nascimento: ${data.nascimento || ''}  |  Naturalidade: ${data.naturalidade || ''}
+- Endereço: ${data.endereco || ''}  |  Tempo de residência: ${data.tempo || ''}
+- Finalidade: ${data.finalidade || ''}
+- Chefe de quarteirão/Lider: ${data.chefe || '[nome do responsável]'}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{DECLARANTE}} = ${data.declarante || ''}
+{{BI}} = ${data.bi || ''}
+{{NASCIMENTO}} = ${data.nascimento || ''}
+{{NATURALIDADE}} = ${data.naturalidade || ''}
+{{ENDERECO}} = ${data.endereco || ''}
+{{TEMPO}} = ${data.tempo || ''}
+{{FINALIDADE}} = ${data.finalidade || ''}
+{{CHEFE}} = ${data.chefe || '[nome do responsável]'}
+{{LOCAL}} = Maputo
+{{DATA}} = data de hoje por extenso`,
+
+      prestacao: () => `- Serviço: ${data.servico || ''}
+- Prestador: ${data.prestador || ''}  |  NUIT: ${data.nuitPrestador || ''}  |  Morada: ${data.moradaPrestador || ''}
+- Cliente: ${data.cliente || ''}  |  BI/NUIT: ${data.biCliente || ''}  |  Morada: ${data.moradaCliente || ''}
+- Valor total: ${num(data.valorTotal)} MZN  |  Prazo: ${data.prazo || ''} dias
+- Pagamento: ${data.pagamento || ''}
+- Penalização por atraso: ${data.penalizacao || '0.5%/dia'}
+- Descrição: ${data.descricao || ''}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{PRESTADOR}} = ${data.prestador || ''}
+{{NUIT_PRESTADOR}} = ${data.nuitPrestador || ''}
+{{MORADA_PRESTADOR}} = ${data.moradaPrestador || ''}
+{{CLIENTE}} = ${data.cliente || ''}
+{{BI_CLIENTE}} = ${data.biCliente || ''}
+{{SERVICO}} = ${data.servico || ''}
+{{DESCRICAO}} = ${data.descricao || ''}
+{{VALOR_TOTAL}} = ${num(data.valorTotal)} MZN
+{{PRAZO}} = ${data.prazo || ''} dias
+{{PAGAMENTO}} = ${data.pagamento || ''}
+{{DATA}} = data de hoje por extenso
+{{CLAUSULAS}} = gere cláusulas completas numeradas para contrato de prestação de serviços:
+  objecto, obrigações do prestador, obrigações do cliente, prazo de execução, valor e pagamento,
+  penalizações, propriedade intelectual, rescisão, foro competente`,
+
+      recibo: () => {
+        const valorBase = parseFloat(data.valor || 0);
+        const taxaIva   = data.iva === 'Sim' ? 16 : (parseFloat(data.taxaIva) || 0);
+        const valorIva  = valorBase * taxaIva / 100;
+        const valorTotal = valorBase + valorIva;
+        return `- Tipo: ${data.tipoDoc || 'Recibo Simples'}
+- Emitente: ${data.emitente || ''}  |  NUIT: ${data.nuitEmitente || 'N/A'}
+- Cliente: ${data.cliente || ''}  |  BI/NUIT: ${data.biCliente || ''}
+- Descrição: ${data.descricao || ''}
+- Valor base: ${valorBase.toLocaleString('pt-MZ')} MZN | IVA: ${taxaIva}% | Total: ${valorTotal.toLocaleString('pt-MZ')} MZN
+- Pagamento: ${data.pagamento || ''}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{EMITENTE}} = ${data.emitente || ''}
+{{NUIT_EMITENTE}} = ${data.nuitEmitente || 'N/A'}
+{{CLIENTE}} = ${data.cliente || ''}
+{{BI_CLIENTE}} = ${data.biCliente || ''}
+{{DESCRICAO}} = ${data.descricao || ''}
+{{NUM_DOC}} = ${data.numDoc || '001/' + new Date().getFullYear()}
+{{DATA}} = data de hoje por extenso
+{{FORMA_PAGAMENTO}} = ${data.pagamento || 'Numerário'}
+{{ITEMS_RECIBO}} = gere 1-3 linhas <tr><td>descrição</td><td>qtd</td><td>preço unit</td><td>total</td></tr> para: "${data.descricao || ''}"
+{{TAXA_IVA}} = ${taxaIva}
+{{VALOR_IVA}} = ${valorIva.toLocaleString('pt-MZ')} MZN
+{{SUBTOTAL}} = ${valorBase.toLocaleString('pt-MZ')} MZN
+{{VALOR_TOTAL}} = ${valorTotal.toLocaleString('pt-MZ')} MZN`;
+      },
+
+      recomendacao: () => `- Tipo: ${data.tipoRec || 'Profissional'}
+- Recomendador: ${data.recomendador || ''}  |  Cargo: ${data.cargoRec || ''}  |  Entidade: ${data.entidadeRec || ''}
+- Recomendado: ${data.recomendado || ''}  |  Cargo/Bolsa pretendido: ${data.cargoRecm || ''}
+- Relação de trabalho: ${data.relacao || ''}
+- Qualidades evidenciadas: ${data.qualidades || ''}
+- Exemplo concreto: ${data.exemploConcreto || '[a completar]'}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{RECOMENDADOR}} = ${data.recomendador || ''}
+{{CARGO_REC}} = ${data.cargoRec || ''}
+{{ENTIDADE_REC}} = ${data.entidadeRec || ''}
+{{RECOMENDADO}} = ${data.recomendado || ''}
+{{LOCAL}} = Maputo
+{{DATA}} = data de hoje por extenso
+{{CORPO}} = carta completa de recomendação (3-4 parágrafos):
+  1. Apresentação do recomendador e relação com o recomendado
+  2. Competências e qualidades: "${data.qualidades || ''}"
+  3. Exemplo concreto: "${data.exemploConcreto || ''}"
+  4. Recomendação explícita para "${data.cargoRecm || ''}"`,
+
+      planonegocio: () => `- Negócio: ${data.nomeNegocio || ''}  |  Forma jurídica: ${data.formaJuridica || ''}
+- Sector: ${data.sector || ''}  |  Local: ${data.local || ''}
+- Proprietário: ${data.proprietario || ''}
+- Investimento total: ${num(data.investimento)} MZN
+- Trabalhadores: ${data.nTrabalhadores || 1}  |  Público-alvo: ${data.clientes || ''}
+- Retorno esperado: ${data.retorno || ''}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{NOME_NEGOCIO}} = ${data.nomeNegocio || ''}
+{{SECTOR}} = ${data.sector || ''}
+{{PROPRIETARIO}} = ${data.proprietario || ''}
+{{LOCAL}} = ${data.local || ''}
+{{ANO}} = ${new Date().getFullYear()}
+{{INVESTIMENTO_TOTAL}} = ${num(data.investimento)} MZN
+{{SUMARIO}} = sumário executivo do negócio (2-3 frases)
+{{DESCRICAO_NEGOCIO}} = descrição detalhada: o que faz, como funciona, proposta de valor
+{{ANALISE_MERCADO}} = análise do mercado em ${data.local || 'Moçambique'} para ${data.sector || ''}: clientes-alvo, concorrência, oportunidades
+{{ITEMS_FINANCEIROS}} = linhas <tr><td>componente</td><td>valor MZN</td></tr> (equipamento, stock, licenças, fundo de maneio...)
+{{EQUIPA}} = estrutura organizacional com ${data.nTrabalhadores || 1} colaborador(es) e funções
+{{RETORNO}} = projecção de retorno: ${data.retorno || ''} com análise de ponto de equilíbrio`,
+
+      licenca: () => `- Tipo: ${data.tipoLicenca || 'Licença Comercial'}
+- Requerente: ${data.requerente || ''}  |  NUIT: ${data.nuit || ''}  |  Contacto: ${data.contacto || ''}
+- Entidade destinatária: ${data.entidade || ''}
+- Objecto da licença: ${data.objecto || ''}
+- Área: ${data.areaM2 || ''} m²  |  Horário: ${data.horario || ''}  |  Local: ${data.local || ''}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{REQUERENTE}} = ${data.requerente || ''}
+{{NUIT}} = ${data.nuit || ''}
+{{CONTACTO}} = ${data.contacto || ''}
+{{ENTIDADE}} = ${data.entidade || ''}
+{{OBJECTO}} = ${data.objecto || ''}
+{{AREA_M2}} = ${data.areaM2 || ''}
+{{HORARIO}} = ${data.horario || ''}
+{{LOCAL}} = ${data.local || ''}
+{{DATA}} = data de hoje por extenso
+{{FUNDAMENTACAO}} = fundamentação jurídica do pedido (2 parágrafos referenciando legislação moçambicana aplicável)`,
+
+      acta: () => `- Organização: ${data.organizacao || ''}  |  Tipo: ${data.tipoReuniao || ''}
+- Data: ${data.data || ''}  |  Hora: ${data.hora || ''}  |  Local: ${data.local || ''}
+- Presidente: ${data.presidente || ''}  |  Secretário: ${data.secretario || ''}
+- Presentes: ${data.presentes || ''}
+- Pauta: ${data.pauta || ''}
+- Deliberações: ${data.deliberacoes || ''}
+
+MAPEAMENTO DE PLACEHOLDERS:
+{{ORGANIZACAO}} = ${data.organizacao || ''}
+{{TIPO_REUNIAO}} = ${data.tipoReuniao || ''}
+{{NUM_ACTA}} = ${data.numActa || '001/' + new Date().getFullYear()}
+{{DATA}} = ${data.data || 'data de hoje por extenso'}
+{{HORA}} = ${data.hora || ''}
+{{LOCAL}} = ${data.local || ''}
+{{PRESIDENTE}} = ${data.presidente || ''}
+{{SECRETARIO}} = ${data.secretario || ''}
+{{PRESENTES}} = ${data.presentes || ''}
+{{PAUTA}} = lista formatada dos pontos da ordem do dia: "${data.pauta || ''}"
+           Formato: <p>1. Ponto um</p><p>2. Ponto dois</p>...
+{{DELIBERACOES}} = deliberações formais detalhadas sobre: "${data.deliberacoes || ''}"
+                  Formato: <p><strong>Ponto 1:</strong> texto da deliberação aprovada por unanimidade/maioria.</p>`,
+
+      trabalho: () => `- Tema: ${data.tema || ''}
+- Disciplina: ${data.disciplina || ''}  |  Nível: ${data.nivel || ''}
+- Páginas: ${data.paginas || 5}  |  Requisitos: ${data.requisitos || 'APA'}`,
+    };
+
+    return (blocks[type] || blocks.carta)();
   }
 
 }
