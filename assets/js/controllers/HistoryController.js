@@ -302,35 +302,54 @@ export class HistoryController {
     const doc = docs.find(d => d.id === id);
     if (!doc) return;
     this.close();
-    const preview = document.getElementById('resPreview');
-    const meta    = document.getElementById('resMeta');
-    const model   = document.getElementById('resModel');
-    if (preview) {
-      // Usar o renderizador Markdown do Views se disponível
-      if (window.docController) {
-        import('../views/Views.js').then(({ DocumentView }) => {
-          const svc = { title: doc.title || doc.service_type };
-          DocumentView.renderResult(doc.content, svc, null, doc.model_used || '');
-        });
-      } else {
-        preview.innerHTML = `<pre style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.7;">${doc.content.replace(/</g,'&lt;')}</pre>`;
-      }
+
+    if (window.docController) {
+      import('../views/Views.js').then(({ DocumentView }) => {
+        const svc = { title: doc.title || doc.service_type };
+        DocumentView.renderResult(doc.content, svc, null, doc.model_used || '');
+      });
+    } else {
+      const preview = document.getElementById('resPreview');
+      if (preview) preview.innerHTML = `<pre style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.7;">${doc.content.replace(/</g,'&lt;')}</pre>`;
     }
-    if (meta) meta.innerHTML = `<span>📁 Do arquivo · ${new Date(doc.created_at).toLocaleDateString('pt-MZ')}</span>`;
+
+    const meta  = document.getElementById('resMeta');
+    const model = document.getElementById('resModel');
+    if (meta)  meta.innerHTML = `<span>📁 Do arquivo · ${new Date(doc.created_at).toLocaleDateString('pt-MZ')}</span>`;
     if (model) model.textContent = doc.model_used || '';
 
     if (window.docController?.docModel) {
-      window.docController.docModel.content = doc.content;
-      window.docController.docModel.service = doc.service_type;
+      window.docController.docModel.content     = doc.content;
+      window.docController.docModel.service     = doc.service_type;
+      // CORRIGIDO: restaurar formData a partir do conteúdo guardado para que
+      // ao clicar "Usar este Modelo" no histórico a IA regenere com os dados
+      // reais do documento (nome, cargo, etc.) em vez de [PREENCHER].
+      // Estratégia: se o doc tiver formData guardado usa-o directamente;
+      // caso contrário extrai os campos visíveis do conteúdo (nome, cargo, etc.)
+      if (doc.form_data) {
+        try {
+          window.docController.docModel.formData = typeof doc.form_data === 'string'
+            ? JSON.parse(doc.form_data)
+            : doc.form_data;
+        } catch (_) {}
+      } else if (!window.docController.docModel.formData) {
+        // Fallback: construir formData mínimo a partir do título e conteúdo
+        // para que _applyTemplate não regenere com campos vazios.
+        window.docController.docModel.formData = {
+          _fromHistory: true,
+          _existingContent: doc.content,
+          title: doc.title || '',
+          service: doc.service_type,
+        };
+      }
     }
-    // Sincronizar documentState para que btnTemplate, btnCopy, btnDl funcionem
-    // correctamente com documentos abertos do histórico
+
     if (window.documentState) {
       window.documentState.set(doc.content, doc.service_type);
     }
+
     import('../views/Views.js').then(({ ModalView }) => {
       ModalView.open('resultOverlay');
-      // Re-bind do botão editar para este documento
       window.docController?._bindEditBtn?.();
     });
   }
