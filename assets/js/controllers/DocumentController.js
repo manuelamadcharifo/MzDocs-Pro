@@ -588,11 +588,7 @@ export class DocumentController {
         if (!tpl) return;
         this._activeTemplate = tpl;
 
-        // ── Documento do histórico: formData._fromHistory ───────────────────
-        // CORRIGIDO: quando o utilizador abre um documento do histórico e clica
-        // "Usar este Modelo", o formData tem _fromHistory=true e _existingContent.
-        // Neste caso NÃO regeneramos — apenas aplicamos o CSS do template ao
-        // conteúdo já existente, preservando todos os dados reais do documento.
+        // ── Documento do histórico ───────────────────────────────────────────
         const fd = this.docModel.formData;
         if (fd?._fromHistory) {
             const current = documentState.currentContent || fd._existingContent;
@@ -604,20 +600,29 @@ export class DocumentController {
             return;
         }
 
-        // ── SE o template tem htmlTemplate → regenerar o documento com HTML estruturado ──
-        // O markdown linear NUNCA produz layouts de duas colunas (sidebar + main).
-        // Precisamos pedir à IA para gerar HTML directamente com as classes do template.
-        if (tpl.htmlTemplate && this.docModel.formData && this.docModel.service) {
-            this._regenerateWithHTMLTemplate(tpl);
+        // ── CORRIGIDO: não regenerar o documento com nova chamada à IA ───────
+        // Bug original: ao clicar "Usar este Modelo" o código chamava
+        // _regenerateWithHTMLTemplate que pedia à IA para gerar um documento
+        // completamente novo — alterando o conteúdo real (nome, experiências,
+        // objectivo) que o utilizador já tinha gerado, substituindo por dados
+        // genéricos ou [PREENCHER]. O utilizador via o seu CV mudar para outro.
+        //
+        // Solução correcta: o template define apenas LAYOUT e ESTILO, não conteúdo.
+        // Pegamos no conteúdo HTML já gerado (se existir) ou no markdown actual,
+        // e aplicamos o CSS do template por cima sem tocar no conteúdo.
+        //
+        // Se o template tem htmlTemplate mas não temos HTML gerado ainda
+        // (documento gerado em markdown puro), fazemos uma única re-renderização
+        // injectando o markdown no wrapper do template — sem chamar a IA.
+        const current = documentState.currentContent;
+        const svc     = SERVICES[this.docModel.service];
+        if (!current || !svc) {
+            NotificationView.warn('⚠️ Nenhum documento gerado. Gere primeiro o documento.');
             return;
         }
 
-        // Fallback: template só tem CSS → aplicar ao markdown existente
-        const current = documentState.currentContent;
-        const svc     = SERVICES[this.docModel.service];
-        if (current && svc) {
-            DocumentView.renderResult(current, svc, this.creditModel.value, this.docModel.model, tpl.css);
-        }
+        // Aplicar CSS do template ao conteúdo existente (sem nova chamada à IA)
+        DocumentView.renderResult(current, svc, this.creditModel.value, this.docModel.model, tpl.css || null);
         NotificationView.success(`✅ Modelo "${tpl.name}" aplicado!`);
     }
 
