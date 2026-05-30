@@ -14,6 +14,34 @@ export const TEMPLATE_LIBRARY = {
       name: 'Académico Clássico',
       description: 'Times New Roman, margens APA, numeração de páginas',
       preview: { accent: '#1e3a5f', bg: '#fff', font: 'serif', headerBg: '#1e3a5f', headerColor: '#fff' },
+      htmlTemplate: `
+<div class="ta-page">
+  <div class="ta-capa">
+    <p class="ta-instituicao">{{INSTITUICAO}}</p>
+    <p class="ta-curso">{{CURSO}}</p>
+    <h1 class="ta-titulo">{{TEMA}}</h1>
+    <p class="ta-autor">{{AUTORES}}</p>
+    <p class="ta-local-ano">{{LOCAL_ANO}}</p>
+  </div>
+  <div class="ta-body">
+    <section class="ta-section">
+      <h2 class="ta-section-title">Introdução</h2>
+      <p class="ta-text">{{INTRODUCAO}}</p>
+    </section>
+    <section class="ta-section">
+      <h2 class="ta-section-title">Desenvolvimento</h2>
+      <div class="ta-content">{{DESENVOLVIMENTO}}</div>
+    </section>
+    <section class="ta-section">
+      <h2 class="ta-section-title">Conclusão</h2>
+      <p class="ta-text">{{CONCLUSAO}}</p>
+    </section>
+    <section class="ta-section">
+      <h2 class="ta-section-title">Referências Bibliográficas</h2>
+      <div class="ta-referencias">{{REFERENCIAS}}</div>
+    </section>
+  </div>
+</div>`,
       css: `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:2;color:#000;padding:30mm 25mm 25mm 30mm}
         h1{font-size:14pt;text-align:center;font-weight:bold;text-transform:uppercase;margin-bottom:24pt}
         h2{font-size:13pt;font-weight:bold;text-transform:uppercase;margin-top:18pt;margin-bottom:6pt}
@@ -479,6 +507,18 @@ export const TEMPLATE_LIBRARY = {
       name: 'Formal Clássica',
       description: 'Estrutura tradicional, tom oficial e respeitoso',
       preview: { accent: '#1e3a5f', bg: '#fff', font: 'serif', headerBg: '#1e3a5f', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <p style="text-align:right">{{LOCAL}}, {{DATA}}</p>
+  <p style="margin-top:24pt"><strong>Exmo.(a) Sr.(a)</strong><br>{{DESTINATARIO_NOME}}<br>{{DESTINATARIO_ENTI}}</p>
+  <h1>Assunto: {{ASSUNTO}}</h1>
+  <p>Exmo.(a) Sr.(a) {{DESTINATARIO_NOME}},</p>
+  <div>{{CORPO}}</div>
+  <div class="assinatura">
+    <p>Com os melhores cumprimentos,</p>
+    <p><strong>{{REMETENTE_NOME}}</strong></p>
+  </div>
+</div>`,
       css: `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:30mm 25mm}
         h1{font-size:13pt;text-align:center;font-weight:bold;margin-bottom:20pt;text-transform:uppercase}
         p{margin-bottom:10pt;text-align:justify}
@@ -489,6 +529,39 @@ export const TEMPLATE_LIBRARY = {
       name: 'Corporativa com Timbrado',
       description: 'Faixa de cabeçalho colorida, ideal para empresas',
       preview: { accent: '#1d4ed8', bg: '#fff', font: 'sans-serif', headerBg: '#1d4ed8', headerColor: '#fff' },
+      htmlTemplate: `
+<div class="carta-page">
+  <header class="carta-header">
+    <div class="carta-logo-area">
+      <div class="carta-logo-placeholder">{{INICIAIS_EMPRESA}}</div>
+      <div>
+        <p class="carta-empresa-nome">{{REMETENTE_NOME}}</p>
+        <p class="carta-empresa-sub">{{REMETENTE_CARGO}}</p>
+      </div>
+    </div>
+    <div class="carta-ref-area">
+      <p class="carta-data">{{LOCAL}}, {{DATA}}</p>
+      <p class="carta-ref">Ref.: {{ASSUNTO}}</p>
+    </div>
+  </header>
+  <section class="carta-destinatario">
+    <p><strong>A/C: {{DESTINATARIO_NOME}}</strong></p>
+    <p>{{DESTINATARIO_ENTI}}</p>
+  </section>
+  <section class="carta-corpo">
+    <p class="carta-assunto"><strong>Assunto: {{ASSUNTO}}</strong></p>
+    <p>Exmo.(a) Sr.(a) {{DESTINATARIO_NOME}},</p>
+    <div class="carta-texto">{{CORPO}}</div>
+  </section>
+  <footer class="carta-footer">
+    <div class="carta-assinatura">
+      <p>Atenciosamente,</p>
+      <div class="carta-linha-assinatura"></div>
+      <p><strong>{{REMETENTE_NOME}}</strong></p>
+      <p class="carta-cargo-assin">{{REMETENTE_CARGO}}</p>
+    </div>
+  </footer>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#1e293b;padding:0}
         h1{background:#1d4ed8;color:#fff;padding:18pt 25pt;font-size:14pt;margin:0 0 20pt}
         p{padding:0 25pt;margin-bottom:10pt;text-align:justify}
@@ -499,6 +572,26 @@ export const TEMPLATE_LIBRARY = {
       name: 'Ministerial / Governo',
       description: 'Formato para comunicações com entidades públicas e ministérios',
       preview: { accent: '#006633', bg: '#fff', font: 'serif', headerBg: '#006633', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <div style="text-align:center;border-bottom:3px solid #1a237e;padding-bottom:10pt;margin-bottom:20pt">
+    <p style="font-size:9pt;letter-spacing:2px;color:#1a237e;font-weight:700">REPÚBLICA DE MOÇAMBIQUE</p>
+    <p style="font-size:11pt;font-weight:800;color:#1a237e">{{MINISTERIO}}</p>
+    <p style="font-size:9pt;color:#1a237e">{{REPARTIÇÃO}}</p>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:20pt">
+    <div><p>Ref.: {{REF}}</p></div>
+    <div style="text-align:right"><p>{{LOCAL}}, {{DATA}}</p></div>
+  </div>
+  <p><strong>Exmo.(a) Sr.(a)</strong><br>{{DESTINATARIO_NOME}}<br>{{DESTINATARIO_ENTI}}</p>
+  <h2 style="font-size:11pt;font-weight:700;margin:20pt 0 12pt">Assunto: {{ASSUNTO}}</h2>
+  <div>{{CORPO}}</div>
+  <div style="margin-top:40pt">
+    <p>Com os elevados cumprimentos,</p>
+    <p style="margin-top:30pt"><strong>{{REMETENTE_NOME}}</strong></p>
+    <p>{{REMETENTE_CARGO}}</p>
+  </div>
+</div>`,
       css: `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:25mm 25mm 20mm 35mm}
         h1{font-size:13pt;text-align:center;font-weight:bold;border-top:2px solid #006633;border-bottom:2px solid #006633;padding:6pt 0;margin-bottom:18pt;color:#006633;text-transform:uppercase}
         p{margin-bottom:10pt;text-align:justify}`,
@@ -508,6 +601,35 @@ export const TEMPLATE_LIBRARY = {
       name: 'Moderna e Limpa',
       description: 'Design contemporâneo para candidaturas e comunicações profissionais',
       preview: { accent: '#0f172a', bg: '#f8fafc', font: 'sans-serif', headerBg: '#0f172a', headerColor: '#fff' },
+      htmlTemplate: `
+<div class="carta-mod-page">
+  <aside class="carta-mod-sidebar">
+    <div class="carta-mod-logo">{{INICIAIS}}</div>
+    <p class="carta-mod-remetente">{{REMETENTE_NOME}}</p>
+    <p class="carta-mod-cargo">{{REMETENTE_CARGO}}</p>
+    <div class="carta-mod-divider"></div>
+    <p class="carta-mod-label">Data</p>
+    <p class="carta-mod-val">{{DATA}}</p>
+    <p class="carta-mod-label">Local</p>
+    <p class="carta-mod-val">{{LOCAL}}</p>
+    <p class="carta-mod-label">Referência</p>
+    <p class="carta-mod-val">{{REF}}</p>
+  </aside>
+  <main class="carta-mod-main">
+    <div class="carta-mod-destinatario">
+      <p><strong>{{DESTINATARIO_NOME}}</strong></p>
+      <p>{{DESTINATARIO_ENTI}}</p>
+    </div>
+    <p class="carta-mod-assunto"><strong>Assunto: {{ASSUNTO}}</strong></p>
+    <p>Exmo.(a) Sr.(a) {{DESTINATARIO_NOME}},</p>
+    <div class="carta-mod-corpo">{{CORPO}}</div>
+    <div class="carta-mod-assinatura">
+      <p>Com os melhores cumprimentos,</p>
+      <div class="carta-mod-linha"></div>
+      <p><strong>{{REMETENTE_NOME}}</strong></p>
+    </div>
+  </main>
+</div>`,
       css: `body{font-family:Helvetica,Arial,sans-serif;font-size:11pt;line-height:1.7;color:#334155;padding:28mm}
         h1{font-size:13pt;font-weight:700;color:#0f172a;border-left:4px solid #0f172a;padding-left:12pt;margin-bottom:20pt}
         p{margin-bottom:12pt;text-align:justify}
@@ -518,6 +640,25 @@ export const TEMPLATE_LIBRARY = {
       name: 'Carta de Candidatura',
       description: 'Optimizada para candidaturas a emprego, com espaço para realização pessoal',
       preview: { accent: '#0ea5e9', bg: '#f0f9ff', font: 'sans-serif', headerBg: '#0ea5e9', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20pt">
+    <div>
+      <p style="font-size:18pt;font-weight:800;color:#0f172a">{{REMETENTE_NOME}}</p>
+      <p style="font-size:10pt;color:#64748b">{{REMETENTE_CARGO_PRETENDIDO}}</p>
+    </div>
+    <div style="text-align:right;font-size:9pt;color:#64748b">
+      <p>{{LOCAL}}, {{DATA}}</p>
+    </div>
+  </div>
+  <p><strong>Exmo.(a) Sr.(a)</strong><br>{{DESTINATARIO_NOME}}<br>{{DESTINATARIO_ENTI}}</p>
+  <h1 style="font-size:12pt;font-weight:700;margin:16pt 0 10pt">Candidatura: {{ASSUNTO}}</h1>
+  <div>{{CORPO}}</div>
+  <div style="margin-top:36pt">
+    <p>Atenciosamente,</p>
+    <p style="margin-top:24pt;font-weight:700">{{REMETENTE_NOME}}</p>
+  </div>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#0c4a6e;padding:25mm}
         h1{font-size:15pt;font-weight:800;color:#0ea5e9;margin-bottom:4pt}
         h2{font-size:11pt;font-weight:600;color:#0369a1;margin-bottom:16pt;font-style:italic}
@@ -534,6 +675,29 @@ export const TEMPLATE_LIBRARY = {
       name: 'Profissional Detalhado',
       description: 'Tabelas de itens, subtotais e condições de pagamento',
       preview: { accent: '#f59e0b', bg: '#fffbeb', font: 'sans-serif', headerBg: '#f59e0b', headerColor: '#000' },
+      htmlTemplate: `
+<div>
+  <h1>{{TITULO_OBRA}}</h1>
+  <p><strong>Local:</strong> {{LOCAL_DATA}} &nbsp;&nbsp; <strong>Área/Pisos:</strong> {{AREA_PISOS}} &nbsp;&nbsp; <strong>Válido:</strong> {{VALIDADE}}</p>
+  <h2>Materiais de Construção</h2>
+  <table>
+    <thead><tr><th>Descrição</th><th>Unid.</th><th>Qtd.</th><th>Pr. Unit. (MZN)</th><th>Total (MZN)</th></tr></thead>
+    <tbody>{{ITEMS_MATERIAIS}}</tbody>
+    <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">Subtotal Materiais</td><td style="font-weight:700">{{TOTAL_MATERIAIS}}</td></tr></tfoot>
+  </table>
+  <h2>Mão-de-Obra</h2>
+  <table>
+    <thead><tr><th>Profissional</th><th>Dias</th><th>Diária (MZN)</th><th>Total (MZN)</th></tr></thead>
+    <tbody>{{ITEMS_MAO_OBRA}}</tbody>
+    <tfoot><tr><td colspan="3" style="text-align:right;font-weight:700">Subtotal Mão-de-Obra</td><td style="font-weight:700">{{TOTAL_MAO_OBRA}}</td></tr></tfoot>
+  </table>
+  <table>
+    <tfoot>
+      <tr><td colspan="4" style="text-align:right;font-weight:800;font-size:12pt">TOTAL GERAL</td><td style="font-weight:800;font-size:12pt">{{TOTAL_GERAL}}</td></tr>
+    </tfoot>
+  </table>
+  <p style="margin-top:16pt;font-size:9pt;color:#78716c">Nota: Valores em Meticais (MZN). Imprevistos de 10% incluídos. {{VALIDADE}}</p>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:10.5pt;line-height:1.4;color:#1c1917;padding:20mm}
         h1{font-size:18pt;font-weight:800;color:#b45309;margin-bottom:4pt}
         h2{font-size:11pt;font-weight:700;background:#fef3c7;padding:4pt 8pt;margin-top:14pt;border-left:4px solid #f59e0b}
@@ -548,6 +712,17 @@ export const TEMPLATE_LIBRARY = {
       name: 'Simples e Directo',
       description: 'Para pequenas obras, remodelações e reparações',
       preview: { accent: '#0f172a', bg: '#fff', font: 'sans-serif', headerBg: '#0f172a', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <h1>Orçamento — {{TITULO_OBRA}}</h1>
+  <p>Local: {{LOCAL_DATA}} | {{AREA_PISOS}}</p>
+  <table>
+    <thead><tr><th>#</th><th>Descrição</th><th>Qtd.</th><th>Unit. (MZN)</th><th>Total (MZN)</th></tr></thead>
+    <tbody>{{ITEMS_TODOS}}</tbody>
+    <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td>{{TOTAL_GERAL}}</td></tr></tfoot>
+  </table>
+  <p style="margin-top:12pt;font-size:9pt">Válido: {{VALIDADE}} | Prazo de execução: {{PRAZO}} dias</p>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#1e293b;padding:22mm}
         h1{font-size:16pt;font-weight:800;padding:12pt;background:#0f172a;color:#fff;margin:-22mm -22mm 18pt;padding:14pt 22mm}
         h2{font-size:11pt;font-weight:700;color:#0f172a;margin-top:14pt;text-transform:uppercase;letter-spacing:.5px}
@@ -560,6 +735,41 @@ export const TEMPLATE_LIBRARY = {
       name: 'Construtora Formal',
       description: 'Logo e identidade visual para empresas de construção',
       preview: { accent: '#dc2626', bg: '#fff', font: 'sans-serif', headerBg: '#dc2626', headerColor: '#fff' },
+      htmlTemplate: `
+<div class="orc-page">
+  <header class="orc-header">
+    <div class="orc-empresa">
+      <p class="orc-empresa-nome">{{EMPRESA}}</p>
+      <p class="orc-empresa-sub">Construção Civil &amp; Obras</p>
+    </div>
+    <div class="orc-ref-block">
+      <p class="orc-ref">Orç. N.º {{NUM_ORC}}</p>
+      <p class="orc-data">{{LOCAL_DATA}}</p>
+    </div>
+  </header>
+  <section class="orc-info">
+    <p><strong>Obra:</strong> {{TITULO_OBRA}} &nbsp;&nbsp; <strong>Área:</strong> {{AREA_PISOS}}</p>
+    <p><strong>Cliente:</strong> {{CLIENTE}} &nbsp;&nbsp; <strong>Prazo:</strong> {{PRAZO}} dias</p>
+  </section>
+  <section class="orc-section">
+    <h2 class="orc-section-title">Materiais</h2>
+    <table class="orc-table">
+      <thead><tr><th>Descrição</th><th>Unid.</th><th>Qtd.</th><th>Unit.(MZN)</th><th>Total(MZN)</th></tr></thead>
+      <tbody>{{ITEMS_MATERIAIS}}</tbody>
+    </table>
+  </section>
+  <section class="orc-section">
+    <h2 class="orc-section-title">Mão-de-Obra</h2>
+    <table class="orc-table">
+      <thead><tr><th>Profissional</th><th>Dias</th><th>Diária(MZN)</th><th>Total(MZN)</th></tr></thead>
+      <tbody>{{ITEMS_MAO_OBRA}}</tbody>
+    </table>
+  </section>
+  <div class="orc-total-block">
+    <p class="orc-total-label">TOTAL GERAL (incl. 10% imprevistos)</p>
+    <p class="orc-total-valor">{{TOTAL_GERAL}} MZN</p>
+  </div>
+</div>`,
       css: `body{font-family:Calibri,Arial,sans-serif;font-size:10.5pt;line-height:1.4;color:#1c1917;padding:20mm}
         h1{color:#dc2626;font-size:20pt;font-weight:800;border-bottom:3px solid #dc2626;padding-bottom:6pt;margin-bottom:4pt}
         h2{font-size:11pt;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:.5px;margin-top:14pt}
@@ -573,6 +783,24 @@ export const TEMPLATE_LIBRARY = {
       name: 'Engenharia Técnica',
       description: 'Colunas de quantidade, unidade, preço unitário e total',
       preview: { accent: '#1d4ed8', bg: '#eff6ff', font: 'sans-serif', headerBg: '#1d4ed8', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <div style="border-bottom:3px double #0e3a68;padding-bottom:10pt;margin-bottom:16pt">
+    <h1 style="font-size:16pt;font-weight:800;color:#0e3a68">ORÇAMENTO DE ENGENHARIA</h1>
+    <p style="font-size:10pt;color:#334155">{{TITULO_OBRA}} | {{LOCAL_DATA}} | Área: {{AREA_PISOS}}</p>
+  </div>
+  <h2 style="font-size:11pt;font-weight:700;color:#0e3a68;border-left:4px solid #0e3a68;padding-left:8pt;margin:14pt 0 8pt">01. MATERIAIS</h2>
+  <table><thead><tr><th>Cód.</th><th>Descrição</th><th>Unid.</th><th>Qtd.</th><th>Pr.Unit.</th><th>Total (MZN)</th></tr></thead>
+  <tbody>{{ITEMS_MATERIAIS}}</tbody></table>
+  <h2 style="font-size:11pt;font-weight:700;color:#0e3a68;border-left:4px solid #0e3a68;padding-left:8pt;margin:14pt 0 8pt">02. MÃO-DE-OBRA</h2>
+  <table><thead><tr><th>Cód.</th><th>Profissional</th><th>Dias</th><th>Diária</th><th>Total (MZN)</th></tr></thead>
+  <tbody>{{ITEMS_MAO_OBRA}}</tbody></table>
+  <table style="margin-top:12pt"><tfoot>
+    <tr style="background:#e8f0fe"><td colspan="5" style="text-align:right;font-weight:700">Subtotal</td><td>{{SUBTOTAL}}</td></tr>
+    <tr style="background:#e8f0fe"><td colspan="5" style="text-align:right;font-weight:700">Imprevistos (10%)</td><td>{{IMPREVISTOS}}</td></tr>
+    <tr style="background:#0e3a68;color:#fff"><td colspan="5" style="text-align:right;font-weight:900">TOTAL GERAL (MZN)</td><td style="font-weight:900">{{TOTAL_GERAL}}</td></tr>
+  </tfoot></table>
+</div>`,
       css: `body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.4;color:#0f172a;padding:20mm}
         h1{font-size:14pt;font-weight:800;text-align:center;color:#1d4ed8;border:2px solid #1d4ed8;padding:8pt;margin-bottom:16pt}
         h2{font-size:10.5pt;font-weight:700;color:#1e40af;background:#eff6ff;padding:4pt 8pt;border-left:4px solid #1d4ed8;margin-top:12pt}
@@ -585,6 +813,23 @@ export const TEMPLATE_LIBRARY = {
       name: 'Pequeno Negócio M-Pesa',
       description: 'Directo ao ponto com QR M-Pesa e referência de pagamento',
       preview: { accent: '#10b981', bg: '#f0fdf4', font: 'sans-serif', headerBg: '#10b981', headerColor: '#fff' },
+      htmlTemplate: `
+<div style="max-width:360pt;margin:auto">
+  <div style="background:#e91e8c;color:#fff;padding:16pt;border-radius:8pt 8pt 0 0;text-align:center">
+    <p style="font-size:9pt;letter-spacing:2px;opacity:.85">M-PESA BUSINESS</p>
+    <p style="font-size:14pt;font-weight:800">{{TITULO_OBRA}}</p>
+    <p style="font-size:9pt;opacity:.8">{{LOCAL_DATA}}</p>
+  </div>
+  <div style="border:1.5px solid #e91e8c;border-top:none;padding:16pt;border-radius:0 0 8pt 8pt">
+    <table style="width:100%;font-size:10pt">
+      <tbody>{{ITEMS_TODOS}}</tbody>
+      <tfoot>
+        <tr style="border-top:2px solid #e91e8c"><td style="font-weight:700;padding-top:8pt">TOTAL</td><td style="text-align:right;font-weight:800;font-size:14pt;color:#e91e8c">{{TOTAL_GERAL}} MZN</td></tr>
+      </tfoot>
+    </table>
+    <p style="text-align:center;margin-top:12pt;font-size:8pt;color:#94a3b8">Válido: {{VALIDADE}}</p>
+  </div>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#064e3b;padding:20mm}
         h1{font-size:16pt;font-weight:800;color:#10b981;margin-bottom:4pt}
         h2{font-size:11pt;font-weight:700;color:#065f46;border-bottom:2px solid #10b981;padding-bottom:3pt;margin-top:14pt}
@@ -604,6 +849,19 @@ export const TEMPLATE_LIBRARY = {
       name: 'Jurídico Formal',
       description: 'Formato notarial, artigos numerados, cláusulas legais completas',
       preview: { accent: '#1e3a5f', bg: '#fff', font: 'serif', headerBg: '#1e3a5f', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <h1 style="text-align:center">CONTRATO DE ARRENDAMENTO</h1>
+  <p style="text-align:center;font-size:10pt;margin-bottom:20pt">{{TIPO_IMOVEL}} — {{IMOVEL_LOCAL}}</p>
+  <p>Entre os abaixo assinados:</p>
+  <p><strong>SENHORIO:</strong> {{SENHORIO_NOME}}, portador do BI n.º {{SENHORIO_BI}}, residente em {{IMOVEL_LOCAL}}.</p>
+  <p><strong>INQUILINO:</strong> {{INQUILINO_NOME}}, portador do BI n.º {{INQUILINO_BI}}.</p>
+  <div>{{CLAUSULAS}}</div>
+  <div style="display:flex;justify-content:space-between;margin-top:40pt">
+    <div><p>O Senhorio,</p><div style="margin-top:24pt;border-top:1px solid #000;width:160pt"></div><p>{{SENHORIO_NOME}}</p></div>
+    <div><p>O Inquilino,</p><div style="margin-top:24pt;border-top:1px solid #000;width:160pt"></div><p>{{INQUILINO_NOME}}</p></div>
+  </div>
+</div>`,
       css: `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:30mm 25mm 25mm 30mm}
         h1{font-size:14pt;text-align:center;font-weight:bold;text-transform:uppercase;margin-bottom:6pt;border-top:2px solid #000;border-bottom:2px solid #000;padding:6pt 0}
         h2{font-size:12pt;font-weight:bold;margin-top:18pt;counter-increment:clause;text-transform:uppercase}
@@ -615,6 +873,22 @@ export const TEMPLATE_LIBRARY = {
       name: 'Moderno Residencial',
       description: 'Layout limpo e acessível para senhorios particulares',
       preview: { accent: '#f59e0b', bg: '#fffbeb', font: 'sans-serif', headerBg: '#f59e0b', headerColor: '#000' },
+      htmlTemplate: `
+<div class="arr-page">
+  <header class="arr-header">
+    <h1 class="arr-titulo">Contrato de Arrendamento</h1>
+    <p class="arr-subtitulo">{{TIPO_IMOVEL}} · {{IMOVEL_LOCAL}}</p>
+  </header>
+  <section class="arr-partes">
+    <div class="arr-parte"><span class="arr-parte-label">Senhorio</span><p class="arr-parte-nome">{{SENHORIO_NOME}}</p><p class="arr-parte-bi">BI: {{SENHORIO_BI}}</p></div>
+    <div class="arr-parte"><span class="arr-parte-label">Inquilino</span><p class="arr-parte-nome">{{INQUILINO_NOME}}</p><p class="arr-parte-bi">BI: {{INQUILINO_BI}}</p></div>
+  </section>
+  <section class="arr-clausulas">{{CLAUSULAS}}</section>
+  <section class="arr-assinaturas">
+    <div class="arr-assin"><p class="arr-assin-label">O Senhorio</p><div class="arr-assin-linha"></div><p>{{SENHORIO_NOME}}</p></div>
+    <div class="arr-assin"><p class="arr-assin-label">O Inquilino</p><div class="arr-assin-linha"></div><p>{{INQUILINO_NOME}}</p></div>
+  </section>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#1c1917;padding:25mm}
         h1{font-size:17pt;font-weight:800;color:#b45309;margin-bottom:4pt}
         h2{font-size:12pt;font-weight:700;color:#b45309;background:#fffbeb;border-left:4px solid #f59e0b;padding:4pt 10pt;margin-top:16pt}
@@ -663,6 +937,19 @@ export const TEMPLATE_LIBRARY = {
       name: 'Jurídico Completo',
       description: 'Artigos, cláusulas penais, propriedade intelectual',
       preview: { accent: '#1e3a5f', bg: '#fff', font: 'serif', headerBg: '#1e3a5f', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <h1 style="text-align:center">CONTRATO DE PRESTAÇÃO DE SERVIÇOS</h1>
+  <p style="text-align:center;font-size:10pt;margin-bottom:20pt">{{SERVICO}}</p>
+  <p>Entre:</p>
+  <p><strong>PRESTADOR:</strong> {{PRESTADOR}}, NUIT {{NUIT_PRESTADOR}}, com sede em {{MORADA_PRESTADOR}}.</p>
+  <p><strong>CLIENTE:</strong> {{CLIENTE}}, BI/NUIT {{BI_CLIENTE}}.</p>
+  <div>{{CLAUSULAS}}</div>
+  <div style="display:flex;justify-content:space-between;margin-top:40pt">
+    <div><p>O Prestador</p><div style="margin-top:24pt;border-top:1px solid #000;width:150pt"></div><p>{{PRESTADOR}}</p></div>
+    <div><p>O Cliente</p><div style="margin-top:24pt;border-top:1px solid #000;width:150pt"></div><p>{{CLIENTE}}</p></div>
+  </div>
+</div>`,
       css: `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:28mm 25mm}
         h1{font-size:14pt;text-align:center;font-weight:bold;text-transform:uppercase;border-top:2px solid #1e3a5f;border-bottom:2px solid #1e3a5f;padding:6pt 0;margin-bottom:16pt;color:#1e3a5f}
         h2{font-size:12pt;font-weight:bold;text-transform:uppercase;margin-top:16pt}
@@ -779,6 +1066,21 @@ export const TEMPLATE_LIBRARY = {
       name: 'Formal Padrão',
       description: 'Formato padrão aceite em todas as repartições públicas',
       preview: { accent: '#1e3a5f', bg: '#fff', font: 'serif', headerBg: '#1e3a5f', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <p style="text-align:right;margin-bottom:20pt">{{LOCAL}}, {{DATA}}</p>
+  <p><strong>Exmo.(a) Sr.(a) {{ENTIDADE}}</strong></p>
+  <h1 style="font-size:12pt;font-weight:700;margin:16pt 0">REQUERIMENTO</h1>
+  <p><strong>{{REQUERENTE}}</strong>, portador do BI n.º {{BI}}, residente em {{ENDERECO}}, vem respeitosamente requerer a V. Ex.ª o seguinte:</p>
+  <p><strong>Assunto:</strong> {{ASSUNTO}}</p>
+  <div>{{FUNDAMENTO}}</div>
+  <p style="margin-top:14pt">Nestes termos, pede deferimento.</p>
+  <div style="margin-top:36pt;text-align:right">
+    <p>{{LOCAL}}, {{DATA}}</p>
+    <div style="margin-top:24pt;border-top:1px solid #000;width:160pt;margin-left:auto"></div>
+    <p>{{REQUERENTE}}</p>
+  </div>
+</div>`,
       css: `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:30mm 25mm 25mm 35mm}
         h1{font-size:14pt;text-align:center;font-weight:bold;text-transform:uppercase;margin-bottom:20pt}
         p{text-align:justify;margin-bottom:10pt;text-indent:1.25cm}
@@ -834,6 +1136,21 @@ export const TEMPLATE_LIBRARY = {
       name: 'Junta de Bairro',
       description: 'Emitido pelo presidente de bairro ou quarteirão',
       preview: { accent: '#166534', bg: '#f0fdf4', font: 'sans-serif', headerBg: '#166534', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <div style="text-align:center;margin-bottom:20pt">
+    <p style="font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:2px">Junta de Freguesia / Bairro</p>
+    <h1 style="font-size:14pt;font-weight:800">DECLARAÇÃO DE RESIDÊNCIA</h1>
+    <div style="width:40pt;height:3pt;background:#1a237e;margin:8pt auto"></div>
+  </div>
+  <p>O(a) abaixo assinado(a), declara para os devidos efeitos que:</p>
+  <p><strong>{{DECLARANTE}}</strong>, portador(a) do BI n.º <strong>{{BI}}</strong>, nascido(a) a {{NASCIMENTO}} em {{NATURALIDADE}}, reside em <strong>{{ENDERECO}}</strong>, há <strong>{{TEMPO}}</strong>.</p>
+  <p>A presente declaração é emitida para fins de <strong>{{FINALIDADE}}</strong>.</p>
+  <div style="margin-top:36pt;display:flex;justify-content:space-between">
+    <p>{{LOCAL}}, {{DATA}}</p>
+    <div style="text-align:center"><div style="border-top:1px solid #000;width:140pt;margin-bottom:4pt"></div><p>O Responsável</p><p>{{CHEFE}}</p></div>
+  </div>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:11.5pt;line-height:1.6;color:#14532d;padding:25mm}
         h1{font-size:15pt;font-weight:800;color:#166534;border-bottom:3px solid #16a34a;padding-bottom:5pt;margin-bottom:16pt;text-align:center;text-transform:uppercase}
         p{text-align:justify;margin-bottom:10pt}
@@ -887,6 +1204,26 @@ export const TEMPLATE_LIBRARY = {
       name: 'Banco / Financiamento',
       description: 'Estrutura exigida por BCI, Millennium e bancos moçambicanos',
       preview: { accent: '#1d4ed8', bg: '#eff6ff', font: 'sans-serif', headerBg: '#1d4ed8', headerColor: '#fff' },
+      htmlTemplate: `
+<div class="pln-page">
+  <header class="pln-header">
+    <h1 class="pln-titulo">{{NOME_NEGOCIO}}</h1>
+    <p class="pln-subtitulo">Plano de Negócios — {{SECTOR}}</p>
+    <p class="pln-meta">{{PROPRIETARIO}} | {{LOCAL}} | {{ANO}}</p>
+  </header>
+  <section class="pln-section"><h2 class="pln-section-title">1. Sumário Executivo</h2><div class="pln-content">{{SUMARIO}}</div></section>
+  <section class="pln-section"><h2 class="pln-section-title">2. Descrição do Negócio</h2><div class="pln-content">{{DESCRICAO_NEGOCIO}}</div></section>
+  <section class="pln-section"><h2 class="pln-section-title">3. Análise de Mercado</h2><div class="pln-content">{{ANALISE_MERCADO}}</div></section>
+  <section class="pln-section"><h2 class="pln-section-title">4. Plano Financeiro</h2>
+    <table class="pln-table">
+      <thead><tr><th>Componente</th><th>Valor (MZN)</th></tr></thead>
+      <tbody>{{ITEMS_FINANCEIROS}}</tbody>
+      <tfoot><tr><td><strong>Investimento Total</strong></td><td><strong>{{INVESTIMENTO_TOTAL}}</strong></td></tr></tfoot>
+    </table>
+  </section>
+  <section class="pln-section"><h2 class="pln-section-title">5. Equipa e Recursos Humanos</h2><div class="pln-content">{{EQUIPA}}</div></section>
+  <section class="pln-section"><h2 class="pln-section-title">6. Projecção de Retorno</h2><div class="pln-content">{{RETORNO}}</div></section>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#1e3a8a;padding:25mm}
         h1{font-size:20pt;font-weight:800;color:#1d4ed8;border-bottom:3px solid #1d4ed8;padding-bottom:6pt;margin-bottom:6pt}
         h2{font-size:12pt;font-weight:700;color:#1e40af;background:#eff6ff;padding:4pt 10pt;border-left:4px solid #1d4ed8;margin-top:16pt}
@@ -947,6 +1284,27 @@ export const TEMPLATE_LIBRARY = {
       name: 'Recibo Simples',
       description: 'Compacto, directo, para pequenos negócios',
       preview: { accent: '#16a34a', bg: '#f0fdf4', font: 'sans-serif', headerBg: '#16a34a', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <h1>RECIBO DE PAGAMENTO</h1>
+  <p><strong>Emitido por:</strong> {{EMITENTE}} &nbsp; NUIT: {{NUIT_EMITENTE}}</p>
+  <p><strong>Recebido de:</strong> {{CLIENTE}}</p>
+  <p><strong>Descrição:</strong> {{DESCRICAO}}</p>
+  <p class="valor">{{VALOR_TOTAL}} MZN</p>
+  <table>
+    <thead><tr><th>Descrição</th><th>Qtd.</th><th>Pr. Unit.</th><th>Total</th></tr></thead>
+    <tbody>{{ITEMS_RECIBO}}</tbody>
+    <tfoot>
+      <tr><td colspan="3" style="text-align:right;font-weight:700">IVA ({{TAXA_IVA}}%)</td><td>{{VALOR_IVA}} MZN</td></tr>
+      <tr><td colspan="3" style="text-align:right;font-weight:800">TOTAL</td><td style="font-weight:800">{{VALOR_TOTAL}} MZN</td></tr>
+    </tfoot>
+  </table>
+  <p><strong>Forma de pagamento:</strong> {{FORMA_PAGAMENTO}}</p>
+  <div style="margin-top:30pt;display:flex;justify-content:space-between">
+    <p>Data: {{DATA}}</p>
+    <div style="text-align:center"><div style="border-top:1px solid #000;width:120pt;margin-bottom:4pt"></div><p>{{EMITENTE}}</p></div>
+  </div>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#14532d;padding:18mm}
         h1{font-size:18pt;font-weight:800;color:#16a34a;border-bottom:3px solid #16a34a;padding-bottom:4pt;margin-bottom:12pt}
         .valor{font-size:22pt;font-weight:900;color:#15803d;text-align:right;margin:10pt 0}
@@ -959,6 +1317,24 @@ export const TEMPLATE_LIBRARY = {
       name: 'Factura Formal com IVA',
       description: 'NUIT, IVA 16%, referência fiscal para empresas',
       preview: { accent: '#1d4ed8', bg: '#eff6ff', font: 'sans-serif', headerBg: '#1d4ed8', headerColor: '#fff' },
+      htmlTemplate: `
+<div class="fac-page">
+  <header class="fac-header">
+    <div class="fac-empresa"><p class="fac-empresa-nome">{{EMITENTE}}</p><p class="fac-nuit">NUIT: {{NUIT_EMITENTE}}</p></div>
+    <div class="fac-doc-info"><p class="fac-doc-tipo">FACTURA / RECIBO</p><p class="fac-doc-num">N.º {{NUM_DOC}}</p><p class="fac-doc-data">{{DATA}}</p></div>
+  </header>
+  <section class="fac-cliente"><p><strong>Cliente:</strong> {{CLIENTE}}</p><p><strong>BI/NUIT:</strong> {{BI_CLIENTE}}</p></section>
+  <table class="fac-table">
+    <thead><tr><th>Descrição</th><th>Qtd.</th><th>Unit.(MZN)</th><th>Total(MZN)</th></tr></thead>
+    <tbody>{{ITEMS_RECIBO}}</tbody>
+    <tfoot>
+      <tr><td colspan="3">Subtotal</td><td>{{SUBTOTAL}}</td></tr>
+      <tr><td colspan="3">IVA ({{TAXA_IVA}}%)</td><td>{{VALOR_IVA}}</td></tr>
+      <tr class="fac-total-row"><td colspan="3"><strong>TOTAL (MZN)</strong></td><td><strong>{{VALOR_TOTAL}}</strong></td></tr>
+    </tfoot>
+  </table>
+  <p class="fac-pagamento">Pagamento: {{FORMA_PAGAMENTO}}</p>
+</div>`,
       css: `body{font-family:Calibri,Arial,sans-serif;font-size:10.5pt;line-height:1.4;color:#1e293b;padding:16mm}
         h1{font-size:20pt;font-weight:800;color:#1d4ed8;border-bottom:2px solid #1d4ed8;padding-bottom:4pt}
         .header-info{display:flex;justify-content:space-between;margin:10pt 0;font-size:9.5pt}
@@ -1013,6 +1389,19 @@ export const TEMPLATE_LIBRARY = {
       name: 'Recomendação Profissional',
       description: 'De superior para candidato a novo emprego',
       preview: { accent: '#1e3a5f', bg: '#fff', font: 'serif', headerBg: '#1e3a5f', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <div style="text-align:right;margin-bottom:20pt"><p>{{LOCAL}}, {{DATA}}</p></div>
+  <h1 style="font-size:14pt;font-weight:700;margin-bottom:16pt">CARTA DE RECOMENDAÇÃO</h1>
+  <p>A quem possa interessar,</p>
+  <div>{{CORPO}}</div>
+  <div style="margin-top:36pt">
+    <p>Com os melhores cumprimentos,</p>
+    <div style="margin-top:28pt;border-top:1px solid #000;width:160pt"></div>
+    <p><strong>{{RECOMENDADOR}}</strong></p>
+    <p>{{CARGO_REC}} — {{ENTIDADE_REC}}</p>
+  </div>
+</div>`,
       css: `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:30mm 25mm}
         h1{display:none}
         .remetente{margin-bottom:20pt;font-size:11pt}
@@ -1071,6 +1460,25 @@ export const TEMPLATE_LIBRARY = {
       name: 'Licença Comercial',
       description: 'Pedido de alvará comercial para câmara municipal',
       preview: { accent: '#b45309', bg: '#fffbeb', font: 'sans-serif', headerBg: '#b45309', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <div style="text-align:center;margin-bottom:20pt">
+    <p style="font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:2px">República de Moçambique</p>
+    <h1 style="font-size:14pt;font-weight:800">REQUERIMENTO DE LICENÇA COMERCIAL</h1>
+  </div>
+  <p>Ao(À) {{ENTIDADE}},</p>
+  <p><strong>{{REQUERENTE}}</strong>, NUIT <strong>{{NUIT}}</strong>, contacto <strong>{{CONTACTO}}</strong>, vem requerer a V. Ex.ª a emissão de licença para exercício de actividade comercial:</p>
+  <p><strong>Actividade:</strong> {{OBJECTO}}</p>
+  <p><strong>Área:</strong> {{AREA_M2}} m² | <strong>Horário:</strong> {{HORARIO}}</p>
+  <p><strong>Local do estabelecimento:</strong> {{LOCAL}}</p>
+  <div>{{FUNDAMENTACAO}}</div>
+  <p style="margin-top:14pt">Pede deferimento.</p>
+  <div style="margin-top:36pt;text-align:right">
+    <p>{{LOCAL}}, {{DATA}}</p>
+    <div style="margin-top:24pt;border-top:1px solid #000;width:150pt;margin-left:auto"></div>
+    <p>{{REQUERENTE}}</p>
+  </div>
+</div>`,
       css: `body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#1c1917;padding:25mm}
         h1{font-size:15pt;font-weight:800;color:#b45309;border-bottom:2px solid #b45309;padding-bottom:5pt;margin-bottom:16pt;text-transform:uppercase}
         p{text-align:justify;margin-bottom:10pt}
@@ -1124,6 +1532,23 @@ export const TEMPLATE_LIBRARY = {
       name: 'Acta Formal',
       description: 'Numerada, com ponto de ordem, deliberações e assinaturas',
       preview: { accent: '#1e3a5f', bg: '#fff', font: 'serif', headerBg: '#1e3a5f', headerColor: '#fff' },
+      htmlTemplate: `
+<div>
+  <h1 style="text-align:center">ACTA N.º {{NUM_ACTA}}</h1>
+  <p style="text-align:center;font-size:10pt;margin-bottom:16pt">{{ORGANIZACAO}} — {{TIPO_REUNIAO}}</p>
+  <p><strong>Data:</strong> {{DATA}} | <strong>Hora:</strong> {{HORA}} | <strong>Local:</strong> {{LOCAL}}</p>
+  <p><strong>Presidente:</strong> {{PRESIDENTE}} | <strong>Secretário:</strong> {{SECRETARIO}}</p>
+  <p><strong>Presentes:</strong> {{PRESENTES}}</p>
+  <h2 style="font-size:11pt;font-weight:700;margin:14pt 0 8pt">Ordem do Dia</h2>
+  <div>{{PAUTA}}</div>
+  <h2 style="font-size:11pt;font-weight:700;margin:14pt 0 8pt">Deliberações</h2>
+  <div>{{DELIBERACOES}}</div>
+  <p style="margin-top:14pt">Nada mais havendo a tratar, foi encerrada a reunião.</p>
+  <div style="display:flex;justify-content:space-between;margin-top:36pt">
+    <div><p>O Presidente</p><div style="margin-top:24pt;border-top:1px solid #000;width:140pt"></div><p>{{PRESIDENTE}}</p></div>
+    <div><p>O Secretário</p><div style="margin-top:24pt;border-top:1px solid #000;width:140pt"></div><p>{{SECRETARIO}}</p></div>
+  </div>
+</div>`,
       css: `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:28mm 25mm}
         h1{font-size:14pt;text-align:center;font-weight:bold;text-transform:uppercase;border-top:2px solid #1e3a5f;border-bottom:2px solid #1e3a5f;padding:5pt 0;margin-bottom:16pt;color:#1e3a5f}
         h2{font-size:12pt;font-weight:bold;text-transform:uppercase;margin-top:14pt}
