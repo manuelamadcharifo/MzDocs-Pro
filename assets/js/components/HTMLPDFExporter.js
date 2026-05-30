@@ -110,6 +110,13 @@ export class HTMLPDFExporter {
 /* Reset básico */
 *, *::before, *::after { box-sizing: border-box; }
 
+/* CRÍTICO: forçar impressão de cores de fundo (sidebar, headers, etc.) */
+* {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}
+
 /* Impressão A4 */
 @media print {
   @page {
@@ -118,7 +125,8 @@ export class HTMLPDFExporter {
   }
   html, body {
     width: 210mm;
-    /* Deixar o CSS do template controlar a altura */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .no-print { display: none !important; }
 }
