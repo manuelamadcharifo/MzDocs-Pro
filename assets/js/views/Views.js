@@ -215,12 +215,20 @@ export const DocumentView = {
         </div>
         <div class="res-preview-stats">${words} palavras · ~${pages} pág.</div>
       </div>
-      <div class="res-a4-wrap">
-        <iframe id="resPreviewFrame" class="res-a4-frame"></iframe>
+      <div class="res-a4-wrap" id="resA4Wrap">
+        <div class="res-a4-scaler" id="resA4Scaler">
+          <iframe id="resPreviewFrame" class="res-a4-frame"></iframe>
+        </div>
       </div>
     `;
 
     this._renderResultFrame('pdf', content);
+    // Scale after render
+    requestAnimationFrame(() => this._scaleResultFrame());
+    if (!this._resizeResultHandler) {
+      this._resizeResultHandler = () => this._scaleResultFrame();
+      window.addEventListener('resize', this._resizeResultHandler);
+    }
 
     previewContainer.querySelectorAll('.res-tab').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -229,6 +237,26 @@ export const DocumentView = {
         this._renderResultFrame(btn.dataset.rfmt, content);
       });
     });
+  },
+
+  // ── Escalar o iframe A4 para caber no contentor sem distorcer ──────────
+  _scaleResultFrame() {
+    const wrap  = document.getElementById('resA4Wrap');
+    const scaler = document.getElementById('resA4Scaler');
+    const frame = document.getElementById('resPreviewFrame');
+    if (!wrap || !scaler || !frame) return;
+    const wrapW = wrap.clientWidth - 32; // 16px padding × 2
+    const a4W   = 794; // 210mm @ 96dpi
+    const scale = Math.min(1, wrapW / a4W);
+    frame.style.transform = `scale(${scale})`;
+    frame.style.transformOrigin = 'top center';
+    // Adjust scaler height so wrap doesn't collapse
+    const a4H = 1123;
+    scaler.style.height = (a4H * scale) + 'px';
+    scaler.style.width  = (a4W * scale) + 'px';
+    // Wrap height: show about 1 page by default
+    const wrapH = Math.min(500, (a4H * scale) + 32);
+    wrap.style.height = wrapH + 'px';
   },
 
   _renderResultFrame(format, content) {
@@ -287,12 +315,13 @@ export const DocumentView = {
     // ── Montar HTML final e injectar no iframe ─────────────────────────────
     const pageHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}' + css + '</style></head><body>' + bodyHTML + '</body></html>';
     try {
-      const doc = frame.contentDocument || frame.contentWindow?.document;
-      if (doc) { doc.open(); doc.write(pageHtml); doc.close(); }
+      frame.srcdoc = pageHtml;
+      frame.onload = () => { DocumentView._scaleResultFrame(); };
     } catch (e) {
       if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
       this._resultBlobURL = URL.createObjectURL(new Blob([pageHtml], { type: 'text/html' }));
       frame.src = this._resultBlobURL;
+      frame.onload = () => { DocumentView._scaleResultFrame(); };
     }
   },
 
