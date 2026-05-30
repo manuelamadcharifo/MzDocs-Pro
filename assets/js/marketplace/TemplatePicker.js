@@ -374,6 +374,10 @@ export class TemplatePicker {
     if (!tpl) return;
     this._tpl = tpl;
 
+    // ── Quando o utilizador escolhe um template pré-definido,
+    //    desactivar o modelo próprio para que não bloqueie o _apply ──
+    this._customActive = false;
+
     // Highlight
     document.querySelectorAll('.tpl-card').forEach(c => c.classList.toggle('selected', c.dataset.id === id));
     document.querySelector(`.tpl-card[data-id="${id}"]`)
@@ -426,16 +430,41 @@ export class TemplatePicker {
         pageEl.appendChild(iframe);
         outer.appendChild(pageEl);
 
-        // Conteúdo da página com o CSS do template
+        // ── Conteúdo da página com o CSS do template ──────────────────────────
+        // Se o template tem htmlTemplate, usar a estrutura HTML directamente para preview fiel.
+        // Substituir os placeholders por texto de demonstração para visualização.
+        let previewBody;
+        if (tpl.htmlTemplate && i === 0) {
+          // Preview com estrutura real — substituir placeholders por conteúdo de demo
+          previewBody = tpl.htmlTemplate
+            .replace(/\{\{NOME\}\}/g, 'Ana Maria Silva Santos')
+            .replace(/\{\{CARGO\}\}/g, 'Gestora de Projectos Sénior')
+            .replace(/\{\{CONTACTO\}\}/g, '+258 84 000 0000')
+            .replace(/\{\{EMAIL\}\}/g, 'ana.silva@email.com')
+            .replace(/\{\{LOCALIZACAO\}\}/g, 'Maputo, Moçambique')
+            .replace(/\{\{INICIAIS\}\}/g, 'AS')
+            .replace(/\{\{OBJECTIVO\}\}/g, 'Profissional experiente com 10 anos em gestão de projectos, especializada em coordenação de equipas multidisciplinares e entrega de resultados mensuráveis.')
+            .replace(/\{\{FORMACAO\}\}/g, '<div class="cv-entry"><p class="cv-entry-date">2015 – 2018</p><p class="cv-entry-title">Licenciatura em Gestão</p><p class="cv-entry-company">Universidade Eduardo Mondlane | Maputo</p></div>')
+            .replace(/\{\{EXPERIENCIA\}\}/g, '<div class="cv-entry"><p class="cv-entry-date">2019 – 2024</p><p class="cv-entry-title">Gestora de Projectos</p><p class="cv-entry-company">Empresa XYZ | Maputo</p><ul class="cv-entry-bullets"><li>Reduziu o tempo de entrega em 30% através de metodologias ágeis</li><li>Coordenou equipa de 12 pessoas com taxa de sucesso de 95%</li></ul></div>')
+            .replace(/\{\{REALIZACAO\}\}/g, 'Implementou sistema de monitorização que reduziu custos operacionais em 25%, reconhecida como Colaboradora do Ano 2023.')
+            .replace(/\{\{HABILIDADES\}\}/g, 'MS Project, Jira, Scrum, Power BI, Excel Avançado')
+            .replace(/\{\{HABILIDADES_LIST\}\}/g, '<li>MS Project</li><li>Scrum/Kanban</li><li>Power BI</li><li>Liderança de equipas</li>')
+            .replace(/\{\{LINGUAS\}\}/g, '<div class="cv-entry"><p class="cv-entry-title">Português</p><p class="cv-entry-sub">Nativo</p><div class="cv-lang-bar"><div class="cv-lang-fill" style="width:100%"></div></div></div><div class="cv-entry"><p class="cv-entry-title">Inglês</p><p class="cv-entry-sub">Avançado (C1)</p><div class="cv-lang-bar"><div class="cv-lang-fill" style="width:80%"></div></div></div>')
+            .replace(/\{\{EXTRA\}\}/g, 'Carta de condução categoria B. Disponível para deslocações nacionais.')
+            .replace(/\{\{[A-Z_]+\}\}/g, '<span style="color:#94a3b8">[conteúdo]</span>');
+        } else {
+          previewBody = pageHtml;
+        }
+
         const doc = `<!DOCTYPE html>
 <html lang="pt"><head>
 <meta charset="utf-8">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:210mm;height:297mm;overflow:hidden}
+html,body{width:210mm;min-height:297mm;overflow:hidden}
 ${tpl.css}
 </style>
-</head><body>${pageHtml}</body></html>`;
+</head><body>${previewBody}</body></html>`;
 
         iframe.srcdoc = doc;
 
@@ -474,8 +503,16 @@ ${tpl.css}
 
   // ── Aplicar template e fechar ────────────────────────────────────────────
   _apply() {
-    // CORRIGIDO: se o utilizador carregou um modelo próprio, aplicá-lo
-    // mesmo que nenhum template pré-definido esteja seleccionado.
+    // ── Prioridade: template pré-definido seleccionado > modelo próprio ──
+    // Se o utilizador clicou num template da galeria E depois clicou "Usar este Modelo",
+    // aplicar SEMPRE o template pré-definido, mesmo que haja modelo próprio carregado.
+    if (this._tpl) {
+      this._onApply?.(this._tpl);
+      this.close();
+      return;
+    }
+
+    // Sem template pré-definido seleccionado: usar modelo próprio se estiver activo
     if (this._customActive) {
       // O TemplateController já tem o ficheiro carregado e activo.
       // Apenas fechar o picker — a próxima geração usará o modelo próprio.
@@ -483,9 +520,8 @@ ${tpl.css}
       this.close();
       return;
     }
-    if (!this._tpl) { _notify('Seleccione um modelo primeiro.'); return; }
-    this._onApply?.(this._tpl);
-    this.close();
+
+    _notify('Seleccione um modelo primeiro.');
   }
 
   // ── Upload de modelo próprio ─────────────────────────────────────────────
