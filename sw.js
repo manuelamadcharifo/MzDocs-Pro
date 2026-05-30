@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v10-20260528'; // fix: page freeze + modal reset + template image
+const CACHE_VERSION = 'v11-20260530'; // editor iframe template, HTMLWordExporter, PDF backgrounds
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
