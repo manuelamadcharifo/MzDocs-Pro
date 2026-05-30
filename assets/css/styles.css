@@ -249,9 +249,35 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .res-tab{padding:5px 11px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;transition:all 0.15s;}
 .res-tab.active{background:#07101F;color:#fff;border-color:#07101F;}
 .res-preview-stats{font-size:11px;color:#94a3b8;font-weight:600;}
-/* Frame A4 no modal de resultado */
-.res-a4-wrap{overflow:auto;max-height:290px;display:flex;justify-content:center;padding:16px;background:#d1d5db;}
-.res-a4-frame{width:100%;min-height:220px;border:none;background:#fff;box-shadow:0 3px 16px rgba(0,0,0,0.15);display:block;}
+/* Frame A4 no modal de resultado — visão A4 real com scroll */
+.res-a4-wrap{
+  overflow:auto;
+  height:420px;
+  display:flex;
+  justify-content:center;
+  padding:16px;
+  background:#d1d5db;
+  -webkit-overflow-scrolling:touch;
+}
+/* O iframe é escalado via JS para caber na largura do contentor mas mantém proporção A4 */
+.res-a4-frame{
+  /* Dimensões A4 reais — o scale é aplicado via JS abaixo */
+  width:794px;       /* 210mm @ 96dpi */
+  height:1123px;     /* 297mm @ 96dpi */
+  border:none;
+  background:#fff;
+  box-shadow:0 4px 24px rgba(0,0,0,0.25);
+  display:block;
+  flex-shrink:0;
+  transform-origin:top center;
+}
+/* Container que envolve iframe + escala */
+.res-a4-scaler{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  transform-origin:top center;
+}
 
 .res-preview h1{font-size:17px;font-weight:800;margin:12px 0 6px}
 .res-preview h2{font-size:15px;font-weight:700;margin:10px 0 5px}
