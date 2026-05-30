@@ -434,13 +434,31 @@ export class DocumentEditor {
     if (!frame) return;
     const wrap  = this.modal.querySelector('.ed-preview-wrap');
     if (!wrap)  return;
-    const availW  = wrap.clientWidth - 32;
-    const a4Px    = 210 * 3.7795;
-    const scale   = Math.min(1, availW / a4Px);
-    frame.style.transform       = `scale(${scale})`;
-    frame.style.transformOrigin = 'top center';
+    const availW     = wrap.clientWidth;
+    const a4Px       = 210 * 3.7795;  // 210mm em px (96dpi)
     const a4HeightPx = 297 * 3.7795;
-    frame.style.marginBottom = `${(a4HeightPx * scale) - a4HeightPx}px`;
+    const scale      = Math.min(1, availW / a4Px);
+
+    // CORRIGIDO: antes usava transform-origin:top center e inline style.
+    // Problema: o iframe de 210mm a começar no centro transbordava para a
+    // direita em viewports < 210mm*2 — causando scroll horizontal e layout
+    // partido (imagem 3). Solução: usar transform-origin:top left e centrar
+    // via margin-left calculado, exposto como CSS var para o media query do CSS.
+    const marginLeft = (availW - a4Px * scale) / 2;
+
+    // Definir a variável CSS para que o media query do editor.css a use
+    frame.closest('.ed-a4-bg')?.style.setProperty('--a4-scale', scale.toString());
+    // Aplicar directamente no JS para desktop (onde o CSS var não é usado)
+    if (scale < 1) {
+      frame.style.transform       = `scale(${scale})`;
+      frame.style.transformOrigin = 'top left';
+      frame.style.marginLeft      = `${marginLeft}px`;
+      frame.style.marginBottom    = `${(a4HeightPx * scale) - a4HeightPx}px`;
+    } else {
+      frame.style.transform    = '';
+      frame.style.marginLeft   = '';
+      frame.style.marginBottom = '';
+    }
   }
 
   // ── Preview A4 no iframe ───────────────────────────────────────
