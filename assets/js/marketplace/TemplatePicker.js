@@ -654,10 +654,11 @@ ${tpl.css}
     }
   }
 
-  // ── Extrair template HTML+CSS de uma imagem via Anthropic API ─────────────
-  // Processo em 2 passos: 1ª análise visual detalhada, 2ª geração de código fiel.
-  // Isto produz resultados MUITO mais fiéis do que um único prompt genérico.
+  // ── Extrair template HTML+CSS via backend /api/extract-template ─────────────
+  // CORRIGIDO: chamada feita pelo backend Vercel para evitar bloqueio CORS.
+  // O browser não pode chamar api.anthropic.com directamente — a Vercel faz o proxy.
   async _extractTemplateFromImage(file) {
+    // Converter imagem para base64 (sem o prefixo data:image/...;base64,)
     const base64 = await new Promise((res, rej) => {
       const reader = new FileReader();
       reader.onload  = () => res(reader.result.split(',')[1]);
@@ -665,136 +666,34 @@ ${tpl.css}
       reader.readAsDataURL(file);
     });
 
-    const serviceKey = this._key;
-    const serviceNames = {
-      cv: 'Currículo (CV)', carta: 'Carta', orcamento: 'Orçamento',
-      arrendamento: 'Contrato de Arrendamento', recibo: 'Recibo/Factura',
-      prestacao: 'Contrato de Prestação', recomendacao: 'Carta de Recomendação',
-      requerimento: 'Requerimento', residencia: 'Declaração de Residência',
-      planonegocio: 'Plano de Negócios', procuracao: 'Procuração',
-      licenca: 'Licença', acta: 'Acta', trabalho: 'Trabalho Académico',
-    };
-    const docType = serviceNames[serviceKey] || serviceKey;
-
-    // ── PASSO 1: Análise visual detalhada da imagem ───────────────────────────
-    const analysisResp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+    const resp = await fetch('/api/extract-template', {
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: base64 } },
-            { type: 'text', text: `Analisa esta imagem de um template de ${docType} com MÁXIMO DETALHE visual. Descreve:
-
-1. LAYOUT GERAL: quantas colunas? Existe sidebar/barra lateral? Onde está o cabeçalho? Qual a largura aproximada da sidebar em mm?
-2. CORES EXACTAS: cor de fundo da página, cor do cabeçalho/sidebar (hex aproximado), cor do texto principal, cor de accent/destaque.
-3. TIPOGRAFIA: tamanho do nome principal (grande/médio/pequeno), estilo dos títulos de secção (maiúsculas? sublinhado? negrito?). Serif ou sans-serif?
-4. SECÇÕES VISÍVEIS: lista TODAS as secções por ordem exacta em que aparecem.
-5. ELEMENTOS ESPECIAIS: avatar/círculo com iniciais? barras de progresso para línguas? ícones? linha decorativa? bordas coloridas?
-6. ESPAÇAMENTOS: padding interno das secções, gaps entre elementos (apertado/médio/espaçado).
-7. NOME SUGERIDO: propõe um nome profissional de 2-3 palavras para este template, ao estilo dos outros templates: "Clássico Profissional", "Moderno Colorido", "Executivo Premium", "Jovem Dinâmico". O nome deve descrever visualmente o estilo.
-
-Responde em texto detalhado com todos os detalhes observados.` }
-          ]
-        }]
-      })
+        imageBase64: base64,
+        mimeType:    file.type || 'image/jpeg',
+        serviceKey:  this._key,
+      }),
     });
 
-    if (!analysisResp.ok) throw new Error(`API error (análise): ${analysisResp.status}`);
-    const analysisData = await analysisResp.json();
-    const analysis = analysisData.content?.find(b => b.type === 'text')?.text || '';
-
-    // ── PASSO 2: Gerar htmlTemplate + css baseado na análise ─────────────────
-    const genResp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8000,
-        messages: [{
-          role: 'user',
-          content: [{ type: 'text', text: `És um especialista em HTML/CSS para documentos profissionais. Com base na análise visual abaixo, gera o código que replica FIELMENTE o template observado.
-
-ANÁLISE DO TEMPLATE:
-${analysis}
-
-TIPO DE DOCUMENTO: ${docType}
-
-Gera APENAS este JSON (sem markdown, sem \`\`\`json, sem texto extra antes ou depois):
-{
-  "name": "Nome profissional exato sugerido na análise (ex: Clássico Profissional, Moderno Bicolor, Executivo Elegante)",
-  "description": "Frase curta de 1 linha descrevendo o estilo",
-  "accent": "#hexcolor da cor de destaque principal",
-  "bg": "#hexcolor do fundo (ou da sidebar se existir)",
-  "htmlTemplate": "HTML COMPLETO com placeholders",
-  "css": "CSS COMPLETO e detalhado"
-}
-
-REGRAS PARA htmlTemplate:
-- Replicar EXACTAMENTE a estrutura observada (número de colunas, posição dos elementos)
-- Com sidebar: <div class="cv-page cv-two-col"><aside class="cv-sidebar">...</aside><main class="cv-main">...</main></div>
-- Sem sidebar: <div class="cv-page">...</div>
-- Placeholders: {{NOME}}, {{CARGO}}, {{CONTACTO}}, {{EMAIL}}, {{LOCALIZACAO}}, {{INICIAIS}}, {{OBJECTIVO}}, {{FORMACAO}}, {{EXPERIENCIA}}, {{HABILIDADES}}, {{HABILIDADES_LIST}}, {{LINGUAS}}, {{REALIZACAO}}, {{EXTRA}}
-- Secções: <div class="cv-section"><h2 class="cv-section-title">TÍTULO</h2>CONTEÚDO</div>
-- Entradas: <div class="cv-entry"><p class="cv-entry-date">período</p><p class="cv-entry-title">cargo</p><p class="cv-entry-company">empresa | local</p><ul class="cv-entry-bullets"><li>realização</li></ul></div>
-- Avatar: <div class="cv-avatar">{{INICIAIS}}</div>
-- Barras língua: <div class="cv-lang-bar"><div class="cv-lang-fill" style="width:90%"></div></div>
-- Lista habilidades: <ul class="cv-skills-list">{{HABILIDADES_LIST}}</ul>
-
-REGRAS PARA css (CRÍTICO — cores e medidas exactas conforme análise):
-* { box-sizing:border-box; margin:0; padding:0; }
-body { font-family:FONTE_CORRECTA; width:210mm; min-height:297mm; color:COR_TEXTO_REAL; }
-.cv-page { width:210mm; min-height:297mm; background:COR_FUNDO_REAL; }
-.cv-two-col { display:flex; }
-.cv-sidebar { width:LARGURA_REALmm; background:COR_SIDEBAR_REAL; padding:Xmm Ymm; }
-.cv-main { flex:1; padding:Xmm Ymm; }
-.cv-avatar { width:50pt; height:50pt; border-radius:50%; background:COR_ACCENT; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16pt; font-weight:700; margin:0 auto 12pt; }
-.cv-section { margin-bottom:10pt; }
-.cv-section-title { /* EXACTAMENTE como visto: uppercase/capitalize, cor, border, background */ }
-.cv-entry { margin-bottom:6pt; }
-.cv-entry-date { font-size:9pt; color:COR_SECUNDARIA; }
-.cv-entry-title { font-size:10pt; font-weight:700; }
-.cv-entry-company { font-size:9pt; }
-.cv-entry-bullets { padding-left:12pt; margin-top:3pt; font-size:9pt; }
-.cv-skills-list { list-style:none; padding:0; }
-.cv-skills-list li { font-size:9.5pt; padding:2pt 0; }
-.cv-lang-bar { background:#e2e8f0; height:4pt; border-radius:2pt; margin-top:3pt; }
-.cv-lang-fill { background:COR_ACCENT_REAL; height:100%; border-radius:2pt; }
-/* Adiciona TODOS os outros estilos necessários para replicar o template observado */` }]
-        }]
-      })
-    });
-
-    if (!genResp.ok) throw new Error(`API error (geração): ${genResp.status}`);
-    const genData = await genResp.json();
-    const genText = genData.content?.find(b => b.type === 'text')?.text || '';
-
-    // Parse JSON robusto — lida com markdown fences e texto extra
-    let parsed;
-    try {
-      const clean = genText.replace(/```json\n?/g, '').replace(/```/g, '').trim();
-      parsed = JSON.parse(clean);
-    } catch (_) {
-      const jsonMatch = genText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Não foi possível extrair JSON da resposta da API');
-      parsed = JSON.parse(jsonMatch[0]);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(err.error || `Erro do servidor: ${resp.status}`);
     }
 
-    if (!parsed.htmlTemplate || !parsed.css) {
-      throw new Error('Resposta inválida da API — htmlTemplate ou css em falta');
+    const data = await resp.json();
+    if (!data.ok || !data.htmlTemplate || !data.css) {
+      throw new Error(data.error || 'Resposta inválida do servidor');
     }
 
-    const templateId = `custom-${serviceKey}-${Date.now()}`;
+    const templateId = `custom-${this._key}-${Date.now()}`;
     return {
       id:           templateId,
-      name:         parsed.name        || 'Template Personalizado',
-      description:  parsed.description || 'Extraído da sua imagem',
-      preview:      { accent: parsed.accent || '#3B82F6', bg: parsed.bg || '#fff', font: 'sans-serif' },
-      htmlTemplate: parsed.htmlTemplate,
-      css:          parsed.css,
+      name:         data.name        || 'Template Personalizado',
+      description:  data.description || 'Extraído da sua imagem',
+      preview:      { accent: data.accent || '#3B82F6', bg: data.bg || '#fff', font: 'sans-serif' },
+      htmlTemplate: data.htmlTemplate,
+      css:          data.css,
       _isCustom:    true,
     };
   }
