@@ -11,6 +11,9 @@
     "api/generate-document.js": {
       "maxDuration": 60
     },
+    "api/extract-template.js": {
+      "maxDuration": 60
+    },
     "api/verify-credits.js": {
       "maxDuration": 10
     },
