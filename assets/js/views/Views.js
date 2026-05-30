@@ -235,7 +235,40 @@ export const DocumentView = {
     const frame = document.getElementById('resPreviewFrame');
     if (!frame) return;
 
-    const bodyHTML = this._markdownToHTML(content).replace('<div class="md-preview">', '').replace('</div>', '');
+    // ── Detecção automática HTML vs Markdown ────────────────────────────────
+    // Quando o documento foi gerado com htmlTemplate (duas colunas, sidebar, etc.),
+    // o conteúdo começa com '<div' — usar directamente sem conversão md→html.
+    const isRawHTML = content && content.trimStart().startsWith('<');
+    const bodyHTML = isRawHTML
+      ? content
+      : this._markdownToHTML(content).replace('<div class="md-preview">', '').replace('</div>', '');
+
+    // Para HTML estruturado, o CSS do template já está embutido — não sobrepor com o padrão.
+    if (isRawHTML && this._activeTemplateCss) {
+      const html = \`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}\${this._activeTemplateCss}</style></head><body>\${bodyHTML}</body></html>\`;
+      try {
+        const doc = frame.contentDocument || frame.contentWindow?.document;
+        if (doc) { doc.open(); doc.write(html); doc.close(); }
+      } catch(e) {
+        if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
+        this._resultBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        frame.src = this._resultBlobURL;
+      }
+      return;
+    }
+    if (isRawHTML) {
+      // HTML sem template CSS — renderizar com reset mínimo
+      const html = \`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Calibri,Arial,sans-serif;}</style></head><body>\${bodyHTML}</body></html>\`;
+      try {
+        const doc = frame.contentDocument || frame.contentWindow?.document;
+        if (doc) { doc.open(); doc.write(html); doc.close(); }
+      } catch(e) {
+        if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
+        this._resultBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        frame.src = this._resultBlobURL;
+      }
+      return;
+    }
 
     let css = '';
     if (format === 'pdf') {
