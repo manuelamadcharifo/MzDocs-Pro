@@ -884,7 +884,11 @@ export class DocumentController {
       return;
     }
     console.log('[DocumentController] _openEditor — content length:', editorContent.length, 'service:', serviceType);
-    window.documentEditor.loadDocument(editorContent, serviceType, this._activeTemplate?.css || null);
+    // Passar o HTML preenchido do template (se existir) separado do CSS,
+    // para que o editor mostre a estrutura visual correcta e não o markdown cru.
+    const templateHtml = this._activeTemplateHtml || null;
+    const templateCss  = this._activeTemplate?.css  || null;
+    window.documentEditor.loadDocument(editorContent, serviceType, templateCss, templateHtml);
     window.documentEditor._docController = this;
  }
 
