@@ -1609,9 +1609,20 @@ export function getTemplates(serviceKey) {
   return TEMPLATE_LIBRARY[serviceKey] || [];
 }
 
-/** Devolve um template por id */
+/** Sessão de templates dinâmicos (modelo próprio, extraídos de imagem).
+ *  Declarado ANTES das funções que o referenciam para evitar TDZ (Temporal Dead Zone). */
+const _sessionTemplates = {};  // { serviceKey: [template, ...] }
+
+/** Devolve um template por id — procura primeiro na sessão, depois na biblioteca */
 export function getTemplateById(serviceKey, templateId) {
-  return (TEMPLATE_LIBRARY[serviceKey] || []).find(t => t.id === templateId) || null;
+  // CORRIGIDO: procurar também nos templates de sessão (modelo próprio, extraídos de imagem).
+  // Bug anterior: só pesquisava TEMPLATE_LIBRARY — templates dinâmicos (MEU, modelo próprio,
+  // extraídos de imagem via _handleUpload) nunca eram encontrados, logo _pick() ficava com
+  // this._tpl = null e o botão "Usar este Modelo" não aplicava nada.
+  const sessionList = (_sessionTemplates[serviceKey] || []);
+  return sessionList.find(t => t.id === templateId)
+      || (TEMPLATE_LIBRARY[serviceKey] || []).find(t => t.id === templateId)
+      || null;
 }
 
 /** Devolve o template por defeito de um serviço (primeiro da lista) */
@@ -1620,9 +1631,7 @@ export function getDefaultTemplate(serviceKey) {
   return list[0] || null;
 }
 
-
 /** Adiciona um template gerado dinamicamente (ex: extraído de imagem do utilizador) à sessão */
-const _sessionTemplates = {};  // { serviceKey: [template, ...] }
 
 // ── Persistência em localStorage ─────────────────────────────────────────────
 // CORRIGIDO: antes os templates de sessão (extraídos de imagem) ficavam apenas
