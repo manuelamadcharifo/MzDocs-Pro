@@ -1807,21 +1807,39 @@ USING (EXISTS (
 
     async _approveTemplate(id) {
         try {
-            const { error } = await this.supabase.rpc('approve_template', { p_template_id: id });
+            // CORRIGIDO: update directo em vez de RPC que pode não existir no Supabase.
+            const { error } = await this.supabase
+                .from('templates_custom')
+                .update({
+                    status:         'approved',
+                    is_public:      true,
+                    approved_at:    new Date().toISOString(),
+                    rejection_note: null,
+                })
+                .eq('id', id);
             if (error) throw error;
-            alert('✅ Template aprovado e publicado!');
+            alert('✅ Template aprovado e publicado! Estará disponível para todos os utilizadores.');
             this._loadTemplates('pending');
-        } catch (err) { alert('Erro: ' + err.message); }
+        } catch (err) { alert('Erro ao aprovar: ' + err.message); }
     }
 
     async _rejectTemplate(id) {
         const note = prompt('Motivo da rejeição (opcional):') ?? '';
         try {
-            const { error } = await this.supabase.rpc('reject_template', { p_template_id: id, p_note: note });
+            // CORRIGIDO: update directo em vez de RPC que pode não existir no Supabase.
+            const { error } = await this.supabase
+                .from('templates_custom')
+                .update({
+                    status:         'rejected',
+                    is_public:      false,
+                    rejection_note: note || null,
+                    rejected_at:    new Date().toISOString(),
+                })
+                .eq('id', id);
             if (error) throw error;
             alert('❌ Template rejeitado.');
             this._loadTemplates('pending');
-        } catch (err) { alert('Erro: ' + err.message); }
+        } catch (err) { alert('Erro ao rejeitar: ' + err.message); }
     }
 
     _previewTemplate(id) {
