@@ -396,14 +396,19 @@ export class DocumentEditor {
     });
 
     if (mode === 'preview') {
-      // Sync do editor apenas se o modo edição foi usado (wordDoc tem conteúdo real)
-      // E apenas se NÃO estamos a usar templateHtml (que não é editável via execCommand)
-      // CRITICAL: calling _syncContentFromEditor() on an empty wordDoc resets this.content to ''
-      if (!this._templateHtml && wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+      // Sync do editor apenas se o modo edição foi usado
+      if (this._templateHtml) {
+        // Ler conteúdo editado do iframe de template
+        const editFrame = this._templateEditFrame || this.modal.querySelector('#edTemplateEditFrame');
+        if (editFrame && editFrame.contentDocument && editFrame.contentDocument.body) {
+          try { this._templateHtml = editFrame.contentDocument.body.innerHTML; } catch(e) {}
+        }
+        // Ocultar iframe de edição
+        if (editFrame) editFrame.style.display = 'none';
+        const wordDocEl = this.modal.querySelector('#edWordDoc');
+        if (wordDocEl) wordDocEl.style.display = '';
+      } else if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
         this._syncContentFromEditor();
-      } else if (this._templateHtml && wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
-        // Se o utilizador editou o HTML do template no editor, guardar as alterações
-        this._templateHtml = wordDoc.innerHTML;
       }
       previewWrap.style.display = 'flex';
       editWrap.style.display    = 'none';
@@ -418,31 +423,43 @@ export class DocumentEditor {
       wordToolbar.style.display = 'flex';
       // Renderizar conteúdo rico no editor
       if (wordDoc) {
-        // Se há templateHtml (layout com CSS próprio), não usar contenteditable
-        // pois iria destruir a estrutura. Em vez disso, mostrar aviso e usar o HTML
-        // directamente no ed-word-page mas com os estilos do template injectados.
         if (this._templateHtml && this._templateCss) {
-          // Injectar o CSS do template no ed-word-page via <style> local
-          const styleId = 'ed-tpl-style';
-          document.getElementById(styleId)?.remove();
-          const styleEl = document.createElement('style');
-          styleEl.id = styleId;
-          // Scope dos estilos do template para o ed-word-page
-          // Prefixar cada regra com #edWordDoc para limitar ao editor
-          styleEl.textContent = this._templateCss;
-          document.head.appendChild(styleEl);
-          wordDoc.innerHTML = sanitizeHtml(this._templateHtml);
-          wordDoc.style.padding = '0';
-          wordDoc.style.fontFamily = '';
+          // Template HTML com layout estruturado (flexbox, 2 colunas, etc.)
+          // Usar iframe com designMode='on' para preservar o layout visual exacto
+          // enquanto permite edição inline. O contenteditable div destrói o layout.
+          document.getElementById('ed-tpl-style')?.remove();
+          const editWrapEl = this.modal.querySelector('#edEditWrap');
+          // Criar ou reutilizar iframe de edição de template
+          let editFrame = this.modal.querySelector('#edTemplateEditFrame');
+          if (!editFrame) {
+            editFrame = document.createElement('iframe');
+            editFrame.id = 'edTemplateEditFrame';
+            editFrame.style.cssText = 'flex:1;border:none;background:#fff;';
+            editWrapEl?.appendChild(editFrame);
+          }
+          editFrame.style.display = 'flex';
+          wordDoc.style.display = 'none';
+          const editHtml = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>${this._templateCss}</style></head><body>${this._templateHtml}</body></html>`;
+          editFrame.srcdoc = editHtml;
+          editFrame.onload = () => {
+            try {
+              editFrame.contentDocument.designMode = 'on';
+              // Guardar referência ao frame para ler o conteúdo ao guardar
+              this._templateEditFrame = editFrame;
+            } catch(e) { console.warn('[editor] designMode failed:', e); }
+          };
         } else {
-          // Limpar estilos de template anteriores
+          // Limpar iframe de edição de template se existir
+          const editFrame = this.modal.querySelector('#edTemplateEditFrame');
+          if (editFrame) { editFrame.style.display = 'none'; }
+          const wordDocWrap = this.modal.querySelector('#edWordDoc');
+          if (wordDocWrap) wordDocWrap.style.display = '';
           document.getElementById('ed-tpl-style')?.remove();
           wordDoc.style.padding = '';
           wordDoc.style.fontFamily = '';
           const isRawHTML = this.content && this.content.trimStart().startsWith('<');
           if (isRawHTML) {
-            // HTML estruturado: sanitize e mostrar directamente
-            wordDoc.innerHTML = sanitizeHtml(this.content);
+            wordDoc.innerHTML = this.content;
           } else {
             wordDoc.innerHTML = this._richHTML || this._mdToRichHTML(this.content);
           }
@@ -506,9 +523,11 @@ export class DocumentEditor {
 
   _buildPreviewHTML(format) {
     // Prioridade 1: HTML estruturado do template (layout de 2 colunas, sidebar, etc.)
-    // Usar sempre que disponível — ignora format porque o CSS do template já define tudo.
+    // NÃO passar pelo sanitizeHtml — o templateHtml vem de TemplateLibrary.js (fonte interna
+    // confiável) e o sanitizer removeria tags semânticas (section, aside, main, header, footer)
+    // que são essenciais para o layout. Os dados do utilizador já foram limpos em _extractRealData.
     if (this._templateHtml && this._templateCss) {
-      return `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;}${this._templateCss}</style></head><body>${sanitizeHtml(this._templateHtml)}</body></html>`;
+      return `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>${this._templateCss}</style></head><body>${this._templateHtml}</body></html>`;
     }
 
     const isRawHTML = this.content && this.content.trimStart().startsWith('<');
@@ -516,7 +535,7 @@ export class DocumentEditor {
     if (isRawHTML) {
       // Conteúdo HTML estruturado (gerado via htmlTemplate da IA)
       const templateCss = this._templateCss || 'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;padding:18mm;}';
-      return `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;}${templateCss}</style></head><body>${sanitizeHtml(this.content)}</body></html>`;
+      return `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>${templateCss}</style></head><body>${this.content}</body></html>`;
     }
 
     // Conteúdo markdown → converter para HTML
@@ -911,18 +930,18 @@ export class DocumentEditor {
 
   // ── Guardar edição e voltar ao preview ────────────────────────
   _saveAndPreview() {
-    // Se não há template HTML, sincronizar do contenteditable normalmente
-    if (!this._templateHtml) {
-      this._syncContentFromEditor();
-    } else {
-      // Com templateHtml: guardar o innerHTML editado como novo templateHtml
-      const wordDoc = this.modal.querySelector('#edWordDoc');
-      if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
-        this._templateHtml = wordDoc.innerHTML;
+    if (this._templateHtml) {
+      // Ler conteúdo editado do iframe de template (designMode)
+      const editFrame = this._templateEditFrame || this.modal.querySelector('#edTemplateEditFrame');
+      if (editFrame && editFrame.contentDocument) {
+        try {
+          this._templateHtml = editFrame.contentDocument.body.innerHTML;
+        } catch(e) { console.warn('[editor] Could not read template iframe:', e); }
       }
+    } else {
+      this._syncContentFromEditor();
     }
     this._switchMode('preview');
-    // Toast de confirmação
     const toast = document.createElement('div');
     toast.textContent = '💾 Edição guardada!';
     toast.style.cssText = [
@@ -993,8 +1012,8 @@ export class DocumentEditor {
   open()  { if (this.modal) { this.modal.style.display='flex'; document.body.style.overflow='hidden'; } }
   close() {
     if (this.modal) { this.modal.style.display='none'; document.body.style.overflow=''; }
-    // Limpar estilos de template injectados no <head>
     document.getElementById('ed-tpl-style')?.remove();
+    this._templateEditFrame = null;
   }
   getContent() { return this.content; }
 }
