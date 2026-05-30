@@ -397,9 +397,13 @@ export class DocumentEditor {
 
     if (mode === 'preview') {
       // Sync do editor apenas se o modo edição foi usado (wordDoc tem conteúdo real)
+      // E apenas se NÃO estamos a usar templateHtml (que não é editável via execCommand)
       // CRITICAL: calling _syncContentFromEditor() on an empty wordDoc resets this.content to ''
-      if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+      if (!this._templateHtml && wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
         this._syncContentFromEditor();
+      } else if (this._templateHtml && wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+        // Se o utilizador editou o HTML do template no editor, guardar as alterações
+        this._templateHtml = wordDoc.innerHTML;
       }
       previewWrap.style.display = 'flex';
       editWrap.style.display    = 'none';
@@ -414,12 +418,34 @@ export class DocumentEditor {
       wordToolbar.style.display = 'flex';
       // Renderizar conteúdo rico no editor
       if (wordDoc) {
-        const isRawHTML = this.content && this.content.trimStart().startsWith('<');
-        if (isRawHTML) {
-          // HTML estruturado: sanitize e mostrar directamente
-          wordDoc.innerHTML = sanitizeHtml(this.content);
+        // Se há templateHtml (layout com CSS próprio), não usar contenteditable
+        // pois iria destruir a estrutura. Em vez disso, mostrar aviso e usar o HTML
+        // directamente no ed-word-page mas com os estilos do template injectados.
+        if (this._templateHtml && this._templateCss) {
+          // Injectar o CSS do template no ed-word-page via <style> local
+          const styleId = 'ed-tpl-style';
+          document.getElementById(styleId)?.remove();
+          const styleEl = document.createElement('style');
+          styleEl.id = styleId;
+          // Scope dos estilos do template para o ed-word-page
+          // Prefixar cada regra com #edWordDoc para limitar ao editor
+          styleEl.textContent = this._templateCss;
+          document.head.appendChild(styleEl);
+          wordDoc.innerHTML = sanitizeHtml(this._templateHtml);
+          wordDoc.style.padding = '0';
+          wordDoc.style.fontFamily = '';
         } else {
-          wordDoc.innerHTML = this._richHTML || this._mdToRichHTML(this.content);
+          // Limpar estilos de template anteriores
+          document.getElementById('ed-tpl-style')?.remove();
+          wordDoc.style.padding = '';
+          wordDoc.style.fontFamily = '';
+          const isRawHTML = this.content && this.content.trimStart().startsWith('<');
+          if (isRawHTML) {
+            // HTML estruturado: sanitize e mostrar directamente
+            wordDoc.innerHTML = sanitizeHtml(this.content);
+          } else {
+            wordDoc.innerHTML = this._richHTML || this._mdToRichHTML(this.content);
+          }
         }
         setTimeout(() => { wordDoc.focus(); }, 50);
       }
@@ -479,6 +505,12 @@ export class DocumentEditor {
   }
 
   _buildPreviewHTML(format) {
+    // Prioridade 1: HTML estruturado do template (layout de 2 colunas, sidebar, etc.)
+    // Usar sempre que disponível — ignora format porque o CSS do template já define tudo.
+    if (this._templateHtml && this._templateCss) {
+      return `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;}${this._templateCss}</style></head><body>${sanitizeHtml(this._templateHtml)}</body></html>`;
+    }
+
     const isRawHTML = this.content && this.content.trimStart().startsWith('<');
 
     if (isRawHTML) {
@@ -597,9 +629,10 @@ export class DocumentEditor {
     const fmt = this._previewFmt;
     const btn = this.modal.querySelector('#edBtnDownload');
     const orig = btn.textContent;
-    // Sync from rich-text editor before export to ensure this.content is current
+    // Sync from rich-text editor before export ONLY when no template HTML is active
+    // (syncContentFromEditor converts innerHTML back to markdown which would corrupt templateHtml)
     const wordDoc = this.modal.querySelector('#edWordDoc');
-    if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+    if (!this._templateHtml && wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
       this._syncContentFromEditor();
     }
     btn.disabled = true; btn.textContent = '⏳…';
@@ -612,6 +645,21 @@ export class DocumentEditor {
   }
 
   async _downloadPDF() {
+    // Se há HTML estruturado do template, usar sempre HTMLPDFExporter para preservar
+    // o layout exacto (2 colunas, sidebar, cores, etc.) — igual ao preview.
+    if (this._templateHtml && this._templateCss) {
+      try {
+        const { HTMLPDFExporter } = await import('./HTMLPDFExporter.js');
+        new HTMLPDFExporter().export(this._templateHtml, `mzdocs-${this.serviceType}-${Date.now()}`, {
+          templateCss: this._templateCss,
+          title: this.serviceType || 'Documento MzDocs',
+        });
+        return;
+      } catch (err) {
+        console.error('[DocumentEditor] HTMLPDFExporter (templateHtml) falhou:', err.message);
+      }
+    }
+
     // If content is raw HTML (from htmlTemplate) or has template CSS, use HTMLPDFExporter
     const isRawHTML = this.content && this.content.trimStart().startsWith('<');
     const templateCss = this._templateCss;
@@ -663,6 +711,24 @@ export class DocumentEditor {
   }
 
   async _downloadWord() {
+    // Se há HTML estruturado do template, gerar .doc com o HTML+CSS — preserva visual
+    if (this._templateHtml && this._templateCss) {
+      const css = this._templateCss;
+      const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
+        xmlns:w='urn:schemas-microsoft-com:office:word'
+        xmlns='http://www.w3.org/TR/REC-html40'>
+        <head><meta charset="UTF-8">
+        <style>${css}
+          @page{size:210mm 297mm;margin:0;}
+        </style></head>
+        <body>${this._templateHtml}</body></html>`;
+      const blob = new Blob(['\uFEFF', html], { type:'application/msword' });
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.doc` });
+      a.click(); URL.revokeObjectURL(url);
+      return;
+    }
+
     // Use the full WordExporter (same pipeline as original generation)
     try {
       const { WordExporter } = await import('./WordExporter.js');
@@ -845,7 +911,16 @@ export class DocumentEditor {
 
   // ── Guardar edição e voltar ao preview ────────────────────────
   _saveAndPreview() {
-    this._syncContentFromEditor();
+    // Se não há template HTML, sincronizar do contenteditable normalmente
+    if (!this._templateHtml) {
+      this._syncContentFromEditor();
+    } else {
+      // Com templateHtml: guardar o innerHTML editado como novo templateHtml
+      const wordDoc = this.modal.querySelector('#edWordDoc');
+      if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+        this._templateHtml = wordDoc.innerHTML;
+      }
+    }
     this._switchMode('preview');
     // Toast de confirmação
     const toast = document.createElement('div');
@@ -867,7 +942,7 @@ export class DocumentEditor {
   }
 
   // ── API pública ────────────────────────────────────────────────
-  loadDocument(content, serviceType, templateCss) {
+  loadDocument(content, serviceType, templateCss, templateHtml) {
     // DEBUG: log incoming content
     console.log('[DocumentEditor] loadDocument — type:', typeof content, 'length:', content?.length);
     // Fallback: use window.documentState if content is invalid (Bug 2 fix)
@@ -881,11 +956,15 @@ export class DocumentEditor {
         return;
       }
     }
-    this.content     = content;
-    this.serviceType = serviceType;
-    this._previewFmt = 'pdf';
-    this._richHTML   = null; // reset rich HTML cache
-    this._templateCss = templateCss || null; // store template CSS for preview
+    this.content       = content;
+    this.serviceType   = serviceType;
+    this._previewFmt   = 'pdf';
+    this._richHTML     = null; // reset rich HTML cache
+    this._templateCss  = templateCss  || null; // store template CSS for preview
+    // templateHtml: HTML estruturado já preenchido com dados reais do utilizador
+    // (gerado em _applyTemplate). Quando existe, é usado no preview e no editor
+    // em vez do markdown original, preservando layout de 2 colunas, cores, etc.
+    this._templateHtml = templateHtml || null;
 
     this._updateStats();
     this.open();
@@ -914,6 +993,8 @@ export class DocumentEditor {
   open()  { if (this.modal) { this.modal.style.display='flex'; document.body.style.overflow='hidden'; } }
   close() {
     if (this.modal) { this.modal.style.display='none'; document.body.style.overflow=''; }
+    // Limpar estilos de template injectados no <head>
+    document.getElementById('ed-tpl-style')?.remove();
   }
   getContent() { return this.content; }
 }
