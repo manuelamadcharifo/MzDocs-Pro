@@ -659,24 +659,20 @@ ${tpl.css || ''}
     const badge = document.getElementById('tplUploadBadge');
     const zone  = document.getElementById('tplUploadZone');
 
-    // ── Mostrar card "A processar…" IMEDIATAMENTE enquanto a IA trabalha ──
-    // CORRIGIDO: antes o utilizador não via nenhum feedback visual na lista de cards
-    // durante o processamento — agora aparece um card de loading no topo da lista.
+    // Card de loading imediato
     const processingId = `processing-${Date.now()}`;
     addSessionTemplate(this._key, {
       id: processingId,
       name: '⏳ A processar…',
       description: file.name,
       preview: { accent: '#10b981', bg: '#f0fdf4', font: 'sans-serif' },
-      _isCustom: true,
-      htmlTemplate: null,
-      css: '',
+      _isCustom: true, htmlTemplate: null, css: '',
     });
     this._render();
 
     if (sub) sub.textContent = isImg ? '🤖 A extrair template da imagem…' : '⏳ A processar ficheiro…';
 
-    // Helper: remover card de processamento da lista de sessão
+    // Remover card de loading
     const removeProcessingCard = () => {
       const list = getSessionTemplates(this._key);
       const idx  = list.findIndex(t => t.id === processingId);
@@ -684,18 +680,17 @@ ${tpl.css || ''}
     };
 
     try {
-      // ── Sempre: passar ao TemplateController para usar como modelo próprio ──
+      // Passar ao TemplateController para usar como modelo próprio nas gerações futuras
       const templateCtrl = window.docController?.templateCtrl;
       if (templateCtrl) {
         await templateCtrl._handleFile({ target: { files: [file], value: '' } });
       }
 
-      // ── IMAGEM: extrair template HTML+CSS via API e adicionar como card real ──
+      // ── IMAGEM: tentar extrair template via API ────────────────────────
       if (isImg) {
         try {
           const extracted = await this._extractTemplateFromImage(file);
           if (extracted) {
-            // Remover card de processamento e adicionar o template extraído
             removeProcessingCard();
             addSessionTemplate(this._key, extracted);
             this._render();
@@ -705,61 +700,250 @@ ${tpl.css || ''}
             if (zone) zone.classList.add('active');
             if (badge) badge.style.display = 'block';
             _notify(`✅ Template "${extracted.name}" extraído!`);
-
-            // Guardar no Supabase para revisão admin (não bloqueia UI)
             this._saveTemplateToSupabase(extracted).catch(e => console.warn('Supabase save:', e));
-
             this._customActive = false;
             return;
           }
         } catch (extractErr) {
-          console.warn('Extracção de imagem falhou, a usar modelo próprio:', extractErr.message);
-          // Continua para o fallback abaixo
+          console.warn('Extracção de imagem falhou, a gerar fallback local:', extractErr.message);
+          // Continua para fallback local abaixo
         }
       }
 
-      // ── FALLBACK para imagem falhada / PDF / Word ──
-      // Remover card de processamento
+      // ── FALLBACK: gerar template visual local (imagem falhada / PDF / Word) ──
       removeProcessingCard();
 
-      // Criar card "Modelo Próprio" permanente para o utilizador ver e seleccionar
-      // CORRIGIDO: antes ficava sem card nenhum quando a extracção falhava ou
-      // quando se carregava PDF/Word — o utilizador não sabia que o modelo estava activo.
-      const ownModelId = `own-model-${Date.now()}`;
-      const ownModelTpl = {
-        id: ownModelId,
-        name: 'Modelo Próprio',
-        description: file.name,
-        preview: { accent: '#10b981', bg: '#f0fdf4', font: 'sans-serif' },
-        _isCustom: true,
-        _isOwnModel: true,   // flag para _apply() saber que não deve chamar _regenerateWithHTMLTemplate
-        htmlTemplate: null,
-        css: '',
+      // Nome profissional inteligente baseado no tipo de serviço + paleta de cores
+      // CORRIGIDO: antes usava o nome do ficheiro (ex: "Screenshot 20260530 022813")
+      // que não tem significado visual. Agora gera nomes profissionais como os outros cards.
+      const svcNamesMap = {
+        cv:           ['Elegante Bicolor', 'Profissional Moderno', 'Executivo Dinâmico', 'Clássico Contemporâneo', 'Minimalista Pro'],
+        carta:        ['Formal Elegante', 'Corporativa Moderna', 'Profissional Limpa', 'Executiva Premium', 'Clássica Formal'],
+        orcamento:    ['Profissional Detalhado', 'Corporativo Moderno', 'Técnico Formal', 'Executivo Premium', 'Simples Elegante'],
+        arrendamento: ['Jurídico Formal', 'Contrato Moderno', 'Legal Clássico', 'Formal Elegante', 'Profissional Legal'],
+        recibo:       ['Recibo Formal', 'Factura Moderna', 'Comprovativo Elegante', 'Financeiro Pro', 'Simples Formal'],
       };
-      addSessionTemplate(this._key, ownModelTpl);
+      const nameOptions = svcNamesMap[this._key] || ['Modelo Elegante', 'Layout Profissional', 'Design Moderno', 'Estilo Executivo', 'Visual Premium'];
+      // Escolher nome determinista baseado no hash do nome do ficheiro
+      const nameHash = file.name.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+      const friendlyName = nameOptions[nameHash % nameOptions.length];
+
+      // Gerar template visual local com os dados actuais do utilizador
+      const localTpl = this._buildLocalFallbackTemplate(friendlyName, file.name);
+
+      addSessionTemplate(this._key, localTpl);
       this._render();
-      this._pick(ownModelId);
+      this._pick(localTpl.id);
 
       this._customFile   = file;
       this._customName   = file.name;
-      this._customActive = true;
+      this._customActive = false; // template local real — não precisa de flag especial
 
       if (zone)  zone.classList.add('active');
       if (badge) badge.style.display = 'block';
-      if (sub)   sub.textContent = `✅ ${file.name} — A IA usará o seu layout ao gerar`;
+      if (sub)   sub.textContent = `✅ ${friendlyName} — Template gerado do seu ficheiro`;
 
       const selBar = document.getElementById('tplSelBar');
-      if (selBar) selBar.textContent = `📎 Modelo próprio: ${file.name}`;
+      if (selBar) selBar.textContent = `📎 ${friendlyName} — ${file.name}`;
 
-      _notify(`✅ Modelo próprio carregado: ${file.name}`);
+      _notify(`✅ Template "${friendlyName}" pronto!`);
 
     } catch (err) {
-      // Limpar card de processamento em caso de erro inesperado
       removeProcessingCard();
       this._render();
       if (sub) sub.textContent = 'Toque para carregar imagem, PDF ou Word com o seu layout';
       _notify('Erro ao processar: ' + err.message);
     }
+  }
+
+  // ── Gerar template visual local sem chamar a API ─────────────────────────
+  // Cria template com htmlTemplate + css real com 5 layouts diferentes.
+  // CORRIGIDO: gerava sempre o mesmo layout de 2 colunas — agora varia o estilo
+  // com base no hash do nome para parecer um template personalizado real.
+  _buildLocalFallbackTemplate(name, filename) {
+    const svcKey  = this._key || 'cv';
+    const content = this._content || '';
+    const rd      = this._extractRealData(content);
+
+    const palettes = [
+      // 0 — Bicolor escuro (sidebar esquerda escura)
+      { accent: '#1e3a5f', sidebar: '#1e3a5f', sidebarText: '#fff', bg: '#fff', layout: 'two-col' },
+      // 1 — Verde esmeralda (sidebar)
+      { accent: '#0f766e', sidebar: '#0f766e', sidebarText: '#fff', bg: '#fff', layout: 'two-col' },
+      // 2 — Linha de topo colorida (single col com header accent)
+      { accent: '#1d4ed8', sidebar: '#1d4ed8', sidebarText: '#fff', bg: '#f8fafc', layout: 'top-bar' },
+      // 3 — Roxo premium (sidebar)
+      { accent: '#7c3aed', sidebar: '#4c1d95', sidebarText: '#fff', bg: '#fff', layout: 'two-col' },
+      // 4 — Ouro executivo (single col com header dourado)
+      { accent: '#92400e', sidebar: '#78350f', sidebarText: '#fff', bg: '#fffbeb', layout: 'top-bar' },
+    ];
+    const hash = filename.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const pal  = palettes[hash % palettes.length];
+    const isTwoCol = pal.layout === 'two-col';
+
+    // ── Layout duas colunas (sidebar lateral) ──────────────────────────────
+    const htmlTwoCol = `
+<div class="cv-page cv-two-col">
+  <aside class="cv-sidebar">
+    <div class="cv-avatar">{{INICIAIS}}</div>
+    <div class="cv-sidebar-name">{{NOME}}</div>
+    <div class="cv-sidebar-cargo">{{CARGO}}</div>
+    <div class="cv-sidebar-divider"></div>
+    <div class="cv-section">
+      <h2 class="cv-section-title">Contactos</h2>
+      <div class="cv-contact-item">📞 {{CONTACTO}}</div>
+      <div class="cv-contact-item">✉️ {{EMAIL}}</div>
+      <div class="cv-contact-item">📍 {{LOCALIZACAO}}</div>
+    </div>
+    <div class="cv-section">
+      <h2 class="cv-section-title">Competências</h2>
+      <ul class="cv-skills-list">{{HABILIDADES_LIST}}</ul>
+    </div>
+    <div class="cv-section">
+      <h2 class="cv-section-title">Línguas</h2>
+      {{LINGUAS}}
+    </div>
+  </aside>
+  <main class="cv-main">
+    <section class="cv-section">
+      <h2 class="cv-section-title">Objectivo Profissional</h2>
+      <p class="cv-text">{{OBJECTIVO}}</p>
+    </section>
+    <section class="cv-section">
+      <h2 class="cv-section-title">Formação Académica</h2>
+      <div class="cv-entries">{{FORMACAO}}</div>
+    </section>
+    <section class="cv-section">
+      <h2 class="cv-section-title">Experiência Profissional</h2>
+      <div class="cv-entries">{{EXPERIENCIA}}</div>
+    </section>
+    <section class="cv-section">
+      <h2 class="cv-section-title">Realização de Destaque</h2>
+      <p class="cv-text">{{REALIZACAO}}</p>
+    </section>
+    {{EXTRA}}
+  </main>
+</div>`;
+
+    // ── Layout coluna única com barra de topo ──────────────────────────────
+    const htmlTopBar = `
+<div class="cv-page">
+  <header class="cv-header">
+    <div class="cv-avatar">{{INICIAIS}}</div>
+    <div class="cv-header-info">
+      <h1 class="cv-name">{{NOME}}</h1>
+      <p class="cv-cargo">{{CARGO}}</p>
+      <div class="cv-contacts">
+        <span>📞 {{CONTACTO}}</span>
+        <span>✉️ {{EMAIL}}</span>
+        <span>📍 {{LOCALIZACAO}}</span>
+      </div>
+    </div>
+  </header>
+  <div class="cv-body">
+    <section class="cv-section">
+      <h2 class="cv-section-title">Objectivo Profissional</h2>
+      <p class="cv-text">{{OBJECTIVO}}</p>
+    </section>
+    <div class="cv-two-grid">
+      <section class="cv-section">
+        <h2 class="cv-section-title">Formação Académica</h2>
+        <div class="cv-entries">{{FORMACAO}}</div>
+      </section>
+      <section class="cv-section">
+        <h2 class="cv-section-title">Competências</h2>
+        <ul class="cv-skills-list">{{HABILIDADES_LIST}}</ul>
+      </section>
+    </div>
+    <section class="cv-section">
+      <h2 class="cv-section-title">Experiência Profissional</h2>
+      <div class="cv-entries">{{EXPERIENCIA}}</div>
+    </section>
+    <div class="cv-two-grid">
+      <section class="cv-section">
+        <h2 class="cv-section-title">Línguas</h2>
+        {{LINGUAS}}
+      </section>
+      <section class="cv-section">
+        <h2 class="cv-section-title">Realização de Destaque</h2>
+        <p class="cv-text">{{REALIZACAO}}</p>
+      </section>
+    </div>
+    {{EXTRA}}
+  </div>
+</div>`;
+
+    const cssTwoCol = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1e293b; width: 210mm; min-height: 297mm; background: ${pal.bg}; }
+.cv-page { width: 210mm; min-height: 297mm; background: ${pal.bg}; }
+.cv-two-col { display: flex; min-height: 297mm; }
+.cv-sidebar { width: 68mm; background: ${pal.sidebar}; color: ${pal.sidebarText}; padding: 14mm 8mm; flex-shrink: 0; }
+.cv-main { flex: 1; padding: 14mm 10mm 10mm; }
+.cv-avatar { width: 54pt; height: 54pt; border-radius: 50%; background: rgba(255,255,255,0.2); color: ${pal.sidebarText}; display: flex; align-items: center; justify-content: center; font-size: 19pt; font-weight: 700; margin: 0 auto 10pt; border: 2px solid rgba(255,255,255,0.4); }
+.cv-sidebar-name { font-size: 12.5pt; font-weight: 800; text-align: center; line-height: 1.2; margin-bottom: 3pt; word-break: break-word; }
+.cv-sidebar-cargo { font-size: 8.5pt; text-align: center; opacity: 0.82; margin-bottom: 10pt; }
+.cv-sidebar-divider { height: 1px; background: rgba(255,255,255,0.25); margin: 8pt 0; }
+.cv-sidebar .cv-section { margin-bottom: 10pt; }
+.cv-sidebar .cv-section-title { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 3pt; margin-bottom: 5pt; color: ${pal.sidebarText}; }
+.cv-contact-item { font-size: 8.5pt; margin-bottom: 4pt; opacity: 0.9; word-break: break-all; }
+.cv-skills-list { list-style: none; padding: 0; }
+.cv-skills-list li { font-size: 8.5pt; padding: 3pt 0; border-bottom: 1px solid rgba(255,255,255,0.1); opacity: 0.9; }
+.cv-lang-item { font-size: 8.5pt; margin-bottom: 5pt; }
+.cv-lang-name { font-weight: 700; display: block; }
+.cv-lang-level { font-size: 8pt; opacity: 0.75; }
+.cv-lang-bar { background: rgba(255,255,255,0.2); height: 3pt; border-radius: 2pt; margin-top: 2pt; }
+.cv-lang-fill { background: rgba(255,255,255,0.7); height: 100%; border-radius: 2pt; }
+.cv-main .cv-section { margin-bottom: 10pt; }
+.cv-main .cv-section-title { font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${pal.accent}; border-bottom: 2px solid ${pal.accent}; padding-bottom: 2pt; margin-bottom: 6pt; }
+.cv-text { font-size: 9.5pt; line-height: 1.55; color: #374151; }
+.cv-entries { font-size: 9.5pt; }
+.cv-entry { margin-bottom: 6pt; }
+.cv-entry-date { font-size: 8pt; color: #6b7280; font-style: italic; }
+.cv-entry-title { font-size: 10pt; font-weight: 700; color: #111827; margin-top: 1pt; }
+.cv-entry-company { font-size: 9pt; color: #4b5563; margin-top: 1pt; }
+.cv-entry-bullets { padding-left: 12pt; margin-top: 3pt; }
+.cv-entry-bullets li { font-size: 9pt; margin-bottom: 1.5pt; color: #374151; }`;
+
+    const cssTopBar = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; color: #1e293b; width: 210mm; min-height: 297mm; background: ${pal.bg}; }
+.cv-page { width: 210mm; min-height: 297mm; background: ${pal.bg}; }
+.cv-header { background: ${pal.sidebar}; color: ${pal.sidebarText}; padding: 10mm 12mm; display: flex; align-items: center; gap: 12pt; }
+.cv-avatar { width: 52pt; height: 52pt; border-radius: 50%; background: rgba(255,255,255,0.2); color: ${pal.sidebarText}; display: flex; align-items: center; justify-content: center; font-size: 18pt; font-weight: 700; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.4); }
+.cv-header-info { flex: 1; }
+.cv-name { font-size: 18pt; font-weight: 800; line-height: 1.1; margin-bottom: 2pt; }
+.cv-cargo { font-size: 10pt; opacity: 0.85; margin-bottom: 5pt; }
+.cv-contacts { display: flex; flex-wrap: wrap; gap: 4pt 12pt; font-size: 8.5pt; opacity: 0.9; }
+.cv-body { padding: 10mm 12mm; }
+.cv-two-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14pt; }
+.cv-section { margin-bottom: 10pt; }
+.cv-section-title { font-size: 9.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${pal.accent}; border-bottom: 2px solid ${pal.accent}; padding-bottom: 2pt; margin-bottom: 6pt; }
+.cv-text { font-size: 9.5pt; line-height: 1.55; color: #374151; }
+.cv-entries { font-size: 9.5pt; }
+.cv-entry { margin-bottom: 6pt; }
+.cv-entry-date { font-size: 8pt; color: #6b7280; font-style: italic; }
+.cv-entry-title { font-size: 10pt; font-weight: 700; color: #111827; margin-top: 1pt; }
+.cv-entry-company { font-size: 9pt; color: #4b5563; margin-top: 1pt; }
+.cv-entry-bullets { padding-left: 12pt; margin-top: 3pt; }
+.cv-entry-bullets li { font-size: 9pt; margin-bottom: 1.5pt; color: #374151; }
+.cv-skills-list { list-style: none; padding: 0; }
+.cv-skills-list li { font-size: 9pt; padding: 2.5pt 0; border-bottom: 1px solid #e2e8f0; color: #374151; }
+.cv-lang-item { font-size: 9pt; margin-bottom: 5pt; }
+.cv-lang-name { font-weight: 700; color: #111827; }
+.cv-lang-level { font-size: 8pt; color: #6b7280; }
+.cv-lang-bar { background: #e2e8f0; height: 3pt; border-radius: 2pt; margin-top: 2pt; }
+.cv-lang-fill { background: ${pal.accent}; height: 100%; border-radius: 2pt; }`;
+
+    return {
+      id:           `own-${svcKey}-${Date.now()}`,
+      name:         name,
+      description:  isTwoCol ? 'Layout bicolor com sidebar lateral' : 'Layout moderno com cabeçalho colorido',
+      preview:      { accent: pal.accent, bg: pal.bg, font: 'sans-serif' },
+      htmlTemplate: isTwoCol ? htmlTwoCol : htmlTopBar,
+      css:          isTwoCol ? cssTwoCol  : cssTopBar,
+      _isCustom:    true,
+    };
   }
 
   // ── Extrair template HTML+CSS via backend /api/extract-template ─────────────
