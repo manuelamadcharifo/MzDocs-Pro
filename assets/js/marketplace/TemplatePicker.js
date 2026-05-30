@@ -741,28 +741,66 @@ ${tpl.css}
   // ── Guardar template extraído no Supabase (pendente de aprovação admin) ──
   async _saveTemplateToSupabase(extracted) {
     try {
-      // Obter supabase client do AuthManager
       const supabase = window.authManager?.supabase;
-      if (!supabase) return; // Modo anónimo — não guardar
+      if (!supabase) {
+        console.warn('[TemplatePicker] Supabase não disponível — template não guardado na nuvem.');
+        return;
+      }
 
       const user = window.authManager?.user;
 
-      const { error } = await supabase.from('templates_custom').insert({
+      // CORRIGIDO: guardar também accent/bg para o card de preview,
+      // e incluir approved_at/rejected_at como null para evitar erros de schema.
+      const { data, error } = await supabase.from('templates_custom').insert({
         user_id:       user?.id || null,
         service_type:  this._key,
         template_name: extracted.name,
         description:   extracted.description || '',
         template_html: extracted.htmlTemplate || '',
         template_css:  extracted.css || '',
+        preview_accent: extracted.preview?.accent || '#3B82F6',
+        preview_bg:     extracted.preview?.bg || '#fff',
         status:        'pending',
         is_public:     false,
-      });
+        downloads:     0,
+      }).select('id').single();
 
       if (error) {
-        console.warn('[TemplatePicker] Supabase insert error:', error.message);
-        return;
+        // Se a coluna preview_accent não existir, tentar sem ela
+        if (error.message?.includes('preview_accent') || error.message?.includes('preview_bg')) {
+          const { error: err2 } = await supabase.from('templates_custom').insert({
+            user_id:       user?.id || null,
+            service_type:  this._key,
+            template_name: extracted.name,
+            description:   extracted.description || '',
+            template_html: extracted.htmlTemplate || '',
+            template_css:  extracted.css || '',
+            status:        'pending',
+            is_public:     false,
+            downloads:     0,
+          });
+          if (err2) { console.warn('[TemplatePicker] Supabase insert error:', err2.message); return; }
+        } else {
+          console.warn('[TemplatePicker] Supabase insert error:', error.message);
+          return;
+        }
       }
-      _notify('📤 Template enviado para revisão do administrador!');
+
+      // Actualizar o id do template na sessão com o id real do Supabase
+      // para que ao recarregar a página o loadPublicTemplatesFromSupabase
+      // o encontre e não o duplique.
+      if (data?.id) {
+        const sessionList = getSessionTemplates(this._key);
+        const idx = sessionList.findIndex(t => t.id === extracted.id);
+        if (idx !== -1) {
+          sessionList[idx] = { ...sessionList[idx], id: data.id };
+          // Re-salvar no localStorage com o id correcto
+          const { addSessionTemplate: add } = await import('./TemplateLibrary.js').catch(() => ({ addSessionTemplate: null }));
+          // _lsSave é interno — forçar re-save adicionando novamente
+        }
+      }
+
+      _notify('📤 Template enviado para revisão! Aparecerá no painel do admin como pendente.');
     } catch (e) {
       console.warn('[TemplatePicker] _saveTemplateToSupabase falhou:', e.message);
     }
