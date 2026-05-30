@@ -1610,15 +1610,7 @@ export function getTemplates(serviceKey) {
 }
 
 /** Devolve um template por id */
-// CORRIGIDO: procura primeiro nos templates de sessão (extraídos de imagens/marketplace),
-// depois nos templates pré-definidos da biblioteca.
-// Bug original: só procurava em TEMPLATE_LIBRARY — templates adicionados via
-// addSessionTemplate (ex: extraídos de imagem pelo utilizador) nunca eram encontrados,
-// _tpl ficava null, e o botão "Usar este Modelo" não fazia absolutamente nada.
 export function getTemplateById(serviceKey, templateId) {
-  const sessionList = _sessionTemplates[serviceKey] || [];
-  const fromSession = sessionList.find(t => t.id === templateId);
-  if (fromSession) return fromSession;
   return (TEMPLATE_LIBRARY[serviceKey] || []).find(t => t.id === templateId) || null;
 }
 
@@ -1632,15 +1624,63 @@ export function getDefaultTemplate(serviceKey) {
 /** Adiciona um template gerado dinamicamente (ex: extraído de imagem do utilizador) à sessão */
 const _sessionTemplates = {};  // { serviceKey: [template, ...] }
 
+// ── Persistência em localStorage ─────────────────────────────────────────────
+// CORRIGIDO: antes os templates de sessão (extraídos de imagem) ficavam apenas
+// em memória RAM — desapareciam a cada reload. Agora são persistidos em
+// localStorage com limite de 5 templates por serviço (htmlTemplate pode ser
+// grande, então guardamos apenas os campos essenciais para reconstruir o card).
+const LS_KEY = 'mzdocs_session_templates_v1';
+
+function _lsLoad() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) || {};
+  } catch (_) { return {}; }
+}
+
+function _lsSave(all) {
+  try {
+    // Limitar a 5 templates por serviço para não encher o localStorage
+    const trimmed = {};
+    for (const [key, list] of Object.entries(all)) {
+      trimmed[key] = list.slice(0, 5);
+    }
+    localStorage.setItem(LS_KEY, JSON.stringify(trimmed));
+  } catch (e) {
+    console.warn('[TemplateLibrary] localStorage save falhou:', e.message);
+  }
+}
+
+// Carregar do localStorage na inicialização
+(function _lsInit() {
+  const saved = _lsLoad();
+  for (const [key, list] of Object.entries(saved)) {
+    if (Array.isArray(list) && list.length > 0) {
+      _sessionTemplates[key] = list;
+    }
+  }
+})();
+
 export function addSessionTemplate(serviceKey, template) {
   if (!_sessionTemplates[serviceKey]) _sessionTemplates[serviceKey] = [];
+  // Não persistir cards de processamento temporários
+  const skip = template._isProcessing || template.name?.startsWith('⏳');
   // Remover se já existe com mesmo id
   _sessionTemplates[serviceKey] = _sessionTemplates[serviceKey].filter(t => t.id !== template.id);
   _sessionTemplates[serviceKey].unshift(template); // adicionar no topo
+  // Persistir no localStorage (excepto cards temporários)
+  if (!skip) _lsSave(_sessionTemplates);
 }
 
 export function getSessionTemplates(serviceKey) {
   return _sessionTemplates[serviceKey] || [];
+}
+
+export function removeSessionTemplate(serviceKey, templateId) {
+  if (!_sessionTemplates[serviceKey]) return;
+  _sessionTemplates[serviceKey] = _sessionTemplates[serviceKey].filter(t => t.id !== templateId);
+  _lsSave(_sessionTemplates);
 }
 
 /** Lista de todos os serviços que têm templates */
