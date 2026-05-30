@@ -1687,8 +1687,10 @@ export function removeSessionTemplate(serviceKey, templateId) {
 export const SERVICES_WITH_TEMPLATES = Object.keys(TEMPLATE_LIBRARY);
 
 /**
- * Carrega templates públicos e aprovados do Supabase para a sessão.
- * Esses templates aparecem no picker tal como os pré-definidos.
+ * Carrega templates do Supabase para a sessão:
+ * — Templates públicos aprovados (visíveis a todos)
+ * — Templates do próprio utilizador em qualquer estado (pending, approved, rejected)
+ *   para que ele veja os seus uploads sem ter que re-extrair da imagem.
  * @param {string} serviceKey
  * @returns {Promise<Array>} lista de templates carregados
  */
@@ -1697,34 +1699,74 @@ export async function loadPublicTemplatesFromSupabase(serviceKey) {
     const supabase = window.authManager?.supabase;
     if (!supabase) return [];
 
-    const { data, error } = await supabase
+    const userId = window.authManager?.user?.id;
+
+    // ── Construir query: aprovados públicos + os do próprio user ─────────────
+    // CORRIGIDO: antes só carregava status='approved' AND is_public=true.
+    // O utilizador que fez upload ficava a ver sempre "Modelo Próprio" genérico
+    // porque o seu template estava 'pending' e nunca era devolvido pela query.
+    // Agora fazemos duas queries e juntamos os resultados.
+    let publicData = [];
+    let userOwnData = [];
+
+    // 1. Templates públicos aprovados
+    const { data: pub, error: pubErr } = await supabase
       .from('templates_custom')
-      .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count')
+      .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id')
       .eq('service_type', serviceKey)
       .eq('status', 'approved')
       .eq('is_public', true)
       .order('downloads', { ascending: false })
       .limit(20);
 
-    if (error || !data?.length) return [];
+    if (!pubErr && pub?.length) publicData = pub;
+
+    // 2. Templates do próprio utilizador (todos os estados)
+    if (userId) {
+      const { data: own, error: ownErr } = await supabase
+        .from('templates_custom')
+        .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id')
+        .eq('service_type', serviceKey)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (!ownErr && own?.length) userOwnData = own;
+    }
+
+    // Juntar e desduplicar (os próprios do user primeiro)
+    const seen = new Set();
+    const allData = [...userOwnData, ...publicData].filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
+
+    if (!allData.length) return [];
 
     const loaded = [];
-    for (const row of data) {
-      // Evitar duplicados com templates já na sessão
+    for (const row of allData) {
+      // Evitar duplicados com templates já na sessão (ex: extraído desta sessão)
       if (_sessionTemplates[serviceKey]?.find(t => t.id === row.id)) continue;
 
       const avgRating = row.rating_count > 0
         ? (row.rating_sum / row.rating_count).toFixed(1)
         : null;
 
+      // Badge de estado para templates do próprio user ainda pendentes
+      const isOwnPending  = row.user_id === window.authManager?.user?.id && row.status === 'pending';
+      const isOwnRejected = row.user_id === window.authManager?.user?.id && row.status === 'rejected';
+      const statusSuffix  = isOwnPending  ? ' ⏳' : isOwnRejected ? ' ❌' : '';
+
       const tpl = {
         id:           row.id,
-        name:         row.template_name,
+        name:         row.template_name + statusSuffix,
         description:  row.description || `⭐ ${avgRating || '?'} · ${row.downloads || 0} downloads`,
         preview:      { accent: '#3B82F6', bg: '#fff', font: 'sans-serif' },
         htmlTemplate: row.template_html || '',
         css:          row.template_css || '',
         _fromMarketplace: true,
+        _isOwnPending:    isOwnPending,
         _downloads:   row.downloads || 0,
       };
 
