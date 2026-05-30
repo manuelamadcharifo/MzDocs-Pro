@@ -588,6 +588,22 @@ export class DocumentController {
         if (!tpl) return;
         this._activeTemplate = tpl;
 
+        // ── Documento do histórico: formData._fromHistory ───────────────────
+        // CORRIGIDO: quando o utilizador abre um documento do histórico e clica
+        // "Usar este Modelo", o formData tem _fromHistory=true e _existingContent.
+        // Neste caso NÃO regeneramos — apenas aplicamos o CSS do template ao
+        // conteúdo já existente, preservando todos os dados reais do documento.
+        const fd = this.docModel.formData;
+        if (fd?._fromHistory) {
+            const current = documentState.currentContent || fd._existingContent;
+            const svc     = SERVICES[this.docModel.service];
+            if (current && svc) {
+                DocumentView.renderResult(current, svc, this.creditModel.value, this.docModel.model, tpl.css || null);
+            }
+            NotificationView.success(`✅ Modelo "${tpl.name}" aplicado!`);
+            return;
+        }
+
         // ── SE o template tem htmlTemplate → regenerar o documento com HTML estruturado ──
         // O markdown linear NUNCA produz layouts de duas colunas (sidebar + main).
         // Precisamos pedir à IA para gerar HTML directamente com as classes do template.
