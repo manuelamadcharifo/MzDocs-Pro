@@ -513,25 +513,21 @@ ${tpl.css}
 
   // ── Aplicar template e fechar ────────────────────────────────────────────
   _apply() {
-    // ── Prioridade: template pré-definido seleccionado > modelo próprio ──
-    // Se o utilizador clicou num template da galeria E depois clicou "Usar este Modelo",
-    // aplicar SEMPRE o template pré-definido, mesmo que haja modelo próprio carregado.
-    if (this._tpl) {
-      this._onApply?.(this._tpl);
+    if (!this._tpl) {
+      _notify('Seleccione um modelo primeiro.');
+      return;
+    }
+
+    // Modelo próprio PDF/Word (sem htmlTemplate real) — TemplateController já activo
+    if (this._tpl._isOwnModel) {
+      _notify('✅ Modelo próprio activado! Gere o documento no formulário.');
       this.close();
       return;
     }
 
-    // Sem template pré-definido seleccionado: usar modelo próprio se estiver activo
-    if (this._customActive) {
-      // O TemplateController já tem o ficheiro carregado e activo.
-      // Apenas fechar o picker — a próxima geração usará o modelo próprio.
-      _notify('✅ Modelo próprio activado! Feche e gere o documento.');
-      this.close();
-      return;
-    }
-
-    _notify('Seleccione um modelo primeiro.');
+    // Template pré-definido ou extraído de imagem → aplicar normalmente
+    this._onApply?.(this._tpl);
+    this.close();
   }
 
   // ── Upload de modelo próprio ─────────────────────────────────────────────
@@ -554,26 +550,47 @@ ${tpl.css}
     const sub   = document.getElementById('tplUploadSub');
     const badge = document.getElementById('tplUploadBadge');
     const zone  = document.getElementById('tplUploadZone');
-    if (sub) sub.textContent = '⏳ A analisar layout da imagem…';
+
+    // ── Mostrar card "A processar…" IMEDIATAMENTE enquanto a IA trabalha ──
+    // CORRIGIDO: antes o utilizador não via nenhum feedback visual na lista de cards
+    // durante o processamento — agora aparece um card de loading no topo da lista.
+    const processingId = `processing-${Date.now()}`;
+    addSessionTemplate(this._key, {
+      id: processingId,
+      name: '⏳ A processar…',
+      description: file.name,
+      preview: { accent: '#10b981', bg: '#f0fdf4', font: 'sans-serif' },
+      _isCustom: true,
+      htmlTemplate: null,
+      css: '',
+    });
+    this._render();
+
+    if (sub) sub.textContent = isImg ? '🤖 A extrair template da imagem…' : '⏳ A processar ficheiro…';
+
+    // Helper: remover card de processamento da lista de sessão
+    const removeProcessingCard = () => {
+      const list = getSessionTemplates(this._key);
+      const idx  = list.findIndex(t => t.id === processingId);
+      if (idx !== -1) list.splice(idx, 1);
+    };
 
     try {
-      // ── Sempre: passar ao TemplateController para geração via modelo próprio ──
+      // ── Sempre: passar ao TemplateController para usar como modelo próprio ──
       const templateCtrl = window.docController?.templateCtrl;
       if (templateCtrl) {
         await templateCtrl._handleFile({ target: { files: [file], value: '' } });
       }
 
-      // ── Se for IMAGEM: extrair template HTML+CSS via API e adicionar ao marketplace ──
+      // ── IMAGEM: extrair template HTML+CSS via API e adicionar como card real ──
       if (isImg) {
-        if (sub) sub.textContent = '🤖 A extrair template da imagem…';
         try {
           const extracted = await this._extractTemplateFromImage(file);
           if (extracted) {
-            // Adicionar à sessão e re-renderizar lista para aparecer no topo
+            // Remover card de processamento e adicionar o template extraído
+            removeProcessingCard();
             addSessionTemplate(this._key, extracted);
-            this._render(); // Re-render para incluir o novo template
-
-            // Auto-seleccionar o template extraído
+            this._render();
             this._pick(extracted.id);
 
             if (sub) sub.textContent = `✅ Template "${extracted.name}" adicionado!`;
@@ -581,20 +598,40 @@ ${tpl.css}
             if (badge) badge.style.display = 'block';
             _notify(`✅ Template "${extracted.name}" extraído!`);
 
-            // Guardar no Supabase para revisão do admin (não bloqueia UI)
+            // Guardar no Supabase para revisão admin (não bloqueia UI)
             this._saveTemplateToSupabase(extracted).catch(e => console.warn('Supabase save:', e));
 
-            // Resetar _customActive — agora temos um template pré-definido seleccionado
             this._customActive = false;
             return;
           }
         } catch (extractErr) {
-          console.warn('Extracção falhou, usando modelo próprio:', extractErr.message);
-          // Fallback: continuar como modelo próprio
+          console.warn('Extracção de imagem falhou, a usar modelo próprio:', extractErr.message);
+          // Continua para o fallback abaixo
         }
       }
 
-      // ── Fallback: usar como modelo próprio (comportamento anterior) ──
+      // ── FALLBACK para imagem falhada / PDF / Word ──
+      // Remover card de processamento
+      removeProcessingCard();
+
+      // Criar card "Modelo Próprio" permanente para o utilizador ver e seleccionar
+      // CORRIGIDO: antes ficava sem card nenhum quando a extracção falhava ou
+      // quando se carregava PDF/Word — o utilizador não sabia que o modelo estava activo.
+      const ownModelId = `own-model-${Date.now()}`;
+      const ownModelTpl = {
+        id: ownModelId,
+        name: 'Modelo Próprio',
+        description: file.name,
+        preview: { accent: '#10b981', bg: '#f0fdf4', font: 'sans-serif' },
+        _isCustom: true,
+        _isOwnModel: true,   // flag para _apply() saber que não deve chamar _regenerateWithHTMLTemplate
+        htmlTemplate: null,
+        css: '',
+      };
+      addSessionTemplate(this._key, ownModelTpl);
+      this._render();
+      this._pick(ownModelId);
+
       this._customFile   = file;
       this._customName   = file.name;
       this._customActive = true;
@@ -603,12 +640,15 @@ ${tpl.css}
       if (badge) badge.style.display = 'block';
       if (sub)   sub.textContent = `✅ ${file.name} — A IA usará o seu layout ao gerar`;
 
-      document.querySelectorAll('.tpl-card').forEach(c => c.classList.remove('selected'));
       const selBar = document.getElementById('tplSelBar');
       if (selBar) selBar.textContent = `📎 Modelo próprio: ${file.name}`;
 
       _notify(`✅ Modelo próprio carregado: ${file.name}`);
+
     } catch (err) {
+      // Limpar card de processamento em caso de erro inesperado
+      removeProcessingCard();
+      this._render();
       if (sub) sub.textContent = 'Toque para carregar imagem, PDF ou Word com o seu layout';
       _notify('Erro ao processar: ' + err.message);
     }
