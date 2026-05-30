@@ -51,6 +51,19 @@ export class AdminDashboard {
                 badge.style.display = pendingCount > 0 ? 'inline-flex' : 'none';
             }
 
+            // Templates pending badge
+            try {
+                const { count: tplPending } = await this.supabase
+                    .from('templates_custom')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('status', 'pending');
+                const tplBadge = document.getElementById('navBadgeTemplates');
+                if (tplBadge) {
+                    tplBadge.textContent = tplPending || 0;
+                    tplBadge.style.display = (tplPending || 0) > 0 ? 'inline-flex' : 'none';
+                }
+            } catch (_) {}
+
             await this.renderCharts();
 
         } catch (err) {
