@@ -193,10 +193,11 @@ export class DocumentController {
  closeResult() {
     ModalView.close('resultOverlay');
     this._removeExportMenu();
-    // CORRIGIDO: limpar o CSS do template activo ao fechar o resultado,
+    // Limpar o CSS e HTML do template activo ao fechar o resultado,
     // para que ao gerar um novo documento o preview comece sempre sem template aplicado.
     if (window.DocumentView) window.DocumentView._activeTemplateCss = null;
-    this._activeTemplate = null;
+    this._activeTemplate     = null;
+    this._activeTemplateHtml = null;
   }
 
  async generate() {
@@ -588,40 +589,55 @@ export class DocumentController {
         if (!tpl) return;
         this._activeTemplate = tpl;
 
-        // ── Documento do histórico ───────────────────────────────────────────
-        const fd = this.docModel.formData;
-        if (fd?._fromHistory) {
-            const current = documentState.currentContent || fd._existingContent;
-            const svc     = SERVICES[this.docModel.service];
-            if (current && svc) {
-                DocumentView.renderResult(current, svc, this.creditModel.value, this.docModel.model, tpl.css || null);
-            }
-            NotificationView.success(`✅ Modelo "${tpl.name}" aplicado!`);
-            return;
-        }
-
-        // ── CORRIGIDO: não regenerar o documento com nova chamada à IA ───────
-        // Bug original: ao clicar "Usar este Modelo" o código chamava
-        // _regenerateWithHTMLTemplate que pedia à IA para gerar um documento
-        // completamente novo — alterando o conteúdo real (nome, experiências,
-        // objectivo) que o utilizador já tinha gerado, substituindo por dados
-        // genéricos ou [PREENCHER]. O utilizador via o seu CV mudar para outro.
-        //
-        // Solução correcta: o template define apenas LAYOUT e ESTILO, não conteúdo.
-        // Pegamos no conteúdo HTML já gerado (se existir) ou no markdown actual,
-        // e aplicamos o CSS do template por cima sem tocar no conteúdo.
-        //
-        // Se o template tem htmlTemplate mas não temos HTML gerado ainda
-        // (documento gerado em markdown puro), fazemos uma única re-renderização
-        // injectando o markdown no wrapper do template — sem chamar a IA.
-        const current = documentState.currentContent;
+        const fd      = this.docModel.formData;
+        const current = documentState.currentContent || (fd?._fromHistory ? fd._existingContent : '');
         const svc     = SERVICES[this.docModel.service];
+
         if (!current || !svc) {
             NotificationView.warn('⚠️ Nenhum documento gerado. Gere primeiro o documento.');
             return;
         }
 
-        // Aplicar CSS do template ao conteúdo existente (sem nova chamada à IA)
+        // ── Se o template tem htmlTemplate: preencher com dados reais do markdown gerado ──
+        // Bug anterior: só o CSS era aplicado e o htmlTemplate (com estrutura de
+        // colunas, sidebar, etc.) era completamente ignorado — o resultado visual
+        // ficava idêntico ao layout padrão mesmo após escolher um modelo.
+        //
+        // Solução: extrair dados reais do markdown (igual ao que o picker faz no
+        // preview) e preencher os placeholders {{NOME}}, {{CARGO}}, etc. do
+        // htmlTemplate. O resultado HTML preenchido é passado como conteúdo ao
+        // renderResult, que detecta que começa com '<' e usa-o directamente.
+        if (tpl.htmlTemplate) {
+            const rd = templatePicker._extractRealData(current);
+            const filledHtml = tpl.htmlTemplate
+                .replace(/\{\{NOME\}\}/g,             rd.nome)
+                .replace(/\{\{CARGO\}\}/g,             rd.cargo)
+                .replace(/\{\{CONTACTO\}\}/g,          rd.contacto)
+                .replace(/\{\{EMAIL\}\}/g,              rd.email)
+                .replace(/\{\{LOCALIZACAO\}\}/g,       rd.localizacao)
+                .replace(/\{\{INICIAIS\}\}/g,           rd.iniciais)
+                .replace(/\{\{OBJECTIVO\}\}/g,          rd.objectivo)
+                .replace(/\{\{FORMACAO\}\}/g,           rd.formacao)
+                .replace(/\{\{EXPERIENCIA\}\}/g,        rd.experiencia)
+                .replace(/\{\{REALIZACAO\}\}/g,         rd.realizacao)
+                .replace(/\{\{HABILIDADES\}\}/g,        rd.habilidades)
+                .replace(/\{\{HABILIDADES_LIST\}\}/g,   rd.habilidadesList)
+                .replace(/\{\{LINGUAS\}\}/g,            rd.linguas)
+                .replace(/\{\{EXTRA\}\}/g,              rd.extra)
+                .replace(/\{\{[A-Z_]+\}\}/g,            '');
+
+            // Guardar HTML preenchido como conteúdo actual (preserva o markdown
+            // original para exports sem template)
+            this._activeTemplateHtml = filledHtml;
+
+            // Renderizar: passar o HTML preenchido como conteúdo — DocumentView
+            // detecta que começa com '<' e usa-o directamente no iframe.
+            DocumentView.renderResult(filledHtml, svc, this.creditModel.value, this.docModel.model, tpl.css || null);
+            NotificationView.success(`✅ Modelo "${tpl.name}" aplicado!`);
+            return;
+        }
+
+        // ── Template sem htmlTemplate: aplicar apenas o CSS ao markdown existente ──
         DocumentView.renderResult(current, svc, this.creditModel.value, this.docModel.model, tpl.css || null);
         NotificationView.success(`✅ Modelo "${tpl.name}" aplicado!`);
     }
@@ -676,34 +692,53 @@ export class DocumentController {
     }
 
     _downloadWithTemplate(tpl, format) {
-        const content = documentState.currentContent;
+        const content  = documentState.currentContent;
         if (!content) return;
         const filename = `mzdocs-${this.docModel.service}-${Date.now()}`;
         const svc      = SERVICES[this.docModel.service];
-        const meta     = this._buildExportMetadata(svc); // CORRIGIDO: _buildMeta não existe
+        const meta     = this._buildExportMetadata(svc);
+
+        // Se o template tem htmlTemplate, usar o HTML já preenchido com dados reais
+        // (gerado em _applyTemplate) ou gerar agora se ainda não foi gerado
+        const exportContent = (tpl?.htmlTemplate)
+            ? (() => {
+                const rd = templatePicker._extractRealData(content);
+                return tpl.htmlTemplate
+                    .replace(/\{\{NOME\}\}/g,             rd.nome)
+                    .replace(/\{\{CARGO\}\}/g,             rd.cargo)
+                    .replace(/\{\{CONTACTO\}\}/g,          rd.contacto)
+                    .replace(/\{\{EMAIL\}\}/g,              rd.email)
+                    .replace(/\{\{LOCALIZACAO\}\}/g,       rd.localizacao)
+                    .replace(/\{\{INICIAIS\}\}/g,           rd.iniciais)
+                    .replace(/\{\{OBJECTIVO\}\}/g,          rd.objectivo)
+                    .replace(/\{\{FORMACAO\}\}/g,           rd.formacao)
+                    .replace(/\{\{EXPERIENCIA\}\}/g,        rd.experiencia)
+                    .replace(/\{\{REALIZACAO\}\}/g,         rd.realizacao)
+                    .replace(/\{\{HABILIDADES\}\}/g,        rd.habilidades)
+                    .replace(/\{\{HABILIDADES_LIST\}\}/g,   rd.habilidadesList)
+                    .replace(/\{\{LINGUAS\}\}/g,            rd.linguas)
+                    .replace(/\{\{EXTRA\}\}/g,              rd.extra)
+                    .replace(/\{\{[A-Z_]+\}\}/g,            '');
+              })()
+            : content;
 
         if (format === 'pdf') {
-            // CORRIGIDO: usar HTMLPDFExporter quando há CSS de template.
-            // O PDFExporter jsPDF ignora completamente o templateCss — o PDF saía
-            // sempre com o layout padrão independentemente do modelo escolhido.
             if (tpl?.css) {
                 import('../components/HTMLPDFExporter.js').then(({ HTMLPDFExporter }) => {
-                    new HTMLPDFExporter().export(content, filename, {
+                    new HTMLPDFExporter().export(exportContent, filename, {
                         templateCss: tpl.css,
                         title: svc?.title || 'Documento MzDocs Pro',
                     });
-                    if (window.NotificationView) {
-                        NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
-                    }
+                    NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
                 });
             } else {
                 import('../components/PDFExporter.js').then(({ pdfExporter }) => {
-                    pdfExporter.export(content, `${filename}.pdf`, meta);
+                    pdfExporter.export(exportContent, `${filename}.pdf`, meta);
                 });
             }
         } else {
             import('../components/WordExporter.js').then(({ wordExporter }) => {
-                wordExporter.export(content, `${filename}.docx`, meta);
+                wordExporter.export(exportContent, `${filename}.docx`, meta);
             });
         }
     }
@@ -756,15 +791,22 @@ export class DocumentController {
  async _exportPDF() {
  NotificationView.info('⏳ A preparar PDF…');
  try {
-   const content  = this.docModel.content;
    const svc      = SERVICES[this.docModel.service];
    const filename = `mzdocs-${this.docModel.service}-${Date.now()}`;
 
-   // CORRIGIDO: se houver template activo, usar HTMLPDFExporter que aplica o CSS real.
-   // O PDFExporter original usa jsPDF imperativo e ignora completamente o templateCss.
-   const activeCss = this._activeTemplate?.css || null;
+   // Se há HTML preenchido do template activo, usá-lo directamente
+   const activeHtml = this._activeTemplateHtml || null;
+   const activeCss  = this._activeTemplate?.css || null;
 
-   if (activeCss) {
+   if (activeHtml && activeCss) {
+     const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
+     new HTMLPDFExporter().export(activeHtml, filename, {
+       templateCss: activeCss,
+       title: svc?.title || 'Documento MzDocs Pro',
+     });
+     NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
+   } else if (activeCss) {
+     const content = this.docModel.content;
      const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
      new HTMLPDFExporter().export(content, filename, {
        templateCss: activeCss,
@@ -772,6 +814,7 @@ export class DocumentController {
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
    } else {
+     const content = this.docModel.content;
      const { PDFExporter } = await import('../components/PDFExporter.js');
      await new PDFExporter().export(content, `${filename}.pdf`, this._buildExportMetadata(svc));
      NotificationView.success('✅ PDF descarregado!');
