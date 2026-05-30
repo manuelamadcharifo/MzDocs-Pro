@@ -257,7 +257,7 @@ export class DocumentController {
  try {
  const result = await Promise.race([
  this.queue.add(() =>
- this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost, this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null, this._activeTemplate || null)
+ this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost, this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null, null)
  ),
  timeout,
  new Promise((_, reject) => { signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }); }),
@@ -587,15 +587,71 @@ export class DocumentController {
     _applyTemplate(tpl) {
         if (!tpl) return;
         this._activeTemplate = tpl;
-        const content = documentState.currentContent;
-        const svc     = SERVICES[this.docModel.service];
-        if (content && svc) {
-            // CORRIGIDO: passar tpl.css para renderResult para que o preview
-            // reflicta imediatamente o modelo escolhido (antes, o preview ficava
-            // com o estilo padrão mesmo após "Usar este Modelo").
-            DocumentView.renderResult(content, svc, this.creditModel.value, this.docModel.model, tpl.css);
+
+        // ── SE o template tem htmlTemplate → regenerar o documento com HTML estruturado ──
+        // O markdown linear NUNCA produz layouts de duas colunas (sidebar + main).
+        // Precisamos pedir à IA para gerar HTML directamente com as classes do template.
+        if (tpl.htmlTemplate && this.docModel.formData && this.docModel.service) {
+            this._regenerateWithHTMLTemplate(tpl);
+            return;
         }
-        NotificationView.success(`✅ Modelo "${tpl.name}" aplicado! O preview foi actualizado.`);
+
+        // Fallback: template só tem CSS → aplicar ao markdown existente
+        const current = documentState.currentContent;
+        const svc     = SERVICES[this.docModel.service];
+        if (current && svc) {
+            DocumentView.renderResult(current, svc, this.creditModel.value, this.docModel.model, tpl.css);
+        }
+        NotificationView.success(`✅ Modelo "${tpl.name}" aplicado!`);
+    }
+
+    // ── Regenerar documento com HTML estruturado fiel ao template ────────────
+    async _regenerateWithHTMLTemplate(tpl) {
+        const key  = this.docModel.service;
+        const svc  = SERVICES[key];
+        const data = this.docModel.formData;
+
+        if (!this.creditModel.canConsume(1)) {
+            NotificationView.warn('⚠️ Créditos insuficientes para aplicar modelo estruturado.');
+            return;
+        }
+
+        NotificationView.info(`🎨 A regenerar com modelo "${tpl.name}"…`);
+
+        // Mostrar loader simples
+        const loadEl = document.createElement('div');
+        loadEl.id = 'tplRegenLoader';
+        loadEl.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;';
+        loadEl.innerHTML = '<div style="background:#fff;border-radius:16px;padding:28px 32px;text-align:center;font-family:sans-serif"><div style="font-size:28px;margin-bottom:12px">🎨</div><div style="font-size:15px;font-weight:700;color:#0f172a">A aplicar modelo estruturado…</div><div style="font-size:12px;color:#64748b;margin-top:6px">Isto pode demorar alguns segundos</div></div>';
+        document.body.appendChild(loadEl);
+
+        try {
+            const result = await this.queue.add(() =>
+                this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, 1, null, tpl)
+            );
+
+            if (!result?.document || result.document.trim().length < 20) {
+                throw new Error('Resposta vazia da IA. Tente novamente.');
+            }
+
+            await this.creditModel.consume(1);
+            if (typeof result.creditsRemaining === 'number') {
+                this.creditModel.applyServerDeduction(result.creditsRemaining);
+            }
+
+            this.docModel.setGenerated(result.document, result.model);
+            documentState.set(result.document, key);
+
+            // Renderizar com CSS do template
+            DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model, tpl.css);
+
+            NotificationView.success(`✅ Modelo "${tpl.name}" aplicado com estrutura fiel!`);
+
+        } catch (err) {
+            NotificationView.error('❌ Erro ao aplicar modelo: ' + (err.message || 'Tente novamente.'));
+        } finally {
+            document.getElementById('tplRegenLoader')?.remove();
+        }
     }
 
     _downloadWithTemplate(tpl, format) {
