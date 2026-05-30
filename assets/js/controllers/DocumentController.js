@@ -737,9 +737,26 @@ export class DocumentController {
                 });
             }
         } else {
-            import('../components/WordExporter.js').then(({ wordExporter }) => {
-                wordExporter.export(exportContent, `${filename}.docx`, meta);
-            });
+            // Se o template tem HTML estruturado (sidebar, 2 colunas), usar HTMLWordExporter
+            // que converte flexbox → tabelas Word e preserva cores de fundo
+            if (tpl?.htmlTemplate || (exportContent && exportContent.trimStart().startsWith('<'))) {
+                import('../components/HTMLWordExporter.js').then(({ HTMLWordExporter }) => {
+                    new HTMLWordExporter().export(
+                        exportContent,
+                        tpl?.css || '',
+                        filename,
+                        svc?.title || 'Documento MzDocs Pro'
+                    );
+                }).catch(() => {
+                    import('../components/WordExporter.js').then(({ wordExporter }) => {
+                        wordExporter.export(exportContent, `${filename}.docx`, meta);
+                    });
+                });
+            } else {
+                import('../components/WordExporter.js').then(({ wordExporter }) => {
+                    wordExporter.export(exportContent, `${filename}.docx`, meta);
+                });
+            }
         }
     }
 
