@@ -820,7 +820,7 @@ export class DocumentController {
       return;
     }
     console.log('[DocumentController] _openEditor — content length:', editorContent.length, 'service:', serviceType);
-    window.documentEditor.loadDocument(editorContent, serviceType);
+    window.documentEditor.loadDocument(editorContent, serviceType, this._activeTemplate?.css || null);
     window.documentEditor._docController = this;
  }
 
