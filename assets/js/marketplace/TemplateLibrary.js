@@ -1610,7 +1610,15 @@ export function getTemplates(serviceKey) {
 }
 
 /** Devolve um template por id */
+// CORRIGIDO: procura primeiro nos templates de sessão (extraídos de imagens/marketplace),
+// depois nos templates pré-definidos da biblioteca.
+// Bug original: só procurava em TEMPLATE_LIBRARY — templates adicionados via
+// addSessionTemplate (ex: extraídos de imagem pelo utilizador) nunca eram encontrados,
+// _tpl ficava null, e o botão "Usar este Modelo" não fazia absolutamente nada.
 export function getTemplateById(serviceKey, templateId) {
+  const sessionList = _sessionTemplates[serviceKey] || [];
+  const fromSession = sessionList.find(t => t.id === templateId);
+  if (fromSession) return fromSession;
   return (TEMPLATE_LIBRARY[serviceKey] || []).find(t => t.id === templateId) || null;
 }
 
