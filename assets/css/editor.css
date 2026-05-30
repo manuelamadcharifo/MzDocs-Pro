@@ -699,6 +699,15 @@
   flex-direction: column;
 }
 
+/* Iframe de edição de template HTML (usa designMode='on') */
+#edTemplateEditFrame {
+  flex: 1;
+  border: none;
+  background: #e8ecf0;
+  width: 100%;
+  min-height: 0;
+}
+
 /* ── MOBILE WORD EDITOR ───────────────────────────────────────── */
 @media (max-width: 900px) {
   .ed-word-toolbar { padding: 4px 8px; gap: 3px; }
