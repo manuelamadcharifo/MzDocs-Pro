@@ -2,7 +2,7 @@
 // Layout mobile: lista de templates (scroll horizontal) no topo, preview A4 em baixo
 // PAGE_BREAK → folhas A4 separadas com sombra, como um PDF real
 
-import { getTemplates, getDefaultTemplate, getTemplateById } from './TemplateLibrary.js';
+import { getTemplates, getDefaultTemplate, getTemplateById, addSessionTemplate, getSessionTemplates } from './TemplateLibrary.js';
 
 // ── Notificação toast ─────────────────────────────────────────────────────────
 function _notify(msg) {
@@ -332,7 +332,7 @@ export class TemplatePicker {
 
   // ── Renderizar lista de templates ─────────────────────────────────────────
   _render() {
-    const templates = getTemplates(this._key);
+    const templates = [...getSessionTemplates(this._key), ...getTemplates(this._key)];
     const sub = document.getElementById('tplHdrSub');
     if (sub && this._svc) sub.textContent = `${this._svc.icon || ''} ${this._svc.title || ''}`;
 
@@ -531,30 +531,57 @@ ${tpl.css}
 
     const mime = file.type.toLowerCase();
     const name = file.name.toLowerCase();
+    const isImg  = mime.startsWith('image/');
     const isPdf  = mime === 'application/pdf' || name.endsWith('.pdf');
     const isWord = mime.includes('wordprocessingml') || mime === 'application/msword'
                    || name.endsWith('.docx') || name.endsWith('.doc');
-    const isImg  = mime.startsWith('image/');
 
     if (!isPdf && !isWord && !isImg) {
       _notify('Formato não suportado. Use imagem, PDF ou Word.');
       return;
     }
 
-    // Mostrar estado de carregamento
     const sub   = document.getElementById('tplUploadSub');
     const badge = document.getElementById('tplUploadBadge');
     const zone  = document.getElementById('tplUploadZone');
-    if (sub) sub.textContent = '⏳ A processar…';
+    if (sub) sub.textContent = '⏳ A analisar layout da imagem…';
 
     try {
-      // Passar o ficheiro para o TemplateController existente (reutiliza a lógica de extracção)
+      // ── Sempre: passar ao TemplateController para geração via modelo próprio ──
       const templateCtrl = window.docController?.templateCtrl;
       if (templateCtrl) {
-        // Simular o evento de change do input do TemplateController
         await templateCtrl._handleFile({ target: { files: [file], value: '' } });
       }
 
+      // ── Se for IMAGEM: extrair template HTML+CSS via API e adicionar ao marketplace ──
+      if (isImg) {
+        if (sub) sub.textContent = '🤖 A extrair template da imagem…';
+        try {
+          const extracted = await this._extractTemplateFromImage(file);
+          if (extracted) {
+            // Adicionar à sessão e re-renderizar lista para aparecer no topo
+            addSessionTemplate(this._key, extracted);
+            this._renderList(); // Re-render para incluir o novo template
+
+            // Auto-seleccionar o template extraído
+            this._pick(extracted.id);
+
+            if (sub) sub.textContent = `✅ Template "${extracted.name}" adicionado ao marketplace!`;
+            if (zone) zone.classList.add('active');
+            if (badge) badge.style.display = 'block';
+            _notify(`✅ Template "${extracted.name}" extraído e adicionado!`);
+
+            // Resetar _customActive — agora temos um template pré-definido seleccionado
+            this._customActive = false;
+            return;
+          }
+        } catch (extractErr) {
+          console.warn('Extracção falhou, usando modelo próprio:', extractErr.message);
+          // Fallback: continuar como modelo próprio
+        }
+      }
+
+      // ── Fallback: usar como modelo próprio (comportamento anterior) ──
       this._customFile   = file;
       this._customName   = file.name;
       this._customActive = true;
@@ -563,7 +590,6 @@ ${tpl.css}
       if (badge) badge.style.display = 'block';
       if (sub)   sub.textContent = `✅ ${file.name} — A IA usará o seu layout ao gerar`;
 
-      // Desseleccionar templates pré-definidos (modelo próprio tem prioridade)
       document.querySelectorAll('.tpl-card').forEach(c => c.classList.remove('selected'));
       const selBar = document.getElementById('tplSelBar');
       if (selBar) selBar.textContent = `📎 Modelo próprio: ${file.name}`;
@@ -573,6 +599,94 @@ ${tpl.css}
       if (sub) sub.textContent = 'Toque para carregar imagem, PDF ou Word com o seu layout';
       _notify('Erro ao processar: ' + err.message);
     }
+  }
+
+  // ── Extrair template HTML+CSS de uma imagem via Anthropic API ─────────────
+  // Analisa o layout visual da imagem e gera um htmlTemplate + css compatível
+  // com o sistema MzDocs, adicionando-o ao marketplace da sessão actual.
+  async _extractTemplateFromImage(file) {
+    // Converter imagem para base64
+    const base64 = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload  = () => res(reader.result.split(',')[1]);
+      reader.onerror = () => rej(new Error('Falha ao ler ficheiro'));
+      reader.readAsDataURL(file);
+    });
+
+    const serviceKey = this._key;
+    const serviceNames = {
+      cv: 'Currículo (CV)', carta: 'Carta', orcamento: 'Orçamento',
+      arrendamento: 'Contrato de Arrendamento', recibo: 'Recibo/Factura',
+      prestacao: 'Contrato de Prestação', recomendacao: 'Carta de Recomendação',
+      requerimento: 'Requerimento', residencia: 'Declaração de Residência',
+      planonegocio: 'Plano de Negócios', procuracao: 'Procuração',
+      licenca: 'Licença', acta: 'Acta', trabalho: 'Trabalho Académico',
+    };
+    const docType = serviceNames[serviceKey] || serviceKey;
+
+    const prompt = `Analise este template de documento (${docType}) e gere EXACTAMENTE um objecto JSON com esta estrutura:
+
+{
+  "name": "Nome curto e descritivo do template (máx 3 palavras)",
+  "description": "Descrição em 1 frase do estilo visual",
+  "htmlTemplate": "estrutura HTML completa usando classes CSS semânticas",
+  "css": "CSS completo que estiliza as classes do htmlTemplate"
+}
+
+REGRAS PARA htmlTemplate:
+- Use classes semânticas específicas (ex: cv-page, cv-sidebar, cv-main, cv-name, cv-section, cv-entry)
+- Para layouts de duas colunas: <div class="cv-page cv-two-col"><aside class="cv-sidebar">...</aside><main class="cv-main">...</main></div>
+- Para layout de coluna única: <div class="cv-page">...</div>
+- Use placeholders {{NOME}}, {{CARGO}}, {{CONTACTO}}, {{EMAIL}}, {{LOCALIZACAO}}, {{OBJECTIVO}}, {{FORMACAO}}, {{EXPERIENCIA}}, {{HABILIDADES}}, {{LINGUAS}}, {{REALIZACAO}}, {{EXTRA}} conforme adequado
+- Para cv-entry: <div class="cv-entry"><p class="cv-entry-date">período</p><p class="cv-entry-title">título</p><p class="cv-entry-company">empresa</p><ul class="cv-entry-bullets"><li>...</li></ul></div>
+
+REGRAS PARA css:
+- Deve estilizar EXACTAMENTE as classes usadas no htmlTemplate
+- Cores, fontes, espaçamentos e layouts fiéis ao que vê na imagem
+- Para duas colunas: .cv-two-col{display:flex} .cv-sidebar{width:Xmm;background:COR} .cv-main{flex:1}
+- width:210mm, font-size em pt, padding em mm ou pt
+
+RESPOSTA: APENAS o JSON válido, sem markdown, sem \`\`\`json, sem explicações.`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: base64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const data = await response.json();
+    const text = data.content?.find(b => b.type === 'text')?.text || '';
+
+    // Parse JSON — limpar markdown fences se presentes
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    if (!parsed.htmlTemplate || !parsed.css) {
+      throw new Error('Resposta inválida da API');
+    }
+
+    // Criar template compatível com o sistema
+    const templateId = `custom-${serviceKey}-${Date.now()}`;
+    return {
+      id:           templateId,
+      name:         parsed.name || 'Template Personalizado',
+      description:  parsed.description || 'Extraído da sua imagem',
+      preview:      { accent: '#3B82F6', bg: '#fff', font: 'sans-serif' },
+      htmlTemplate: parsed.htmlTemplate,
+      css:          parsed.css,
+      _isCustom:    true,  // Marker para distinguir de templates pré-definidos
+    };
   }
 
   // ── Markdown + PAGE_BREAK → HTML de uma única página ────────────────────
