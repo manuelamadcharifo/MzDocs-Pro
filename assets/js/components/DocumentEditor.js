@@ -403,8 +403,10 @@ export class DocumentEditor {
         if (editFrame && editFrame.contentDocument && editFrame.contentDocument.body) {
           try { this._templateHtml = editFrame.contentDocument.body.innerHTML; } catch(e) {}
         }
-        // Ocultar iframe de edição
+        // Ocultar iframe de edição e restaurar word-page-wrap
         if (editFrame) editFrame.style.display = 'none';
+        const pageWrap = this.modal.querySelector('.ed-word-page-wrap');
+        if (pageWrap) pageWrap.style.display = '';
         const wordDocEl = this.modal.querySelector('#edWordDoc');
         if (wordDocEl) wordDocEl.style.display = '';
       } else if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
@@ -426,25 +428,35 @@ export class DocumentEditor {
         if (this._templateHtml && this._templateCss) {
           // Template HTML com layout estruturado (flexbox, 2 colunas, etc.)
           // Usar iframe com designMode='on' para preservar o layout visual exacto
-          // enquanto permite edição inline. O contenteditable div destrói o layout.
           document.getElementById('ed-tpl-style')?.remove();
           const editWrapEl = this.modal.querySelector('#edEditWrap');
+          // Ocultar o ed-word-page-wrap para não ocupar espaço
+          const pageWrap = editWrapEl?.querySelector('.ed-word-page-wrap');
+          if (pageWrap) pageWrap.style.display = 'none';
           // Criar ou reutilizar iframe de edição de template
           let editFrame = this.modal.querySelector('#edTemplateEditFrame');
           if (!editFrame) {
             editFrame = document.createElement('iframe');
             editFrame.id = 'edTemplateEditFrame';
-            editFrame.style.cssText = 'flex:1;border:none;background:#fff;';
+            editFrame.style.cssText = 'flex:1;border:none;background:#fff;width:100%;min-height:0;';
             editWrapEl?.appendChild(editFrame);
           }
-          editFrame.style.display = 'flex';
+          editFrame.style.display = 'block';
           wordDoc.style.display = 'none';
-          const editHtml = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>${this._templateCss}</style></head><body>${this._templateHtml}</body></html>`;
+          const editHtml = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>
+            * { box-sizing: border-box; }
+            body { margin: 0; padding: 0; background: #e8ecf0; }
+            /* Centrar a página A4 dentro do iframe */
+            .cv-page, .doc-page, [class*="-page"] {
+              margin: 0 auto;
+              box-shadow: 0 2px 16px rgba(0,0,0,.18);
+            }
+            ${this._templateCss}
+          </style></head><body>${this._templateHtml}</body></html>`;
           editFrame.srcdoc = editHtml;
           editFrame.onload = () => {
             try {
               editFrame.contentDocument.designMode = 'on';
-              // Guardar referência ao frame para ler o conteúdo ao guardar
               this._templateEditFrame = editFrame;
             } catch(e) { console.warn('[editor] designMode failed:', e); }
           };
@@ -452,8 +464,11 @@ export class DocumentEditor {
           // Limpar iframe de edição de template se existir
           const editFrame = this.modal.querySelector('#edTemplateEditFrame');
           if (editFrame) { editFrame.style.display = 'none'; }
+          // Restaurar ed-word-page-wrap
+          const pageWrap = this.modal.querySelector('.ed-word-page-wrap');
+          if (pageWrap) pageWrap.style.display = '';
           const wordDocWrap = this.modal.querySelector('#edWordDoc');
-          if (wordDocWrap) wordDocWrap.style.display = '';
+          if (wordDocWrap) { wordDocWrap.style.display = ''; }
           document.getElementById('ed-tpl-style')?.remove();
           wordDoc.style.padding = '';
           wordDoc.style.fontFamily = '';
@@ -730,22 +745,21 @@ export class DocumentEditor {
   }
 
   async _downloadWord() {
-    // Se há HTML estruturado do template, gerar .doc com o HTML+CSS — preserva visual
+    // Se há HTML estruturado do template, usar HTMLWordExporter
+    // que converte flexbox → tabelas Word e preserva cores de fundo
     if (this._templateHtml && this._templateCss) {
-      const css = this._templateCss;
-      const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
-        xmlns:w='urn:schemas-microsoft-com:office:word'
-        xmlns='http://www.w3.org/TR/REC-html40'>
-        <head><meta charset="UTF-8">
-        <style>${css}
-          @page{size:210mm 297mm;margin:0;}
-        </style></head>
-        <body>${this._templateHtml}</body></html>`;
-      const blob = new Blob(['\uFEFF', html], { type:'application/msword' });
-      const url  = URL.createObjectURL(blob);
-      const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.doc` });
-      a.click(); URL.revokeObjectURL(url);
-      return;
+      try {
+        const { HTMLWordExporter } = await import('./HTMLWordExporter.js');
+        new HTMLWordExporter().export(
+          this._templateHtml,
+          this._templateCss,
+          `mzdocs-${this.serviceType}-${Date.now()}`,
+          this.serviceType || 'Documento MzDocs'
+        );
+        return;
+      } catch (err) {
+        console.error('[DocumentEditor] HTMLWordExporter falhou:', err.message);
+      }
     }
 
     // Use the full WordExporter (same pipeline as original generation)
