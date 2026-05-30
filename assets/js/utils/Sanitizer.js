@@ -7,6 +7,9 @@ const ALLOWED_TAGS = new Set([
   'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
   'table', 'thead', 'tbody', 'tr', 'td', 'th',
   'div', 'span', 'a', 'img',
+  // Tags semânticas HTML5 usadas pelos templates (cv-executivo, etc.)
+  'header', 'footer', 'main', 'aside', 'section', 'article',
+  'nav', 'figure', 'figcaption', 'address',
 ]);
 
 const ALLOWED_ATTRS = new Set([
