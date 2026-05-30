@@ -1620,5 +1620,20 @@ export function getDefaultTemplate(serviceKey) {
   return list[0] || null;
 }
 
+
+/** Adiciona um template gerado dinamicamente (ex: extraído de imagem do utilizador) à sessão */
+const _sessionTemplates = {};  // { serviceKey: [template, ...] }
+
+export function addSessionTemplate(serviceKey, template) {
+  if (!_sessionTemplates[serviceKey]) _sessionTemplates[serviceKey] = [];
+  // Remover se já existe com mesmo id
+  _sessionTemplates[serviceKey] = _sessionTemplates[serviceKey].filter(t => t.id !== template.id);
+  _sessionTemplates[serviceKey].unshift(template); // adicionar no topo
+}
+
+export function getSessionTemplates(serviceKey) {
+  return _sessionTemplates[serviceKey] || [];
+}
+
 /** Lista de todos os serviços que têm templates */
 export const SERVICES_WITH_TEMPLATES = Object.keys(TEMPLATE_LIBRARY);
