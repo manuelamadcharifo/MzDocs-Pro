@@ -1,7 +1,7 @@
 {
   "name": "mzdocs-pro",
-  "version": "7.1.20260516",
-  "description": "MzDocs Pro v7 — Documentos profissionais com IA gratuita para Moçambique",
+  "version": "11.0.0",
+  "description": "MzDocs Pro v11 — Documentos profissionais com IA para Moçambique",
   "main": "index.html",
   "homepage": "./",
   "scripts": {
