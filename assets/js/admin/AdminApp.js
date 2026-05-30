@@ -131,6 +131,7 @@ class AdminApp {
         if (section === 'settings')     this._loadSettings();
         if (section === 'analytics')    this._loadAnalytics();
         if (section === 'affiliates')   this._loadAffiliates();
+        if (section === 'templates')    this._loadTemplates('pending');
     }
 
     refresh() { this.nav(this._section); }
@@ -1735,8 +1736,110 @@ USING (EXISTS (
         modal.style.display = 'flex';
     }
 
+    // ══ TEMPLATES MARKETPLACE ══════════════════════════════════════════════
+    async _loadTemplates(status = 'pending') {
+        const container = document.getElementById('templates-list');
+        if (!container) return;
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">⏳ A carregar…</div>';
 
+        try {
+            const { data, error } = await this.supabase
+                .from('templates_custom')
+                .select('id, template_name, description, template_html, template_css, service_type, status, is_public, created_at, downloads, user_id, rejection_note')
+                .eq('status', status)
+                .order('created_at', { ascending: false })
+                .limit(50);
 
+            // Update badge with pending count
+            if (status === 'pending') {
+                const badge = document.getElementById('navBadgeTemplates');
+                if (badge) badge.textContent = data?.length || 0;
+            }
+
+            if (error) throw error;
+            if (!data?.length) {
+                container.innerHTML = `<div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">Nenhum template ${status === 'pending' ? 'pendente' : status === 'approved' ? 'aprovado' : 'rejeitado'} encontrado.</div>`;
+                return;
+            }
+
+            const statusColor = { pending: '#f59e0b', approved: '#16a34a', rejected: '#dc2626' };
+            const statusLabel = { pending: '⏳ Pendente', approved: '✅ Aprovado', rejected: '❌ Rejeitado' };
+
+            container.innerHTML = data.map(tpl => {
+                const previewCSS = tpl.template_css || 'body{font-family:sans-serif;font-size:10pt;padding:10mm;}';
+                const previewHTML = (tpl.template_html || '').slice(0, 2000);
+                const date = new Date(tpl.created_at).toLocaleDateString('pt');
+
+                return `<div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.07)">
+                  <!-- Preview miniatura -->
+                  <div style="height:180px;background:#f1f5f9;overflow:hidden;position:relative;cursor:pointer" onclick="adminApp._previewTemplate('${tpl.id}')">
+                    <iframe srcdoc="${escapeHtml(`<!DOCTYPE html><html><head><meta charset='UTF-8'><style>*{box-sizing:border-box;margin:0;padding:0;}${previewCSS}</style></head><body>${previewHTML}</body></html>`)}"
+                      style="width:794px;height:1123px;border:none;transform:scale(0.22);transform-origin:top left;pointer-events:none"
+                      sandbox="allow-same-origin"></iframe>
+                    <div style="position:absolute;top:8px;right:8px;background:${statusColor[tpl.status]};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px">${statusLabel[tpl.status]}</div>
+                    <div style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 8px;border-radius:6px">${tpl.service_type}</div>
+                  </div>
+                  <!-- Info -->
+                  <div style="padding:14px">
+                    <div style="font-size:14px;font-weight:800;color:#0f172a;margin-bottom:4px">${tpl.template_name}</div>
+                    <div style="font-size:12px;color:#64748b;margin-bottom:8px">${tpl.description || '—'}</div>
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:12px">📅 ${date} · 📥 ${tpl.downloads || 0} downloads</div>
+                    ${tpl.rejection_note ? `<div style="font-size:11px;color:#dc2626;background:#fef2f2;border-radius:6px;padding:6px 10px;margin-bottom:10px">❌ ${tpl.rejection_note}</div>` : ''}
+                    <!-- Acções -->
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                      ${status !== 'approved' ? `<button onclick="adminApp._approveTemplate('${tpl.id}')" style="flex:1;padding:8px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">✅ Aprovar</button>` : ''}
+                      ${status !== 'rejected' ? `<button onclick="adminApp._rejectTemplate('${tpl.id}')" style="flex:1;padding:8px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">❌ Rejeitar</button>` : ''}
+                      <button onclick="adminApp._previewTemplate('${tpl.id}')" style="padding:8px 12px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">👁️</button>
+                    </div>
+                  </div>
+                </div>`;
+            }).join('');
+
+            // Helper for HTML escaping in template literals
+            function escapeHtml(s) {
+                return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            }
+
+        } catch (err) {
+            container.innerHTML = `<div style="text-align:center;padding:40px;color:#ef4444;font-size:14px">❌ Erro: ${err.message}</div>`;
+        }
     }
 
-window.adminApp = new AdminApp();
+    async _approveTemplate(id) {
+        try {
+            const { error } = await this.supabase.rpc('approve_template', { p_template_id: id });
+            if (error) throw error;
+            alert('✅ Template aprovado e publicado!');
+            this._loadTemplates('pending');
+        } catch (err) { alert('Erro: ' + err.message); }
+    }
+
+    async _rejectTemplate(id) {
+        const note = prompt('Motivo da rejeição (opcional):') ?? '';
+        try {
+            const { error } = await this.supabase.rpc('reject_template', { p_template_id: id, p_note: note });
+            if (error) throw error;
+            alert('❌ Template rejeitado.');
+            this._loadTemplates('pending');
+        } catch (err) { alert('Erro: ' + err.message); }
+    }
+
+    _previewTemplate(id) {
+        // Fetch and display full preview in a new window
+        this.supabase.from('templates_custom')
+            .select('template_name, template_html, template_css')
+            .eq('id', id)
+            .single()
+            .then(({ data, error }) => {
+                if (error || !data) return;
+                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${data.template_name}</title>
+<style>*{box-sizing:border-box;}${data.template_css || ''}</style></head>
+<body>${data.template_html || '<p>Sem conteúdo HTML</p>'}</body></html>`;
+                const win = window.open('', '_blank');
+                if (win) { win.document.write(html); win.document.close(); }
+            });
+    }
+
+
+
+    }window.adminApp = new AdminApp();
