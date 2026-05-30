@@ -244,23 +244,13 @@ export const DocumentView = {
       : this._markdownToHTML(content).replace('<div class="md-preview">', '').replace('</div>', '');
 
     // Para HTML estruturado, o CSS do template já está embutido — não sobrepor com o padrão.
-    if (isRawHTML && this._activeTemplateCss) {
-      const html = \`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}\${this._activeTemplateCss}</style></head><body>\${bodyHTML}</body></html>\`;
-      try {
-        const doc = frame.contentDocument || frame.contentWindow?.document;
-        if (doc) { doc.open(); doc.write(html); doc.close(); }
-      } catch(e) {
-        if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
-        this._resultBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-        frame.src = this._resultBlobURL;
-      }
-      return;
-    }
     if (isRawHTML) {
-      // HTML sem template CSS — renderizar com reset mínimo
-      const html = \`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Calibri,Arial,sans-serif;}</style></head><body>\${bodyHTML}</body></html>\`;
+      var activeCss = this._activeTemplateCss
+        ? '*{box-sizing:border-box;margin:0;padding:0;}' + this._activeTemplateCss
+        : '*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Calibri,Arial,sans-serif;}';
+      var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' + activeCss + '</style></head><body>' + bodyHTML + '</body></html>';
       try {
-        const doc = frame.contentDocument || frame.contentWindow?.document;
+        var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
         if (doc) { doc.open(); doc.write(html); doc.close(); }
       } catch(e) {
         if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
