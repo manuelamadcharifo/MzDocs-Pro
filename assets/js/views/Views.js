@@ -236,38 +236,28 @@ export const DocumentView = {
     if (!frame) return;
 
     // ── Detecção automática HTML vs Markdown ────────────────────────────────
-    // Quando o documento foi gerado com htmlTemplate (duas colunas, sidebar, etc.),
-    // o conteúdo começa com '<div' — usar directamente sem conversão md→html.
+    // Se o conteúdo começa com '<' é HTML estruturado gerado pelo htmlTemplate.
+    // Usar directamente no iframe sem passar pelo conversor md→html.
     const isRawHTML = content && content.trimStart().startsWith('<');
-    const bodyHTML = isRawHTML
-      ? content
-      : this._markdownToHTML(content).replace('<div class="md-preview">', '').replace('</div>', '');
 
-    // Para HTML estruturado, o CSS do template já está embutido — não sobrepor com o padrão.
+    let bodyHTML;
     if (isRawHTML) {
-      var activeCss = this._activeTemplateCss
-        ? '*{box-sizing:border-box;margin:0;padding:0;}' + this._activeTemplateCss
-        : '*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Calibri,Arial,sans-serif;}';
-      var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' + activeCss + '</style></head><body>' + bodyHTML + '</body></html>';
-      try {
-        var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
-        if (doc) { doc.open(); doc.write(html); doc.close(); }
-      } catch(e) {
-        if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
-        this._resultBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-        frame.src = this._resultBlobURL;
-      }
-      return;
+      bodyHTML = content;
+    } else {
+      const converted = this._markdownToHTML(content);
+      bodyHTML = converted.replace('<div class="md-preview">', '').replace('</div>', '');
     }
 
+    // ── Construir CSS para o formato pedido ────────────────────────────────
     let css = '';
-    if (format === 'pdf') {
-      // CORRIGIDO: usar CSS do template activo se existir, senão usar padrão MzDocs.
-      // Isto faz o preview reflectir imediatamente o modelo escolhido pelo utilizador.
-      if (this._activeTemplateCss) {
-        css = this._activeTemplateCss;
-      } else {
-        css = `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:18mm 18mm 14mm;}
+    if (isRawHTML) {
+      // HTML estruturado: usar CSS do template activo ou reset mínimo
+      css = this._activeTemplateCss
+        ? this._activeTemplateCss
+        : 'body{font-family:Calibri,Arial,sans-serif;}';
+    } else if (format === 'pdf') {
+      css = this._activeTemplateCss ||
+        `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:18mm 18mm 14mm;}
         h1{font-size:17pt;text-align:center;margin-bottom:14pt;font-weight:bold;}
         h2{font-size:13pt;font-weight:bold;margin-top:12pt;margin-bottom:6pt;border-bottom:1px solid #bbb;padding-bottom:2pt;}
         h3{font-size:12pt;font-weight:bold;margin-top:8pt;}
@@ -278,7 +268,6 @@ export const DocumentView = {
         th{background:#f0f0f0;font-weight:bold;}
         strong{font-weight:bold;}em{font-style:italic;}hr{border:none;border-top:1px solid #888;margin:10pt 0;}
         div[style*="page-break"]{margin:16pt 0;}`;
-      }
     } else if (format === 'word') {
       css = `body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.15;color:#000;padding:18mm;}
         h1{font-size:16pt;color:#2E74B5;margin-bottom:12pt;}
@@ -295,15 +284,14 @@ export const DocumentView = {
         h1,h2,h3{font-weight:bold;}`;
     }
 
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}${css}</style></head><body>${bodyHTML}</body></html>`;
-    // contentDocument.write() — works on all browsers incl. Android Chrome
-    // without blob URL (blocked on mobile in sandboxed iframes) or srcdoc (blocks scripts)
+    // ── Montar HTML final e injectar no iframe ─────────────────────────────
+    const pageHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}' + css + '</style></head><body>' + bodyHTML + '</body></html>';
     try {
       const doc = frame.contentDocument || frame.contentWindow?.document;
-      if (doc) { doc.open(); doc.write(html); doc.close(); }
+      if (doc) { doc.open(); doc.write(pageHtml); doc.close(); }
     } catch (e) {
       if (this._resultBlobURL) URL.revokeObjectURL(this._resultBlobURL);
-      this._resultBlobURL = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      this._resultBlobURL = URL.createObjectURL(new Blob([pageHtml], { type: 'text/html' }));
       frame.src = this._resultBlobURL;
     }
   },
