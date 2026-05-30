@@ -623,9 +623,12 @@ ${tpl.css || ''}
       return;
     }
 
-    // Modelo próprio PDF/Word (sem htmlTemplate real) — TemplateController já activo
+    // Modelo próprio PDF/Word (_isOwnModel): não tem htmlTemplate mas o
+    // TemplateController já guardou o ficheiro. Chamar onApply na mesma para
+    // que o DocumentController aplique pelo menos o CSS base e mostre o resultado.
+    // CORRIGIDO: antes fechava sem chamar _onApply — o documento não era actualizado.
     if (this._tpl._isOwnModel) {
-      _notify('✅ Modelo próprio activado! Gere o documento no formulário.');
+      this._onApply?.(this._tpl);
       this.close();
       return;
     }
