@@ -1637,3 +1637,56 @@ export function getSessionTemplates(serviceKey) {
 
 /** Lista de todos os serviços que têm templates */
 export const SERVICES_WITH_TEMPLATES = Object.keys(TEMPLATE_LIBRARY);
+
+/**
+ * Carrega templates públicos e aprovados do Supabase para a sessão.
+ * Esses templates aparecem no picker tal como os pré-definidos.
+ * @param {string} serviceKey
+ * @returns {Promise<Array>} lista de templates carregados
+ */
+export async function loadPublicTemplatesFromSupabase(serviceKey) {
+  try {
+    const supabase = window.authManager?.supabase;
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from('templates_custom')
+      .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count')
+      .eq('service_type', serviceKey)
+      .eq('status', 'approved')
+      .eq('is_public', true)
+      .order('downloads', { ascending: false })
+      .limit(20);
+
+    if (error || !data?.length) return [];
+
+    const loaded = [];
+    for (const row of data) {
+      // Evitar duplicados com templates já na sessão
+      if (_sessionTemplates[serviceKey]?.find(t => t.id === row.id)) continue;
+
+      const avgRating = row.rating_count > 0
+        ? (row.rating_sum / row.rating_count).toFixed(1)
+        : null;
+
+      const tpl = {
+        id:           row.id,
+        name:         row.template_name,
+        description:  row.description || `⭐ ${avgRating || '?'} · ${row.downloads || 0} downloads`,
+        preview:      { accent: '#3B82F6', bg: '#fff', font: 'sans-serif' },
+        htmlTemplate: row.template_html || '',
+        css:          row.template_css || '',
+        _fromMarketplace: true,
+        _downloads:   row.downloads || 0,
+      };
+
+      addSessionTemplate(serviceKey, tpl);
+      loaded.push(tpl);
+    }
+
+    return loaded;
+  } catch (e) {
+    console.warn('[TemplateLibrary] loadPublicTemplatesFromSupabase:', e.message);
+    return [];
+  }
+}
