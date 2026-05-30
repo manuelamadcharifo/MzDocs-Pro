@@ -530,16 +530,26 @@
   .ed-shell { max-width: 100%; height: 100dvh; border-radius: 0; }
   #editorOverlay { padding: 0; }
 
-  .ed-preview-wrap { padding: 12px 8px; }
-  .ed-a4-bg { width: 100%; align-items: center; }
-
-  /* Scale A4 to fit mobile viewport */
+  /* CORRIGIDO: o preview A4 no mobile transbordava para a direita porque
+     transform-origin:top center ainda deixava o iframe de 210mm mais largo
+     que o viewport — causando scroll horizontal e layout partido (imagem 3).
+     Solução: usar transform-origin:top left e centrar com margin-left. */
+  .ed-preview-wrap {
+    padding: 8px 0;
+    overflow: hidden;
+  }
+  .ed-a4-bg {
+    width: 100%;
+    overflow: hidden;
+    align-items: flex-start;
+  }
   .ed-a4-frame {
     width: 210mm;
     min-height: 297mm;
-    transform-origin: top center;
+    transform-origin: top left;
     transform: scale(var(--a4-scale, 0.42));
     margin-bottom: calc((297mm * var(--a4-scale, 0.42)) - 297mm);
+    margin-left: calc((100vw - 210mm * var(--a4-scale, 0.42)) / 2);
   }
 
   .ed-fmt-group { flex-wrap: wrap; }
@@ -690,12 +700,16 @@
   .ed-word-group { gap: 1px; padding-right: 4px; }
   .ed-wbtn { padding: 3px 5px; font-size: 11px; }
   .ed-sel  { font-size: 11px; padding: 2px 4px; }
-  .ed-word-page-wrap { padding: 10px; }
+  /* CORRIGIDO: o ed-word-page com padding:16px e sem min-height causava o layout
+     partido com "zoom" na imagem 4 — o documento parecia uma coluna estreita.
+     Agora usa padding em mm proporcional e font-size legível sem overflow. */
+  .ed-word-page-wrap { padding: 8px; }
   .ed-word-page {
     width: 100%;
     min-height: auto;
-    padding: 16px;
+    padding: 12mm 10mm;
     font-size: 11pt;
+    box-shadow: 0 1px 8px rgba(0,0,0,.12);
   }
   /* Esconder alguns botões menos usados em mobile */
   #edBtnTable, #edBtnHr, #edBtnLink { display: none; }
