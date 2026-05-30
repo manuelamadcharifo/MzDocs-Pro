@@ -414,7 +414,13 @@ export class DocumentEditor {
       wordToolbar.style.display = 'flex';
       // Renderizar conteúdo rico no editor
       if (wordDoc) {
-        wordDoc.innerHTML = this._richHTML || this._mdToRichHTML(this.content);
+        const isRawHTML = this.content && this.content.trimStart().startsWith('<');
+        if (isRawHTML) {
+          // HTML estruturado: sanitize e mostrar directamente
+          wordDoc.innerHTML = sanitizeHtml(this.content);
+        } else {
+          wordDoc.innerHTML = this._richHTML || this._mdToRichHTML(this.content);
+        }
         setTimeout(() => { wordDoc.focus(); }, 50);
       }
       this._updateStats();
@@ -455,6 +461,11 @@ export class DocumentEditor {
   }
 
   _buildPreviewHTML(format) {
+    const isRawHTML = this.content && this.content.trimStart().startsWith('<');
+    if (isRawHTML) {
+      const templateCss = this._templateCss || 'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;}'; 
+      return `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;}${templateCss}</style></head><body>${sanitizeHtml(this.content)}</body></html>`;
+    }
     const css  = this._getFormatCSS(format);
     const body = sanitizeHtml(this._markdownToHTML(this.content));
     return `<!DOCTYPE html>
@@ -566,8 +577,24 @@ export class DocumentEditor {
   }
 
   async _downloadPDF() {
-    // Use the full PDFExporter (same pipeline as original generation) for professional output
-    // with cover page, page numbers, table of contents, etc.
+    // If content is raw HTML (from htmlTemplate) or has template CSS, use HTMLPDFExporter
+    const isRawHTML = this.content && this.content.trimStart().startsWith('<');
+    const templateCss = this._templateCss;
+
+    if (isRawHTML || templateCss) {
+      try {
+        const { HTMLPDFExporter } = await import('./HTMLPDFExporter.js');
+        new HTMLPDFExporter().export(this.content, `mzdocs-${this.serviceType}-${Date.now()}`, {
+          templateCss: templateCss || null,
+          title: this.serviceType || 'Documento MzDocs',
+        });
+        return;
+      } catch (err) {
+        console.error('[DocumentEditor] HTMLPDFExporter falhou:', err.message);
+      }
+    }
+
+    // Use the full PDFExporter (same pipeline as original generation)
     try {
       const { PDFExporter } = await import('./PDFExporter.js');
       // Build metadata from docController if available, else use serviceType as fallback
@@ -620,19 +647,20 @@ export class DocumentEditor {
       );
     } catch (err) {
       console.error('[DocumentEditor] WordExporter falhou, a usar fallback:', err.message);
-      // Fallback: simple .doc via blob
-      const richContent = this._mdToRichHTML(this.content);
-      const css = this._getFormatCSS('word');
+      // Fallback: simple .doc via blob — handle both HTML and markdown content
+      const isRawHTML = this.content && this.content.trimStart().startsWith('<');
+      const richContent = isRawHTML ? this.content : this._mdToRichHTML(this.content);
+      const templateCss = this._templateCss || '';
+      const css = templateCss || this._getFormatCSS('word');
       const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
         xmlns:w='urn:schemas-microsoft-com:office:word'
         xmlns='http://www.w3.org/TR/REC-html40'>
         <head><meta charset="UTF-8">
         <style>${css}
           @page{size:210mm 297mm;margin:25mm 22mm 20mm 25mm;}
-          body{font-family:Calibri,sans-serif;font-size:11pt;line-height:1.5;}
         </style></head>
-        <body><div class="doc-page">${richContent}</div></body></html>`;
-      const blob = new Blob(['﻿', html], { type:'application/msword' });
+        <body>${richContent}</body></html>`;
+      const blob = new Blob(['\uFEFF', html], { type:'application/msword' });
       const url  = URL.createObjectURL(blob);
       const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.doc` });
       a.click(); URL.revokeObjectURL(url);
@@ -804,7 +832,7 @@ export class DocumentEditor {
   }
 
   // ── API pública ────────────────────────────────────────────────
-  loadDocument(content, serviceType) {
+  loadDocument(content, serviceType, templateCss) {
     // DEBUG: log incoming content
     console.log('[DocumentEditor] loadDocument — type:', typeof content, 'length:', content?.length);
     // Fallback: use window.documentState if content is invalid (Bug 2 fix)
@@ -822,6 +850,7 @@ export class DocumentEditor {
     this.serviceType = serviceType;
     this._previewFmt = 'pdf';
     this._richHTML   = null; // reset rich HTML cache
+    this._templateCss = templateCss || null; // store template CSS for preview
 
     this._updateStats();
     this.open();
