@@ -1,57 +1,142 @@
-// assets/js/admin/AdminTransactions.js
-// Gestão de transações do painel admin
+// assets/js/admin/AdminTransactions.js — v2.0 (auditado e corrigido)
+// CORREÇÕES:
+//  1. Join com profiles usa fallback se a FK nomeada não existir
+//  2. Erros de query mostrados ao admin em vez de silenciosos
+//  3. Estado de "a carregar" no tabela
+//  4. Botão de confirmação desactivado durante operação (evita duplo clique)
+//  5. Feedback visual com cor correcta por estado
 
 import { authManager } from '../auth/AuthManager.js';
 
 export class AdminTransactions {
     constructor(supabaseClient) {
-        this.supabase = supabaseClient;
-        this.selected = null;
+        this.supabase  = supabaseClient;
+        this.selected  = null;
+        this._loading  = false;
         this._bindModalEvents();
     }
 
     async load() {
+        if (this._loading) return;
+        this._loading = true;
+        this._setTableLoading(true);
+
         try {
             const filterStatus = document.getElementById('filterStatus')?.value || 'all';
-            const filterDate = document.getElementById('filterDate')?.value;
+            const filterDate   = document.getElementById('filterDate')?.value;
 
-            let query = this.supabase
-                .from('transactions')
-                .select(`
-                    id,
-                    user_id,
-                    package_id,
-                    amount,
-                    credits,
-                    status,
-                    payment_method,
-                    reference_id,
-                    phone_number,
-                    confirmed_by,
-                    confirmed_at,
-                    created_at,
-                    user_profile:profiles!transactions_user_id_fkey(full_name, email, phone)
-                `)
-                .order('created_at', { ascending: false });
+            // ── Tentativa 1: join com FK nomeada ─────────────────────────
+            let data, error;
+            ({ data, error } = await this._queryWithJoin(filterStatus, filterDate));
 
-            if (filterStatus !== 'all') {
-                query = query.eq('status', filterStatus);
+            // ── Fallback: join sem FK nomeada (syntax alternativa) ────────
+            if (error) {
+                console.warn('[AdminTransactions] Join FK falhou, tentando sem FK nomeada:', error.message);
+                ({ data, error } = await this._querySimple(filterStatus, filterDate));
             }
-            if (filterDate) {
-                const dayStart = `${filterDate}T00:00:00.000Z`;
-                const dayEnd = `${filterDate}T23:59:59.999Z`;
-                query = query.gte('created_at', dayStart).lte('created_at', dayEnd);
-            }
-
-            const { data, error } = await query.limit(100);
 
             if (error) throw error;
 
             this._renderTable(data || []);
 
         } catch (err) {
-            console.error('[AdminTransactions] Erro:', err);
+            console.error('[AdminTransactions] Erro ao carregar:', err);
+            this._setTableError('Erro ao carregar transações: ' + err.message);
+        } finally {
+            this._loading = false;
+            this._setTableLoading(false);
         }
+    }
+
+    // ── Query com FK nomeada (preferida) ──────────────────────────────────
+    async _queryWithJoin(filterStatus, filterDate) {
+        let query = this.supabase
+            .from('transactions')
+            .select(`
+                id,
+                user_id,
+                package_id,
+                amount,
+                credits,
+                status,
+                payment_method,
+                reference_id,
+                phone_number,
+                confirmed_by,
+                confirmed_at,
+                created_at,
+                user_profile:profiles!transactions_user_id_fkey(full_name, email, phone)
+            `)
+            .order('created_at', { ascending: false });
+
+        if (filterStatus !== 'all') query = query.eq('status', filterStatus);
+        if (filterDate) {
+            query = query
+                .gte('created_at', `${filterDate}T00:00:00.000Z`)
+                .lte('created_at', `${filterDate}T23:59:59.999Z`);
+        }
+
+        return query.limit(100);
+    }
+
+    // ── Query simples sem join (fallback) ─────────────────────────────────
+    async _querySimple(filterStatus, filterDate) {
+        let query = this.supabase
+            .from('transactions')
+            .select(`
+                id,
+                user_id,
+                package_id,
+                amount,
+                credits,
+                status,
+                payment_method,
+                reference_id,
+                phone_number,
+                confirmed_by,
+                confirmed_at,
+                created_at
+            `)
+            .order('created_at', { ascending: false });
+
+        if (filterStatus !== 'all') query = query.eq('status', filterStatus);
+        if (filterDate) {
+            query = query
+                .gte('created_at', `${filterDate}T00:00:00.000Z`)
+                .lte('created_at', `${filterDate}T23:59:59.999Z`);
+        }
+
+        return query.limit(100);
+    }
+
+    // ── Estado visual da tabela ───────────────────────────────────────────
+    _setTableLoading(loading) {
+        const tbody = document.getElementById('transactionsTable');
+        if (!tbody) return;
+        if (loading) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:32px;color:#94a3b8;">
+                        <div style="display:inline-flex;align-items:center;gap:8px;">
+                            <div style="width:16px;height:16px;border:2px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+                            A carregar transações…
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    _setTableError(msg) {
+        const tbody = document.getElementById('transactionsTable');
+        if (!tbody) return;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align:center;padding:24px;color:#ef4444;background:#fef2f2;border-radius:8px;">
+                    ⚠️ ${msg}
+                </td>
+            </tr>
+        `;
     }
 
     _renderTable(transactions) {
@@ -61,7 +146,7 @@ export class AdminTransactions {
         if (transactions.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="8" style="text-align:center;padding:24px;color:#94a3b8;">
+                    <td colspan="8" style="text-align:center;padding:32px;color:#94a3b8;">
                         Nenhuma transação encontrada
                     </td>
                 </tr>
@@ -70,7 +155,7 @@ export class AdminTransactions {
         }
 
         tbody.innerHTML = transactions.map(t => {
-            const profile = t.user_profile || {};
+            const profile  = t.user_profile || {};
             const isPending = t.status === 'pending';
             const date = new Date(t.created_at).toLocaleDateString('pt-MZ');
             const time = new Date(t.created_at).toLocaleTimeString('pt-MZ', { hour: '2-digit', minute: '2-digit' });
@@ -83,13 +168,13 @@ export class AdminTransactions {
                     </td>
                     <td style="padding:12px;font-size:13px;">
                         <div style="font-weight:600;">${profile.full_name || 'Anónimo'}</div>
-                        <div style="font-size:11px;color:#64748b;">${profile.email || profile.phone || '-'}</div>
+                        <div style="font-size:11px;color:#64748b;">${profile.email || profile.phone || t.phone_number || '-'}</div>
                     </td>
                     <td style="padding:12px;font-size:13px;">
                         <span style="text-transform:capitalize;">${this._translateType(t.package_id)}</span>
                     </td>
                     <td style="padding:12px;font-size:13px;font-weight:700;color:#1e293b;">
-                        MZN ${t.amount}
+                        MZN ${t.amount || 0}
                     </td>
                     <td style="padding:12px;font-size:13px;">
                         ${t.credits} créd.
@@ -154,13 +239,20 @@ export class AdminTransactions {
 
     async _confirmSelected() {
         if (!this.selected) return;
+
+        // Desactivar botão de confirmação para evitar duplo clique
+        const btnConfirm = document.getElementById('btnConfirmPayment');
+        if (btnConfirm) { btnConfirm.disabled = true; btnConfirm.textContent = '⏳ A processar…'; }
+
         const { id, userId, credits, packageId, referenceId } = this.selected;
 
         try {
+            const token = authManager.getToken();
+            if (!token) throw new Error('Sessão expirada. Recarregue a página.');
+
             // ── Avulso: criar conta temporária ───────────────────────────
             if (packageId === 'avulso') {
-                const token = authManager.getToken();
-                const resp  = await fetch('/api/admin/confirm-avulso', {
+                const resp = await fetch('/api/admin/confirm-avulso', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body:    JSON.stringify({ transactionId: id, referenceId }),
@@ -171,16 +263,11 @@ export class AdminTransactions {
                 document.getElementById('confirmModal').style.display = 'none';
                 this.selected = null;
                 await this.load();
-
-                // Mostrar credenciais ao admin + botão para abrir WhatsApp
                 this._showTempCredentials(result);
                 return;
             }
 
-            // ── Pacotes normais (starter/basico/pro) ─────────────────────
-            // CORRIGIDO: usar /api/admin/confirm-payment em vez do Supabase client anon
-            // (o endpoint usa service role key + chama process_affiliate_commission)
-            const token = authManager.getToken();
+            // ── Pacotes normais ───────────────────────────────────────────
             const resp = await fetch('/api/admin/confirm-payment', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -193,20 +280,26 @@ export class AdminTransactions {
             this.selected = null;
             await this.load();
 
-            const notif = document.createElement('div');
-            notif.style.cssText = 'position:fixed;top:20px;right:20px;padding:16px 20px;background:#10b981;color:#fff;border-radius:12px;font-weight:700;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
-            notif.textContent = `✅ ${result.newCredits || credits} créditos adicionados!`;
-            document.body.appendChild(notif);
-            setTimeout(() => notif.remove(), 3000);
+            // Notificação de sucesso
+            this._showNotif(`✅ ${result.newCredits || credits} créditos adicionados!`, '#10b981');
 
         } catch (err) {
             console.error('[AdminTransactions] Erro ao confirmar:', err);
-            alert('❌ Erro ao confirmar pagamento: ' + err.message);
+            this._showNotif('❌ ' + err.message, '#ef4444');
+        } finally {
+            if (btnConfirm) { btnConfirm.disabled = false; btnConfirm.textContent = 'Confirmar'; }
         }
     }
 
+    _showNotif(msg, bg = '#10b981') {
+        const n = document.createElement('div');
+        n.style.cssText = `position:fixed;top:20px;right:20px;padding:16px 20px;background:${bg};color:#fff;border-radius:12px;font-weight:700;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);max-width:320px;`;
+        n.textContent = msg;
+        document.body.appendChild(n);
+        setTimeout(() => n.remove(), 4000);
+    }
+
     _showTempCredentials(result) {
-        // Painel com as credenciais temporárias para o admin copiar/enviar
         const panel = document.createElement('div');
         panel.style.cssText = `
             position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
@@ -231,19 +324,17 @@ export class AdminTransactions {
 
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
                 ${result.waLink ? `
-                <a href="${result.waLink}" target="_blank"
+                <a href="${result.waLink}" target="_blank" rel="noopener"
                    style="flex:1;min-width:140px;padding:10px 16px;background:#25D366;color:#fff;border-radius:10px;
                           font-weight:700;font-size:13px;text-align:center;text-decoration:none;display:block;">
                     📱 Enviar pelo WhatsApp
                 </a>` : ''}
-                <button onclick="
-                    navigator.clipboard?.writeText('Email: ${result.tempEmail}\nPassword: ${result.tempPass}');
-                    this.textContent='✅ Copiado!';setTimeout(()=>this.textContent='📋 Copiar',2000);
-                " style="flex:1;min-width:100px;padding:10px 16px;background:#f1f5f9;border:none;border-radius:10px;
-                         font-weight:700;font-size:13px;cursor:pointer;">
+                <button id="_copyCredBtn"
+                    style="flex:1;min-width:100px;padding:10px 16px;background:#f1f5f9;border:none;border-radius:10px;
+                           font-weight:700;font-size:13px;cursor:pointer;">
                     📋 Copiar
                 </button>
-                <button onclick="this.closest('div[style*=fixed]').remove()"
+                <button id="_closeTempPanel"
                     style="flex:1;min-width:80px;padding:10px 16px;background:#e2e8f0;border:none;border-radius:10px;
                            font-weight:700;font-size:13px;cursor:pointer;">
                     Fechar
@@ -251,12 +342,21 @@ export class AdminTransactions {
             </div>
         `;
 
-        // Overlay de fundo
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;';
-        overlay.addEventListener('click', () => { overlay.remove(); panel.remove(); });
+
+        const close = () => { overlay.remove(); panel.remove(); };
+        overlay.addEventListener('click', close);
+
         document.body.appendChild(overlay);
         document.body.appendChild(panel);
+
+        panel.querySelector('#_copyCredBtn').addEventListener('click', function() {
+            navigator.clipboard?.writeText(`Email: ${result.tempEmail}\nPassword: ${result.tempPass}`)
+                .then(() => { this.textContent = '✅ Copiado!'; setTimeout(() => this.textContent = '📋 Copiar', 2000); })
+                .catch(() => { this.textContent = '❌ Erro'; });
+        });
+        panel.querySelector('#_closeTempPanel').addEventListener('click', close);
     }
 
     _bindModalEvents() {
@@ -279,20 +379,20 @@ export class AdminTransactions {
 
     _translateStatus(status) {
         const map = {
-            pending: '⏳ Pendente',
+            pending:   '⏳ Pendente',
             completed: '✅ Confirmado',
-            failed: '❌ Falhado',
-            refunded: '↩️ Reembolsado'
+            failed:    '❌ Falhado',
+            refunded:  '↩️ Reembolsado',
         };
         return map[status] || status;
     }
 
     _statusStyle(status) {
         const styles = {
-            pending: 'background:#fef3c7;color:#92400e;',
+            pending:   'background:#fef3c7;color:#92400e;',
             completed: 'background:#d1fae5;color:#065f46;',
-            failed: 'background:#fee2e2;color:#991b1b;',
-            refunded: 'background:#e0e7ff;color:#3730a3;'
+            failed:    'background:#fee2e2;color:#991b1b;',
+            refunded:  'background:#e0e7ff;color:#3730a3;',
         };
         return styles[status] || '';
     }
@@ -303,13 +403,7 @@ export class AdminTransactions {
             starter: 'Starter',
             basico:  'Básico',
             pro:     'Pro',
-            trabalho: '📚 Trabalho Escolar',
-            cv: '📋 CV',
-            carta: '✉️ Carta Formal',
-            orcamento: '🏗️ Orçamento',
-            impressao: '🖨️ Impressão',
-            foto: '📷 Foto',
-            conversao: '🔄 Conversão'
+            empresa: 'Empresa',
         };
         return map[type] || type;
     }
