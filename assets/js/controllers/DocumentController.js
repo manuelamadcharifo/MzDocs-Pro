@@ -608,23 +608,8 @@ export class DocumentController {
         // htmlTemplate. O resultado HTML preenchido é passado como conteúdo ao
         // renderResult, que detecta que começa com '<' e usa-o directamente.
         if (tpl.htmlTemplate) {
-            const rd = templatePicker._extractRealData(current);
-            const filledHtml = tpl.htmlTemplate
-                .replace(/\{\{NOME\}\}/g,             rd.nome)
-                .replace(/\{\{CARGO\}\}/g,             rd.cargo)
-                .replace(/\{\{CONTACTO\}\}/g,          rd.contacto)
-                .replace(/\{\{EMAIL\}\}/g,              rd.email)
-                .replace(/\{\{LOCALIZACAO\}\}/g,       rd.localizacao)
-                .replace(/\{\{INICIAIS\}\}/g,           rd.iniciais)
-                .replace(/\{\{OBJECTIVO\}\}/g,          rd.objectivo)
-                .replace(/\{\{FORMACAO\}\}/g,           rd.formacao)
-                .replace(/\{\{EXPERIENCIA\}\}/g,        rd.experiencia)
-                .replace(/\{\{REALIZACAO\}\}/g,         rd.realizacao)
-                .replace(/\{\{HABILIDADES\}\}/g,        rd.habilidades)
-                .replace(/\{\{HABILIDADES_LIST\}\}/g,   rd.habilidadesList)
-                .replace(/\{\{LINGUAS\}\}/g,            rd.linguas)
-                .replace(/\{\{EXTRA\}\}/g,              rd.extra)
-                .replace(/\{\{[A-Z_]+\}\}/g,            '');
+            const rd = templatePicker._extractRealData(current, this.docModel.service);
+            const filledHtml = templatePicker._fillTemplate(tpl.htmlTemplate, rd);
 
             // Guardar HTML preenchido como conteúdo actual (preserva o markdown
             // original para exports sem template)
@@ -701,25 +686,7 @@ export class DocumentController {
         // Se o template tem htmlTemplate, usar o HTML já preenchido com dados reais
         // (gerado em _applyTemplate) ou gerar agora se ainda não foi gerado
         const exportContent = (tpl?.htmlTemplate)
-            ? (() => {
-                const rd = templatePicker._extractRealData(content);
-                return tpl.htmlTemplate
-                    .replace(/\{\{NOME\}\}/g,             rd.nome)
-                    .replace(/\{\{CARGO\}\}/g,             rd.cargo)
-                    .replace(/\{\{CONTACTO\}\}/g,          rd.contacto)
-                    .replace(/\{\{EMAIL\}\}/g,              rd.email)
-                    .replace(/\{\{LOCALIZACAO\}\}/g,       rd.localizacao)
-                    .replace(/\{\{INICIAIS\}\}/g,           rd.iniciais)
-                    .replace(/\{\{OBJECTIVO\}\}/g,          rd.objectivo)
-                    .replace(/\{\{FORMACAO\}\}/g,           rd.formacao)
-                    .replace(/\{\{EXPERIENCIA\}\}/g,        rd.experiencia)
-                    .replace(/\{\{REALIZACAO\}\}/g,         rd.realizacao)
-                    .replace(/\{\{HABILIDADES\}\}/g,        rd.habilidades)
-                    .replace(/\{\{HABILIDADES_LIST\}\}/g,   rd.habilidadesList)
-                    .replace(/\{\{LINGUAS\}\}/g,            rd.linguas)
-                    .replace(/\{\{EXTRA\}\}/g,              rd.extra)
-                    .replace(/\{\{[A-Z_]+\}\}/g,            '');
-              })()
+            ? templatePicker._fillTemplate(tpl.htmlTemplate, templatePicker._extractRealData(content, this.docModel.service))
             : content;
 
         if (format === 'pdf') {
