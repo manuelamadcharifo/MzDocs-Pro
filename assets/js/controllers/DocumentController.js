@@ -705,7 +705,8 @@ export class DocumentController {
             }
         } else {
             // Se o template tem HTML estruturado (sidebar, 2 colunas), usar HTMLToDocxExporter
-            // que gera um .docx REAL (OOXML) preservando layout, cores e estilos do template
+            // que gera um .doc (Word HTML) preservando 100% do layout visual do template:
+            // sidebar colorida, duas colunas, fontes, cores — sem perdas de conversão.
             if (tpl?.htmlTemplate || (exportContent && exportContent.trimStart().startsWith('<'))) {
                 import('../components/HTMLToDocxExporter.js').then(({ HTMLToDocxExporter }) => {
                     new HTMLToDocxExporter().export(
@@ -713,6 +714,7 @@ export class DocumentController {
                         tpl?.css || '',
                         filename
                     );
+                    NotificationView.success('✅ Word (.docx) descarregado!');
                 }).catch(() => {
                     import('../components/WordExporter.js').then(({ wordExporter }) => {
                         wordExporter.export(exportContent, `${filename}.docx`, meta);
@@ -808,11 +810,28 @@ export class DocumentController {
  async _exportWord() {
  NotificationView.info('⏳ A gerar Word…');
  try {
+ const svc      = SERVICES[this.docModel.service];
+ const filename = `mzdocs-${this.docModel.service}-${Date.now()}`;
+ const tpl      = this._activeTemplate;
+
+ // Se há template activo com HTML estruturado, usar HTMLToDocxExporter
+ // para preservar o layout visual (sidebar, colunas, cores) no ficheiro Word
+ if (tpl?.htmlTemplate || tpl?.css) {
+     const rawContent = documentState.currentContent || this.docModel.content;
+     const exportContent = tpl?.htmlTemplate
+         ? templatePicker._fillTemplate(tpl.htmlTemplate, templatePicker._extractRealData(rawContent, this.docModel.service))
+         : rawContent;
+     const { HTMLToDocxExporter } = await import('../components/HTMLToDocxExporter.js');
+     await new HTMLToDocxExporter().export(exportContent, tpl?.css || '', filename);
+     NotificationView.success('✅ Word (.docx) descarregado!');
+     return;
+ }
+
+ // Sem template: exportar como .docx académico padrão
  const { WordExporter } = await import('../components/WordExporter.js');
- const svc = SERVICES[this.docModel.service];
  await new WordExporter().export(
  this.docModel.content,
- `mzdocs-${this.docModel.service}-${Date.now()}.docx`,
+ `${filename}.docx`,
  this._buildExportMetadata(svc)
  );
  NotificationView.success('✅ Word descarregado!');
