@@ -745,12 +745,13 @@ export class DocumentEditor {
   }
 
   async _downloadWord() {
-    // Se há HTML estruturado do template, usar HTMLWordExporter
-    // que converte flexbox → tabelas Word e preserva cores de fundo
+    // Se há HTML estruturado do template, usar HTMLToDocxExporter
+    // que gera um .docx REAL (OOXML) preservando layout de 2 colunas,
+    // cores de fundo, tipografia e estilos do template via docx-js.
     if (this._templateHtml && this._templateCss) {
       try {
-        const { HTMLWordExporter } = await import('./HTMLWordExporter.js');
-        new HTMLWordExporter().export(
+        const { HTMLToDocxExporter } = await import('./HTMLToDocxExporter.js');
+        await new HTMLToDocxExporter().export(
           this._templateHtml,
           this._templateCss,
           `mzdocs-${this.serviceType}-${Date.now()}`,
@@ -758,7 +759,7 @@ export class DocumentEditor {
         );
         return;
       } catch (err) {
-        console.error('[DocumentEditor] HTMLWordExporter falhou:', err.message);
+        console.error('[DocumentEditor] HTMLToDocxExporter falhou:', err.message);
       }
     }
 
