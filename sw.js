@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v11-20260530'; // editor iframe template, HTMLWordExporter, PDF backgrounds
+const CACHE_VERSION = 'v12-20260531'; // HTMLToDocxExporter substitui HTMLWordExporter; removidos ficheiros mortos
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
@@ -39,12 +39,11 @@ workbox.precaching.precacheAndRoute([
     { url: '/assets/js/auth/AuthUI.js',                      revision: CACHE_VERSION },
     { url: '/assets/js/auth/AuthGuard.js',                   revision: CACHE_VERSION },
     { url: '/assets/js/components/DocumentEditor.js',        revision: CACHE_VERSION },
-    { url: '/assets/js/utils/ExportManager.js',               revision: CACHE_VERSION },
     { url: '/assets/js/utils/Sanitizer.js',                   revision: CACHE_VERSION },
     { url: '/assets/js/components/PDFExporter.js',           revision: CACHE_VERSION },
     { url: '/assets/js/components/WordExporter.js',          revision: CACHE_VERSION },
+    { url: '/assets/js/components/HTMLToDocxExporter.js',    revision: CACHE_VERSION },
     { url: '/assets/js/components/ExcelExporter.js',         revision: CACHE_VERSION },
-    { url: '/assets/js/components/SignatureCanvas.js',        revision: CACHE_VERSION },
     { url: '/assets/js/utils/Storage.js',                    revision: CACHE_VERSION },
     { url: '/assets/js/utils/Formatter.js',                  revision: CACHE_VERSION },
     { url: '/assets/js/utils/IndexedDB.js',                  revision: CACHE_VERSION },
