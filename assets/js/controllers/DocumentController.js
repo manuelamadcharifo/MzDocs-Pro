@@ -737,15 +737,14 @@ export class DocumentController {
                 });
             }
         } else {
-            // Se o template tem HTML estruturado (sidebar, 2 colunas), usar HTMLWordExporter
-            // que converte flexbox → tabelas Word e preserva cores de fundo
+            // Se o template tem HTML estruturado (sidebar, 2 colunas), usar HTMLToDocxExporter
+            // que gera um .docx REAL (OOXML) preservando layout, cores e estilos do template
             if (tpl?.htmlTemplate || (exportContent && exportContent.trimStart().startsWith('<'))) {
-                import('../components/HTMLWordExporter.js').then(({ HTMLWordExporter }) => {
-                    new HTMLWordExporter().export(
+                import('../components/HTMLToDocxExporter.js').then(({ HTMLToDocxExporter }) => {
+                    new HTMLToDocxExporter().export(
                         exportContent,
                         tpl?.css || '',
-                        filename,
-                        svc?.title || 'Documento MzDocs Pro'
+                        filename
                     );
                 }).catch(() => {
                     import('../components/WordExporter.js').then(({ wordExporter }) => {
