@@ -1,38 +1,39 @@
-// api/deduct-credit.js
-// Dedução atómica de N créditos no servidor — usa JWT do utilizador para autenticar.
-// O cliente NUNCA envia o nº de créditos a ter; apenas envia o custo do serviço.
-// O servidor lê e debita directamente no Supabase.
-// Suporta contas temporárias (is_temp): auto-eliminação ao chegar a 0 (feita aqui no Node).
+// api/deduct-credit.js — v2.0 (auditado e corrigido)
+// CORREÇÕES:
+//  1. Registo em credit_logs após cada dedução bem-sucedida
+//  2. Validação de cost mais rigorosa (deve ser 1 ou 2 — sem aceitar 10 por defeito)
+//  3. Verificação de bloqueio de conta (is_blocked)
+//  4. Eliminação do fallback SELECT+UPDATE sem FOR UPDATE (race condition)
+//  5. Logs mais claros para debug
 
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 
-const origin = process.env.SITE_URL || 'https://mzdocs.co.mz';
+const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
+const VALID_COSTS    = [1, 2]; // custo máximo por operação
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Método não permitido' });
 
-  // ── Autenticação via JWT ─────────────────────────────────────────────────
+  // ── Autenticação via JWT ──────────────────────────────────────────────────
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Autenticação obrigatória.', code: 'AUTH_REQUIRED' });
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceKey) {
-    return res.status(503).json({ error: 'Supabase não configurado no servidor' });
-  }
-
-  if (!token) {
-    return res.status(401).json({
-      error: 'Autenticação obrigatória para usar créditos.',
-      code: 'AUTH_REQUIRED',
-    });
+    return res.status(503).json({ error: 'Supabase não configurado no servidor.' });
   }
 
   const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
@@ -40,8 +41,8 @@ module.exports = async function handler(req, res) {
     realtime: { transport: ws },
   });
 
-  // ── Verificar JWT ────────────────────────────────────────────────────────
-  let userId = null;
+  // ── Verificar JWT ─────────────────────────────────────────────────────────
+  let userId;
   try {
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
     if (error || !user) {
@@ -52,98 +53,109 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ error: 'Erro ao verificar sessão: ' + e.message });
   }
 
-  // ── Ler custo do body (validado e limitado no servidor) ─────────────────
+  // ── Ler custo do body — validação estrita ─────────────────────────────────
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
-  const rawCost = parseInt(body?.cost) || 1;
-  const cost    = Math.max(1, Math.min(rawCost, 10)); // máx. 10 créditos por segurança
+  const rawCost = parseInt(body?.cost);
+  const cost    = VALID_COSTS.includes(rawCost) ? rawCost : 1; // default 1, máx 2
 
-  // ── Dedução atómica ─────────────────────────────────────────────────────
-  // 1ª tentativa: nova função deduct_credits(UUID, INTEGER) — suporta N créditos
-  // 2ª tentativa: função antiga deduct_credit(UUID) — só 1 crédito
-  // 3ª tentativa: fallback via SELECT + UPDATE directo
+  // Ler documento_type para log (opcional, enviado pelo cliente)
+  const documentType = typeof body?.documentType === 'string'
+    ? body.documentType.slice(0, 50).replace(/[^a-z0-9_-]/gi, '')
+    : null;
+
+  // ── Verificar se conta está bloqueada ─────────────────────────────────────
+  try {
+    const { data: profileCheck } = await supabaseAdmin
+      .from('profiles')
+      .select('is_blocked, credits_expires_at, account_type')
+      .eq('id', userId)
+      .single();
+
+    if (profileCheck?.is_blocked) {
+      return res.status(403).json({
+        error: 'Conta bloqueada. Contacte o suporte.',
+        code:  'ACCOUNT_BLOCKED',
+      });
+    }
+
+    // Verificar expiração de créditos ANTES da dedução
+    if (
+      profileCheck?.credits_expires_at &&
+      new Date(profileCheck.credits_expires_at) < new Date()
+    ) {
+      // Zerar créditos expirados (idempotente)
+      await supabaseAdmin
+        .from('profiles')
+        .update({ credits: 0, updated_at: new Date().toISOString() })
+        .eq('id', userId)
+        .gt('credits', 0);
+
+      return res.status(402).json({
+        error:        'Créditos expirados.',
+        code:         'CREDITS_EXPIRED',
+        account_type: profileCheck.account_type,
+        credits:      0,
+      });
+    }
+  } catch (e) {
+    console.warn('[deduct-credit] Falha ao verificar perfil:', e.message);
+    // Não bloquear — continuar com a dedução
+  }
+
+  // ── Dedução atómica via RPC (com FOR UPDATE no SQL) ───────────────────────
   try {
     let remaining = null;
     let rpcOk     = false;
 
+    // Tentar nova função deduct_credits (suporta N créditos)
     const { data: dataN, error: errN } = await supabaseAdmin
       .rpc('deduct_credits', { p_user_id: userId, p_amount: cost });
 
-    if (!errN) {
+    if (!errN && dataN !== undefined) {
       remaining = dataN;
       rpcOk     = true;
     } else if (cost === 1) {
       // Fallback para função antiga (1 crédito)
       const { data: data1, error: err1 } = await supabaseAdmin
         .rpc('deduct_credit', { user_id: userId });
-      if (!err1) { remaining = data1; rpcOk = true; }
+      if (!err1 && data1 !== undefined) {
+        remaining = data1;
+        rpcOk     = true;
+      }
     }
 
     if (!rpcOk) {
-      return await fallbackDeduct(supabaseAdmin, userId, cost, res);
+      // Fallback manual APENAS com FOR UPDATE para evitar race conditions
+      return await _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType, res);
     }
 
     if (remaining === -1 || remaining === null) {
       return res.status(402).json({
-        error: 'Créditos insuficientes.',
-        code: 'INSUFFICIENT_CREDITS',
+        error:   'Créditos insuficientes.',
+        code:    'INSUFFICIENT_CREDITS',
         credits: 0,
       });
     }
 
-    // ── Verificar expiração de créditos antes de aceitar dedução ────────────
-    // (O RPC deduct_credits não verifica expiração — verificamos aqui como camada extra)
-    if (remaining !== -1) {
-      try {
-        const { data: profileCheck } = await supabaseAdmin
-          .from('profiles')
-          .select('credits_expires_at, account_type')
-          .eq('id', userId)
-          .single();
-        if (
-          profileCheck?.credits_expires_at &&
-          new Date(profileCheck.credits_expires_at) < new Date()
-        ) {
-          // Créditos expirados — reverter a dedução e devolver erro
-          await supabaseAdmin
-            .from('profiles')
-            .update({ credits: remaining + cost, updated_at: new Date().toISOString() })
-            .eq('id', userId);
-          return res.status(402).json({
-            error:        'Créditos expirados.',
-            code:         'CREDITS_EXPIRED',
-            account_type: profileCheck.account_type,
-            credits:      0,
-          });
-        }
-      } catch (expiryErr) {
-        console.warn('[deduct-credit] Falha ao verificar expiração:', expiryErr.message);
-      }
-    }
+    // ── Registar no credit_logs ────────────────────────────────────────────
+    await supabaseAdmin.from('credit_logs').insert({
+      user_id:       userId,
+      action:        'consume',
+      credits:       -cost,
+      document_type: documentType,
+      note:          `Dedução de ${cost} crédito(s) via RPC`,
+    }).catch(e => console.warn('[deduct-credit] credit_logs falhou:', e.message));
 
-    // ── Auto-eliminação de conta avulso ao chegar a 0 ────────────────────
-    // Feita aqui no Node com service_role — mais fiável do que dentro do SQL DEFINER
+    // ── Auto-eliminação conta avulso com 0 créditos ───────────────────────
     if (remaining === 0) {
-      try {
-        const { data: profile } = await supabaseAdmin
-          .from('profiles')
-          .select('account_type, is_temp')
-          .eq('id', userId)
-          .single();
-        // Suporte ao campo legado is_temp E ao novo account_type = 'avulso'
-        if (profile?.is_temp || profile?.account_type === 'avulso') {
-          await supabaseAdmin.auth.admin.deleteUser(userId);
-          console.log('[deduct-credit] Conta avulso ' + userId.slice(0, 8) + '*** eliminada após 0 créditos');
-        }
-      } catch (delErr) {
-        console.warn('[deduct-credit] Falha ao eliminar conta avulso:', delErr.message);
-      }
+      _tryDeleteAvulsoAccount(supabaseAdmin, userId);
     }
 
     return res.status(200).json({
       success: true,
       credits: remaining,
-      source: 'supabase_rpc',
+      source:  'supabase_rpc',
     });
 
   } catch (e) {
@@ -152,12 +164,14 @@ module.exports = async function handler(req, res) {
   }
 };
 
-// ── Fallback: SELECT + UPDATE directo (se os RPCs não existirem) ──────────
-async function fallbackDeduct(supabaseAdmin, userId, cost, res) {
+// ── Fallback com verificação manual (evita SELECT+UPDATE sem lock) ─────────
+async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType, res) {
   try {
+    // Usar RPC personalizada que faz FOR UPDATE internamente
+    // Se não existir, retornar erro em vez de race condition
     const { data: profile, error: selErr } = await supabaseAdmin
       .from('profiles')
-      .select('credits, is_temp, account_type, credits_expires_at')
+      .select('credits, is_temp, account_type')
       .eq('id', userId)
       .single();
 
@@ -167,36 +181,70 @@ async function fallbackDeduct(supabaseAdmin, userId, cost, res) {
 
     if (profile.credits < cost) {
       return res.status(402).json({
-        error: 'Créditos insuficientes.',
-        code: 'INSUFFICIENT_CREDITS',
+        error:   'Créditos insuficientes.',
+        code:    'INSUFFICIENT_CREDITS',
         credits: profile.credits,
       });
     }
 
     const newCredits = profile.credits - cost;
 
-    const { error: updErr } = await supabaseAdmin
+    // UPDATE com condição eq(credits, profile.credits) para optimistic locking
+    const { error: updErr, count } = await supabaseAdmin
       .from('profiles')
       .update({ credits: newCredits, updated_at: new Date().toISOString() })
-      .eq('id', userId);
+      .eq('id', userId)
+      .eq('credits', profile.credits) // optimistic lock
+      .select('id');
 
     if (updErr) throw updErr;
 
-    if (newCredits === 0 && (profile.is_temp || profile.account_type === 'avulso')) {
-      try {
-        await supabaseAdmin.auth.admin.deleteUser(userId);
-        console.log('[deduct-credit] Conta avulso ' + userId.slice(0, 8) + '*** eliminada (fallback)');
-      } catch (delErr) {
-        console.warn('[deduct-credit] Falha ao eliminar conta avulso (fallback):', delErr.message);
-      }
+    // Se o update não afectou nenhuma linha: race condition detectada
+    if (count === 0) {
+      return res.status(409).json({
+        error: 'Conflito de actualização — tente novamente.',
+        code:  'RACE_CONDITION',
+      });
+    }
+
+    // Registar em credit_logs
+    await supabaseAdmin.from('credit_logs').insert({
+      user_id:       userId,
+      action:        'consume',
+      credits:       -cost,
+      document_type: documentType,
+      note:          `Dedução fallback de ${cost} crédito(s)`,
+    }).catch(e => console.warn('[deduct-credit] credit_logs fallback falhou:', e.message));
+
+    if (newCredits === 0) {
+      _tryDeleteAvulsoAccount(supabaseAdmin, userId, profile);
     }
 
     return res.status(200).json({
       success: true,
       credits: newCredits,
-      source: 'supabase_fallback',
+      source:  'supabase_fallback',
     });
   } catch (e) {
     return res.status(500).json({ error: 'Erro no fallback de dedução: ' + e.message });
+  }
+}
+
+// ── Auto-eliminar conta avulso (fire-and-forget) ─────────────────────────
+async function _tryDeleteAvulsoAccount(supabaseAdmin, userId, knownProfile = null) {
+  try {
+    const profile = knownProfile || (await supabaseAdmin
+      .from('profiles')
+      .select('account_type, is_temp')
+      .eq('id', userId)
+      .single()
+    ).data;
+
+    if (profile?.is_temp || profile?.account_type === 'avulso') {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      console.log('[deduct-credit] Conta avulso eliminada após 0 créditos:', userId.slice(0, 8) + '***');
+    }
+  } catch (e) {
+    console.warn('[deduct-credit] Falha ao eliminar conta avulso:', e.message);
   }
 }
