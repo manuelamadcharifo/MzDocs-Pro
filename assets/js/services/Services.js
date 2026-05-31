@@ -19,7 +19,9 @@ export class OpenRouterService {
   }
 
 
-  async generateRaw(prompt, reeditData = null, credits = null) {
+  // skipDeduct=true quando o chamador (DocumentController.handleReedit) já debitou
+  // o crédito no servidor antes de chamar esta função — evita dupla dedução.
+  async generateRaw(prompt, reeditData = null, credits = null, skipDeduct = false) {
     const userId = localStorage.getItem('mz_uid') || 'anon';
 
     // Obter token JWT para autenticação no servidor
@@ -35,19 +37,25 @@ export class OpenRouterService {
 
     const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` };
 
-    // Deduzir 1 crédito antes da reedição
-    const deductRes = await fetch('/api/deduct-credit', {
-      method: 'POST', headers,
-      body: JSON.stringify({ cost: 1 }),
-    });
-    if (deductRes.status === 402) {
-      const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e;
+    let creditsAfterDeduct = credits;
+
+    if (!skipDeduct) {
+      // Deduzir 1 crédito antes da reedição (fluxo antigo — mantido para compatibilidade)
+      const deductRes = await fetch('/api/deduct-credit', {
+        method: 'POST', headers,
+        body: JSON.stringify({ cost: 1, documentType: reeditData?.serviceType || 'reedit' }),
+      });
+      if (deductRes.status === 402) {
+        const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e;
+      }
+      if (!deductRes.ok) {
+        const d = await deductRes.json().catch(() => ({}));
+        throw new Error(d.error || 'Erro ao verificar créditos.');
+      }
+      const deductData = await deductRes.json();
+      creditsAfterDeduct = deductData.credits;
     }
-    if (!deductRes.ok) {
-      const d = await deductRes.json().catch(() => ({}));
-      throw new Error(d.error || 'Erro ao verificar créditos.');
-    }
-    const { credits: creditsAfterDeduct } = await deductRes.json();
+    // Se skipDeduct=true, credits já foi passado com o valor correcto pelo chamador
 
     const body = reeditData
       ? {
