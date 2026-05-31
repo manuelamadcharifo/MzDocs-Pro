@@ -132,8 +132,16 @@ export class DocumentController {
 
  document.addEventListener('editor:closed', (e) => {
  if (e.detail?.content) {
- this.docModel.setGenerated(e.detail.content, this.docModel.model);
-      documentState.set(e.detail.content, this.docModel.service);
+   const editedContent = e.detail.content;
+   this.docModel.setGenerated(editedContent, this.docModel.model);
+   documentState.set(editedContent, this.docModel.service);
+
+   // Se o documento veio do histórico, persistir as edições de volta
+   const historyId = this.docModel.formData?._historyId;
+   if (historyId && window.historyController?.updateDocumentContent) {
+     window.historyController.updateDocumentContent(historyId, editedContent)
+       .catch(() => {});
+   }
  }
  });
  }
@@ -677,8 +685,18 @@ export class DocumentController {
     }
 
     _downloadWithTemplate(tpl, format) {
-        const content  = documentState.currentContent;
-        if (!content) return;
+        // Usar documentState primeiro (conteúdo editado nesta sessão),
+        // fallback para docModel.content (restaurado do histórico)
+        const content = documentState.currentContent
+                     || this.docModel?.content
+                     || this._activeTemplateHtml
+                     || null;
+        if (!content) {
+            NotificationView.warn('⚠️ Nenhum conteúdo para exportar.');
+            return;
+        }
+        // Se tpl não foi passado, usar o template activo desta sessão
+        tpl = tpl || this._activeTemplate || null;
         const filename = `mzdocs-${this.docModel.service}-${Date.now()}`;
         const svc      = SERVICES[this.docModel.service];
         const meta     = this._buildExportMetadata(svc);
