@@ -303,55 +303,86 @@ export class HistoryController {
     if (!doc) return;
     this.close();
 
-    if (window.docController) {
-      import('../views/Views.js').then(({ DocumentView }) => {
-        const svc = { title: doc.title || doc.service_type };
-        DocumentView.renderResult(doc.content, svc, null, doc.model_used || '');
-      });
-    } else {
-      const preview = document.getElementById('resPreview');
-      if (preview) preview.innerHTML = `<pre style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.7;">${doc.content.replace(/</g,'&lt;')}</pre>`;
-    }
+    const ctrl = window.docController;
 
-    const meta  = document.getElementById('resMeta');
-    const model = document.getElementById('resModel');
-    if (meta)  meta.innerHTML = `<span>📁 Do arquivo · ${new Date(doc.created_at).toLocaleDateString('pt-MZ')}</span>`;
-    if (model) model.textContent = doc.model_used || '';
+    // ── 1. Restaurar estado do docModel ─────────────────────────────────────
+    if (ctrl?.docModel) {
+      ctrl.docModel.content = doc.content;
+      ctrl.docModel.service = doc.service_type;
 
-    if (window.docController?.docModel) {
-      window.docController.docModel.content     = doc.content;
-      window.docController.docModel.service     = doc.service_type;
-      // CORRIGIDO: restaurar formData a partir do conteúdo guardado para que
-      // ao clicar "Usar este Modelo" no histórico a IA regenere com os dados
-      // reais do documento (nome, cargo, etc.) em vez de [PREENCHER].
-      // Estratégia: se o doc tiver formData guardado usa-o directamente;
-      // caso contrário extrai os campos visíveis do conteúdo (nome, cargo, etc.)
       if (doc.form_data) {
         try {
-          window.docController.docModel.formData = typeof doc.form_data === 'string'
-            ? JSON.parse(doc.form_data)
-            : doc.form_data;
+          ctrl.docModel.formData = typeof doc.form_data === 'string'
+            ? JSON.parse(doc.form_data) : doc.form_data;
         } catch (_) {}
-      } else if (!window.docController.docModel.formData) {
-        // Fallback: construir formData mínimo a partir do título e conteúdo
-        // para que _applyTemplate não regenere com campos vazios.
-        window.docController.docModel.formData = {
-          _fromHistory: true,
+      } else {
+        ctrl.docModel.formData = {
+          _fromHistory:     true,
           _existingContent: doc.content,
-          title: doc.title || '',
-          service: doc.service_type,
+          _historyId:       doc.id,
+          title:            doc.title || '',
+          service:          doc.service_type,
         };
       }
     }
 
+    // ── 2. CRÍTICO: definir documentState com o conteúdo do histórico ────────
+    // Sem isto, _downloadWithTemplate e _exportWord lêem null e falham.
     if (window.documentState) {
       window.documentState.set(doc.content, doc.service_type);
     }
 
-    import('../views/Views.js').then(({ ModalView }) => {
+    // ── 3. Limpar template activo da sessão anterior ─────────────────────────
+    // O documento do histórico é markdown puro — não tem template aplicado.
+    // Se houver template da sessão anterior, poderia preencher com dados errados.
+    if (ctrl) {
+      ctrl._activeTemplate     = null;
+      ctrl._activeTemplateHtml = null;
+      if (window.DocumentView) window.DocumentView._activeTemplateCss = null;
+    }
+
+    // ── 4. Renderizar ────────────────────────────────────────────────────────
+    import('../views/Views.js').then(({ DocumentView, ModalView }) => {
+      const svc = { title: doc.title || doc.service_type };
+      DocumentView.renderResult(doc.content, svc, null, doc.model_used || '');
+
+      const meta  = document.getElementById('resMeta');
+      const model = document.getElementById('resModel');
+      if (meta)  meta.innerHTML = `<span>📁 Do arquivo · ${new Date(doc.created_at).toLocaleDateString('pt-MZ')}</span>`;
+      if (model) model.textContent = doc.model_used || '';
+
       ModalView.open('resultOverlay');
-      window.docController?._bindEditBtn?.();
+      ctrl?._bindEditBtn?.();
     });
+  }
+
+  // ── Actualizar conteúdo de um documento já guardado no histórico ──────────
+  // Chamado quando o utilizador edita um documento que veio do histórico.
+  async updateDocumentContent(id, newContent) {
+    if (!id || !newContent) return;
+    try {
+      // Actualizar no IndexedDB
+      const { offlineDB } = await import('../utils/IndexedDB.js');
+      const userId = window.authManager?.user?.id
+                  || (await import('../utils/Storage.js')).Storage.getUserId();
+      const allDocs = await offlineDB.getDocuments(userId);
+      const existing = allDocs.find(d => d.id === id);
+      if (existing) {
+        await offlineDB.saveDocument({ ...existing, content: newContent, synced: false });
+      }
+      // Actualizar no Supabase se disponível
+      const supabase = window.authManager?.supabase;
+      const authUserId = window.authManager?.user?.id;
+      if (supabase && authUserId) {
+        await supabase.from('documents')
+          .update({ content: newContent })
+          .eq('id', id)
+          .eq('user_id', authUserId)
+          .catch(() => {});
+      }
+    } catch (e) {
+      console.warn('[History] updateDocumentContent failed:', e.message);
+    }
   }
 
   _emptyState() {
