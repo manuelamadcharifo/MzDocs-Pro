@@ -520,50 +520,126 @@ ${tpl.css || ''}
     const key = svcKey || this._key || 'cv';
 
     // ── Utilitários base ────────────────────────────────────────────────────
-    const esc      = (t) => (t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const stripMd  = (t) => (t || '').replace(/\*{1,3}([^*\n]+)\*{1,3}/g,'$1').replace(/`([^`]+)`/g,'$1').replace(/_{1,2}([^_\n]+)_{1,2}/g,'$1').trim();
-    const line     = (pattern) => (md.match(pattern)?.[1] || '').trim();
-    const block    = (startPat, endPat) => {
-      const m = md.match(new RegExp(startPat + '([\\s\\S]*?)(?=' + endPat + '|$)', 'i'));
-      return (m?.[1] || '').trim();
+    const esc     = (t) => (t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const stripMd = (t) => (t || '')
+      .replace(/\*{1,3}([^*\n]+)\*{1,3}/g,'$1')
+      .replace(/`([^`]+)`/g,'$1')
+      .replace(/_{1,2}([^_\n]+)_{1,2}/g,'$1')
+      .trim();
+
+    // Extrai primeira captura de uma regex no markdown
+    const line = (rx) => (md.match(rx)?.[1] || '').trim();
+
+    // ── Extractor de secção ROBUSTO ─────────────────────────────────────────
+    // Divide o markdown em secções por qualquer heading ## ou ###
+    // Devolve o conteúdo da primeira secção cujo título coincide com o padrão
+    const section = (titlePat) => {
+      // Partir por linhas de heading (##, ###, ####)
+      const headingRx = /^(#{1,4})\s+(.+)$/gm;
+      let match;
+      let sections = [];
+      let lastEnd = 0;
+      let firstMatch = null;
+
+      // Primeiro heading do documento como âncora
+      const allLines = md.split('\n');
+      let current = null;
+
+      for (let i = 0; i < allLines.length; i++) {
+        const hm = allLines[i].match(/^(#{1,4})\s+(.+)$/);
+        if (hm) {
+          if (current) {
+            current.content = allLines.slice(current.startLine + 1, i).join('\n').trim();
+            sections.push(current);
+          }
+          current = { level: hm[1].length, title: hm[2].trim(), startLine: i, content: '' };
+        }
+      }
+      if (current) {
+        current.content = allLines.slice(current.startLine + 1).join('\n').trim();
+        sections.push(current);
+      }
+
+      // Procurar secção cujo título coincide
+      const rx = new RegExp(titlePat, 'i');
+      for (const s of sections) {
+        if (rx.test(s.title)) return s.content;
+      }
+      return '';
     };
-    const today    = () => {
+
+    const today = () => {
       const d = new Date();
       const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
       return `${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
     };
 
-    // ── Parser de listas de entradas estruturadas (cv-entry) ─────────────
+    // ── Parser de entradas estruturadas (experiência / formação) ────────────
     const parseEntries = (raw) => {
       if (!raw) return [];
       const entries = [];
       let current = null;
       const flush = () => { if (current) { entries.push(current); current = null; } };
+
       for (const rawLine of raw.split('\n')) {
         const l = rawLine.trim();
         if (!l || l === '---') continue;
-        const entryBold   = l.match(/^[-*]\s+\*{1,2}([^*\n]+)\*{1,2}\s*[|—–\-]?\s*(.*)/);
-        const entryPipe   = !entryBold && l.match(/^[-*]\s+([^*\n]{3,100})\s*[|—–]\s*(.+)/);
-        const m = entryBold || entryPipe;
+
+        // Entrada: - **Título** | Org | Período  OU  - **Título** — Org | Período
+        const boldEntry = l.match(/^[-*]\s+\*{1,2}([^*\n]+)\*{1,2}\s*[|—–\-]?\s*(.*)/);
+        // Entrada: - Título | Org | Período
+        const pipeEntry = !boldEntry && l.match(/^[-*+]\s+([^*\n]{3,120})\s+[|—–]\s+(.+)/);
+        // Linha simples bold: **Título** | Org
+        const boldLine  = !boldEntry && !pipeEntry && l.match(/^\*{1,2}([^*\n]{3,80})\*{1,2}\s*[|—–]?\s*(.*)/);
+
+        const m = boldEntry || pipeEntry || boldLine;
         if (m) {
           flush();
-          const title = stripMd(m[1]);
+          const title = stripMd(m[1].trim());
           const rest  = (m[2] || '').trim();
+          // Separar org e período
           const parts = rest.split(/\s*[|—–]\s*/);
-          const org   = parts[0] ? stripMd(parts[0]) : '';
-          const period= parts[1] ? stripMd(parts[1]) : (parts[0]?.match(/\d{4}/) ? stripMd(parts[0]) : '');
+          // Detectar qual parte é período (contém dígitos de ano)
+          let org = '', period = '';
+          if (parts.length >= 2) {
+            // Último bloco com 4 dígitos = período
+            const lastPart = parts[parts.length - 1];
+            if (/\d{4}/.test(lastPart)) {
+              period = stripMd(lastPart);
+              org    = parts.slice(0, -1).map(p => stripMd(p)).filter(Boolean).join(' · ');
+            } else {
+              org    = parts.slice(0, -1).map(p => stripMd(p)).join(' · ');
+              period = stripMd(parts[parts.length - 1]);
+            }
+          } else if (parts.length === 1) {
+            if (/\d{4}/.test(parts[0])) period = stripMd(parts[0]);
+            else org = stripMd(parts[0]);
+          }
           current = { title, org: org && org !== period ? org : '', period, bullets: [] };
-        } else if (current && /^[-*]\s+/.test(l)) {
-          current.bullets.push(stripMd(l.replace(/^[-*]\s+/, '')));
-        } else if (current && l && !l.startsWith('#')) {
+          continue;
+        }
+
+        // Bullet dentro de entrada: começam com +, *, - seguido de texto
+        if (current && /^[+\-*]\s+/.test(l)) {
+          current.bullets.push(stripMd(l.replace(/^[+\-*]\s+/, '')));
+          continue;
+        }
+
+        // Texto adicional dentro de entrada (sem bullet)
+        if (current && l && !/^#+/.test(l) && !/^[-*+]/.test(l)) {
           const s = stripMd(l);
-          if (!current.org && s.length < 100) current.org = s;
-          else if (s.length > 5) current.bullets.push(s);
-        } else if (!current && l && !/^#/.test(l) && !/^[-*]/.test(l)) {
+          if (s.length > 3) current.bullets.push(s);
+          continue;
+        }
+
+        // Linha solta sem entrada activa (ex: só texto de formação)
+        if (!current && l && !/^#+/.test(l)) {
           const s = stripMd(l);
           if (s.length > 2) {
-            const pm = s.match(/(\d{4}\s*[–—\-]\s*(?:\d{4}|presente|actual|actualmente))/i);
-            entries.push({ title: pm ? s.replace(pm[1],'').replace(/[|—–\-]\s*$/,'').trim() : s, org:'', period: pm?.[1] || '', bullets:[] });
+            const pm = s.match(/(\d{4}\s*[-–—]\s*(?:\d{4}|presente|actual|actualmente|em curso))/i);
+            const period = pm ? pm[1] : '';
+            const title  = period ? s.replace(period,'').replace(/[|—–\-]\s*$/,'').trim() : s;
+            if (title) entries.push({ title, org:'', period, bullets:[] });
           }
         }
       }
@@ -571,254 +647,219 @@ ${tpl.css || ''}
       return entries;
     };
 
-    const entriesToHTML = (entries) => {
-      return entries.map(e => {
-        const bullets = e.bullets.length ? `<ul class="cv-entry-bullets">${e.bullets.map(b=>`<li>${esc(b)}</li>`).join('')}</ul>` : '';
-        const org     = e.org ? `<p class="cv-entry-company">${esc(e.org)}</p>` : '';
-        return `<div class="cv-entry"><p class="cv-entry-date">${esc(e.period)}</p><p class="cv-entry-title">${esc(e.title)}</p>${org}${bullets}</div>`;
-      }).join('\n');
-    };
+    const entriesToHTML = (entries) => entries.map(e => {
+      const bullets = e.bullets.length
+        ? `<ul class="cv-entry-bullets">${e.bullets.map(b=>`<li>${esc(b)}</li>`).join('')}</ul>`
+        : '';
+      const org = e.org ? `<p class="cv-entry-company">${esc(e.org)}</p>` : '';
+      return `<div class="cv-entry"><p class="cv-entry-date">${esc(e.period)}</p><p class="cv-entry-title">${esc(e.title)}</p>${org}${bullets}</div>`;
+    }).join('\n');
 
     const sectionToEntries = (raw) => {
       const entries = parseEntries(raw);
       if (entries.length) return entriesToHTML(entries);
       if (!raw) return '';
-      return `<div class="cv-entry"><p class="cv-entry-date"></p><p class="cv-entry-title">${esc(stripMd(raw.replace(/\n/g,' ').slice(0,200)))}</p></div>`;
+      // Fallback: texto directo
+      const lines = raw.split('\n').map(l => stripMd(l).trim()).filter(l => l && l !== '---');
+      if (!lines.length) return '';
+      return `<div class="cv-entry"><p class="cv-entry-date"></p><p class="cv-entry-title">${esc(lines[0])}</p>${lines.slice(1).map(l=>`<p class="cv-entry-company">${esc(l)}</p>`).join('')}</div>`;
     };
 
-    // ── Dados comuns a todos os documentos ─────────────────────────────────
+    // ── Dados comuns ────────────────────────────────────────────────────────
     const data = {};
-
-    // Data/local genérica
     data['DATA'] = today();
 
-    // Nome principal (H1 ou H2)
-    const nomeRaw = stripMd(line(/^#{1,2}\s+(.+)/m) || line(/\*\*Nome[:\s]+\*\*\s*(.+)/i) || line(/^(.{3,50})$/m) || '');
-    data['NOME'] = esc(nomeRaw) || '';
-    data['INICIAIS'] = nomeRaw.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || 'XX';
+    // Nome: primeiro H1 ou H2
+    const nomeRaw = stripMd(
+      line(/^#\s+(.+)/m) ||
+      line(/^##\s+(.+)/m) ||
+      line(/\*\*Nome[:\s]+\*\*\s*(.+)/i) ||
+      ''
+    );
+    data['NOME']    = esc(nomeRaw);
+    data['INICIAIS']= nomeRaw.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || 'XX';
 
-    // ── Dados específicos por tipo ──────────────────────────────────────────
     if (key === 'cv') {
-      // Cargo
-      const cargo = stripMd(line(/\*\*(.*?)\*\*\s*[\n\r].*(?:📞|☎|\+258|@)/m)
-                 || line(/^[*_]{0,2}([^#*\n]{5,60})[*_]{0,2}\s*[\n\r].*(?:📞|\||@)/m)
-                 || line(/Cargo[:\s]+(.+)/i) || '');
-      data['CARGO'] = esc(cargo);
+      // Cargo: linha logo após o nome (antes dos contactos)
+      const cargo = stripMd(
+        line(/^#{1,2}\s+.+\n+([^\n#*]{3,60})\n.*(?:📞|☎|\+258|@)/m) ||
+        line(/\*\*(.*?)\*\*\s*[\n\r].*(?:📞|☎|\+258|@)/m) ||
+        line(/^[*_]{0,2}([^#*\n]{5,60})[*_]{0,2}\s*[\n\r].*(?:📞|\||@)/m) ||
+        section('Cargo|Profiss[aã]o') ||
+        ''
+      );
+      data['CARGO']      = esc(cargo);
       data['CONTACTO']   = esc(line(/(?:📞|☎|Tel[:\s]+)[\s*]*([+\d][\d\s\-().]{6,20})/i) || line(/\b(8[234567]\s?\d{3}\s?\d{4})\b/i) || '');
       data['EMAIL']      = esc(line(/([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i) || '');
-      data['LOCALIZACAO']= esc(stripMd(line(/(?:📍|Local[:\s]+)([^\n|]{3,50})/i) || line(/(?:Maputo|Beira|Nampula|Tete)[^\n]*/i) || 'Moçambique'));
-      data['OBJECTIVO']  = esc(stripMd(block('(?:Objectivo|Resumo|Perfil)[^\n]*\n', '\n##')));
-      data['REALIZACAO'] = esc(stripMd(block('(?:Realiza[cç][aã]o|Destaque|Conquista)[^\n]*\n', '\n##')));
+      data['LOCALIZACAO']= esc(stripMd(line(/(?:📍|Local[:\s]+)([^\n|]{3,50})/i) || line(/(?:Maputo|Beira|Nampula|Tete|Quelimane|Inhambane)[^\n]*/i) || 'Moçambique'));
 
-      const habRaw  = block('(?:Habilidade|Compet[eê]ncia|Skill)[^\n]*\n', '\n##');
-      const habList = habRaw.split(/[,;\n•·\-]/).map(h=>stripMd(h).trim()).filter(h=>h.length>1);
+      // Objectivo / Resumo / Perfil
+      data['OBJECTIVO'] = esc(stripMd(
+        section('Objectivo|Resumo Profissional|Resumo|Perfil|Summary') || ''
+      ));
+
+      // Realização de Destaque
+      data['REALIZACAO'] = esc(stripMd(
+        section('Realiza[cç][aã]o|Destaque|Conquista|Achievement') || ''
+      ));
+
+      // Competências / Habilidades / Skills
+      const habRaw = section('Compet[eê]ncia|Habilidade|Skill|T[eé]cnica') || '';
+      const habList = habRaw
+        .split(/[,;\n•·+\-*]/)
+        .map(h => stripMd(h).trim())
+        .filter(h => h.length > 1 && !/^#+/.test(h));
       data['HABILIDADES']      = esc(habList.join(', ').slice(0,200));
       data['HABILIDADES_LIST'] = habList.map(h=>`<li>${esc(h)}</li>`).join('') || '<li>Competências profissionais</li>';
 
-      data['FORMACAO']   = sectionToEntries(block('(?:Forma[cç][aã]o|Educa[cç][aã]o)[^\n]*\n', '\n##'));
-      data['EXPERIENCIA']= sectionToEntries(block('(?:Experi[eê]ncia|Hist[oó]rico)[^\n]*\n', '\n##'));
+      // Formação
+      data['FORMACAO'] = sectionToEntries(
+        section('Forma[cç][aã]o|Educa[cç][aã]o|Academic|Escolar')
+      );
 
-      const linguasRaw = block('(?:L[íi]ngua|Idioma)[^\n]*\n', '\n##') || 'Português (Nativo)';
-      data['LINGUAS'] = linguasRaw.split(/[,;\n•·]/).map(l => {
-        const clean = stripMd(l).replace(/^[-*]\s+/,'').trim();
-        if (clean.length < 2) return '';
-        const parts = clean.split(/\s*[—–\-]\s*/);
-        return `<div class="cv-lang-item"><span class="cv-lang-name">${esc(parts[0].trim())}</span>${parts[1] ? `<span class="cv-lang-level">${esc(parts[1].trim())}</span>` : ''}</div>`;
-      }).filter(Boolean).join('') || `<div class="cv-lang-item"><span class="cv-lang-name">${esc(linguasRaw)}</span></div>`;
+      // Experiência — pode ter vários padrões de nome
+      data['EXPERIENCIA'] = sectionToEntries(
+        section('Experi[eê]ncia Profissional|Experi[eê]ncia de Trabalho|Experi[eê]ncia|Hist[oó]rico|Work Experience') ||
+        section('Experi[eê]ncia')
+      );
 
-      data['EXTRA'] = esc(stripMd(block('(?:Informa[cç][aã]o Adicional|Extra|Outros)[^\n]*\n', '\n##')));
+      // Línguas
+      const linguasRaw = section('L[íi]ngua|Idioma|Language') || '';
+      data['LINGUAS'] = linguasRaw
+        .split(/[\n,;•·]/)
+        .map(l => {
+          const clean = stripMd(l.replace(/^[-*+]\s*/,'')).trim();
+          if (clean.length < 2) return '';
+          // "Português — Nativo" ou "Português (Nativo)" ou "Português Nativo"
+          const parts = clean.split(/\s*[—–\-]\s*|\s*[\(\)]\s*|\s{2,}/);
+          const name  = parts[0].trim();
+          const level = parts[1] ? parts[1].replace(/[()]/g,'').trim() : '';
+          return `<div class="cv-lang-item"><span class="cv-lang-name">${esc(name)}</span>${level ? `<span class="cv-lang-level">${esc(level)}</span>` : ''}</div>`;
+        })
+        .filter(Boolean)
+        .join('') || `<div class="cv-lang-item"><span class="cv-lang-name">${esc(linguasRaw || 'Português')}</span></div>`;
+
+      // Extra / Informação Adicional
+      data['EXTRA'] = esc(stripMd(section('Informa[cç][aã]o Adicional|Extra|Outros|Refer[eê]ncia') || ''));
 
     } else if (key === 'carta') {
-      data['REMETENTE_NOME']  = esc(stripMd(line(/(?:Remetente|De|From)[:\s]+(.+)/i) || line(/^#{3,4}\s*(.+)/m) || nomeRaw));
-      data['REMETENTE_CARGO'] = esc(stripMd(line(/(?:Cargo|Função|Título)[:\s]+(.+)/i) || ''));
+      data['REMETENTE_NOME']   = esc(stripMd(line(/(?:Remetente|De|From)[:\s]+(.+)/i) || nomeRaw));
+      data['REMETENTE_CARGO']  = esc(stripMd(section('Cargo|Fun[cç][aã]o') || ''));
       data['DESTINATARIO_NOME']= esc(stripMd(line(/(?:Exmo\.?|A[:\s]|Para)[:\s]*(.+)/i) || ''));
-      data['DESTINATARIO_ENTI']= esc(stripMd(line(/(?:Entidade|Empresa|Organização)[:\s]+(.+)/i) || ''));
-      data['ASSUNTO']         = esc(stripMd(line(/(?:Assunto|Re)[:\s]+(.+)/i) || ''));
-      data['REF']             = esc(line(/(?:Ref\.?|Referência)[:\s]*([^\n]+)/i) || 'S/Ref.');
-      data['LOCAL']           = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete|Quelimane)[^\n,]*/i) || 'Maputo'));
-      data['LOCAL_DATA']      = `${data['LOCAL']}, ${today()}`;
-      data['MINISTERIO']      = data['REMETENTE_NOME'];
-      data['REPARTIÇÃO']      = data['REMETENTE_NOME'];
-      data['INICIAIS']        = nomeRaw.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || 'XX';
-      data['INICIAIS_EMPRESA']= data['INICIAIS'];
-      // Corpo da carta: tudo entre a saudação e a despedida
-      const corpo = block('(?:Exmo|Prezado|Caro|Senhor)[^\n]*\n', '(?:Atentamente|Respeitosamente|Com os melhores|Sem mais)') || block('##[^\n]*\n', '\n##');
-      data['CORPO'] = stripMd(corpo).replace(/\n\n/g,'</p><p>').replace(/\n/g,' ');
+      data['DESTINATARIO_ENTI']= esc(stripMd(line(/(?:Entidade|Empresa|Organiza[cç][aã]o)[:\s]+(.+)/i) || ''));
+      data['ASSUNTO']          = esc(stripMd(line(/(?:Assunto|Re)[:\s]+(.+)/i) || ''));
+      data['REF']              = esc(line(/(?:Ref\.?|Refer[eê]ncia)[:\s]*([^\n]+)/i) || 'S/Ref.');
+      data['LOCAL']            = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete|Quelimane)[^\n,]*/i) || 'Maputo'));
+      data['LOCAL_DATA']       = `${data['LOCAL']}, ${today()}`;
+      data['CORPO']            = stripMd(section('Corpo|Conte[uú]do') || section('Exmo|Prezado') || '').replace(/\n\n/g,'</p><p>').replace(/\n/g,' ');
+      data['MINISTERIO']       = data['REMETENTE_NOME'];
+      data['INICIAIS']         = nomeRaw.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || 'XX';
       data['REMETENTE_CARGO_PRETENDIDO'] = data['REMETENTE_CARGO'];
 
     } else if (key === 'requerimento') {
-      data['ENTIDADE']    = esc(stripMd(line(/(?:Exmo\.?|A[:\s]|Entidade)[:\s]*(.+)/i) || line(/^## .+/m) || ''));
-      data['REQUERENTE']  = esc(nomeRaw);
-      data['BI']          = esc(line(/(?:BI|Bilhete|Identidade)[:\s.]*([A-Z0-9]{6,14}[A-Z]?)/i) || '');
-      data['ENDERECO']    = esc(stripMd(line(/(?:Endereço|Morada|Resid[eê]ncia)[:\s]+(.+)/i) || ''));
-      data['CONTACTO']    = esc(line(/(?:Contacto|Telefone|Tel\.?)[:\s]*([+\d][\d\s\-().]{6,20})/i) || '');
-      data['ASSUNTO']     = esc(stripMd(line(/(?:Assunto|Objecto|Pedido)[:\s]+(.+)/i) || ''));
-      data['LOCAL']       = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete)[^\n,]*/i) || 'Maputo'));
-      data['LOCAL_DATA']  = `${data['LOCAL']}, ${today()}`;
-      data['FUNDAMENTACAO']= esc(stripMd(block('(?:Fundamenta[cç][aã]o|Exposto|Expos[eê]|Fundamento)[^\n]*\n', '\n##')));
-      data['FUNDAMENTO']  = data['FUNDAMENTACAO'];
+      data['ENTIDADE']      = esc(stripMd(line(/(?:Exmo\.?|A[:\s]|Entidade)[:\s]*(.+)/i) || ''));
+      data['REQUERENTE']    = esc(nomeRaw);
+      data['BI']            = esc(line(/(?:BI|Bilhete)[:\s.]*([A-Z0-9]{6,14}[A-Z]?)/i) || '');
+      data['ENDERECO']      = esc(stripMd(line(/(?:Endere[cç]o|Morada|Resid[eê]ncia)[:\s]+(.+)/i) || ''));
+      data['CONTACTO']      = esc(line(/(?:Contacto|Telefone|Tel\.?)[:\s]*([+\d][\d\s\-().]{6,20})/i) || '');
+      data['ASSUNTO']       = esc(stripMd(line(/(?:Assunto|Objecto|Pedido)[:\s]+(.+)/i) || ''));
+      data['LOCAL']         = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete)[^\n,]*/i) || 'Maputo'));
+      data['LOCAL_DATA']    = `${data['LOCAL']}, ${today()}`;
+      data['FUNDAMENTACAO'] = esc(stripMd(section('Fundamenta[cç][aã]o|Fundamento|Exposto') || ''));
+      data['FUNDAMENTO']    = data['FUNDAMENTACAO'];
 
     } else if (key === 'arrendamento') {
-      data['SENHORIO_NOME']  = esc(stripMd(line(/(?:Senhorio|Proprietário|Arrendador)[:\s]+(.+)/i) || ''));
-      data['SENHORIO_BI']    = esc(line(/(?:BI\s*(?:do\s*)?(?:Senhorio|Proprietário))[:\s.]*([A-Z0-9]+)/i) || '');
-      data['INQUILINO_NOME'] = esc(stripMd(line(/(?:Inquilino|Arrendatário|Locatário)[:\s]+(.+)/i) || ''));
-      data['INQUILINO_BI']   = esc(line(/(?:BI\s*(?:do\s*)?(?:Inquilino|Arrendatário))[:\s.]*([A-Z0-9]+)/i) || '');
-      data['IMOVEL_LOCAL']   = esc(stripMd(line(/(?:Localiz|Imóvel|Endereço)[:\s]+(.+)/i) || ''));
-      data['TIPO_IMOVEL']    = esc(stripMd(line(/(?:Tipo[:\s]+(?:de\s*)?[Ii]móvel)[:\s]+(.+)/i) || ''));
-      data['RENDA_VALOR']    = esc(line(/(?:Renda|Valor\s*Mensal)[:\s]*([\d.,]+\s*MZN[^\n]*)/i) || '');
-      data['RENDA_EXTENSO']  = data['RENDA_VALOR'];
-      data['DURACAO']        = esc(stripMd(line(/(?:Dura[cç][aã]o|Prazo)[:\s]+(.+)/i) || ''));
-      data['CAUCAO']         = esc(stripMd(line(/(?:Cau[cç][aã]o|Dep[oó]sito)[:\s]+(.+)/i) || ''));
-      data['LOCAL']          = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete)[^\n,]*/i) || 'Maputo'));
-      data['LOCAL_DATA']     = `${data['LOCAL']}, ${today()}`;
-      data['CLAUSULAS']      = sectionToEntries(block('(?:Cl[aá]usula|Art[ií]go)[^\n]*\n', '\n##'));
+      data['SENHORIO_NOME']   = esc(stripMd(line(/(?:Senhorio|Propriet[aá]rio|Arrendador)[:\s]+(.+)/i) || ''));
+      data['INQUILINO_NOME']  = esc(stripMd(line(/(?:Inquilino|Arrendat[aá]rio|Locat[aá]rio)[:\s]+(.+)/i) || ''));
+      data['IMOVEL_LOCAL']    = esc(stripMd(line(/(?:Localiz|Im[oó]vel|Endere[cç]o)[:\s]+(.+)/i) || ''));
+      data['RENDA_VALOR']     = esc(line(/(?:Renda|Valor\s*Mensal)[:\s]*([\d.,]+\s*MZN[^\n]*)/i) || '');
+      data['DURACAO']         = esc(stripMd(line(/(?:Dura[cç][aã]o|Prazo)[:\s]+(.+)/i) || ''));
+      data['LOCAL']           = esc(stripMd(line(/(?:Maputo|Beira|Nampula)[^\n,]*/i) || 'Maputo'));
+      data['LOCAL_DATA']      = `${data['LOCAL']}, ${today()}`;
+      data['CLAUSULAS']       = sectionToEntries(section('Cl[aá]usula|Art[ií]go') || '');
 
     } else if (key === 'procuracao') {
-      data['OUTORGANTE']      = esc(stripMd(line(/(?:Outorgante|Mandante|Constituinte)[:\s]+(.+)/i) || nomeRaw));
-      data['BI_OUTORGANTE']   = esc(line(/(?:BI\s*(?:do\s*)?[Oo]utorgante)[:\s.]*([A-Z0-9]+)/i) || '');
-      data['PROCURADOR']      = esc(stripMd(line(/(?:Procurador|Mandatário)[:\s]+(.+)/i) || ''));
-      data['BI_PROCURADOR']   = esc(line(/(?:BI\s*(?:do\s*)?[Pp]rocurador)[:\s.]*([A-Z0-9]+)/i) || '');
-      data['PODERES']         = esc(stripMd(line(/(?:Poderes|Actos|Acto)[:\s]+(.+)/i) || ''));
-      data['LOCAL']           = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete)[^\n,]*/i) || 'Maputo'));
-      data['LOCAL_DATA']      = `${data['LOCAL']}, ${today()}`;
-      data['VALIDADE']        = esc(stripMd(line(/(?:Validade|V[aá]lid[ao])[:\s]+(.+)/i) || ''));
+      data['OUTORGANTE']    = esc(stripMd(line(/(?:Outorgante|Mandante)[:\s]+(.+)/i) || nomeRaw));
+      data['PROCURADOR']    = esc(stripMd(line(/(?:Procurador|Mandat[aá]rio)[:\s]+(.+)/i) || ''));
+      data['PODERES']       = esc(stripMd(line(/(?:Poderes|Actos)[:\s]+(.+)/i) || ''));
+      data['LOCAL']         = esc(stripMd(line(/(?:Maputo|Beira|Nampula)[^\n,]*/i) || 'Maputo'));
+      data['LOCAL_DATA']    = `${data['LOCAL']}, ${today()}`;
 
     } else if (key === 'residencia') {
-      data['DECLARANTE']   = esc(nomeRaw);
-      data['BI']           = esc(line(/(?:BI|Bilhete)[:\s.]*([A-Z0-9]{6,14}[A-Z]?)/i) || '');
-      data['NASCIMENTO']   = esc(line(/(?:Nascimento|Data de Nasc)[:\s]+([^\n]+)/i) || '');
-      data['NATURALIDADE'] = esc(stripMd(line(/(?:Naturalidade|Natural de)[:\s]+(.+)/i) || ''));
-      data['ENDERECO']     = esc(stripMd(line(/(?:Endereço|Morada|Resid[eê]ncia)[:\s]+(.+)/i) || ''));
-      data['TEMPO']        = esc(stripMd(line(/(?:Tempo|Há\s*[cq]uanto)[:\s]+(.+)/i) || ''));
-      data['FINALIDADE']   = esc(stripMd(line(/(?:Finalidade|Para efeitos de)[:\s]+(.+)/i) || ''));
-      data['CHEFE']        = esc(stripMd(line(/(?:Chefe|Líder|L[ií]der)[:\s]+(.+)/i) || '[responsável local]'));
-      data['LOCAL']        = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete)[^\n,]*/i) || 'Maputo'));
-      data['LOCAL_DATA']   = `${data['LOCAL']}, ${today()}`;
+      data['DECLARANTE']    = esc(nomeRaw);
+      data['BI']            = esc(line(/(?:BI|Bilhete)[:\s.]*([A-Z0-9]{6,14}[A-Z]?)/i) || '');
+      data['ENDERECO']      = esc(stripMd(line(/(?:Endere[cç]o|Morada|Resid[eê]ncia)[:\s]+(.+)/i) || ''));
+      data['LOCAL']         = esc(stripMd(line(/(?:Maputo|Beira|Nampula)[^\n,]*/i) || 'Maputo'));
+      data['LOCAL_DATA']    = `${data['LOCAL']}, ${today()}`;
+      data['FINALIDADE']    = esc(stripMd(line(/(?:Finalidade|Para efeitos de)[:\s]+(.+)/i) || ''));
+      data['CHEFE']         = esc(stripMd(line(/(?:Chefe|L[íi]der)[:\s]+(.+)/i) || '[responsável local]'));
 
     } else if (key === 'prestacao') {
-      data['PRESTADOR']       = esc(stripMd(line(/(?:Prestador|Fornecedor|Contratado)[:\s]+(.+)/i) || nomeRaw));
-      data['NUIT_PRESTADOR']  = esc(line(/(?:NUIT)[:\s]*(\d{9})/i) || '');
-      data['MORADA_PRESTADOR']= esc(stripMd(line(/(?:Morada|Endereço)[:\s]+(.+)/i) || ''));
-      data['CLIENTE']         = esc(stripMd(line(/(?:Cliente|Contratante)[:\s]+(.+)/i) || ''));
-      data['BI_CLIENTE']      = esc(line(/(?:BI|NUIT)[:\s.]*([A-Z0-9]+)/i) || '');
-      data['SERVICO']         = esc(stripMd(line(/(?:Servi[cç]o|Objecto)[:\s]+(.+)/i) || ''));
-      data['DESCRICAO']       = esc(stripMd(block('(?:Descri[cç][aã]o|Objecto)[^\n]*\n', '\n##')));
-      data['VALOR_TOTAL']     = esc(line(/(?:Valor|Total)[:\s]*([\d.,]+\s*MZN[^\n]*)/i) || '');
-      data['PRAZO']           = esc(stripMd(line(/(?:Prazo)[:\s]+(.+)/i) || ''));
-      data['PAGAMENTO']       = esc(stripMd(line(/(?:Pagamento|Forma\s*de\s*Pagamento)[:\s]+(.+)/i) || ''));
-      data['LOCAL_DATA']      = `Maputo, ${today()}`;
-      data['CLAUSULAS']       = sectionToEntries(block('(?:Cl[aá]usula|Art[ií]go)[^\n]*\n', '\n##'));
+      data['PRESTADOR']     = esc(stripMd(line(/(?:Prestador|Fornecedor)[:\s]+(.+)/i) || nomeRaw));
+      data['CLIENTE']       = esc(stripMd(line(/(?:Cliente|Contratante)[:\s]+(.+)/i) || ''));
+      data['SERVICO']       = esc(stripMd(line(/(?:Servi[cç]o|Objecto)[:\s]+(.+)/i) || ''));
+      data['VALOR_TOTAL']   = esc(line(/(?:Valor|Total)[:\s]*([\d.,]+\s*MZN[^\n]*)/i) || '');
+      data['LOCAL_DATA']    = `Maputo, ${today()}`;
+      data['CLAUSULAS']     = sectionToEntries(section('Cl[aá]usula|Art[ií]go') || '');
 
     } else if (key === 'recibo') {
-      data['EMITENTE']       = esc(stripMd(line(/(?:Emitente|Empresa|Prestador)[:\s]+(.+)/i) || nomeRaw));
-      data['NUIT_EMITENTE']  = esc(line(/(?:NUIT)[:\s]*(\d{9})/i) || 'N/A');
-      data['CLIENTE']        = esc(stripMd(line(/(?:Cliente|Adquirente|Comprador)[:\s]+(.+)/i) || ''));
-      data['BI_CLIENTE']     = esc(line(/(?:BI|NUIT\s*(?:do\s*)?[Cc]liente)[:\s.]*([A-Z0-9]+)/i) || '');
-      data['DESCRICAO']      = esc(stripMd(line(/(?:Descri[cç][aã]o|Servi[cç]o|Produto)[:\s]+(.+)/i) || ''));
-      data['NUM_DOC']        = esc(line(/(?:N\.?[oº°]|Número)[:\s]*([^\n]+)/i) || `001/${new Date().getFullYear()}`);
-      data['FORMA_PAGAMENTO']= esc(stripMd(line(/(?:Pagamento|Forma)[:\s]+(.+)/i) || 'Numerário'));
-      const valorM = md.match(/(?:Total|Valor\s*Total)[:\s]*([\d\s.,]+)\s*MZN/i);
-      data['VALOR_TOTAL']    = esc(valorM?.[1]?.trim() || '');
-      const subtotalM = md.match(/(?:Subtotal|Valor\s*Base)[:\s]*([\d\s.,]+)\s*MZN/i);
-      data['SUBTOTAL']       = esc(subtotalM?.[1]?.trim() || data['VALOR_TOTAL']);
-      const ivaM = md.match(/IVA[:\s]*([\d.,]+)%/i);
-      data['TAXA_IVA']       = esc(ivaM?.[1] || '0');
-      const valorIvaM = md.match(/(?:Valor\s*)?IVA[:\s]*([\d\s.,]+)\s*MZN/i);
-      data['VALOR_IVA']      = esc(valorIvaM?.[1]?.trim() || '0,00');
-      data['ITEMS_RECIBO']   = sectionToEntries(block('(?:Item|Descri[cç][aã]o)[^\n]*\n', '\n##'));
-      data['LOCAL_DATA']     = `Maputo, ${today()}`;
+      data['EMITENTE']      = esc(stripMd(line(/(?:Emitente|Empresa|Prestador)[:\s]+(.+)/i) || nomeRaw));
+      data['CLIENTE']       = esc(stripMd(line(/(?:Cliente|Adquirente)[:\s]+(.+)/i) || ''));
+      data['DESCRICAO']     = esc(stripMd(line(/(?:Descri[cç][aã]o|Servi[cç]o|Produto)[:\s]+(.+)/i) || ''));
+      data['VALOR_TOTAL']   = esc(line(/(?:Total|Valor\s*Total)[:\s]*([\d\s.,]+)\s*MZN/i) || '');
+      data['LOCAL_DATA']    = `Maputo, ${today()}`;
 
     } else if (key === 'recomendacao') {
-      data['RECOMENDADOR']   = esc(nomeRaw);
-      data['CARGO_REC']      = esc(stripMd(line(/(?:Cargo|Função)[:\s]+(.+)/i) || ''));
-      data['ENTIDADE_REC']   = esc(stripMd(line(/(?:Entidade|Organiza[cç][aã]o|Empresa)[:\s]+(.+)/i) || ''));
-      data['RECOMENDADO']    = esc(stripMd(line(/(?:Recomendado|Candidato)[:\s]+(.+)/i) || ''));
-      data['LOCAL']          = 'Maputo';
-      data['LOCAL_DATA']     = `Maputo, ${today()}`;
-      data['CORPO']          = stripMd(block('(?:Exmo|Prezado|A quem)[^\n]*\n', '(?:Atentamente|Respeitosamente|Com os melhores)') || block('##[^\n]*\n', '\n##'));
+      data['RECOMENDADOR']  = esc(nomeRaw);
+      data['RECOMENDADO']   = esc(stripMd(line(/(?:Recomendado|Candidato)[:\s]+(.+)/i) || ''));
+      data['LOCAL_DATA']    = `Maputo, ${today()}`;
+      data['CORPO']         = stripMd(section('Corpo|Conte[uú]do|Exmo|Prezado') || '');
 
     } else if (key === 'orcamento') {
-      data['TITULO_OBRA']    = esc(stripMd(line(/(?:Orçamento|Obra|Projecto)[:\s]+(.+)/i) || line(/^#{1,2}\s+(.+)/m) || ''));
-      data['EMPRESA']        = esc(stripMd(line(/(?:Empresa|Emitente|Fornecedor)[:\s]+(.+)/i) || nomeRaw));
-      data['CLIENTE']        = esc(stripMd(line(/(?:Cliente|Para)[:\s]+(.+)/i) || ''));
-      data['NUM_ORC']        = esc(line(/(?:N\.?[oº°]|Número|Ref\.?)[:\s]*([^\n]+)/i) || `001/${new Date().getFullYear()}`);
-      data['AREA_PISOS']     = esc(line(/(\d+\s*m[²2][^\n]*)/i) || '');
-      data['PRAZO']          = esc(line(/(?:Prazo)[:\s]*(\d+[^\n]*)/i) || '');
-      data['VALIDADE']       = esc(line(/(?:Validade|V[aá]lid[ao])[:\s]+(.+)/i) || 'Válido por 30 dias');
-      data['LOCAL_DATA']     = `Maputo, ${today()}`;
-      data['ITEMS_TODOS']    = sectionToEntries(block('(?:Material|Item|Descri[cç][aã]o)[^\n]*\n', '\n##'));
-      data['ITEMS_MATERIAIS']= data['ITEMS_TODOS'];
-      data['ITEMS_MAO_OBRA'] = sectionToEntries(block('(?:M[aã]o[- ]de[- ]Obra|M\\.O\\.)[^\n]*\n', '\n##'));
-      const totalM = md.match(/(?:Total\s*Geral|TOTAL)[:\s]*([\d\s.,]+)\s*MZN/i);
-      data['TOTAL_GERAL']    = esc(totalM?.[1]?.trim() || '');
-      const subtotM = md.match(/(?:Subtotal)[:\s]*([\d\s.,]+)\s*MZN/i);
-      data['SUBTOTAL']       = esc(subtotM?.[1]?.trim() || '');
-      data['TOTAL_MATERIAIS']= data['SUBTOTAL'];
-      data['TOTAL_MAO_OBRA'] = '';
-      const imprevM = md.match(/(?:Imprevistos?)[:\s]*([\d\s.,]+)\s*MZN/i);
-      data['IMPREVISTOS']    = esc(imprevM?.[1]?.trim() || '');
+      data['EMPRESA']       = esc(stripMd(line(/(?:Empresa|Emitente)[:\s]+(.+)/i) || nomeRaw));
+      data['CLIENTE']       = esc(stripMd(line(/(?:Cliente|Para)[:\s]+(.+)/i) || ''));
+      data['TOTAL_GERAL']   = esc(line(/(?:Total\s*Geral|TOTAL)[:\s]*([\d\s.,]+)\s*MZN/i) || '');
+      data['LOCAL_DATA']    = `Maputo, ${today()}`;
+      data['ITEMS_TODOS']   = sectionToEntries(section('Item|Material|Descri[cç][aã]o') || '');
 
     } else if (key === 'planonegocio') {
-      data['NOME_NEGOCIO']   = esc(nomeRaw || stripMd(line(/(?:Negócio|Empresa)[:\s]+(.+)/i) || ''));
-      data['SECTOR']         = esc(stripMd(line(/(?:Sector|[Aá]rea\s*de\s*Actividade)[:\s]+(.+)/i) || ''));
-      data['PROPRIETARIO']   = esc(stripMd(line(/(?:Proprietário|Titular|Sócio)[:\s]+(.+)/i) || ''));
-      data['LOCAL']          = esc(stripMd(line(/(?:Local|Sede|Localiza)[:\s]+(.+)/i) || 'Maputo'));
-      data['ANO']            = String(new Date().getFullYear());
-      data['LOCAL_DATA']     = `${data['LOCAL']}, ${today()}`;
-      data['INVESTIMENTO_TOTAL'] = esc(line(/(?:Investimento\s*Total|Capital)[:\s]*([\d.,]+\s*MZN[^\n]*)/i) || '');
-      data['SUMARIO']        = esc(stripMd(block('(?:Sum[aá]rio|Resumo\s*Executivo)[^\n]*\n', '\n##')));
-      data['DESCRICAO_NEGOCIO'] = esc(stripMd(block('(?:Descri[cç][aã]o|Actividade)[^\n]*\n', '\n##')));
-      data['ANALISE_MERCADO']= esc(stripMd(block('(?:Mercado|An[aá]lise)[^\n]*\n', '\n##')));
-      data['ITEMS_FINANCEIROS'] = sectionToEntries(block('(?:Financeiro|Investimento|Or[cç]amento)[^\n]*\n', '\n##'));
-      data['EQUIPA']         = esc(stripMd(block('(?:Equipa|Equipe|Recursos\s*Humanos)[^\n]*\n', '\n##')));
-      data['RETORNO']        = esc(stripMd(block('(?:Retorno|Proje[cç][aã]o|Previs[aã]o)[^\n]*\n', '\n##')));
-
-    } else if (key === 'licenca') {
-      data['REQUERENTE']     = esc(nomeRaw);
-      data['NUIT']           = esc(line(/(?:NUIT)[:\s]*(\d{9})/i) || '');
-      data['CONTACTO']       = esc(line(/(?:Contacto|Telefone)[:\s]*([+\d][\d\s\-().]{6,20})/i) || '');
-      data['ENTIDADE']       = esc(stripMd(line(/(?:Entidade|Destina[:\s])[:\s]+(.+)/i) || ''));
-      data['OBJECTO']        = esc(stripMd(line(/(?:Objecto|Actividade|Finalidade)[:\s]+(.+)/i) || ''));
-      data['AREA_M2']        = esc(line(/(\d+)\s*m[²2]/i) || '');
-      data['HORARIO']        = esc(stripMd(line(/(?:Hor[aá]rio)[:\s]+(.+)/i) || ''));
-      data['LOCAL']          = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete)[^\n,]*/i) || 'Maputo'));
-      data['LOCAL_DATA']     = `${data['LOCAL']}, ${today()}`;
-      data['FUNDAMENTACAO']  = esc(stripMd(block('(?:Fundamenta[cç][aã]o|Fundamento)[^\n]*\n', '\n##')));
+      data['NOME_NEGOCIO']  = esc(nomeRaw || stripMd(line(/(?:Neg[oó]cio|Empresa)[:\s]+(.+)/i) || ''));
+      data['SECTOR']        = esc(stripMd(section('[Aá]rea|Sector|Actividade') || ''));
+      data['LOCAL']         = esc(stripMd(line(/(?:Maputo|Beira|Nampula)[^\n,]*/i) || 'Maputo'));
+      data['LOCAL_DATA']    = `${data['LOCAL']}, ${today()}`;
+      data['SUMARIO']       = esc(stripMd(section('Sum[aá]rio|Resumo Executivo') || ''));
+      data['ANO']           = String(new Date().getFullYear());
 
     } else if (key === 'acta') {
-      data['ORGANIZACAO']    = esc(stripMd(line(/(?:Organiza[cç][aã]o|Associa[cç][aã]o|Empresa)[:\s]+(.+)/i) || nomeRaw));
-      data['TIPO_REUNIAO']   = esc(stripMd(line(/(?:Tipo|Reuni[aã]o)[:\s]+(.+)/i) || ''));
-      data['NUM_ACTA']       = esc(line(/(?:Acta|N\.?[oº°])[:\s]*([^\n]+)/i) || `001/${new Date().getFullYear()}`);
-      data['DATA']           = esc(line(/(?:Data\s*da\s*Reuni[aã]o|Data)[:\s]+([^\n]+)/i) || today());
-      data['HORA']           = esc(line(/(?:Hora|Horas?)[:\s]*([^\n]+)/i) || '');
-      data['LOCAL']          = esc(stripMd(line(/(?:Local\s*da\s*Reuni[aã]o|Local)[:\s]+(.+)/i) || ''));
-      data['PRESIDENTE']     = esc(stripMd(line(/(?:Presidente|Moderador)[:\s]+(.+)/i) || ''));
-      data['SECRETARIO']     = esc(stripMd(line(/(?:Secret[aá]rio)[:\s]+(.+)/i) || ''));
-      data['PRESENTES']      = esc(stripMd(block('(?:Presentes|Participantes)[^\n]*\n', '\n##').replace(/\n/g,', ')));
-      data['PAUTA']          = sectionToEntries(block('(?:Pauta|Ordem\s*do\s*Dia)[^\n]*\n', '\n##'));
-      data['DELIBERACOES']   = sectionToEntries(block('(?:Delibera[cç][oõ]es?|Discuss[aã]o)[^\n]*\n', '\n##'));
+      data['ORGANIZACAO']   = esc(stripMd(line(/(?:Organiza[cç][aã]o|Associa[cç][aã]o)[:\s]+(.+)/i) || nomeRaw));
+      data['DATA']          = esc(line(/(?:Data\s*da\s*Reuni[aã]o|Data)[:\s]+([^\n]+)/i) || today());
+      data['LOCAL']         = esc(stripMd(line(/(?:Local\s*da\s*Reuni[aã]o|Local)[:\s]+(.+)/i) || ''));
+      data['PRESIDENTE']    = esc(stripMd(line(/(?:Presidente|Moderador)[:\s]+(.+)/i) || ''));
+      data['DELIBERACOES']  = sectionToEntries(section('Delibera[cç][oõ]es?|Discuss[aã]o') || '');
 
     } else if (key === 'trabalho') {
-      data['TITULO']         = esc(nomeRaw);
-      data['TEMA']           = data['TITULO'];
-      data['AUTOR']          = esc(stripMd(line(/(?:Autor|Aluno|Estudante)[:\s]+(.+)/i) || ''));
-      data['NIVEL']          = esc(stripMd(line(/(?:N[íi]vel|Grau)[:\s]+(.+)/i) || ''));
-      data['DISCIPLINA']     = esc(stripMd(line(/(?:Disciplina|Cadeira)[:\s]+(.+)/i) || ''));
-      data['DOCENTE']        = esc(stripMd(line(/(?:Docente|Professor)[:\s]+(.+)/i) || ''));
-      data['INSTITUICAO']    = esc(stripMd(line(/(?:Institui[cç][aã]o|Universidade|Instituto)[:\s]+(.+)/i) || ''));
-      data['LOCAL']          = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete)[^\n,]*/i) || 'Maputo'));
-      data['ANO']            = String(new Date().getFullYear());
-      data['LOCAL_DATA']     = `${data['LOCAL']}, ${today()}`;
+      data['TITULO']        = esc(nomeRaw);
+      data['AUTOR']         = esc(stripMd(line(/(?:Autor|Aluno|Estudante)[:\s]+(.+)/i) || ''));
+      data['INSTITUICAO']   = esc(stripMd(line(/(?:Institui[cç][aã]o|Universidade|Instituto)[:\s]+(.+)/i) || ''));
+      data['LOCAL']         = esc(stripMd(line(/(?:Maputo|Beira|Nampula)[^\n,]*/i) || 'Maputo'));
+      data['ANO']           = String(new Date().getFullYear());
+      data['LOCAL_DATA']    = `${data['LOCAL']}, ${today()}`;
+
+    } else if (key === 'licenca') {
+      data['REQUERENTE']    = esc(nomeRaw);
+      data['ENTIDADE']      = esc(stripMd(line(/(?:Entidade|Destina[:\s])[:\s]+(.+)/i) || ''));
+      data['OBJECTO']       = esc(stripMd(line(/(?:Objecto|Actividade|Finalidade)[:\s]+(.+)/i) || ''));
+      data['LOCAL']         = esc(stripMd(line(/(?:Maputo|Beira|Nampula)[^\n,]*/i) || 'Maputo'));
+      data['LOCAL_DATA']    = `${data['LOCAL']}, ${today()}`;
+      data['FUNDAMENTACAO'] = esc(stripMd(section('Fundamenta[cç][aã]o|Fundamento') || ''));
 
     } else {
-      // ── Fallback genérico para qualquer serviço não listado ─────────────
-      // Extrai todos os padrões "Label: Valor" do markdown como placeholders
-      const genericMatches = [...md.matchAll(/^[-*]?\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,30})[:\s]+(.{2,200})/gm)];
-      for (const m of genericMatches) {
+      // ── Fallback genérico ──────────────────────────────────────────────
+      for (const m of [...md.matchAll(/^[-*]?\s*([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F\s]{1,30})[:\s]+(.{2,200})/gm)]) {
         const k = m[1].trim().toUpperCase().replace(/\s+/g,'_').replace(/[^A-Z0-9_]/g,'');
         if (k && !data[k]) data[k] = esc(stripMd(m[2].trim()));
       }
-      data['LOCAL']      = esc(stripMd(line(/(?:Maputo|Beira|Nampula|Tete)[^\n,]*/i) || 'Maputo'));
+      data['LOCAL']      = esc(stripMd(line(/(?:Maputo|Beira|Nampula)[^\n,]*/i) || 'Maputo'));
       data['LOCAL_DATA'] = `${data['LOCAL']}, ${today()}`;
     }
 
@@ -992,26 +1033,24 @@ ${tpl.css || ''}
   _buildLocalFallbackTemplate(name, filename) {
     const svcKey  = this._key || 'cv';
     const content = this._content || '';
-    const rd      = this._extractRealData(content);
+    const rd      = this._extractRealData(content, svcKey);
 
     const palettes = [
-      // 0 — Bicolor escuro (sidebar esquerda escura)
-      { accent: '#1e3a5f', sidebar: '#1e3a5f', sidebarText: '#fff', bg: '#fff', layout: 'two-col' },
-      // 1 — Verde esmeralda (sidebar)
-      { accent: '#0f766e', sidebar: '#0f766e', sidebarText: '#fff', bg: '#fff', layout: 'two-col' },
-      // 2 — Linha de topo colorida (single col com header accent)
+      { accent: '#1e3a5f', sidebar: '#1e3a5f', sidebarText: '#fff', bg: '#fff',    layout: 'two-col' },
+      { accent: '#0f766e', sidebar: '#0f766e', sidebarText: '#fff', bg: '#fff',    layout: 'two-col' },
       { accent: '#1d4ed8', sidebar: '#1d4ed8', sidebarText: '#fff', bg: '#f8fafc', layout: 'top-bar' },
-      // 3 — Roxo premium (sidebar)
-      { accent: '#7c3aed', sidebar: '#4c1d95', sidebarText: '#fff', bg: '#fff', layout: 'two-col' },
-      // 4 — Ouro executivo (single col com header dourado)
+      { accent: '#7c3aed', sidebar: '#4c1d95', sidebarText: '#fff', bg: '#fff',    layout: 'two-col' },
       { accent: '#92400e', sidebar: '#78350f', sidebarText: '#fff', bg: '#fffbeb', layout: 'top-bar' },
     ];
     const hash = filename.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
     const pal  = palettes[hash % palettes.length];
+
+    // ── Seleccionar HTML+CSS consoante o tipo de serviço ──────────────────
     const isTwoCol = pal.layout === 'two-col';
 
-    // ── Layout duas colunas (sidebar lateral) ──────────────────────────────
-    const htmlTwoCol = `
+    // ── GRUPO 1: CV ────────────────────────────────────────────────────────
+    if (svcKey === 'cv') {
+      const htmlTwoCol = `
 <div class="cv-page cv-two-col">
   <aside class="cv-sidebar">
     <div class="cv-avatar">{{INICIAIS}}</div>
@@ -1054,8 +1093,7 @@ ${tpl.css || ''}
   </main>
 </div>`;
 
-    // ── Layout coluna única com barra de topo ──────────────────────────────
-    const htmlTopBar = `
+      const htmlTopBar = `
 <div class="cv-page">
   <header class="cv-header">
     <div class="cv-avatar">{{INICIAIS}}</div>
@@ -1102,9 +1140,372 @@ ${tpl.css || ''}
   </div>
 </div>`;
 
-    const cssTwoCol = `
+      return this._buildLocalResult(name, isTwoCol ? htmlTwoCol : htmlTopBar, pal, isTwoCol, svcKey);
+    }
+
+    // ── GRUPO 2: Carta / Recomendação ──────────────────────────────────────
+    if (['carta', 'recomendacao'].includes(svcKey)) {
+      const html = `
+<div class="doc-page">
+  <header class="doc-header">
+    <div class="doc-header-left">
+      <div class="doc-logo-initials">{{INICIAIS}}</div>
+      <div>
+        <div class="doc-remetente-nome">{{REMETENTE_NOME}}</div>
+        <div class="doc-remetente-cargo">{{REMETENTE_CARGO}}</div>
+      </div>
+    </div>
+    <div class="doc-header-ref">
+      <div class="doc-ref">Ref: {{REF}}</div>
+      <div class="doc-data">{{LOCAL_DATA}}</div>
+    </div>
+  </header>
+  <div class="doc-body">
+    <div class="doc-destinatario">
+      <strong>{{DESTINATARIO_NOME}}</strong><br>
+      {{DESTINATARIO_ENTI}}
+    </div>
+    <div class="doc-assunto-line"><span class="doc-assunto-label">Assunto:</span> {{ASSUNTO}}</div>
+    <div class="doc-corpo">{{CORPO}}</div>
+    <div class="doc-assinatura">
+      <div class="doc-assinatura-linha"></div>
+      <div class="doc-assinatura-nome">{{REMETENTE_NOME}}</div>
+      <div class="doc-assinatura-cargo">{{REMETENTE_CARGO}}</div>
+    </div>
+  </div>
+</div>`;
+      return this._buildLocalResult(name, html, pal, false, svcKey);
+    }
+
+    // ── GRUPO 3: Requerimento / Licença ────────────────────────────────────
+    if (['requerimento', 'licenca'].includes(svcKey)) {
+      const html = `
+<div class="doc-page doc-formal">
+  <div class="doc-formal-header">
+    <div class="doc-formal-entidade">{{ENTIDADE}}</div>
+    <div class="doc-formal-local-data">{{LOCAL_DATA}}</div>
+  </div>
+  <div class="doc-formal-titulo">REQUERIMENTO</div>
+  <div class="doc-formal-identificacao">
+    <p><strong>Requerente:</strong> {{REQUERENTE}}</p>
+    <p><strong>BI:</strong> {{BI}}</p>
+    <p><strong>Endereço:</strong> {{ENDERECO}}</p>
+    <p><strong>Contacto:</strong> {{CONTACTO}}</p>
+    <p><strong>Assunto:</strong> {{ASSUNTO}}</p>
+  </div>
+  <div class="doc-formal-corpo">
+    <p>{{FUNDAMENTACAO}}</p>
+  </div>
+  <div class="doc-formal-assinatura">
+    <div class="doc-assinatura-linha"></div>
+    <div>{{REQUERENTE}}</div>
+    <div class="doc-formal-data-final">{{LOCAL_DATA}}</div>
+  </div>
+</div>`;
+      return this._buildLocalResult(name, html, pal, false, svcKey);
+    }
+
+    // ── GRUPO 4: Arrendamento / Prestação de Serviços / Procuração ─────────
+    if (['arrendamento', 'prestacao', 'procuracao'].includes(svcKey)) {
+      const titulo = { arrendamento: 'CONTRATO DE ARRENDAMENTO', prestacao: 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS', procuracao: 'PROCURAÇÃO' }[svcKey];
+      const html = `
+<div class="doc-page doc-contrato">
+  <div class="doc-contrato-header">
+    <div class="doc-contrato-titulo">${titulo}</div>
+    <div class="doc-contrato-data">{{LOCAL_DATA}}</div>
+  </div>
+  <div class="doc-contrato-partes">
+    <div class="doc-contrato-parte">
+      <span class="doc-parte-label">PRIMEIRO OUTORGANTE</span>
+      <span class="doc-parte-valor">{{SENHORIO_NOME}}{{OUTORGANTE}}{{PRESTADOR}}</span>
+    </div>
+    <div class="doc-contrato-parte">
+      <span class="doc-parte-label">SEGUNDO OUTORGANTE</span>
+      <span class="doc-parte-valor">{{INQUILINO_NOME}}{{PROCURADOR}}{{CLIENTE}}</span>
+    </div>
+  </div>
+  <div class="doc-contrato-clausulas">{{CLAUSULAS}}</div>
+  <div class="doc-contrato-assinaturas">
+    <div class="doc-assinatura-bloco">
+      <div class="doc-assinatura-linha"></div>
+      <div>Primeiro Outorgante</div>
+    </div>
+    <div class="doc-assinatura-bloco">
+      <div class="doc-assinatura-linha"></div>
+      <div>Segundo Outorgante</div>
+    </div>
+  </div>
+</div>`;
+      return this._buildLocalResult(name, html, pal, false, svcKey);
+    }
+
+    // ── GRUPO 5: Declaração de Residência ──────────────────────────────────
+    if (svcKey === 'residencia') {
+      const html = `
+<div class="doc-page doc-formal">
+  <div class="doc-formal-titulo">DECLARAÇÃO DE RESIDÊNCIA</div>
+  <div class="doc-formal-corpo">
+    <p>Eu, <strong>{{DECLARANTE}}</strong>, portador(a) do BI nº <strong>{{BI}}</strong>,
+    declaro que resido em <strong>{{ENDERECO}}</strong>.</p>
+    <p>Esta declaração é emitida para os devidos efeitos, nomeadamente: <strong>{{FINALIDADE}}</strong>.</p>
+  </div>
+  <div class="doc-formal-assinatura">
+    <div>{{LOCAL_DATA}}</div>
+    <div class="doc-assinatura-linha"></div>
+    <div>{{CHEFE}}</div>
+    <div style="font-size:8pt;opacity:0.7">Responsável / Chefe de Quarteirão</div>
+  </div>
+</div>`;
+      return this._buildLocalResult(name, html, pal, false, svcKey);
+    }
+
+    // ── GRUPO 6: Recibo / Factura ──────────────────────────────────────────
+    if (svcKey === 'recibo') {
+      const html = `
+<div class="doc-page doc-recibo">
+  <div class="doc-recibo-header">
+    <div class="doc-recibo-empresa">{{EMITENTE}}</div>
+    <div class="doc-recibo-titulo-bloco">
+      <div class="doc-recibo-titulo">RECIBO</div>
+      <div class="doc-recibo-num">Nº {{NUM_DOC}}</div>
+    </div>
+  </div>
+  <div class="doc-recibo-body">
+    <div class="doc-recibo-row"><span>Data:</span><span>{{LOCAL_DATA}}</span></div>
+    <div class="doc-recibo-row"><span>Cliente:</span><span>{{CLIENTE}}</span></div>
+    <div class="doc-recibo-row"><span>Descrição:</span><span>{{DESCRICAO}}</span></div>
+    <div class="doc-recibo-row doc-recibo-total"><span>TOTAL:</span><span>{{VALOR_TOTAL}} MZN</span></div>
+    <div class="doc-recibo-row"><span>Forma de Pagamento:</span><span>{{FORMA_PAGAMENTO}}</span></div>
+  </div>
+  <div class="doc-recibo-footer">
+    <div class="doc-assinatura-linha"></div>
+    <div>{{EMITENTE}}</div>
+  </div>
+</div>`;
+      return this._buildLocalResult(name, html, pal, false, svcKey);
+    }
+
+    // ── GRUPO 7: Orçamento ─────────────────────────────────────────────────
+    if (svcKey === 'orcamento') {
+      const html = `
+<div class="doc-page doc-orcamento">
+  <div class="doc-orc-header">
+    <div class="doc-orc-empresa">{{EMPRESA}}</div>
+    <div>
+      <div class="doc-orc-titulo">ORÇAMENTO Nº {{NUM_ORC}}</div>
+      <div class="doc-orc-data">{{LOCAL_DATA}}</div>
+    </div>
+  </div>
+  <div class="doc-orc-cliente"><strong>Cliente:</strong> {{CLIENTE}}</div>
+  <div class="doc-orc-items">{{ITEMS_TODOS}}</div>
+  <div class="doc-orc-total">
+    <span>TOTAL GERAL:</span>
+    <span>{{TOTAL_GERAL}} MZN</span>
+  </div>
+  <div class="doc-orc-validade">Validade: {{VALIDADE}}</div>
+</div>`;
+      return this._buildLocalResult(name, html, pal, false, svcKey);
+    }
+
+    // ── GRUPO 8: Plano de Negócio ──────────────────────────────────────────
+    if (svcKey === 'planonegocio') {
+      const html = `
+<div class="doc-page doc-plano">
+  <header class="doc-header" style="background:${pal.sidebar};color:${pal.sidebarText};padding:10mm 12mm;">
+    <h1 style="font-size:18pt;margin:0 0 4pt">{{NOME_NEGOCIO}}</h1>
+    <div style="font-size:10pt;opacity:0.85">{{SECTOR}} · {{LOCAL}} · {{ANO}}</div>
+  </header>
+  <div class="doc-plano-body">
+    <section class="doc-section">
+      <h2 class="doc-section-title">Sumário Executivo</h2>
+      <p>{{SUMARIO}}</p>
+    </section>
+    <section class="doc-section">
+      <h2 class="doc-section-title">Descrição do Negócio</h2>
+      <p>{{DESCRICAO_NEGOCIO}}</p>
+    </section>
+    <section class="doc-section">
+      <h2 class="doc-section-title">Projecção Financeira</h2>
+      <div>{{ITEMS_FINANCEIROS}}</div>
+      <p><strong>Investimento Total:</strong> {{INVESTIMENTO_TOTAL}}</p>
+    </section>
+  </div>
+</div>`;
+      return this._buildLocalResult(name, html, pal, false, svcKey);
+    }
+
+    // ── GRUPO 9: Acta de Reunião ───────────────────────────────────────────
+    if (svcKey === 'acta') {
+      const html = `
+<div class="doc-page doc-formal">
+  <div class="doc-formal-titulo">ACTA DE REUNIÃO Nº {{NUM_ACTA}}</div>
+  <div class="doc-formal-identificacao">
+    <p><strong>Organização:</strong> {{ORGANIZACAO}}</p>
+    <p><strong>Data:</strong> {{DATA}} &nbsp; <strong>Hora:</strong> {{HORA}}</p>
+    <p><strong>Local:</strong> {{LOCAL}}</p>
+    <p><strong>Presidente:</strong> {{PRESIDENTE}}</p>
+    <p><strong>Secretário(a):</strong> {{SECRETARIO}}</p>
+    <p><strong>Presentes:</strong> {{PRESENTES}}</p>
+  </div>
+  <div class="doc-section">
+    <h2 class="doc-section-title">Ordem do Dia</h2>
+    <div>{{PAUTA}}</div>
+  </div>
+  <div class="doc-section">
+    <h2 class="doc-section-title">Deliberações</h2>
+    <div>{{DELIBERACOES}}</div>
+  </div>
+  <div class="doc-formal-assinatura">
+    <div class="doc-assinatura-linha"></div>
+    <div>{{SECRETARIO}} — Secretário(a)</div>
+  </div>
+</div>`;
+      return this._buildLocalResult(name, html, pal, false, svcKey);
+    }
+
+    // ── GRUPO 10: Trabalho Académico ───────────────────────────────────────
+    if (svcKey === 'trabalho') {
+      const html = `
+<div class="doc-page doc-academico">
+  <div class="doc-academico-capa">
+    <div class="doc-academico-instituicao">{{INSTITUICAO}}</div>
+    <div class="doc-academico-titulo">{{TITULO}}</div>
+    <div class="doc-academico-nivel">{{NIVEL}}</div>
+    <div class="doc-academico-disciplina">{{DISCIPLINA}}</div>
+    <div class="doc-academico-autor">{{AUTOR}}</div>
+    <div class="doc-academico-docente">Docente: {{DOCENTE}}</div>
+    <div class="doc-academico-data">{{LOCAL_DATA}}</div>
+  </div>
+</div>`;
+      return this._buildLocalResult(name, html, pal, false, svcKey);
+    }
+
+    // ── FALLBACK genérico para qualquer serviço futuro ─────────────────────
+    // Gera um template de documento formal genérico com todos os dados disponíveis
+    const genericRows = Object.entries(rd)
+      .filter(([k, v]) => v && !['DATA','INICIAIS'].includes(k))
+      .map(([k, v]) => `<tr><td class="doc-gen-label">${k.replace(/_/g,' ')}</td><td>${v}</td></tr>`)
+      .join('');
+
+    const htmlGeneric = `
+<div class="doc-page doc-formal">
+  <div class="doc-formal-titulo">{{NOME}}</div>
+  <div class="doc-formal-corpo">
+    <table class="doc-gen-table"><tbody>${genericRows}</tbody></table>
+  </div>
+  <div class="doc-formal-assinatura">
+    <div class="doc-assinatura-linha"></div>
+    <div>{{LOCAL_DATA}}</div>
+  </div>
+</div>`;
+    return this._buildLocalResult(name, htmlGeneric, pal, false, svcKey);
+  }
+
+  // ── Helper: montar o objecto de retorno com HTML preenchido + CSS universal
+  _buildLocalResult(name, htmlTemplate, pal, isTwoCol, svcKey) {
+    // CSS base para todos os documentos não-CV (cartas, contratos, recibos, etc.)
+    const cssDoc = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1e293b; width: 210mm; min-height: 297mm; background: ${pal.bg}; }
+body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; color: #1e293b; width: 210mm; min-height: 297mm; background: #fff; }
+.doc-page { width: 210mm; min-height: 297mm; background: #fff; padding: 0; }
+
+/* ── Header genérico ── */
+.doc-header { background: ${pal.sidebar}; color: ${pal.sidebarText}; padding: 8mm 12mm; display: flex; justify-content: space-between; align-items: flex-start; }
+.doc-logo-initials { width: 38pt; height: 38pt; border-radius: 50%; background: rgba(255,255,255,0.25); color: ${pal.sidebarText}; display: flex; align-items: center; justify-content: center; font-size: 15pt; font-weight: 700; flex-shrink: 0; margin-right: 8pt; }
+.doc-remetente-nome { font-size: 13pt; font-weight: 700; }
+.doc-remetente-cargo { font-size: 9pt; opacity: 0.8; }
+.doc-header-ref { text-align: right; font-size: 9pt; opacity: 0.85; }
+.doc-ref { margin-bottom: 2pt; }
+.doc-header-left { display: flex; align-items: center; }
+
+/* ── Body genérico ── */
+.doc-body { padding: 8mm 14mm 10mm; }
+.doc-destinatario { margin-bottom: 8pt; font-size: 10.5pt; line-height: 1.5; }
+.doc-assunto-line { margin-bottom: 8pt; font-size: 10pt; }
+.doc-assunto-label { font-weight: 700; color: ${pal.accent}; }
+.doc-corpo { font-size: 10.5pt; line-height: 1.7; text-align: justify; }
+.doc-assinatura { margin-top: 20pt; }
+.doc-assinatura-linha { border-top: 1px solid #374151; width: 140pt; margin-bottom: 4pt; }
+.doc-assinatura-nome { font-weight: 700; font-size: 10pt; }
+.doc-assinatura-cargo { font-size: 9pt; color: #6b7280; }
+
+/* ── Documento formal (requerimento, declaração, acta) ── */
+.doc-formal { padding: 12mm 14mm; }
+.doc-formal-header { display: flex; justify-content: space-between; margin-bottom: 10pt; font-size: 9.5pt; }
+.doc-formal-entidade { font-weight: 700; font-size: 11pt; }
+.doc-formal-titulo { font-size: 14pt; font-weight: 800; text-align: center; color: ${pal.accent}; border-bottom: 2px solid ${pal.accent}; padding-bottom: 4pt; margin-bottom: 12pt; letter-spacing: 1px; }
+.doc-formal-identificacao { background: #f8fafc; border-left: 3px solid ${pal.accent}; padding: 8pt 10pt; margin-bottom: 10pt; }
+.doc-formal-identificacao p { margin-bottom: 3pt; font-size: 10pt; }
+.doc-formal-corpo { line-height: 1.7; text-align: justify; margin-bottom: 14pt; }
+.doc-formal-assinatura { margin-top: 20pt; text-align: center; }
+.doc-formal-data-final { font-size: 9pt; color: #6b7280; margin-top: 4pt; }
+
+/* ── Contrato ── */
+.doc-contrato { padding: 12mm 14mm; }
+.doc-contrato-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12pt; }
+.doc-contrato-titulo { font-size: 14pt; font-weight: 800; color: ${pal.accent}; }
+.doc-contrato-data { font-size: 9pt; color: #6b7280; }
+.doc-contrato-partes { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; margin-bottom: 12pt; }
+.doc-contrato-parte { border: 1px solid #e2e8f0; border-radius: 4pt; padding: 8pt; }
+.doc-parte-label { display: block; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; color: ${pal.accent}; margin-bottom: 3pt; }
+.doc-parte-valor { font-size: 10pt; font-weight: 600; }
+.doc-contrato-clausulas { margin-bottom: 12pt; }
+.doc-contrato-assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 20pt; margin-top: 20pt; }
+.doc-assinatura-bloco { text-align: center; font-size: 9.5pt; }
+.doc-assinatura-bloco .doc-assinatura-linha { margin: 0 auto 4pt; }
+
+/* ── Recibo / Factura ── */
+.doc-recibo { padding: 0; }
+.doc-recibo-header { background: ${pal.sidebar}; color: ${pal.sidebarText}; padding: 8mm 12mm; display: flex; justify-content: space-between; align-items: center; }
+.doc-recibo-empresa { font-size: 14pt; font-weight: 800; }
+.doc-recibo-titulo { font-size: 22pt; font-weight: 900; opacity: 0.9; }
+.doc-recibo-num { font-size: 9pt; opacity: 0.8; text-align: right; }
+.doc-recibo-body { padding: 8mm 12mm; }
+.doc-recibo-row { display: flex; justify-content: space-between; padding: 5pt 0; border-bottom: 1px solid #f1f5f9; font-size: 10.5pt; }
+.doc-recibo-total { font-size: 13pt; font-weight: 800; color: ${pal.accent}; border-bottom: 2px solid ${pal.accent}; margin-top: 4pt; }
+.doc-recibo-footer { padding: 6mm 12mm; text-align: right; }
+
+/* ── Orçamento ── */
+.doc-orcamento { padding: 0; }
+.doc-orc-header { background: ${pal.sidebar}; color: ${pal.sidebarText}; padding: 8mm 12mm; display: flex; justify-content: space-between; align-items: center; }
+.doc-orc-empresa { font-size: 14pt; font-weight: 800; }
+.doc-orc-titulo { font-size: 13pt; font-weight: 700; }
+.doc-orc-data { font-size: 9pt; opacity: 0.8; }
+.doc-orc-cliente { padding: 6pt 12mm; background: #f8fafc; font-size: 10pt; border-bottom: 1px solid #e2e8f0; }
+.doc-orc-items { padding: 6mm 12mm; }
+.doc-orc-total { display: flex; justify-content: space-between; padding: 6pt 12mm; background: ${pal.accent}; color: #fff; font-size: 13pt; font-weight: 800; }
+.doc-orc-validade { padding: 4pt 12mm; font-size: 8.5pt; color: #6b7280; }
+
+/* ── Académico (capa) ── */
+.doc-academico-capa { padding: 16mm 14mm; text-align: center; }
+.doc-academico-instituicao { font-size: 12pt; font-weight: 700; color: ${pal.accent}; margin-bottom: 30pt; }
+.doc-academico-titulo { font-size: 16pt; font-weight: 800; line-height: 1.3; margin-bottom: 20pt; }
+.doc-academico-nivel { font-size: 10pt; color: #6b7280; margin-bottom: 6pt; }
+.doc-academico-disciplina { font-size: 10pt; margin-bottom: 20pt; }
+.doc-academico-autor { font-size: 11pt; font-weight: 700; margin-bottom: 4pt; }
+.doc-academico-docente { font-size: 10pt; color: #6b7280; margin-bottom: 20pt; }
+.doc-academico-data { font-size: 10pt; color: #6b7280; }
+
+/* ── Plano de Negócio ── */
+.doc-plano-body { padding: 8mm 12mm; }
+.doc-section { margin-bottom: 10pt; }
+.doc-section-title { font-size: 10.5pt; font-weight: 700; text-transform: uppercase; color: ${pal.accent}; border-bottom: 2px solid ${pal.accent}; padding-bottom: 2pt; margin-bottom: 6pt; letter-spacing: 0.5px; }
+.doc-section p { font-size: 10pt; line-height: 1.6; color: #374151; }
+
+/* ── cv-entry (reutilizado em orçamento e acta) ── */
+.cv-entry { margin-bottom: 6pt; }
+.cv-entry-date { font-size: 8pt; color: #6b7280; font-style: italic; }
+.cv-entry-title { font-size: 10pt; font-weight: 700; color: #111827; }
+.cv-entry-company { font-size: 9pt; color: #4b5563; }
+.cv-entry-bullets { padding-left: 12pt; margin-top: 3pt; }
+.cv-entry-bullets li { font-size: 9pt; margin-bottom: 1.5pt; color: #374151; }
+
+/* ── Tabela genérica ── */
+.doc-gen-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+.doc-gen-label { font-weight: 700; color: ${pal.accent}; width: 35%; padding: 4pt 6pt; border-bottom: 1px solid #f1f5f9; text-transform: capitalize; }
+.doc-gen-table td { padding: 4pt 6pt; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+
+/* ── CV two-col (reutilizado aqui para coerência) ── */
 .cv-page { width: 210mm; min-height: 297mm; background: ${pal.bg}; }
 .cv-two-col { display: flex; min-height: 297mm; }
 .cv-sidebar { width: 68mm; background: ${pal.sidebar}; color: ${pal.sidebarText}; padding: 14mm 8mm; flex-shrink: 0; }
@@ -1121,8 +1522,6 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1e293
 .cv-lang-item { font-size: 8.5pt; margin-bottom: 5pt; }
 .cv-lang-name { font-weight: 700; display: block; }
 .cv-lang-level { font-size: 8pt; opacity: 0.75; }
-.cv-lang-bar { background: rgba(255,255,255,0.2); height: 3pt; border-radius: 2pt; margin-top: 2pt; }
-.cv-lang-fill { background: rgba(255,255,255,0.7); height: 100%; border-radius: 2pt; }
 .cv-main .cv-section { margin-bottom: 10pt; }
 .cv-main .cv-section-title { font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${pal.accent}; border-bottom: 2px solid ${pal.accent}; padding-bottom: 2pt; margin-bottom: 6pt; }
 .cv-text { font-size: 9.5pt; line-height: 1.55; color: #374151; }
@@ -1132,49 +1531,25 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1e293
 .cv-entry-title { font-size: 10pt; font-weight: 700; color: #111827; margin-top: 1pt; }
 .cv-entry-company { font-size: 9pt; color: #4b5563; margin-top: 1pt; }
 .cv-entry-bullets { padding-left: 12pt; margin-top: 3pt; }
-.cv-entry-bullets li { font-size: 9pt; margin-bottom: 1.5pt; color: #374151; }`;
-
-    const cssTopBar = `
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; color: #1e293b; width: 210mm; min-height: 297mm; background: ${pal.bg}; }
-.cv-page { width: 210mm; min-height: 297mm; background: ${pal.bg}; }
+.cv-entry-bullets li { font-size: 9pt; margin-bottom: 1.5pt; color: #374151; }
 .cv-header { background: ${pal.sidebar}; color: ${pal.sidebarText}; padding: 10mm 12mm; display: flex; align-items: center; gap: 12pt; }
-.cv-avatar { width: 52pt; height: 52pt; border-radius: 50%; background: rgba(255,255,255,0.2); color: ${pal.sidebarText}; display: flex; align-items: center; justify-content: center; font-size: 18pt; font-weight: 700; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.4); }
 .cv-header-info { flex: 1; }
 .cv-name { font-size: 18pt; font-weight: 800; line-height: 1.1; margin-bottom: 2pt; }
 .cv-cargo { font-size: 10pt; opacity: 0.85; margin-bottom: 5pt; }
 .cv-contacts { display: flex; flex-wrap: wrap; gap: 4pt 12pt; font-size: 8.5pt; opacity: 0.9; }
 .cv-body { padding: 10mm 12mm; }
-.cv-two-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14pt; }
-.cv-section { margin-bottom: 10pt; }
-.cv-section-title { font-size: 9.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${pal.accent}; border-bottom: 2px solid ${pal.accent}; padding-bottom: 2pt; margin-bottom: 6pt; }
-.cv-text { font-size: 9.5pt; line-height: 1.55; color: #374151; }
-.cv-entries { font-size: 9.5pt; }
-.cv-entry { margin-bottom: 6pt; }
-.cv-entry-date { font-size: 8pt; color: #6b7280; font-style: italic; }
-.cv-entry-title { font-size: 10pt; font-weight: 700; color: #111827; margin-top: 1pt; }
-.cv-entry-company { font-size: 9pt; color: #4b5563; margin-top: 1pt; }
-.cv-entry-bullets { padding-left: 12pt; margin-top: 3pt; }
-.cv-entry-bullets li { font-size: 9pt; margin-bottom: 1.5pt; color: #374151; }
-.cv-skills-list { list-style: none; padding: 0; }
-.cv-skills-list li { font-size: 9pt; padding: 2.5pt 0; border-bottom: 1px solid #e2e8f0; color: #374151; }
-.cv-lang-item { font-size: 9pt; margin-bottom: 5pt; }
-.cv-lang-name { font-weight: 700; color: #111827; }
-.cv-lang-level { font-size: 8pt; color: #6b7280; }
-.cv-lang-bar { background: #e2e8f0; height: 3pt; border-radius: 2pt; margin-top: 2pt; }
-.cv-lang-fill { background: ${pal.accent}; height: 100%; border-radius: 2pt; }`;
+.cv-two-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14pt; }`;
 
     return {
       id:           `own-${svcKey}-${Date.now()}`,
-      name:         name,
-      description:  isTwoCol ? 'Layout bicolor com sidebar lateral' : 'Layout moderno com cabeçalho colorido',
+      name,
+      description:  isTwoCol ? 'Layout bicolor com sidebar lateral' : 'Layout profissional moderno',
       preview:      { accent: pal.accent, bg: pal.bg, font: 'sans-serif' },
-      htmlTemplate: isTwoCol ? htmlTwoCol : htmlTopBar,
-      css:          isTwoCol ? cssTwoCol  : cssTopBar,
+      htmlTemplate,
+      css:          cssDoc,
       _isCustom:    true,
     };
   }
-
   // ── Extrair template HTML+CSS via backend /api/extract-template ─────────────
   // CORRIGIDO: chamada feita pelo backend Vercel para evitar bloqueio CORS.
   // O browser não pode chamar api.anthropic.com directamente — a Vercel faz o proxy.
