@@ -39,9 +39,13 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Garantir que TODAS as respostas desta função são JSON
+  res.setHeader('Content-Type', 'application/json');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Método não permitido' });
+
+  try {
 
   // ── Parse body ────────────────────────────────────────────────────────────
   let body;
@@ -170,4 +174,11 @@ module.exports = async function handler(req, res) {
   }
 
   return res.status(400).json({ error: `Modo inválido: ${mode}` });
+
+  } catch (unexpectedErr) {
+    console.error("[process-payment] ERRO INESPERADO:", unexpectedErr);
+    return res.status(500).json({
+      error: "Erro interno do servidor. Tente novamente.",
+    });
+  }
 };
