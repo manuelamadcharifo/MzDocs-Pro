@@ -36,6 +36,17 @@ export class PaymentService {
     return await this._payManual(packageId, phoneNumber, userId);
   }
 
+  async _parseResponse(res) {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return res.json();
+    }
+    // A API retornou HTML ou texto (ex: erro do servidor) — converter em erro legível
+    const text = await res.text();
+    console.error('[PaymentService] Resposta não-JSON da API:', res.status, text.slice(0, 200));
+    throw new Error(`Erro do servidor (${res.status}). Tente novamente ou contacte o suporte.`);
+  }
+
   async _payMpesa(packageId, phoneNumber, userId) {
     const res = await fetch(this.endpoint, {
       method: 'POST',
@@ -48,7 +59,7 @@ export class PaymentService {
       }),
     });
 
-    const data = await res.json();
+    const data = await this._parseResponse(res);
     if (!res.ok) {
       if (data.fallback === 'Use modo manual') throw new Error('M-Pesa indisponível');
       throw new Error(data.error || 'Erro no pagamento M-Pesa');
@@ -69,7 +80,7 @@ export class PaymentService {
       }),
     });
 
-    const data = await res.json();
+    const data = await this._parseResponse(res);
     if (!res.ok) throw new Error(data.error || 'Erro ao criar pedido manual');
 
     return {
