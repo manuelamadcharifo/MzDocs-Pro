@@ -130,14 +130,34 @@ export class DocumentController {
  document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
 
  document.addEventListener('editor:closed', (e) => {
-  if (e.detail?.content) {
-    const editedContent = e.detail.content;
-    this.docModel.setGenerated(editedContent, this.docModel.model);
-    documentState.set(editedContent, this.docModel.service);
-    const historyId = this.docModel.formData?._historyId;
-    if (historyId && window.historyController?.updateDocumentContent) {
-      window.historyController.updateDocumentContent(historyId, editedContent).catch(() => {});
-    }
+  const { content, templateHtml, templateCss, historyId } = e.detail || {};
+  if (!content) return;
+
+  // Actualizar estado do modelo e documentState
+  this.docModel.setGenerated(content, this.docModel.model);
+  documentState.set(content, this.docModel.service);
+
+  // Persistir template actualizado no controller para exports correctos
+  if (templateHtml) {
+    this._activeTemplateHtml = templateHtml;
+  }
+  if (templateCss && !this._activeTemplate) {
+    // Reconstruir referência mínima do template
+    this._activeTemplate = { css: templateCss };
+  }
+
+  // Actualizar no historial (usar historyId do evento ou do formData)
+  const hId = historyId || this.docModel.formData?._historyId;
+  if (hId && window.historyController?.updateDocumentContent) {
+    window.historyController.updateDocumentContent(hId, content, templateHtml).catch(err => {
+      console.warn('[DocumentController] editor:closed — updateDocumentContent falhou:', err.message);
+    });
+  }
+
+  // Actualizar também o painel de resultado (se ainda estiver visível)
+  const svc = SERVICES[this.docModel.service] || {};
+  if (document.getElementById('resultOverlay')?.style.display !== 'none') {
+    DocumentView.renderResult(content, svc, this.creditModel.value, this.docModel.model);
   }
  });
  }
@@ -278,16 +298,24 @@ export class DocumentController {
    documentState.set(result.document, this.docModel.service);
  this.docModel.formData = data;
 
+ // Gerar ID do histórico ANTES de guardar o template
+ // (template pode ser aplicado depois, por isso o _historyId permite
+ //  actualizar o registo existente em vez de criar um duplicado)
+ const newHistoryId = crypto.randomUUID();
+ if (this.docModel.formData) {
+   this.docModel.formData._historyId = newHistoryId;
+ }
+
  try {
   const userId = window.authManager?.user?.id || Storage.getUserId();
   await window.historyController?.saveDocument({
-   id: crypto.randomUUID(),
-   user_id: userId,
+   id:           newHistoryId,
+   user_id:      userId,
    service_type: key,
-   title: svc.title,
-   content: result.document,
-   model_used: result.model,
-   created_at: new Date().toISOString(),
+   title:        svc.title,
+   content:      result.document,
+   model_used:   result.model,
+   created_at:   new Date().toISOString(),
   });
  } catch (_) {}
 
