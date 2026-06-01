@@ -1,7 +1,5 @@
-// api/process-payment.js — v2.1
-// CORREÇÕES v2.1:
-//  - Fix: WebSocket error no Node.js 20 (Vercel) ao criar cliente Supabase
-//    Solução: desactivar Realtime + passar ws como transport
+// api/process-payment.js — v2.2
+// v2.2: Fix .catch() em PostgrestFilterBuilder (supabase-js v2 não suporta)
 
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
@@ -32,22 +30,12 @@ function normalizePhone(raw) {
 
 function createSupabaseAdmin(url, key) {
   return createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession:   false,
-    },
-    realtime: {
-      transport: ws,
-    },
-    global: {
-      // Desactivar completamente o Realtime — este endpoint não precisa de subscriptions
-      // Evita o erro "Node.js 20 detected without native WebSocket support"
-    },
+    auth:     { autoRefreshToken: false, persistSession: false },
+    realtime: { transport: ws },
   });
 }
 
 module.exports = async function handler(req, res) {
-  // ── CORS ──────────────────────────────────────────────────────────────────
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -84,7 +72,7 @@ module.exports = async function handler(req, res) {
 
   if (!packageId || !PACKAGES[packageId]) {
     return res.status(400).json({
-      error: 'Pacote inválido.',
+      error:     'Pacote inválido.',
       available: Object.keys(PACKAGES),
     });
   }
@@ -135,16 +123,20 @@ module.exports = async function handler(req, res) {
     const transactionId = txData?.id;
     console.log('[process-payment] Transação criada:', referenceId, '| id:', transactionId, '| user_id:', userId || 'anónimo');
 
-    // Registar em credit_logs (erro não bloqueia o fluxo principal)
+    // Registar em credit_logs — fire-and-forget, nunca bloqueia o fluxo principal
     if (transactionId) {
-      await supabase.from('credit_logs').insert({
-        user_id:        userId,
-        transaction_id: transactionId,
-        action:         'purchase_pending',
-        credits:        pkg.credits,
-        document_type:  null,
-        note:           `Pacote ${pkg.name} — aguarda confirmação manual`,
-      }).catch(e => console.warn('[process-payment] credit_logs insert falhou:', e.message));
+      try {
+        await supabase.from('credit_logs').insert({
+          user_id:        userId,
+          transaction_id: transactionId,
+          action:         'purchase_pending',
+          credits:        pkg.credits,
+          document_type:  null,
+          note:           `Pacote ${pkg.name} — aguarda confirmação manual`,
+        });
+      } catch (logErr) {
+        console.warn('[process-payment] credit_logs insert falhou (não crítico):', logErr.message);
+      }
     }
 
     const waMessage = encodeURIComponent(
@@ -186,7 +178,7 @@ module.exports = async function handler(req, res) {
   } catch (unexpectedErr) {
     console.error('[process-payment] ERRO INESPERADO:', unexpectedErr.message);
     return res.status(500).json({
-      error: 'Erro interno do servidor. Tente novamente.',
+      error:   'Erro interno do servidor. Tente novamente.',
       details: unexpectedErr.message,
     });
   }
