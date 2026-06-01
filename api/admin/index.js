@@ -175,7 +175,7 @@ async function handleConfirmPayment(req, res) {
       target_id:   transactionId,
       details:     { credits: creditsInt, userId, package_id: tx.package_id },
       created_at:  new Date().toISOString(),
-    }).catch(() => {});
+    });
 
     // Processar comissão de afiliado (fire-and-forget)
     supabase.rpc('process_affiliate_commission', {
@@ -613,7 +613,7 @@ async function handleSettings(req, res) {
         target_type: 'system_settings',
         details:     updates,
         created_at:  now,
-      }).catch(() => {});
+      });
       return res.status(200).json({ success: true, updated: rows.length });
     }
 
@@ -687,7 +687,7 @@ async function handleDeleteUser(req, res) {
       target_type: 'user',
       target_id:   userId,
       created_at:  new Date().toISOString(),
-    }).catch(() => {});
+    });
 
     return res.status(200).json({ success: true, message: 'Utilizador eliminado do sistema' });
   } catch (err) {
@@ -722,18 +722,17 @@ async function handleAnalytics(req, res) {
         if (existing) {
           await supabase.from('page_views').update({ views: (existing.views || 0) + 1 }).eq('id', existing.id);
         } else {
-          await supabase.from('page_views').insert({ page, date: today, views: 1 }).catch(() => {});
+          await supabase.from('page_views').insert({ page, date: today, views: 1 });
         }
       }
 
       const sessionRow = { session_id: sid, page, updated_at: now };
       if (userId) sessionRow.user_id = userId;
       await supabase.from('online_sessions')
-        .upsert(sessionRow, { onConflict: 'session_id', ignoreDuplicates: false })
-        .catch(() => {});
+        .upsert(sessionRow, { onConflict: 'session_id', ignoreDuplicates: false });
 
       const cutoff = new Date(Date.now() - 6 * 60 * 1000).toISOString();
-      supabase.from('online_sessions').delete().lt('updated_at', cutoff).catch(() => {});
+      supabase.from('online_sessions').delete().lt('updated_at', cutoff);
 
       return res.status(200).json({ ok: true });
     } catch (err) {
