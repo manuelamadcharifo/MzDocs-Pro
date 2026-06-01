@@ -39,13 +39,9 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  // Garantir que TODAS as respostas desta função são JSON
-  res.setHeader('Content-Type', 'application/json');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Método não permitido' });
-
-  try {
 
   // ── Parse body ────────────────────────────────────────────────────────────
   let body;
@@ -116,11 +112,13 @@ module.exports = async function handler(req, res) {
       .single();
 
     if (insertErr) {
-      console.error('[process-payment] ERRO CRÍTICO ao gravar transação:', insertErr.message, insertErr.code);
-      // Retornar erro real ao cliente — não fingir sucesso
+      console.error('[process-payment] ERRO CRÍTICO ao gravar transação:', insertErr.message, insertErr.code, insertErr.details);
+      // Retornar erro real ao cliente com detalhes para diagnóstico
       return res.status(500).json({
-        error: 'Erro ao registar pedido. Por favor tente novamente ou contacte o suporte.',
-        code:  insertErr.code,
+        error: 'Erro ao registar pedido. Por favor tente novamente.',
+        supabase_error: insertErr.message,
+        supabase_code:  insertErr.code,
+        hint: insertErr.hint || null,
       });
     }
 
@@ -174,11 +172,4 @@ module.exports = async function handler(req, res) {
   }
 
   return res.status(400).json({ error: `Modo inválido: ${mode}` });
-
-  } catch (unexpectedErr) {
-    console.error("[process-payment] ERRO INESPERADO:", unexpectedErr);
-    return res.status(500).json({
-      error: "Erro interno do servidor. Tente novamente.",
-    });
-  }
 };
