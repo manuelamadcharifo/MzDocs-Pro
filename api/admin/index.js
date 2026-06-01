@@ -118,11 +118,12 @@ async function handleConfirmPayment(req, res) {
   const body  = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
 
-  const { transactionId, userId, credits } = body;
+  const { transactionId, credits } = body;
+  // userId pode vir vazio se o join RLS bloqueou — usamos tx.user_id da DB
+  let userId = body.userId || null;
 
   // Validação rigorosa
   if (!transactionId) return res.status(400).json({ error: 'transactionId é obrigatório' });
-  if (!userId)        return res.status(400).json({ error: 'userId é obrigatório' });
   const creditsInt = parseInt(credits);
   if (!creditsInt || creditsInt <= 0 || creditsInt > 500) {
     return res.status(400).json({ error: 'credits deve ser um inteiro positivo entre 1 e 500' });
@@ -142,6 +143,10 @@ async function handleConfirmPayment(req, res) {
 
     if (txErr || !tx) return res.status(404).json({ error: 'Transação não encontrada' });
     if (tx.status !== 'pending') return res.status(400).json({ error: `Transação já processada (status: ${tx.status})` });
+
+    // Se userId não veio do frontend (join RLS bloqueou), usar o da transação
+    if (!userId && tx.user_id) userId = tx.user_id;
+    if (!userId) return res.status(400).json({ error: 'userId em falta e transação não tem user_id' });
 
     // Actualizar transação
     const { error: updateErr } = await supabase.from('transactions')
@@ -729,7 +734,8 @@ async function handleAnalytics(req, res) {
       const sessionRow = { session_id: sid, page, updated_at: now };
       if (userId) sessionRow.user_id = userId;
       await supabase.from('online_sessions')
-        .upsert(sessionRow, { onConflict: 'session_id', ignoreDuplicates: false });
+        .upsert(sessionRow, { onConflict: 'session_id', ignoreDuplicates: false })
+        ;
 
       const cutoff = new Date(Date.now() - 6 * 60 * 1000).toISOString();
       supabase.from('online_sessions').delete().lt('updated_at', cutoff);
