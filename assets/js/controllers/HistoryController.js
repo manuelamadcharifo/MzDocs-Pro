@@ -111,21 +111,26 @@ export class HistoryController {
     if (!supabase || !userId) return;
 
     try {
-      // Validate UUID before sending to Supabase
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(doc.id)) {
         console.warn('[History] saveDocument: non-UUID id skipped for Supabase:', doc.id);
         return;
       }
-      const { error } = await supabase.from('documents').upsert({
-        id:           doc.id,
-        user_id:      userId,
-        service_type: doc.service_type,
-        title:        doc.title,
-        content:      doc.content,
-        model_used:   doc.model_used,
-        created_at:   doc.created_at,
-      }, { ignoreDuplicates: true });
+      // FIX 3: incluir template_html no upsert para que o histórico
+      // restaure o documento com o template exacto em que foi guardado
+      const payload = {
+        id:            doc.id,
+        user_id:       userId,
+        service_type:  doc.service_type,
+        title:         doc.title,
+        content:       doc.content,
+        model_used:    doc.model_used,
+        created_at:    doc.created_at,
+      };
+      if (doc.template_html) payload.template_html = doc.template_html;
+      if (doc.template_css)  payload.template_css  = doc.template_css;
+
+      const { error } = await supabase.from('documents').upsert(payload, { ignoreDuplicates: true });
       if (!error) {
         await offlineDB.saveDocument({ ...doc, synced: true });
       } else {
@@ -332,13 +337,18 @@ export class HistoryController {
       window.documentState.set(doc.content, doc.service_type);
     }
 
-    // ── 3. Limpar template activo da sessão anterior ─────────────────────────
-    // O documento do histórico é markdown puro — não tem template aplicado.
-    // Se houver template da sessão anterior, poderia preencher com dados errados.
+    // ── 3. Restaurar template se foi guardado com o documento ────────────────
+    // FIX 3: se o documento foi guardado com template_html (depois de uma edição),
+    // restaurar o template para que o preview e os exports saiam correctos.
     if (ctrl) {
-      ctrl._activeTemplate     = null;
-      ctrl._activeTemplateHtml = null;
-      if (window.DocumentView) window.DocumentView._activeTemplateCss = null;
+      if (doc.template_html && doc.template_css) {
+        ctrl._activeTemplateHtml = doc.template_html;
+        ctrl._activeTemplate     = { css: doc.template_css, htmlTemplate: doc.template_html };
+      } else {
+        ctrl._activeTemplate     = null;
+        ctrl._activeTemplateHtml = null;
+        if (window.DocumentView) window.DocumentView._activeTemplateCss = null;
+      }
     }
 
     // ── 4. Renderizar ────────────────────────────────────────────────────────
@@ -357,29 +367,52 @@ export class HistoryController {
   }
 
   // ── Actualizar conteúdo de um documento já guardado no histórico ──────────
-  // Chamado quando o utilizador edita um documento que veio do histórico.
-  async updateDocumentContent(id, newContent) {
+  // Chamado quando o utilizador edita (edição manual ou reedição IA) e fecha o editor.
+  // FIX 3: aceita templateHtml opcional para persistir o template editado.
+  async updateDocumentContent(id, newContent, templateHtml = null) {
     if (!id || !newContent) return;
     try {
-      // Actualizar no IndexedDB
       const { offlineDB } = await import('../utils/IndexedDB.js');
       const userId = window.authManager?.user?.id
                   || (await import('../utils/Storage.js')).Storage.getUserId();
       const allDocs = await offlineDB.getDocuments(userId);
       const existing = allDocs.find(d => d.id === id);
       if (existing) {
-        await offlineDB.saveDocument({ ...existing, content: newContent, synced: false });
+        const updated = {
+          ...existing,
+          content:      newContent,
+          template_html: templateHtml || existing.template_html || null,
+          synced:       false,
+          updated_at:   new Date().toISOString(),
+        };
+        await offlineDB.saveDocument(updated);
       }
+
       // Actualizar no Supabase se disponível
-      const supabase = window.authManager?.supabase;
-      const authUserId = window.authManager?.user?.id;
+      const supabase    = window.authManager?.supabase;
+      const authUserId  = window.authManager?.user?.id;
       if (supabase && authUserId) {
+        const updatePayload = { content: newContent, updated_at: new Date().toISOString() };
+        if (templateHtml) updatePayload.template_html = templateHtml;
         await supabase.from('documents')
-          .update({ content: newContent })
+          .update(updatePayload)
           .eq('id', id)
           .eq('user_id', authUserId)
-          .catch(() => {});
+          .catch(e => console.warn('[History] Supabase update failed:', e.message));
       }
+
+      // Actualizar o item na lista em memória (para re-render imediato sem reload)
+      if (this._docs) {
+        const idx = this._docs.findIndex(d => d.id === id);
+        if (idx !== -1) {
+          this._docs[idx] = {
+            ...this._docs[idx],
+            content:       newContent,
+            template_html: templateHtml || this._docs[idx].template_html || null,
+          };
+        }
+      }
+
     } catch (e) {
       console.warn('[History] updateDocumentContent failed:', e.message);
     }
