@@ -292,8 +292,14 @@
   background: #fff;
   border-radius: 16px;
   width: 100%;
-  max-width: 1100px;
-  height: 92vh;
+  /* FIX 3: reduzido de 1100px para 860px — em desktop deixava a shell tão
+     larga que ocultava os botões fora do viewport. 860px é o óptimo para
+     mostrar o A4 (794px) + margens internas sem esconder acções. */
+  max-width: 860px;
+  /* FIX 3: altura máxima 90vh em vez de 92vh — dá mais espaço visual no
+     desktop e permite ver todos os botões da toolbar sem scroll */
+  height: 90vh;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -373,8 +379,14 @@
   background: #f8fafd;
   border-bottom: 1px solid #e5e7eb;
   flex-shrink: 0;
-  flex-wrap: wrap;
+  /* FIX 3: scroll horizontal em vez de wrap — evita que os botões da direita
+     (Redigir c/ IA, Assinar) fiquem ocultos em viewports estreitas */
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
 }
+.ed-subtoolbar::-webkit-scrollbar { display: none; } /* Chrome/Safari */
 
 .ed-fmt-label {
   font-size: 12px;
@@ -561,10 +573,23 @@
 }
 
 @media (max-width: 480px) {
-  .ed-subtoolbar { gap: 5px; padding: 6px 10px; }
-  .ed-action-btn.wa,
-  .ed-action-btn.ai { display: none; }
-  .ed-action-btn.save { padding: 5px 12px; font-size: 12px; } /* always visible */
+  .ed-subtoolbar {
+    gap: 4px;
+    padding: 5px 8px;
+    /* Scrollar horizontalmente em vez de esconder botões */
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* FIX: NÃO esconder wa nem ai — em mobile são os botões mais usados */
+  /* Torná-los mais compactos para caber na linha */
+  .ed-action-btn { padding: 5px 8px; font-size: 11px; white-space: nowrap; }
+  .ed-action-btn.wa  { display: inline-flex; }
+  .ed-action-btn.ai  { display: inline-flex; }
+  .ed-action-btn.save { padding: 5px 10px; font-size: 11px; }
+  /* Esconder apenas o label "(-1 cr.)" nos botões AI em mobile muito pequeno */
+  .ed-action-btn.ai span { display: none; }
+  .ed-fmt-group { flex-wrap: nowrap; overflow-x: auto; }
 }
 
 @keyframes fadeIn {
@@ -733,4 +758,23 @@
   }
   /* Esconder alguns botões menos usados em mobile */
   #edBtnTable, #edBtnHr, #edBtnLink { display: none; }
+
+  /* FIX: row 2 da toolbar (Zoom, Copiar, Redigir c/ IA, Guardar) —
+     scroll horizontal para que nenhum botão fique escondido */
+  .ed-word-row2 {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .ed-word-row2::-webkit-scrollbar { display: none; }
+  /* Garantir que o grupo de acções (Zoom/Copiar/Redigir/Guardar) não encolhe */
+  .ed-word-row2 .ed-word-group:last-child {
+    flex-shrink: 0;
+    margin-left: 0;
+  }
+  /* Esconder apenas o label de custo do botão AI — manter o ícone e texto principal */
+  #edBtnReedit2 span,
+  #edBtnReedit span { font-size: 0; }
 }
