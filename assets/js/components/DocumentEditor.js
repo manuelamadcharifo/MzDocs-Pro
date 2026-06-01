@@ -44,7 +44,7 @@ export class DocumentEditor {
             <button id="edBtnDownload" class="ed-action-btn primary">⬇️ Download</button>
             <button id="edBtnWa"       class="ed-action-btn wa">💬 WhatsApp</button>
             <button id="edBtnCopy"     class="ed-action-btn">📋 Copiar</button>
-            <button id="edBtnReedit"   class="ed-action-btn ai">🤖 Reeditar</button>
+            <button id="edBtnReedit" class="ed-action-btn ai" title="Redigir com IA (consome 1 crédito)">🤖 Redigir c/ IA <span style="font-size:10px;opacity:.75;font-weight:400;">(-1 cr.)</span></button>
             <button id="edBtnSign"    class="ed-action-btn" title="Inserir assinatura digital no documento">✍️ Assinar</button>
           </div>
         </div>
@@ -118,9 +118,10 @@ export class DocumentEditor {
               <button class="ed-wbtn" data-cmd="undo" title="Desfazer (Ctrl+Z)">↩ Undo</button>
               <button class="ed-wbtn" data-cmd="redo" title="Refazer (Ctrl+Y)">↪ Redo</button>
             </div>
-            <div class="ed-word-group" style="margin-left:auto;">
+            <div class="ed-word-group" style="margin-left:auto;flex-wrap:wrap;gap:4px;">
+              <button class="ed-wbtn" id="edBtnZoomOut" title="Ver página completa / reduzir zoom">🔍 Zoom</button>
               <button class="ed-action-btn" id="edBtnCopy2">📋 Copiar</button>
-              <button class="ed-action-btn ai" id="edBtnReedit2">🤖 Reeditar</button>
+              <button class="ed-action-btn ai" id="edBtnReedit2" title="Reeditar com IA (consome 1 crédito)">🤖 Redigir c/ IA <span style="font-size:10px;opacity:.75;font-weight:400;">(-1 cr.)</span></button>
               <button class="ed-action-btn save" id="edBtnSave" title="Guardar edição e voltar ao preview">💾 Guardar</button>
               <div id="editorStats" class="ed-stats">0 palavras</div>
             </div>
@@ -178,8 +179,10 @@ export class DocumentEditor {
     this.modal.querySelector('#edBtnCopy2')?.addEventListener('click',    () => this._copy());
     this.modal.querySelector('#edBtnReedit')?.addEventListener('click',   () => this._reedit());
     this.modal.querySelector('#edBtnReedit2')?.addEventListener('click',  () => this._reedit());
-    this.modal.querySelector('#edBtnSave')?.addEventListener('click',      () => this._saveAndPreview());
+    this.modal.querySelector('#edBtnSave')?.addEventListener('click',     () => this._saveAndPreview());
     this.modal.querySelector('#edBtnSign')?.addEventListener('click',     () => this._openSignature());
+    // FIX 2 — Botão de zoom para ver página completa no editor
+    this.modal.querySelector('#edBtnZoomOut')?.addEventListener('click',  () => this._toggleEditorZoom());
 
     // Toolbar Word — botões execCommand
     this.modal.querySelectorAll('[data-cmd]').forEach(btn => {
@@ -483,6 +486,72 @@ export class DocumentEditor {
       }
       this._updateStats();
       this._updateToolbarState();
+    }
+  }
+
+  // ── FIX 2: Toggle zoom no editor (ver página inteira / zoom normal) ──
+  // Problema: no modo edição, a página A4 (794px) ficava cortada em mobile.
+  // Solução: aplicar transform:scale() no ed-word-page igual ao preview A4,
+  // toggle entre "zoom out (ver tudo)" e "zoom normal (editar confortável)".
+  _toggleEditorZoom() {
+    const editWrap = this.modal.querySelector('#edEditWrap');
+    if (!editWrap) return;
+
+    const btn = this.modal.querySelector('#edBtnZoomOut');
+
+    // Para template (iframe): aplicar zoom no iframe
+    const editFrame = this.modal.querySelector('#edTemplateEditFrame');
+    if (editFrame && editFrame.style.display !== 'none') {
+      const isZoomedOut = editFrame.dataset.zoomedOut === '1';
+      if (isZoomedOut) {
+        editFrame.style.transform = '';
+        editFrame.style.transformOrigin = '';
+        editFrame.style.width = '100%';
+        editFrame.dataset.zoomedOut = '0';
+        if (btn) btn.textContent = '🔍 Zoom';
+      } else {
+        const availW = editWrap.clientWidth;
+        const a4Px   = 794; // aprox px de 210mm a 96dpi
+        const scale  = Math.min(0.95, availW / a4Px);
+        editFrame.style.transformOrigin = 'top left';
+        editFrame.style.transform       = `scale(${scale})`;
+        editFrame.style.width           = `${100 / scale}%`;
+        editFrame.style.marginBottom    = `${(a4Px * 1.414 * scale) - (a4Px * 1.414)}px`;
+        editFrame.dataset.zoomedOut = '1';
+        if (btn) btn.textContent = '🔎 Normal';
+      }
+      return;
+    }
+
+    // Para editor de texto (div contenteditable)
+    const wordPage = this.modal.querySelector('#edWordDoc');
+    if (!wordPage) return;
+    const isZoomedOut = wordPage.dataset.zoomedOut === '1';
+    const pageWrap    = this.modal.querySelector('.ed-word-page-wrap');
+
+    if (isZoomedOut) {
+      // Voltar ao normal
+      wordPage.style.transform       = '';
+      wordPage.style.transformOrigin = '';
+      wordPage.style.width           = '';
+      wordPage.style.marginBottom    = '';
+      if (pageWrap) pageWrap.style.overflow = '';
+      wordPage.dataset.zoomedOut = '0';
+      if (btn) btn.textContent = '🔍 Zoom';
+    } else {
+      // Aplicar zoom out para ver a página inteira
+      const availW = editWrap.clientWidth || 360;
+      const pageW  = 794; // largura A4 em px
+      const scale  = Math.min(0.95, (availW - 16) / pageW);
+      const marginLeft = Math.max(0, (availW - pageW * scale) / 2);
+      wordPage.style.transformOrigin = 'top left';
+      wordPage.style.transform       = `scale(${scale})`;
+      wordPage.style.marginLeft      = `${marginLeft}px`;
+      wordPage.style.marginBottom    = `${(1123 * scale) - 1123}px`; // 1123px ≈ A4 height
+      wordPage.style.width           = `${pageW}px`;
+      if (pageWrap) pageWrap.style.overflow = 'auto';
+      wordPage.dataset.zoomedOut = '1';
+      if (btn) btn.textContent = '🔎 Normal';
     }
   }
 
@@ -993,22 +1062,27 @@ export class DocumentEditor {
     this.content       = content;
     this.serviceType   = serviceType;
     this._previewFmt   = 'pdf';
-    this._richHTML     = null; // reset rich HTML cache
-    this._templateCss  = templateCss  || null; // store template CSS for preview
-    // templateHtml: HTML estruturado já preenchido com dados reais do utilizador
-    // (gerado em _applyTemplate). Quando existe, é usado no preview e no editor
-    // em vez do markdown original, preservando layout de 2 colunas, cores, etc.
+    this._richHTML     = null;
+    // FIX 1 — templateCss e templateHtml definidos ANTES do open()/setTimeout
+    // Anteriormente o requestAnimationFrame corria antes de o browser pintar o
+    // modal, pelo que _buildPreviewHTML encontrava _templateHtml como null.
+    // Com setTimeout(0) o callback corre após o modal ser painted (micro-task).
+    this._templateCss  = templateCss  || null;
     this._templateHtml = templateHtml || null;
+    // Guardar historyId para actualizar o histórico ao fechar (FIX 3)
+    this._historyId = window.documentController?.docModel?.formData?._historyId
+                   || window.docController?.docModel?.formData?._historyId
+                   || null;
 
     this._updateStats();
     this.open();
-    // Wait for modal to paint before writing to iframe contentDocument
-    // (single rAF is correct here — we need one layout pass, not a timer)
-    requestAnimationFrame(() => {
-      console.log('[DocumentEditor] EDITOR MOUNTED — rendering preview');
+
+    // setTimeout(0) garante que o DOM do modal está pintado E que
+    // this._templateHtml já está atribuído quando _buildPreviewHTML é chamado
+    setTimeout(() => {
+      console.log('[DocumentEditor] MOUNTED — template:', !!(this._templateHtml), 'css:', !!(this._templateCss));
       this._switchMode('preview');
-      console.log('[DocumentEditor] EDITOR RENDER SUCCESS');
-    });
+    }, 0);
 
     this.modal.querySelectorAll('[data-preview]').forEach(b => {
       b.classList.toggle('active', b.dataset.preview === 'pdf');
@@ -1016,7 +1090,7 @@ export class DocumentEditor {
     const dlBtn = this.modal.querySelector('#edBtnDownload');
     if (dlBtn) dlBtn.textContent = '⬇️ PDF';
 
-    setTimeout(() => this._updateA4Scale(), 100);
+    setTimeout(() => this._updateA4Scale(), 120);
 
     if (!this._resizeHandler) {
       this._resizeHandler = () => this._updateA4Scale();
@@ -1025,10 +1099,46 @@ export class DocumentEditor {
   }
 
   open()  { if (this.modal) { this.modal.style.display='flex'; document.body.style.overflow='hidden'; } }
+
+  // FIX 3 — close() agora despacha 'editor:closed' com o conteúdo final
+  // e actualiza o histórico. DocumentController.js escuta este evento e
+  // chama historyController.updateDocumentContent(historyId, content).
   close() {
-    if (this.modal) { this.modal.style.display='none'; document.body.style.overflow=''; }
+    if (!this.modal) return;
+
+    // Sincronizar conteúdo antes de fechar
+    let finalContent  = this.content;
+    let finalTemplate = this._templateHtml || null;
+
+    if (this._templateHtml) {
+      const editFrame = this._templateEditFrame || this.modal.querySelector('#edTemplateEditFrame');
+      if (editFrame && editFrame.contentDocument?.body) {
+        try { finalTemplate = editFrame.contentDocument.body.innerHTML; } catch(_) {}
+      }
+    } else {
+      const wordDoc = this.modal.querySelector('#edWordDoc');
+      if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+        this._syncContentFromEditor();
+        finalContent = this.content;
+      }
+    }
+
+    // Despachar evento para DocumentController guardar no histórico
+    document.dispatchEvent(new CustomEvent('editor:closed', {
+      detail: {
+        content:      finalContent,
+        templateHtml: finalTemplate,
+        templateCss:  this._templateCss || null,
+        serviceType:  this.serviceType,
+        historyId:    this._historyId,
+      },
+    }));
+
+    this.modal.style.display = 'none';
+    document.body.style.overflow = '';
     document.getElementById('ed-tpl-style')?.remove();
     this._templateEditFrame = null;
   }
+
   getContent() { return this.content; }
 }
