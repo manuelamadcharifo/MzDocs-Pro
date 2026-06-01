@@ -167,7 +167,7 @@ export class AdminTransactions {
                         <div style="font-size:11px;color:#94a3b8;">${date} ${time}</div>
                     </td>
                     <td style="padding:12px;font-size:13px;">
-                        <div style="font-weight:600;">${profile.full_name || 'Anónimo'}</div>
+                        <div style="font-weight:600;">${profile.full_name || (t.user_id ? 'Utilizador #' + t.user_id.slice(0,8) : 'Anónimo')}</div>
                         <div style="font-size:11px;color:#64748b;">${profile.email || profile.phone || t.phone_number || '-'}</div>
                     </td>
                     <td style="padding:12px;font-size:13px;">
