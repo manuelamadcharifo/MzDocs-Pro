@@ -1,6 +1,7 @@
-// assets/js/app.js — MVC Entry Point v7.1
+// assets/js/app.js — MVC Entry Point v7.2
 
 import { Storage } from './utils/Storage.js';
+import { initHome } from './homeController.js';
 import { CreditModel, DocumentModel } from './models/Models.js';
 import { DocumentController } from './controllers/DocumentController.js';
 import { PaymentController } from './controllers/PaymentController.js';
@@ -87,6 +88,9 @@ async function bootstrap() {
     _config = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
   } catch { }
 
+  // Expor config globalmente para homeController e outros módulos
+  window._mzConfig = _config;
+
   // ── Contador público de documentos gerados ──────────────────────────────
   if (_config.docsGenerated != null) {
     const bar = document.getElementById('docCounterBar');
@@ -106,6 +110,9 @@ async function bootstrap() {
       }
     }
   }
+
+  // ── Inicializar homepage de conversão ──────────────────────────────────
+  initHome().catch(e => console.warn('[MzDocs] homeController erro:', e));
 
   // ── Onboarding de 15 segundos (só na primeira visita) ──────────────────
   _showOnboardingIfNeeded();
