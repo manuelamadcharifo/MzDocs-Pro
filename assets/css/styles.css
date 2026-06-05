@@ -42,6 +42,63 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .chip{font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:20px;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.75);background:rgba(255,255,255,.07)}
 .chip.gr{background:var(--green);border-color:var(--green);color:#fff}
 
+/* ── HERO CONVERSION — CTA + Prova Social ─────────────────────────────── */
+.hero-cta-wrap{margin-top:24px;display:flex;flex-direction:column;gap:12px}
+.btn-hero-cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  background:linear-gradient(135deg,var(--green),#047857);color:#fff;border:none;
+  font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;
+  padding:14px 24px;border-radius:14px;cursor:pointer;
+  box-shadow:0 4px 20px rgba(0,154,68,.4);transition:var(--t);
+  width:100%;max-width:320px;}
+.btn-hero-cta:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,154,68,.5)}
+.btn-hero-cta:active{transform:translateY(0)}
+.hero-social-proof{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hsp-counter{font-size:12.5px;color:rgba(255,255,255,.55);font-weight:600}
+.hsp-counter strong{color:rgba(255,255,255,.85)}
+.hsp-stars{font-size:12px;color:var(--gold);font-weight:700;white-space:nowrap}
+
+/* ── GUEST TEASER — grade desfocada + CTA ─────────────────────────────── */
+.guest-teaser{background:var(--white);border:1.5px dashed var(--border);
+  border-radius:var(--r);padding:28px 20px;text-align:center;margin-top:4px}
+.gt-icon{font-size:36px;margin-bottom:12px}
+.gt-title{font-size:16px;font-weight:800;color:var(--ink);margin-bottom:6px}
+.gt-desc{font-size:13.5px;color:var(--muted);line-height:1.6;margin-bottom:20px}
+.gt-services-preview{display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  margin-bottom:20px;filter:blur(3px);pointer-events:none;user-select:none;
+  opacity:.55}
+.gt-sp-card{background:var(--surface);border:1.5px solid var(--border);
+  border-radius:12px;padding:12px 10px;display:flex;flex-direction:column;gap:6px}
+.gt-sp-ico{font-size:20px}
+.gt-sp-name{font-size:12px;font-weight:700;color:var(--ink)}
+.btn-gt-register{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  background:linear-gradient(135deg,var(--blue),var(--blue-d));color:#fff;border:none;
+  font-family:'Bricolage Grotesque',sans-serif;font-size:14px;font-weight:800;
+  padding:13px 22px;border-radius:13px;cursor:pointer;width:100%;
+  box-shadow:0 4px 16px rgba(59,130,246,.35);transition:var(--t);}
+.btn-gt-register:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(59,130,246,.45)}
+.gt-login-hint{font-size:12px;color:var(--muted);margin-top:10px}
+.gt-login-hint button{background:none;border:none;color:var(--blue);font-weight:700;
+  cursor:pointer;font-family:'Bricolage Grotesque',sans-serif;font-size:12px;padding:0}
+
+/* ── HOW IT WORKS ─────────────────────────────────────────────────────── */
+.how-section{padding:28px 14px 10px;max-width:560px;margin:0 auto}
+.how-title{font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--muted);margin-bottom:16px}
+.how-steps{display:flex;flex-direction:column;gap:12px}
+.how-step{display:flex;align-items:flex-start;gap:14px;
+  background:var(--white);border:1.5px solid var(--border);border-radius:14px;
+  padding:14px 16px;box-shadow:var(--sh)}
+.hs-num{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue-d));
+  color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0}
+.hs-body{}
+.hs-title{font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:2px}
+.hs-desc{font-size:12.5px;color:var(--muted);line-height:1.5}
+
+/* ── TOAST animation ─────────────────────────────────────────────────── */
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}
+  to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
 /* BARS */
 .sandbox-bar{background:linear-gradient(90deg,#92400E,#B45309);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
 .sandbox-bar button{margin-left:auto;background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;font-size:16px}
