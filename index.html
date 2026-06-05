@@ -76,6 +76,17 @@
       <span class="chip">🔄 Arquivo Seguro</span>
       <span class="chip">⚡ Entrega Imediata</span>
     </div>
+
+    <!-- CTA + Prova Social (homeController.js controla estado) -->
+    <div class="hero-cta-wrap">
+      <button id="heroCta" class="btn-hero-cta">
+        🎁 Obter o meu primeiro documento GRÁTIS
+      </button>
+      <div class="hero-social-proof">
+        <span class="hsp-counter">📄 <strong id="heroDocCount">…</strong> documentos gerados em Moçambique 🇲🇿</span>
+        <span class="hsp-stars">⭐ 4.9 (128 avaliações)</span>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -98,15 +109,66 @@
   <span id="queuePos" class="qb-pos"></span>
 </div>
 
+<!-- COMO FUNCIONA — visível para todos -->
+<section class="how-section" id="howItWorks">
+  <p class="how-title">COMO FUNCIONA</p>
+  <div class="how-steps">
+    <div class="how-step">
+      <div class="hs-num">1</div>
+      <div class="hs-body">
+        <div class="hs-title">Escolha o tipo de documento</div>
+        <div class="hs-desc">CV, contrato, carta, trabalho académico, requerimento e muito mais — tudo localizado para Moçambique.</div>
+      </div>
+    </div>
+    <div class="how-step">
+      <div class="hs-num">2</div>
+      <div class="hs-body">
+        <div class="hs-title">Preencha um formulário rápido</div>
+        <div class="hs-desc">Dados simples: nome, datas e detalhes específicos. A IA trata da formatação e linguagem profissional.</div>
+      </div>
+    </div>
+    <div class="how-step">
+      <div class="hs-num">3</div>
+      <div class="hs-body">
+        <div class="hs-title">Receba o documento pronto</div>
+        <div class="hs-desc">Exportação em PDF ou Word, em segundos. Edite, personalize e partilhe directamente do telemóvel.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- SERVIÇOS -->
 <main class="main">
-  <!-- CONTADOR PÚBLICO DE DOCUMENTOS -->
+  <!-- CONTADOR PÚBLICO DE DOCUMENTOS (mantido para compatibilidade com app.js) -->
   <div id="docCounterBar" style="display:none;text-align:center;padding:10px 16px 2px;font-size:12.5px;color:var(--muted);">
     📄 <strong id="docCounterNum" style="color:var(--ink);">…</strong> documentos gerados por moçambicanos
   </div>
 
-  <p class="grid-label">O QUE PRECISA CRIAR?</p>
-  <div class="svc-grid" id="svcGrid">
+  <!-- TEASER PARA VISITANTES — homeController.js controla display -->
+  <div id="guestTeaser" style="display:none;">
+    <div class="guest-teaser">
+      <div class="gt-icon">🔓</div>
+      <div class="gt-title">Aceda a 15+ documentos profissionais</div>
+      <div class="gt-desc">Crie conta gratuita em 30 segundos e receba 1 crédito grátis para o seu primeiro documento.</div>
+      <div class="gt-services-preview" aria-hidden="true">
+        <div class="gt-sp-card"><div class="gt-sp-ico">📋</div><div class="gt-sp-name">Currículo (CV)</div></div>
+        <div class="gt-sp-card"><div class="gt-sp-ico">📚</div><div class="gt-sp-name">Trabalho Escolar</div></div>
+        <div class="gt-sp-card"><div class="gt-sp-ico">🏠</div><div class="gt-sp-name">Contrato Arrendamento</div></div>
+        <div class="gt-sp-card"><div class="gt-sp-ico">📄</div><div class="gt-sp-name">Requerimento Oficial</div></div>
+      </div>
+      <button class="btn-gt-register" onclick="window.openRegisterFromTeaser()">
+        🚀 Criar conta gratuita — receber 1 crédito
+      </button>
+      <div class="gt-login-hint">
+        Já tem conta? <button onclick="window.openLoginFromTeaser()">Entrar aqui</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GRADE DE SERVIÇOS — homeController.js controla display -->
+  <div id="servicesSection">
+    <p class="grid-label">O QUE PRECISA CRIAR?</p>
+    <div class="svc-grid" id="svcGrid">
 
     <div class="sc" data-svc="trabalho">
       <div class="sc-ai">✦ IA</div>
@@ -259,7 +321,8 @@
       <div class="sc-line" style="--c:#EF4444"></div>
     </div>
 
-  </div>
+  </div><!-- /.svc-grid -->
+  </div><!-- /#servicesSection -->
 </main>
 
 <!-- MODAL FORMULÁRIO -->
@@ -488,6 +551,16 @@
     document.getElementById('cookieBanner').style.display = 'none';
   });
 })();
+</script>
+
+<!-- Funções globais para teaser de visitantes -->
+<script>
+window.openRegisterFromTeaser = function() {
+  if (window.authUI) { window.authUI.open('register'); }
+};
+window.openLoginFromTeaser = function() {
+  if (window.authUI) { window.authUI.open('login'); }
+};
 </script>
 
 <!-- APP ENTRY POINT -->
