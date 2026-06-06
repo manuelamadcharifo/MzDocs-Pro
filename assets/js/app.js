@@ -1,4 +1,11 @@
-// assets/js/app.js — MVC Entry Point v7.2
+// assets/js/app.js — MVC Entry Point v7.3 (analytics + credit badge)
+// ALTERAÇÕES v7.3:
+//  1. Import Analytics module
+//  2. creditsChanged: badge colorido (vermelho/laranja/verde) com mensagem
+//  3. authManager.onChange: trackLogin / trackSignUp via eventos globais
+//  4. initScrollDepth chamado na landing page
+//  5. CTA hero trackeado com trackCTAClick
+//  Preservado: toda a lógica existente — inalterada
 
 import { Storage } from './utils/Storage.js';
 import { initHome } from './homeController.js';
@@ -11,6 +18,7 @@ import { authManager } from './auth/AuthManager.js';
 import { authUI } from './auth/AuthUI.js';
 import { authGuard } from './auth/AuthGuard.js';
 import { DocumentEditor } from './components/DocumentEditor.js';
+import { Analytics } from './analytics/Analytics.js';
 
 // ── CAPTURA LINK DE AFILIADO (?ref=CODIGO) ─────────────────────────────────
 (function () {
@@ -64,12 +72,34 @@ async function bootstrap() {
     authGuard.applyVisibility();
   });
 
+  // ── Credit badge colorido ─────────────────────────────────────────────
   window.addEventListener('creditsChanged', e => {
-    const val = e.detail;
-    const el  = document.getElementById('creditVal');
-    if (el) el.textContent = val;
+    const val  = e.detail;
+    const el   = document.getElementById('creditVal');
     const chip = document.getElementById('creditPill');
-    if (chip) chip.style.borderColor = val === 0 ? '#EF4444' : '';
+
+    if (el) el.textContent = val;
+
+    if (chip) {
+      // Cor e borda dinâmica conforme nível de créditos
+      if (val === 0) {
+        chip.style.borderColor  = '#EF4444';
+        chip.style.color        = '#EF4444';
+        chip.title              = 'Sem créditos — Recarregue!';
+      } else if (val === 1) {
+        chip.style.borderColor  = '#F59E0B';
+        chip.style.color        = '#F59E0B';
+        chip.title              = 'Só tem 1 crédito restante';
+      } else if (val === 2) {
+        chip.style.borderColor  = '#F59E0B';
+        chip.style.color        = '#D97706';
+        chip.title              = `Tem ${val} créditos`;
+      } else {
+        chip.style.borderColor  = '';
+        chip.style.color        = '';
+        chip.title              = `Créditos disponíveis: ${val}`;
+      }
+    }
   });
 
   window.dispatchEvent(new CustomEvent('creditsChanged', { detail: creditModel.value }));
@@ -113,6 +143,14 @@ async function bootstrap() {
 
   // ── Inicializar homepage de conversão ──────────────────────────────────
   initHome().catch(e => console.warn('[MzDocs] homeController erro:', e));
+
+  // ── Analytics: scroll depth na landing page ────────────────────────────
+  Analytics.initScrollDepth();
+
+  // ── Analytics: tracking do CTA hero ───────────────────────────────────
+  document.getElementById('heroCta')?.addEventListener('click', () => {
+    Analytics.trackCTAClick('Obter o meu primeiro documento GRÁTIS', 'hero');
+  });
 
   // ── Onboarding de 15 segundos (só na primeira visita) ──────────────────
   _showOnboardingIfNeeded();
@@ -184,15 +222,29 @@ async function bootstrap() {
       console.warn('[MzDocs] Watchdog: overflow corrigido automaticamente');
     }
   }, 3000);
+
+  // ── Analytics: ouvir eventos globais de auth emitidos por AuthUI ──────
+  window.addEventListener('mz:signup', () => {
+    Analytics.trackSignUp('email');
+  });
+  window.addEventListener('mz:login', () => {
+    Analytics.trackLogin('email');
+  });
 }
 
 async function _setupPushNotifications(registration) {
   if (!('Notification' in window) || !('PushManager' in window)) return;
   if (Notification.permission === 'granted') return;
   if (Notification.permission === 'denied') return;
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') return;
-  console.log('[MzDocs] Notificações push activadas ✅');
+  // Pedir permissão de forma não intrusiva — só após 30s na app
+  setTimeout(async () => {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        console.log('[MzDocs] Notificações push activadas ✅');
+      }
+    } catch (_) {}
+  }, 30000);
 }
 
 // Singleton: listener de fechar dropdown registado só uma vez
