@@ -34,6 +34,51 @@
   <link rel="stylesheet" href="assets/css/editor.css"/>
   <link rel="stylesheet" href="assets/css/auth.css"/>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📄%3C/text%3E%3C/svg%3E" type="image/svg+xml"/>
+
+  <!-- ── GOOGLE ANALYTICS 4 ──────────────────────────────────────────────── -->
+  <!-- IMPORTANTE: Substitua G-XXXXXXXXXX pelo seu ID real do GA4             -->
+  <!-- Obtenha em: https://analytics.google.com → Admin → Fluxos de dados     -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-XXXXXXXXXX', {
+      send_page_view: true,
+      anonymize_ip: true,
+      cookie_domain: 'mzdocs.co.mz'
+    });
+    // Expor ID para referência em outros módulos
+    window._GA4_ID = 'G-XXXXXXXXXX';
+  </script>
+
+  <!-- ── FACEBOOK PIXEL ─────────────────────────────────────────────────── -->
+  <!-- IMPORTANTE: Substitua PIXEL_ID_AQUI pelo seu Pixel ID do Facebook Ads  -->
+  <!-- Obtenha em: https://business.facebook.com → Gestor de Eventos           -->
+  <script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', 'PIXEL_ID_AQUI');
+  fbq('track', 'PageView');
+  </script>
+
+  <!-- ── MICROSOFT CLARITY (Heatmaps grátis) ───────────────────────────── -->
+  <!-- IMPORTANTE: Substitua CLARITY_ID_AQUI pelo seu ID do Clarity           -->
+  <!-- Obtenha em: https://clarity.microsoft.com → Novo projecto               -->
+  <script type="text/javascript">
+  (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+  })(window, document, "clarity", "script", "CLARITY_ID_AQUI");
+  </script>
+
 </head>
 <body>
 
