@@ -185,6 +185,8 @@ export class AuthUI {
             await authManager.signIn(identifier, password);
             this.close();
             this._toast('✅ Bem-vindo de volta!', 'success');
+            // Analytics: login bem-sucedido
+            try { window.dispatchEvent(new CustomEvent('mz:login')); } catch(_) {}
         } catch (err) {
             this._showError(err.message || err.toString());
         } finally {
@@ -220,10 +222,14 @@ export class AuthUI {
                 // Login automático funcionou — fechar modal e mostrar boas-vindas
                 this.close();
                 this._toast('✅ Conta criada! Bem-vindo ao MzDocs Pro 🎉', 'success');
+                // Analytics: registo bem-sucedido
+                try { window.dispatchEvent(new CustomEvent('mz:signup')); } catch(_) {}
             } else {
                 // Supabase requer confirmação de email — mostrar ecrã informativo
                 this._switchView('success');
                 this._toast('✅ Conta criada! Verifique o e-mail para confirmar.', 'success');
+                // Analytics: registo registado (sem sessão automática)
+                try { window.dispatchEvent(new CustomEvent('mz:signup')); } catch(_) {}
             }
         } catch (err) {
             const msg = (err.message || '').toLowerCase();
