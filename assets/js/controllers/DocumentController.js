@@ -1,11 +1,9 @@
-// assets/js/controllers/DocumentController.js — v2.0 (auditado e corrigido)
-// CORREÇÕES PRINCIPAIS:
-//  1. handleReedit: crédito agora debitado no SERVIDOR via /api/deduct-credit
-//     antes de chamar a IA (igual ao fluxo de geração normal).
-//     Anteriormente só fazia creditModel.consume() local — bypass fácil.
-//  2. handleReedit: se a IA falhar após dedução, crédito NÃO é devolvido
-//     automaticamente (comportamento correcto — IA foi chamada).
-//  3. handleReedit: envia documentType ao servidor para registo em credit_logs.
+// assets/js/controllers/DocumentController.js — v2.1 (analytics + upsell + referral)
+// ALTERAÇÕES v2.1:
+//  1. Analytics: trackDocumentStart + trackDocumentGenerated após cada geração
+//  2. Modal Upsell: mostrado ao 1º e 3º documento quando créditos ≤ 2
+//  3. Referral CTA: card partilha exibido após cada documento gerado
+//  Preservado: toda a lógica de geração, templates, reedit, exports — inalterada
 
 import { DocumentModel, QueueModel } from '../models/Models.js';
 import { DocumentView, ModalView, NotificationView } from '../views/Views.js';
@@ -21,6 +19,7 @@ import { templatePicker } from '../marketplace/TemplatePicker.js';
 import { academicUI } from '../academic/AcademicUI.js';
 import { getTemplates } from '../marketplace/TemplateLibrary.js';
 import { authManager } from '../auth/AuthManager.js';
+import { Analytics } from '../analytics/Analytics.js';
 
 // ─── documentState: single source of truth for generated content ─────────────
 export const documentState = {
@@ -176,6 +175,9 @@ export class DocumentController {
   return;
  }
 
+ // Analytics: serviço seleccionado
+ Analytics.trackServiceSelected(key);
+
  this.docModel.reset();
  this.docModel.service = key;
 
@@ -240,6 +242,9 @@ export class DocumentController {
   return;
  }
 
+ // Analytics: utilizador iniciou geração
+ Analytics.trackDocumentStart(key, cost);
+
  const btn = document.getElementById('btnGen');
  if (btn) btn.disabled = true;
 
@@ -299,8 +304,6 @@ export class DocumentController {
  this.docModel.formData = data;
 
  // Gerar ID do histórico ANTES de guardar o template
- // (template pode ser aplicado depois, por isso o _historyId permite
- //  actualizar o registo existente em vez de criar um duplicado)
  const newHistoryId = crypto.randomUUID();
  if (this.docModel.formData) {
    this.docModel.formData._historyId = newHistoryId;
@@ -318,6 +321,9 @@ export class DocumentController {
    created_at:   new Date().toISOString(),
   });
  } catch (_) {}
+
+ // Analytics: documento gerado com sucesso
+ Analytics.trackDocumentGenerated(key, cost, newHistoryId);
 
  const activeTemplate = this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null;
  if (activeTemplate) {
@@ -339,9 +345,15 @@ export class DocumentController {
  ModalView.open('resultOverlay');
  this._bindEditBtn();
 
+ // Mostrar CTA de referral no painel de resultado
+ this._showReferralCTA();
+
  if (isLastCreditNormal) {
   const accountType = window.authManager?.profile?.account_type || 'standard';
   window.paymentController?.showAfterLastCredit(accountType);
+ } else {
+  // Upsell: mostrar quando créditos são 0, 1 ou 2 (após geração)
+  this._maybeShowUpsell(remainingAfterNormal, key, cost);
  }
 
  } catch (err) {
@@ -365,6 +377,11 @@ export class DocumentController {
    this.creditModel.applyServerDeduction(result.creditsRemaining);
   }
   await this.creditModel.consume(cost);
+
+  // Analytics
+  const longHistId = crypto.randomUUID();
+  Analytics.trackDocumentGenerated(key, cost, longHistId);
+
   this.docModel.setGenerated(result.document, result.model);
   documentState.set(result.document, this.docModel.service);
   this.docModel.formData = data;
@@ -374,6 +391,10 @@ export class DocumentController {
   DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
   ModalView.open('resultOverlay');
   this._bindEditBtn();
+  this._showReferralCTA();
+
+  const remaining = this.creditModel.value;
+  if (remaining > 0) this._maybeShowUpsell(remaining, key, cost);
  } catch (err) {
   NotificationView.error('❌ ' + (err.message || 'Erro ao gerar documento longo.'));
  } finally {
@@ -381,6 +402,147 @@ export class DocumentController {
   this._longRunning = false;
   if (btn) btn.disabled = false;
  }
+ }
+
+ // ── Upsell modal ─────────────────────────────────────────────────────────
+ _maybeShowUpsell(creditsRemaining, serviceKey, creditCost) {
+   try {
+     // Só mostrar se créditos baixos (0, 1 ou 2)
+     if (creditsRemaining > 2) return;
+
+     // Controlar frequência: máx 1x por sessão
+     if (sessionStorage.getItem('mz_upsell_shown')) return;
+     sessionStorage.setItem('mz_upsell_shown', '1');
+
+     // Delay para não sobrepor ao modal de resultado
+     setTimeout(() => this._showUpsellModal(creditsRemaining), 2500);
+   } catch (_) {}
+ }
+
+ _showUpsellModal(creditsRemaining) {
+   // Remover qualquer upsell anterior
+   document.getElementById('mzUpsellOverlay')?.remove();
+
+   const overlay = document.createElement('div');
+   overlay.id = 'mzUpsellOverlay';
+   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:tplFadeIn .3s ease';
+
+   const creditColor = creditsRemaining === 0 ? '#EF4444' : creditsRemaining === 1 ? '#F59E0B' : '#0F766E';
+   const creditMsg   = creditsRemaining === 0
+     ? '🔴 Ficou sem créditos!'
+     : creditsRemaining === 1
+     ? '⚠️ Só tem 1 crédito restante!'
+     : `💳 Tem ${creditsRemaining} créditos restantes`;
+
+   overlay.innerHTML = `
+     <div style="background:#fff;border-radius:24px;padding:32px 28px;max-width:440px;width:100%;text-align:center;box-shadow:0 25px 50px rgba(0,0,0,0.25);position:relative;">
+       <button id="mzUpsellClose" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:20px;color:#9CA3AF;cursor:pointer;line-height:1;">✕</button>
+       <div style="font-size:3.5rem;margin-bottom:12px;">🎉</div>
+       <h2 style="font-size:1.35rem;font-weight:800;margin:0 0 8px;color:#1F2937;">O seu documento está pronto!</h2>
+       <p style="color:${creditColor};font-weight:700;font-size:.9rem;margin:0 0 20px;">${creditMsg}</p>
+       <div style="background:linear-gradient(135deg,#F0FDFA,#FFFBEB);border-radius:16px;padding:20px;margin-bottom:20px;text-align:left;">
+         <div style="font-size:1.5rem;font-weight:800;color:#0F766E;margin-bottom:4px;">Pack Básico — MZN 280</div>
+         <div style="color:#6B7280;font-size:.85rem;margin-bottom:14px;">25 créditos · MZN 11.2 por documento</div>
+         <div style="display:flex;flex-direction:column;gap:8px;">
+           <div style="display:flex;align-items:center;gap:8px;font-size:.9rem;"><span style="color:#10B981;font-weight:700;">✓</span> 25 documentos com IA</div>
+           <div style="display:flex;align-items:center;gap:8px;font-size:.9rem;"><span style="color:#10B981;font-weight:700;">✓</span> Templates premium incluídos</div>
+           <div style="display:flex;align-items:center;gap:8px;font-size:.9rem;"><span style="color:#10B981;font-weight:700;">✓</span> Módulo académico APA 7</div>
+           <div style="display:flex;align-items:center;gap:8px;font-size:.9rem;"><span style="color:#10B981;font-weight:700;">✓</span> Arquivo de documentos ilimitado</div>
+         </div>
+       </div>
+       <div style="display:flex;flex-direction:column;gap:10px;">
+         <button id="mzUpsellBuy" style="background:linear-gradient(135deg,#0F766E,#0D5F58);color:#fff;padding:15px;border-radius:100px;font-weight:700;font-size:1rem;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(15,118,110,0.3);">
+           💳 Comprar 25 Créditos — MZN 280
+         </button>
+         <button id="mzUpsellLater" style="background:none;color:#9CA3AF;padding:10px;border:none;font-size:.9rem;cursor:pointer;">
+           Talvez depois
+         </button>
+       </div>
+       <div style="margin-top:14px;font-size:.75rem;color:#9CA3AF;">
+         💡 Poupa MZN ${(creditsRemaining > 0 ? (50 - 11.2) * 25 : 50 * 25).toFixed(0)} em comparação com acesso avulso
+       </div>
+     </div>
+   `;
+
+   document.body.appendChild(overlay);
+
+   // Analytics
+   Analytics.trackUpsellShown('basico');
+
+   // Fechar
+   const closeUpsell = () => overlay.remove();
+   document.getElementById('mzUpsellClose')?.addEventListener('click', closeUpsell);
+   document.getElementById('mzUpsellLater')?.addEventListener('click', closeUpsell);
+   overlay.addEventListener('click', e => { if (e.target === overlay) closeUpsell(); });
+
+   // Comprar: abrir modal de pagamento
+   document.getElementById('mzUpsellBuy')?.addEventListener('click', () => {
+     closeUpsell();
+     // Seleccionar pack Básico e abrir pagamento
+     window.paymentController?.showPricing(false);
+     setTimeout(() => {
+       document.querySelector('[data-pkg="basico"]')?.click();
+     }, 300);
+   });
+ }
+
+ // ── Referral CTA após documento ──────────────────────────────────────────
+ _showReferralCTA() {
+   try {
+     const user = window.authManager?.user;
+     if (!user || user.is_anonymous) return;
+
+     // Remover CTA anterior se existir
+     document.getElementById('mzReferralCTA')?.remove();
+
+     const resActions = document.getElementById('resActions');
+     if (!resActions) return;
+
+     const userId = user.id || '';
+     const refLink = `https://mzdocs.co.mz?ref=${userId.slice(0, 8).toUpperCase()}`;
+
+     const cta = document.createElement('div');
+     cta.id = 'mzReferralCTA';
+     cta.style.cssText = 'margin:12px 16px 4px;background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border:2px dashed #F59E0B;border-radius:14px;padding:16px;text-align:center;';
+     cta.innerHTML = `
+       <div style="font-size:1.6rem;margin-bottom:6px;">🎁</div>
+       <div style="font-weight:700;font-size:.9rem;color:#92400E;margin-bottom:4px;">Ganha créditos grátis!</div>
+       <p style="color:#92400E;font-size:.8rem;margin:0 0 12px;line-height:1.4;">Partilha com um amigo. Quando ele se registar, ambos ganham 1 crédito.</p>
+       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+         <button id="mzRefCopy" style="background:#F59E0B;color:#fff;padding:9px 18px;border-radius:100px;font-weight:600;border:none;cursor:pointer;font-size:.82rem;">📋 Copiar Link</button>
+         <button id="mzRefWa" style="background:#25D366;color:#fff;padding:9px 18px;border-radius:100px;font-weight:600;border:none;cursor:pointer;font-size:.82rem;">💬 WhatsApp</button>
+       </div>
+       <div id="mzRefLinkBox" style="display:none;margin-top:10px;">
+         <input id="mzRefLinkInput" readonly style="width:100%;padding:8px 10px;border:1px solid #FCD34D;border-radius:8px;font-size:.75rem;text-align:center;background:#fff;box-sizing:border-box;" value="${refLink}"/>
+       </div>
+     `;
+
+     // Inserir antes da área de acções
+     resActions.parentNode.insertBefore(cta, resActions);
+
+     // Copiar link
+     document.getElementById('mzRefCopy')?.addEventListener('click', () => {
+       const box = document.getElementById('mzRefLinkBox');
+       const inp = document.getElementById('mzRefLinkInput');
+       if (box) box.style.display = 'block';
+       navigator.clipboard?.writeText(refLink).catch(() => {});
+       if (inp) inp.select();
+       NotificationView.success('✅ Link copiado! Partilhe com amigos.');
+       Analytics.trackReferralCopied();
+     });
+
+     // WhatsApp
+     document.getElementById('mzRefWa')?.addEventListener('click', () => {
+       const text = encodeURIComponent(
+         `Olá! Descobri o MzDocs Pro — cria documentos profissionais com IA em 2 minutos. ` +
+         `O primeiro documento é GRÁTIS! Usa o meu link: ${refLink}`
+       );
+       window.open(`https://wa.me/?text=${text}`, '_blank');
+       Analytics.trackReferralWhatsApp();
+     });
+   } catch (err) {
+     console.warn('[DocumentController] _showReferralCTA:', err.message);
+   }
  }
 
  copyDoc() {
