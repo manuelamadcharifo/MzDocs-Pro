@@ -1,13 +1,10 @@
-// api/deduct-credit.js — v2.0 (auditado e corrigido)
-// CORREÇÕES:
-//  1. Registo em credit_logs após cada dedução bem-sucedida
-//  2. Validação de cost mais rigorosa (deve ser 1 ou 2 — sem aceitar 10 por defeito)
-//  3. Verificação de bloqueio de conta (is_blocked)
-//  4. Eliminação do fallback SELECT+UPDATE sem FOR UPDATE (race condition)
-//  5. Logs mais claros para debug
+// api/deduct-credit.js — v2.1 (ws/realtime removido; fallback count corrigido)
+// CORREÇÕES v2.1:
+//  1. Removido `realtime: { transport: ws }` — causa crash em Vercel serverless com supabase-js v2.49+
+//  2. Corrigido _fallbackDeductWithLock: count vinha sempre null (.select() sem { count:'exact' })
+//  3. Removido require('ws') — desnecessário em funções que não usam Realtime
 
 const { createClient } = require('@supabase/supabase-js');
-const ws = require('ws');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 const VALID_COSTS    = [1, 2]; // custo máximo por operação
@@ -36,9 +33,9 @@ module.exports = async function handler(req, res) {
     return res.status(503).json({ error: 'Supabase não configurado no servidor.' });
   }
 
+  // CORRECÇÃO: sem realtime config — causa crash em Vercel com supabase-js v2.49+
   const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
-    realtime: { transport: ws },
   });
 
   // ── Verificar JWT ─────────────────────────────────────────────────────────
@@ -57,9 +54,8 @@ module.exports = async function handler(req, res) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
   const rawCost = parseInt(body?.cost);
-  const cost    = VALID_COSTS.includes(rawCost) ? rawCost : 1; // default 1, máx 2
+  const cost    = VALID_COSTS.includes(rawCost) ? rawCost : 1;
 
-  // Ler documento_type para log (opcional, enviado pelo cliente)
   const documentType = typeof body?.documentType === 'string'
     ? body.documentType.slice(0, 50).replace(/[^a-z0-9_-]/gi, '')
     : null;
@@ -79,12 +75,10 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Verificar expiração de créditos ANTES da dedução
     if (
       profileCheck?.credits_expires_at &&
       new Date(profileCheck.credits_expires_at) < new Date()
     ) {
-      // Zerar créditos expirados (idempotente)
       await supabaseAdmin
         .from('profiles')
         .update({ credits: 0, updated_at: new Date().toISOString() })
@@ -100,33 +94,32 @@ module.exports = async function handler(req, res) {
     }
   } catch (e) {
     console.warn('[deduct-credit] Falha ao verificar perfil:', e.message);
-    // Não bloquear — continuar com a dedução
   }
 
-  // ── Dedução atómica via RPC (com FOR UPDATE no SQL) ───────────────────────
+  // ── Dedução atómica via RPC ───────────────────────────────────────────────
   try {
     let remaining = null;
     let rpcOk     = false;
 
-    // Tentar nova função deduct_credits (suporta N créditos)
+    // Tentar função deduct_credits (suporta N créditos)
     const { data: dataN, error: errN } = await supabaseAdmin
       .rpc('deduct_credits', { p_user_id: userId, p_amount: cost });
 
-    if (!errN && dataN !== undefined) {
+    if (!errN && dataN !== undefined && dataN !== null) {
       remaining = dataN;
       rpcOk     = true;
     } else if (cost === 1) {
       // Fallback para função antiga (1 crédito)
       const { data: data1, error: err1 } = await supabaseAdmin
         .rpc('deduct_credit', { user_id: userId });
-      if (!err1 && data1 !== undefined) {
+      if (!err1 && data1 !== undefined && data1 !== null) {
         remaining = data1;
         rpcOk     = true;
       }
     }
 
     if (!rpcOk) {
-      // Fallback manual APENAS com FOR UPDATE para evitar race conditions
+      // Fallback manual com optimistic locking
       return await _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType, res);
     }
 
@@ -147,7 +140,6 @@ module.exports = async function handler(req, res) {
       note:          `Dedução de ${cost} crédito(s) via RPC`,
     }).catch(e => console.warn('[deduct-credit] credit_logs falhou:', e.message));
 
-    // ── Auto-eliminação conta avulso com 0 créditos ───────────────────────
     if (remaining === 0) {
       _tryDeleteAvulsoAccount(supabaseAdmin, userId);
     }
@@ -159,16 +151,14 @@ module.exports = async function handler(req, res) {
     });
 
   } catch (e) {
-    console.error('[deduct-credit] Excepção:', e.message);
+    console.error('[deduct-credit] Excepção:', e.message, e.stack);
     return res.status(500).json({ error: 'Erro interno ao deduzir crédito.' });
   }
 };
 
-// ── Fallback com verificação manual (evita SELECT+UPDATE sem lock) ─────────
+// ── Fallback com optimistic locking manual ────────────────────────────────
 async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType, res) {
   try {
-    // Usar RPC personalizada que faz FOR UPDATE internamente
-    // Se não existir, retornar erro em vez de race condition
     const { data: profile, error: selErr } = await supabaseAdmin
       .from('profiles')
       .select('credits, is_temp, account_type')
@@ -189,25 +179,26 @@ async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType
 
     const newCredits = profile.credits - cost;
 
-    // UPDATE com condição eq(credits, profile.credits) para optimistic locking
-    const { error: updErr, count } = await supabaseAdmin
+    // CORRECÇÃO: usar { count: 'exact' } para obter contagem real de linhas afectadas
+    const { data: updData, error: updErr, count } = await supabaseAdmin
       .from('profiles')
       .update({ credits: newCredits, updated_at: new Date().toISOString() })
       .eq('id', userId)
       .eq('credits', profile.credits) // optimistic lock
-      .select('id');
+      .select('id', { count: 'exact' });
 
     if (updErr) throw updErr;
 
-    // Se o update não afectou nenhuma linha: race condition detectada
-    if (count === 0) {
+    // Verificar se a linha foi actualizada (count pode ser null em algumas versões)
+    // Usar data length como alternativa segura
+    const affectedRows = count ?? (Array.isArray(updData) ? updData.length : 0);
+    if (affectedRows === 0) {
       return res.status(409).json({
         error: 'Conflito de actualização — tente novamente.',
         code:  'RACE_CONDITION',
       });
     }
 
-    // Registar em credit_logs
     await supabaseAdmin.from('credit_logs').insert({
       user_id:       userId,
       action:        'consume',
@@ -226,11 +217,12 @@ async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType
       source:  'supabase_fallback',
     });
   } catch (e) {
+    console.error('[deduct-credit] Fallback excepção:', e.message);
     return res.status(500).json({ error: 'Erro no fallback de dedução: ' + e.message });
   }
 }
 
-// ── Auto-eliminar conta avulso (fire-and-forget) ─────────────────────────
+// ── Auto-eliminar conta avulso (fire-and-forget) ──────────────────────────
 async function _tryDeleteAvulsoAccount(supabaseAdmin, userId, knownProfile = null) {
   try {
     const profile = knownProfile || (await supabaseAdmin
