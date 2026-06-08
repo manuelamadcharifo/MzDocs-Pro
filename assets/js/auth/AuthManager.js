@@ -52,8 +52,17 @@ export class AuthManager {
  const nowSecs = Math.floor(Date.now() / 1000);
  const needRefresh = expiresAt && (expiresAt - nowSecs) < 60;
  if (needRefresh) {
- const { data: refreshed } = await this.supabase.auth.refreshSession();
- this.session = refreshed?.session || session;
+ const { data: refreshed, error: refreshErr } = await this.supabase.auth.refreshSession();
+ if (refreshErr || !refreshed?.session) {
+   // Refresh token inválido/expirado — limpar sessão e forçar novo login
+   console.warn('[AuthManager] Refresh token inválido — sessão limpa:', refreshErr?.message);
+   await this.supabase.auth.signOut();
+   this.session = null;
+   this.user = null;
+   this._notify();
+   return;
+ }
+ this.session = refreshed.session;
  } else {
  this.session = session;
  }
@@ -343,16 +352,24 @@ export class AuthManager {
 
     this._refreshPromise = (async () => {
       try {
-        const { data } = await Promise.race([
+        const { data, error } = await Promise.race([
           this.supabase.auth.refreshSession(),
           new Promise((_, rej) => setTimeout(() => rej(new Error('refresh timeout')), 8000)),
         ]);
-        if (data?.session) {
+        if (error || !data?.session) {
+          // Token inválido — limpar sessão para forçar novo login
+          console.warn('[AuthManager] refresh token inválido:', error?.message);
+          this.session = null;
+          this.user = null;
+          await this.supabase.auth.signOut();
+          this._notify();
+        } else {
           this.session = data.session;
           this.user    = data.session.user;
         }
       } catch (err) {
         console.warn('[AuthManager] refresh falhou:', err.message);
+        // Em caso de timeout ou erro de rede, não limpar a sessão
       } finally {
         this._refreshPromise = null;
       }
