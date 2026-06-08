@@ -172,13 +172,13 @@ module.exports = async function handler(req, res) {
         }
         try {
             const { createClient } = require('@supabase/supabase-js');
-            const ws = require('ws');
+            
             const supabaseUrl = process.env.SUPABASE_URL;
             const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
             if (supabaseUrl && serviceKey) {
                 const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
                     auth: { autoRefreshToken: false, persistSession: false },
-                    realtime: { transport: ws },
+                    
                 });
                 const { data: { user: jwtUser }, error: authErr } = await supabaseAdmin.auth.getUser(token);
                 if (authErr || !jwtUser) {
