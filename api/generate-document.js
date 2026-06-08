@@ -2,6 +2,7 @@
 // 5 providers em corrida paralela: Groq + Gemini + OpenRouter + Cerebras + NVIDIA NIM
 // Suporte a geração em cadeia (_planMode / _sectionMode) com rate-limit generoso
 
+const ws = require('ws'); // obrigatório em Node 20 para supabase-js v2.49+
 const SYSTEM_PROMPT = `Você é o MzDocs Pro, motor de geração de documentos para Moçambique.
 Gere documentos COMPLETOS e prontos para uso em português (variante moçambicana, formal).
 Use Markdown. Nunca use meta-comentários como "Aqui está o documento...".
@@ -178,6 +179,7 @@ module.exports = async function handler(req, res) {
             if (supabaseUrl && serviceKey) {
                 const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
                     auth: { autoRefreshToken: false, persistSession: false },
+                    realtime: { transport: ws },
                     
                 });
                 const { data: { user: jwtUser }, error: authErr } = await supabaseAdmin.auth.getUser(token);
