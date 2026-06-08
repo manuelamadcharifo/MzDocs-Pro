@@ -817,6 +817,7 @@ export class DocumentController {
      // ── PASSO 1: Debitar crédito no SERVIDOR ────────────────────────────────
      let authToken = null;
      try {
+       await authManager.ready(); // garantir que _init() completou
        authToken = await authManager.getValidToken();
      } catch (_) {}
 
