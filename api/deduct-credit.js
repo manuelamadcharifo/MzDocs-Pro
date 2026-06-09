@@ -1,10 +1,12 @@
-// api/deduct-credit.js — v2.1 (ws/realtime removido; fallback count corrigido)
-// CORREÇÕES v2.1:
-//  1. Removido `realtime: { transport: ws }` — causa crash em Vercel serverless com supabase-js v2.49+
+// api/deduct-credit.js — v2.2 (ws restaurado; fallback count corrigido)
+// CORREÇÕES v2.2:
+//  1. Restaurado require('ws') e realtime: { transport: ws } — obrigatório em Node.js 20
+//     com supabase-js v2.49+ (o supabase instancia RealtimeClient no construtor mesmo
+//     que nunca seja usado; sem ws, crasha com "Node.js 20 detected without native WebSocket")
 //  2. Corrigido _fallbackDeductWithLock: count vinha sempre null (.select() sem { count:'exact' })
-//  3. Removido require('ws') — desnecessário em funções que não usam Realtime
 
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws'); // obrigatório em Node 20 para supabase-js v2.49+
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 const VALID_COSTS    = [1, 2]; // custo máximo por operação
@@ -33,9 +35,12 @@ module.exports = async function handler(req, res) {
     return res.status(503).json({ error: 'Supabase não configurado no servidor.' });
   }
 
-  // CORRECÇÃO: sem realtime config — causa crash em Vercel com supabase-js v2.49+
+  // CORRECÇÃO v2.2: restaurado realtime: { transport: ws } — obrigatório em Node.js 20
+  // O supabase-js v2.49+ instancia o RealtimeClient no construtor.
+  // Em Node < 22 sem WebSocket nativo é necessário fornecer o pacote 'ws'.
   const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    realtime: { transport: ws },
   });
 
   // ── Verificar JWT ─────────────────────────────────────────────────────────
