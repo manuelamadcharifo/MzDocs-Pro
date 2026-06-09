@@ -1,6 +1,10 @@
-// api/deduct-credit.js — v2.2 (ws restaurado; fallback count corrigido)
+// api/deduct-credit.js — v2.3 (corrigido .catch() em Supabase insert)
+// CORREÇÕES v2.3:
+//  1. Substituído .catch() encadeado no supabaseAdmin.from(...).insert() por try/catch.
+//     O Supabase JS v2 retorna um SupabaseQueryBuilder, nao uma Promise nativa,
+//     por isso .catch() nao existe directamente no builder e causava TypeError no Vercel.
 // CORREÇÕES v2.2:
-//  1. Restaurado require('ws') e realtime: { transport: ws } — obrigatório em Node.js 20
+//  1. Restaurado require('ws') e realtime: { transport: ws } - obrigatorio em Node.js 20
 //     com supabase-js v2.49+ (o supabase instancia RealtimeClient no construtor mesmo
 //     que nunca seja usado; sem ws, crasha com "Node.js 20 detected without native WebSocket")
 //  2. Corrigido _fallbackDeductWithLock: count vinha sempre null (.select() sem { count:'exact' })
@@ -137,13 +141,15 @@ module.exports = async function handler(req, res) {
     }
 
     // ── Registar no credit_logs ────────────────────────────────────────────
-    await supabaseAdmin.from('credit_logs').insert({
-      user_id:       userId,
-      action:        'consume',
-      credits:       -cost,
-      document_type: documentType,
-      note:          `Dedução de ${cost} crédito(s) via RPC`,
-    }).catch(e => console.warn('[deduct-credit] credit_logs falhou:', e.message));
+    try {
+      await supabaseAdmin.from('credit_logs').insert({
+        user_id:       userId,
+        action:        'consume',
+        credits:       -cost,
+        document_type: documentType,
+        note:          `Dedução de ${cost} crédito(s) via RPC`,
+      });
+    } catch (e) { console.warn('[deduct-credit] credit_logs falhou:', e.message); }
 
     if (remaining === 0) {
       _tryDeleteAvulsoAccount(supabaseAdmin, userId);
@@ -204,13 +210,15 @@ async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType
       });
     }
 
-    await supabaseAdmin.from('credit_logs').insert({
-      user_id:       userId,
-      action:        'consume',
-      credits:       -cost,
-      document_type: documentType,
-      note:          `Dedução fallback de ${cost} crédito(s)`,
-    }).catch(e => console.warn('[deduct-credit] credit_logs fallback falhou:', e.message));
+    try {
+      await supabaseAdmin.from('credit_logs').insert({
+        user_id:       userId,
+        action:        'consume',
+        credits:       -cost,
+        document_type: documentType,
+        note:          `Dedução fallback de ${cost} crédito(s)`,
+      });
+    } catch (e) { console.warn('[deduct-credit] credit_logs fallback falhou:', e.message); }
 
     if (newCredits === 0) {
       _tryDeleteAvulsoAccount(supabaseAdmin, userId, profile);
