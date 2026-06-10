@@ -1,4 +1,9 @@
-// assets/js/auth/AuthManager.js
+// assets/js/auth/AuthManager.js — v2.4 (corrigido getValidToken needsRefresh)
+// CORRECÇÃO v2.4:
+//   getValidToken: (expiresAt && expiresAt-nowSecs < 60) cortocircuitava quando
+//   expiresAt era undefined/null — token stale devolvido sem refresh → 401 no servidor.
+//   Agora: !expiresAt trata-se como expirado; token definitivamente expirado não é
+//   devolvido mesmo em caso de falha de rede no refresh.
 export class AuthManager {
  constructor() {
  this.user = undefined;
@@ -50,7 +55,8 @@ export class AuthManager {
  if (session) {
  const expiresAt = session.expires_at;
  const nowSecs = Math.floor(Date.now() / 1000);
- const needRefresh = expiresAt && (expiresAt - nowSecs) < 60;
+ // CORRIGIDO v2.4: se expiresAt ausente ou token expirado, forçar refresh
+ const needRefresh = !expiresAt || (expiresAt - nowSecs) < 60;
  if (needRefresh) {
  const { data: refreshed, error: refreshErr } = await this.supabase.auth.refreshSession();
  if (refreshErr || !refreshed?.session) {
@@ -344,7 +350,14 @@ export class AuthManager {
     if (!this.supabase) return null;
     const expiresAt = this.session?.expires_at;
     const nowSecs   = Math.floor(Date.now() / 1000);
-    const needsRefresh = !this.session || (expiresAt && (expiresAt - nowSecs) < 60);
+
+    // CORRIGIDO v2.4: (expiresAt && ...) cortocircuitava para false quando expiresAt
+    // era undefined/null — o token stale era devolvido sem refresh.
+    // Agora: se expiresAt ausente tratamos como expirado (mais seguro).
+    const tokenExpired  = !expiresAt || (expiresAt - nowSecs) < 0;
+    const tokenNearExp  = expiresAt  && (expiresAt - nowSecs) < 60;
+    const needsRefresh  = !this.session || tokenExpired || tokenNearExp;
+
     if (!needsRefresh) return this.session?.access_token || null;
 
     // Mutex: se já há um refresh em curso, esperar o mesmo promise
@@ -369,7 +382,14 @@ export class AuthManager {
         }
       } catch (err) {
         console.warn('[AuthManager] refresh falhou:', err.message);
-        // Em caso de timeout ou erro de rede, não limpar a sessão
+        // Em caso de timeout/erro de rede: só devolver token se NÃO estiver definitivamente expirado
+        if (tokenExpired) {
+          // Token já expirou — não adianta enviá-lo ao servidor (vai dar 401 na mesma)
+          this.session = null;
+          this.user = null;
+          this._notify();
+        }
+        // Se apenas tokenNearExp (< 60s mas ainda válido), o token actual ainda serve
       } finally {
         this._refreshPromise = null;
       }
