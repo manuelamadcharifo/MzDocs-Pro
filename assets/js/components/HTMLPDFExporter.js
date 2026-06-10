@@ -1,5 +1,6 @@
 // assets/js/components/HTMLPDFExporter.js
-// Exportação de PDF com template CSS real via janela de impressão.
+// v1.2 — exportWithPageWrap: envolve conteudo markdown em .doc-page para garantir
+// que o PDF descarregado usa o mesmo layout do preview (corrige 1 pag vs 2 pags).
 //
 // Porquê existe: o PDFExporter usa jsPDF imperativo que ignora templateCss.
 // Esta classe abre uma janela com HTML+CSS do template e dispara window.print().
@@ -183,6 +184,64 @@ window.addEventListener('load', function() {
     }
 
     // Fallback: blob URL (quando window.open é bloqueado)
+    this._blobFallback(html, filename);
+  }
+
+  /**
+   * Exporta markdown envolto numa .doc-page idêntica ao preview do editor.
+   * Garante que o PDF descarregado tem exatamente o mesmo layout que o utilizador vê.
+   * Usado para documentos sem template activo (CV, carta, etc.)
+   */
+  exportWithPageWrap(markdownContent, filename, options = {}) {
+    const { templateCss = '', title = 'MzDocs Pro' } = options;
+    const isRawHTML = markdownContent && markdownContent.trimStart().startsWith('<');
+    const innerHtml = isRawHTML ? markdownContent : mdToHtml(markdownContent);
+    // Envolver em .doc-page — igual ao _buildPreviewHTML do DocumentEditor
+    const bodyHTML = `<div class="doc-page">${innerHtml}</div>`;
+    // Chamar export() com o conteúdo já envolvido e sem conversão adicional
+    this._openPrintWindow(bodyHTML, templateCss, title, filename);
+  }
+
+  _openPrintWindow(bodyHTML, css, title, filename) {
+    const safeCss = css || DEFAULT_CSS;
+    const html = `<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<title>${title.replace(/</g,'&lt;')}</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+* {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}
+@media print {
+  @page { size: A4 portrait; margin: 0; }
+  html, body { width: 210mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .no-print { display: none !important; }
+}
+@media screen {
+  html { background: #e5e7eb; padding: 20px; }
+  body { width: 210mm; min-height: 297mm; margin: 0 auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.2); }
+}
+${safeCss}
+</style>
+</head>
+<body>
+${bodyHTML}
+<div class="no-print" style="position:fixed;bottom:20px;right:20px;background:#1e3a5f;color:#fff;padding:12px 20px;border-radius:24px;font-family:sans-serif;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:9999;" onclick="window.print()">🖨️ Guardar como PDF</div>
+<script>
+window.addEventListener('load', function() {
+  const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+  if (!isMobile) { setTimeout(function() { window.print(); }, 400); }
+});
+</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=1100,scrollbars=yes,resizable=yes');
+    if (win) { win.document.open(); win.document.write(html); win.document.close(); return; }
     this._blobFallback(html, filename);
   }
 
