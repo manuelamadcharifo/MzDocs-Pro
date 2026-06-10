@@ -638,18 +638,43 @@ export class DocumentEditor {
     }
 
     const css = this._getFormatCSS(format);
+    // Para PDF e Word: injectar script de simulacao de paginas (mostra divisores visuais)
+    // Para Excel: sem simulacao (layout continuo em tabela)
+    const pageSim = (format !== 'excel') ? this._pageSimJS() : '';
     return `<!DOCTYPE html>
 <html lang="pt">
 <head><meta charset="UTF-8"><style>${css}</style></head>
-<body><div class="doc-page">${body}</div></body>
+<body><div class="doc-page">${body}</div>${pageSim}</body>
 </html>`;
   }
 
   _getFormatCSS(format) {
+    // NOTA: min-height removido de .doc-page — o preview agora simula paginas reais.
+    // O script _pageSimJS() injeta separadores visuais em multiplos de 297mm,
+    // exactamente como o PDF impresso. O utilizador ve o mesmo numero de paginas que vai descarregar.
     const base = `
       *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-      body{background:#fff;}
-      .doc-page{width:210mm;min-height:297mm;padding:25mm 22mm 20mm 25mm;background:#fff;font-size:12pt;line-height:1.5;color:#000;}
+      body{background:#e5e7eb;padding:20px 0;}
+      .doc-page{
+        width:210mm;padding:25mm 22mm 20mm 25mm;background:#fff;
+        font-size:12pt;line-height:1.5;color:#000;
+        margin:0 auto;
+        box-shadow:0 2px 12px rgba(0,0,0,.15);
+      }
+      .page-break-ruler{
+        width:210mm;margin:0 auto;
+        border:none;border-top:2px dashed #94a3b8;
+        position:relative;
+        display:flex;align-items:center;justify-content:center;
+      }
+      .page-break-ruler::after{
+        content:'— Quebra de página —';
+        position:absolute;
+        background:#e5e7eb;
+        padding:0 10px;
+        font-size:10px;color:#94a3b8;
+        font-family:sans-serif;letter-spacing:.5px;
+      }
       h1{font-size:18pt;font-weight:bold;text-align:center;margin-bottom:16pt;}
       h2{font-size:14pt;font-weight:bold;margin-top:14pt;margin-bottom:8pt;border-bottom:1px solid #ccc;padding-bottom:3pt;}
       h3{font-size:12pt;font-weight:bold;margin-top:10pt;margin-bottom:6pt;}
@@ -678,6 +703,55 @@ export class DocumentEditor {
       h1,h2,h3{padding:8pt;font-size:13pt;}p{padding:4pt 8pt;}ul,ol{padding:4pt 8pt 4pt 24pt;}
     `;
     return base + `body,.doc-page{font-family:'Times New Roman',Georgia,serif;}`;
+  }
+
+  // Script injectado no iframe de preview para simular quebras de pagina visuais.
+  // Mede a altura real do .doc-page e insere divisores "--- Quebra de pagina ---"
+  // em cada multiplo de 297mm (area util: 297 - 25 topo - 20 base = 252mm de texto).
+  // O utilizador ve EXACTAMENTE o numero de paginas que o PDF vai ter.
+  _pageSimJS() {
+    return `<script>
+(function(){
+  // 1px = 0.2646mm a 96dpi; 297mm = ~1122.5px; area util sem padding = 252mm = ~952px
+  const MM_TO_PX = 96 / 25.4;
+  const PAGE_H_MM = 297;
+  const PAGE_H_PX = PAGE_H_MM * MM_TO_PX;  // altura total A4 em px
+  // Padding top (25mm) + padding bottom (20mm) = 45mm = 170px de margem por pagina
+  const PAD_TOP_PX  = 25 * MM_TO_PX;
+  const PAD_BOT_PX  = 20 * MM_TO_PX;
+  const USABLE_PX   = PAGE_H_PX - PAD_TOP_PX - PAD_BOT_PX; // area util de texto ~952px
+
+  function insertPageBreaks() {
+    const page = document.querySelector('.doc-page');
+    if (!page) return;
+    const totalH = page.scrollHeight;
+    if (totalH <= PAGE_H_PX) return; // cabe numa pagina — nada a fazer
+
+    const numBreaks = Math.floor(totalH / PAGE_H_PX);
+    for (let i = 1; i <= numBreaks; i++) {
+      const breakPx = i * PAGE_H_PX;
+      if (breakPx >= totalH) break;
+      const ruler = document.createElement('div');
+      ruler.className = 'page-break-ruler';
+      ruler.style.cssText = 'height:20px;margin:0 auto;width:210mm;';
+      ruler.style.position = 'absolute';
+      ruler.style.top = breakPx + 'px';
+      ruler.style.left = '0';
+      ruler.style.right = '0';
+      document.body.appendChild(ruler);
+    }
+    // Tornar body relativo para posicionamento absoluto dos rulers
+    document.body.style.position = 'relative';
+    document.body.style.minHeight = totalH + 'px';
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', insertPageBreaks);
+  } else {
+    insertPageBreaks();
+  }
+})();
+</script>`;
   }
 
   _markdownToHTML(md) {
