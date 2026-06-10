@@ -188,18 +188,54 @@ window.addEventListener('load', function() {
   }
 
   /**
-   * Exporta markdown envolto numa .doc-page idêntica ao preview do editor.
-   * Garante que o PDF descarregado tem exatamente o mesmo layout que o utilizador vê.
-   * Usado para documentos sem template activo (CV, carta, etc.)
+   * Exporta markdown para PDF usando o motor de impressao do browser.
+   * Usa CSS identico ao preview do editor (mesmas fontes, tamanhos, margens).
+   * Garante que preview e PDF mostram o mesmo numero de paginas.
+   * Usado para documentos sem template activo (CV, carta, recibo, etc.)
    */
   exportWithPageWrap(markdownContent, filename, options = {}) {
-    const { templateCss = '', title = 'MzDocs Pro' } = options;
+    const { title = 'MzDocs Pro' } = options;
     const isRawHTML = markdownContent && markdownContent.trimStart().startsWith('<');
-    const innerHtml = isRawHTML ? markdownContent : mdToHtml(markdownContent);
-    // Envolver em .doc-page — igual ao _buildPreviewHTML do DocumentEditor
-    const bodyHTML = `<div class="doc-page">${innerHtml}</div>`;
-    // Chamar export() com o conteúdo já envolvido e sem conversão adicional
-    this._openPrintWindow(bodyHTML, templateCss, title, filename);
+    const bodyContent = isRawHTML ? markdownContent : mdToHtml(markdownContent);
+
+    // CSS de impressao: identico ao _getFormatCSS('pdf') do DocumentEditor,
+    // mas adaptado para impressao real (body = pagina, sem .doc-page wrapper).
+    // @page { margin: 0 } + padding no body = margens exactas de 25/22/20/25mm.
+    const printCss = `
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      @page { size: A4 portrait; margin: 0; }
+      html, body {
+        width: 210mm;
+        font-family: 'Times New Roman', Georgia, serif;
+        font-size: 12pt;
+        line-height: 1.5;
+        color: #000;
+        background: #fff;
+        padding: 25mm 22mm 20mm 25mm;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      h1{font-size:18pt;font-weight:bold;text-align:center;margin-bottom:16pt;}
+      h2{font-size:14pt;font-weight:bold;margin-top:14pt;margin-bottom:8pt;border-bottom:1px solid #ccc;padding-bottom:3pt;}
+      h3{font-size:12pt;font-weight:bold;margin-top:10pt;margin-bottom:6pt;}
+      h4{font-size:11pt;font-weight:bold;margin-top:8pt;margin-bottom:4pt;}
+      p{margin-bottom:8pt;text-align:justify;}
+      ul,ol{margin:6pt 0 6pt 18pt;}li{margin-bottom:3pt;}
+      table{width:100%;border-collapse:collapse;margin:10pt 0;font-size:11pt;page-break-inside:avoid;}
+      td,th{border:1px solid #000;padding:5pt 7pt;}th{background:#f0f0f0;font-weight:bold;}
+      strong{font-weight:bold;}em{font-style:italic;}
+      hr{border:none;border-top:1px solid #888;margin:12pt 0;}
+      h1,h2,h3,h4{page-break-after:avoid;}
+      @media screen {
+        html { background: #e5e7eb; padding: 20px; }
+        body {
+          margin: 0 auto;
+          box-shadow: 0 4px 24px rgba(0,0,0,.2);
+          padding: 25mm 22mm 20mm 25mm;
+        }
+      }
+    `;
+    this._openPrintWindow(bodyContent, printCss, title, filename);
   }
 
   _openPrintWindow(bodyHTML, css, title, filename) {
