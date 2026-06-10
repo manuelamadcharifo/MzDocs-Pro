@@ -564,10 +564,20 @@ export class DocumentController {
  const menu = document.createElement('div');
  menu.id = 'exportMenu';
  const rect = btn.getBoundingClientRect();
+ const vh   = window.innerHeight;
+
+ // Estimar altura do menu: 3 opções × ~44px + padding ~16px ≈ 148px
+ const MENU_H = 160;
+ // Abrir acima do botão se não há espaço suficiente abaixo
+ const openAbove = (rect.bottom + MENU_H + 8) > vh;
+ const topVal    = openAbove
+   ? Math.max(8, rect.top - MENU_H - 8)
+   : rect.bottom + 8;
+
  menu.style.cssText = [
   'position:fixed',
-  `top:${rect.bottom + 8}px`,
-  `left:${Math.max(8, rect.left - 60)}px`,
+  `top:${topVal}px`,
+  `left:${Math.max(8, Math.min(rect.left - 60, vh - 200))}px`,
   'background:#fff',
   'border:1.5px solid #e2e8f0',
   'border-radius:12px',
@@ -670,10 +680,33 @@ export class DocumentController {
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
    } else {
+     // CORRIGIDO v2.4: usar HTMLPDFExporter (motor do browser) em vez de jsPDF.
+     // O jsPDF recalcula quebras de pagina de forma diferente do preview — causava
+     // documentos com 2 paginas quando o preview mostrava 1 pagina continua.
+     // HTMLPDFExporter usa o mesmo CSS do preview: o que se ve = o que se descarrega.
      const content = this.docModel.content;
-     const { PDFExporter } = await import('../components/PDFExporter.js');
-     await new PDFExporter().export(content, `${filename}.pdf`, this._buildExportMetadata(svc));
-     NotificationView.success('✅ PDF descarregado!');
+     const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
+     const previewCss = [
+       '*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}',
+       'body{background:#fff;font-family:"Times New Roman",Georgia,serif;}',
+       '.doc-page{width:210mm;padding:25mm 22mm 20mm 25mm;font-size:12pt;line-height:1.5;color:#000;}',
+       'h1{font-size:18pt;font-weight:bold;text-align:center;margin-bottom:16pt;}',
+       'h2{font-size:14pt;font-weight:bold;margin-top:14pt;margin-bottom:8pt;border-bottom:1px solid #ccc;padding-bottom:3pt;}',
+       'h3{font-size:12pt;font-weight:bold;margin-top:10pt;margin-bottom:6pt;}',
+       'h4{font-size:11pt;font-weight:bold;margin-top:8pt;margin-bottom:4pt;}',
+       'p{margin-bottom:8pt;text-align:justify;}',
+       'ul,ol{margin:6pt 0 6pt 18pt;}li{margin-bottom:3pt;}',
+       'table{width:100%;border-collapse:collapse;margin:10pt 0;font-size:11pt;}',
+       'td,th{border:1px solid #000;padding:5pt 7pt;}th{background:#f0f0f0;font-weight:bold;}',
+       'strong{font-weight:bold;}em{font-style:italic;}',
+       'hr{border:none;border-top:1px solid #888;margin:12pt 0;}',
+       'h1,h2,h3,h4{page-break-after:avoid;}',
+     ].join('');
+     new HTMLPDFExporter().exportWithPageWrap(content, filename, {
+       templateCss: previewCss,
+       title: svc?.title || 'Documento MzDocs Pro',
+     });
+     NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
    }
  } catch (err) { NotificationView.error('❌ Erro PDF: ' + err.message); }
  }
