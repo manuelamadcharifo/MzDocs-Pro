@@ -153,12 +153,14 @@ export class CreditModel {
     canConsume(n = 1) { return this.credits >= n; }
 
     async consume(n = 1) {
+        // CORRIGIDO v2.5: consume() ja nao e chamado apos applyServerDeduction().
+        // E apenas chamado como FALLBACK quando o servidor nao devolveu creditsRemaining.
+        // Nesse caso, debitar localmente e legítimo — o canConsume() protege contra saldo negativo.
         if (!this.canConsume(n)) throw new Error('INSUFFICIENT_CREDITS');
-
-        // NÃO debitamos optimisticamente aqui — o servidor já debitou dentro de generate-document.
-        // Este método agora apenas sincroniza o estado local com o valor já retornado pelo servidor.
-        // Chamado APÓS o generate com o creditsRemaining vindo do servidor.
-        // Assinatura mantida para compatibilidade com DocumentController.
+        this.credits = Math.max(0, this.credits - n);
+        Storage.set('credits', this.credits);
+        this._lastConsumeAt = Date.now();
+        this._emit();
         return this.credits;
     }
 
