@@ -228,6 +228,12 @@ export class DocumentController {
   return;
  }
 
+ // Utilizador bloqueado não pode criar documentos
+ if (window.authManager?.isBlocked?.()) {
+  NotificationView.warn('🚫 A sua conta está bloqueada. Não é possível criar documentos.');
+  return;
+ }
+
  const key = this.docModel.service;
  const svc = SERVICES[key];
  if (!svc) return;
@@ -570,7 +576,12 @@ export class DocumentController {
  }
 
  downloadDoc() {
- this._showExportMenu();
+  // Utilizador bloqueado não pode baixar documentos
+  if (window.authManager?.isBlocked?.()) {
+   NotificationView.warn('🚫 A sua conta está bloqueada. Não é possível baixar documentos.');
+   return;
+  }
+  this._showExportMenu();
  }
 
  _showExportMenu() {
@@ -749,6 +760,11 @@ export class DocumentController {
  }
 
  _openEditor() {
+ // Utilizador bloqueado só pode fazer preview — não pode editar
+ if (window.authManager?.isBlocked?.()) {
+  NotificationView.warn('🚫 A sua conta está bloqueada. Não é possível editar documentos.');
+  return;
+ }
  if (!this.docModel.content) {
   NotificationView.warn('⚠️ Nenhum documento gerado ainda.');
   return;
@@ -807,6 +823,11 @@ export class DocumentController {
  }
 
  async _downloadWithTemplate(tpl, format) {
+ // Utilizador bloqueado não pode baixar documentos
+ if (window.authManager?.isBlocked?.()) {
+  NotificationView.warn('🚫 A sua conta está bloqueada. Não é possível baixar documentos.');
+  return;
+ }
  const content = documentState.currentContent || this.docModel.content;
  if (!content) { NotificationView.warn('⚠️ Nenhum documento para exportar.'); return; }
  this._activeTemplate = tpl;
