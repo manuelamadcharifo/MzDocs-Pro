@@ -291,10 +291,21 @@ export class DocumentController {
   throw new Error('A IA devolveu uma resposta vazia. Tente novamente.');
  }
 
+ // CORRIGIDO v2.5: consume() era chamado DEPOIS de applyServerDeduction().
+ // Quando o ultimo credito era usado, applyServerDeduction(0) punha credits=0,
+ // e entao consume() chamava canConsume() → 0 >= 1 → false → INSUFFICIENT_CREDITS.
+ // Solucao: se o servidor devolveu creditsRemaining, confiar nesse valor (ja debitou).
+ // Se nao devolveu, debitar localmente como fallback.
  if (typeof result.creditsRemaining === 'number') {
   this.creditModel.applyServerDeduction(result.creditsRemaining);
+ } else {
+  // Fallback: servidor nao devolveu creditsRemaining — debitar localmente
+  if (!this.creditModel.canConsume(cost)) throw new Error('INSUFFICIENT_CREDITS');
+  this.creditModel.credits -= cost;
+  if (this.creditModel.credits < 0) this.creditModel.credits = 0;
+  Storage.set('credits', this.creditModel.credits);
+  this.creditModel._emit?.();
  }
- await this.creditModel.consume(cost);
 
  const remainingAfterNormal = this.creditModel.value;
  const isLastCreditNormal   = remainingAfterNormal === 0;
@@ -373,10 +384,16 @@ export class DocumentController {
  this._longRunning = true;
  try {
   const result = await this.longEngine.generate(key, data, svc, this.creditModel.value, cost);
+  // CORRIGIDO v2.5: mesma logica — nao chamar consume() apos applyServerDeduction()
   if (typeof result.creditsRemaining === 'number') {
    this.creditModel.applyServerDeduction(result.creditsRemaining);
+  } else {
+   if (!this.creditModel.canConsume(cost)) throw new Error('INSUFFICIENT_CREDITS');
+   this.creditModel.credits -= cost;
+   if (this.creditModel.credits < 0) this.creditModel.credits = 0;
+   Storage.set('credits', this.creditModel.credits);
+   this.creditModel._emit?.();
   }
-  await this.creditModel.consume(cost);
 
   // Analytics
   const longHistId = crypto.randomUUID();
@@ -564,20 +581,10 @@ export class DocumentController {
  const menu = document.createElement('div');
  menu.id = 'exportMenu';
  const rect = btn.getBoundingClientRect();
- const vh   = window.innerHeight;
-
- // Estimar altura do menu: 3 opções × ~44px + padding ~16px ≈ 148px
- const MENU_H = 160;
- // Abrir acima do botão se não há espaço suficiente abaixo
- const openAbove = (rect.bottom + MENU_H + 8) > vh;
- const topVal    = openAbove
-   ? Math.max(8, rect.top - MENU_H - 8)
-   : rect.bottom + 8;
-
  menu.style.cssText = [
   'position:fixed',
-  `top:${topVal}px`,
-  `left:${Math.max(8, Math.min(rect.left - 60, vh - 200))}px`,
+  `top:${rect.bottom + 8}px`,
+  `left:${Math.max(8, rect.left - 60)}px`,
   'background:#fff',
   'border:1.5px solid #e2e8f0',
   'border-radius:12px',
@@ -680,18 +687,10 @@ export class DocumentController {
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
    } else {
-     // CORRIGIDO v2.4: usar HTMLPDFExporter (motor do browser) em vez de jsPDF.
-     // O jsPDF recalcula quebras de pagina de forma diferente do preview — causava
-     // documentos com 2 paginas quando o preview mostrava 1 pagina continua.
-     // HTMLPDFExporter usa o mesmo CSS do preview: o que se ve = o que se descarrega.
-     // exportWithPageWrap usa CSS proprio optimizado para impressao A4 (1 pagina para CVs).
-     // CSS definido no HTMLPDFExporter — nao precisa ser passado aqui.
      const content = this.docModel.content;
-     const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
-     new HTMLPDFExporter().exportWithPageWrap(content, filename, {
-       title: svc?.title || 'Documento MzDocs Pro',
-     });
-     NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
+     const { PDFExporter } = await import('../components/PDFExporter.js');
+     await new PDFExporter().export(content, `${filename}.pdf`, this._buildExportMetadata(svc));
+     NotificationView.success('✅ PDF descarregado!');
    }
  } catch (err) { NotificationView.error('❌ Erro PDF: ' + err.message); }
  }
