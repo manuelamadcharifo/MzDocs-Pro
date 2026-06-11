@@ -40,6 +40,7 @@ module.exports = async function handler(req, res) {
     case 'analytics':       return handleAnalytics(req, res);
     case 'feedback':        return handleFeedback(req, res);
     case 'static-pages':    return handleStaticPages(req, res);
+    case 'delete-document':  return handleDeleteDocument(req, res);
     case 'documents':       return handleDocuments(req, res);
     case 'pages':           return handleBlogPages(req, res);
     case 'generate-page':   return handleGeneratePage(req, res);
@@ -47,7 +48,7 @@ module.exports = async function handler(req, res) {
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
-        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','analytics','feedback','static-pages','documents','pages','generate-page','affiliates'],
+        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','pages','generate-page','affiliates'],
       });
   }
 };
@@ -922,6 +923,39 @@ async function handleDocuments(req, res) {
     return res.status(200).json({ success: true, data: data || [] });
   } catch (err) {
     console.error('[admin/documents]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE DOCUMENT (admin — usa service role para contornar RLS)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleDeleteDocument(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  const token = req.headers.authorization?.replace('Bearer ', '').trim();
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    const { docId } = req.body || {};
+    if (!docId) return res.status(400).json({ error: 'docId é obrigatório' });
+
+    const { error } = await supabase.from('documents').delete().eq('id', docId);
+    if (error) throw error;
+
+    // Registar no audit log
+    await supabase.from('audit_log').insert({
+      admin_id:    auth.user.id,
+      action:      'delete_document',
+      target_id:   docId,
+      details:     { deleted_by: auth.user.email || auth.user.id },
+      created_at:  new Date().toISOString(),
+    }).catch(() => {});
+
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[admin/delete-document]', err);
     return res.status(500).json({ error: err.message });
   }
 }
