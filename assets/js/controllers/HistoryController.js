@@ -155,7 +155,7 @@ export class HistoryController {
       userId = window.authManager?.user?.id;
     }
 
-    if (supabase && userId && navigator.onLine) {
+    if (supabase && userId && navigator.onLine && !this._justDeleted) {
       try {
         const { data, error } = await supabase
           .from('documents')
@@ -175,6 +175,9 @@ export class HistoryController {
         console.warn('[History] Supabase load error, usando IndexedDB:', e.message);
       }
     }
+
+    // Se viemos de uma operação de apagar, repor a flag e usar IndexedDB
+    if (this._justDeleted) this._justDeleted = false;
 
     // Fallback: IndexedDB local
     const localUserId = userId || Storage.getUserId();
@@ -209,15 +212,20 @@ export class HistoryController {
         return;
       }
 
+      const isBlocked = window.authManager?.isBlocked?.() === true;
+
       body.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:13px;color:#64748b;">${docs.length} documento${docs.length !== 1 ? 's' : ''}</span>
             ${sourceLabel}
           </div>
-          <button id="btnClearHistory" style="background:none;border:none;color:#EF4444;font-size:12px;font-weight:600;cursor:pointer;padding:4px 8px;border-radius:6px;">🗑️ Limpar tudo</button>
+          ${isBlocked
+            ? '<span style="font-size:11px;color:#ef4444;font-weight:600;">🚫 Conta bloqueada</span>'
+            : '<button id="btnClearHistory" style="background:none;border:none;color:#EF4444;font-size:12px;font-weight:600;cursor:pointer;padding:4px 8px;border-radius:6px;">🗑️ Limpar tudo</button>'
+          }
         </div>
-        ${docs.map(doc => this._docCard(doc)).join('')}
+        ${docs.map(doc => this._docCard(doc, isBlocked)).join('')}
       `;
 
       // Eventos dos cartões
@@ -241,8 +249,17 @@ export class HistoryController {
 
       document.getElementById('btnClearHistory')?.addEventListener('click', async () => {
         if (!confirm('Remover todos os documentos do arquivo?')) return;
-        for (const doc of docs) await this._deleteDoc(doc.id);
-        NotificationView.info('🗑️ Arquivo limpo');
+        const btn = document.getElementById('btnClearHistory');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ A limpar…'; }
+        let erros = 0;
+        for (const doc of docs) {
+          try { await this._deleteDoc(doc.id); } catch (_) { erros++; }
+        }
+        if (erros === 0) {
+          NotificationView.info('🗑️ Arquivo limpo');
+        } else {
+          NotificationView.warn(`🗑️ Arquivo limpo (${erros} erro(s) ignorados)`);
+        }
         await this._render();
       });
 
@@ -257,18 +274,29 @@ export class HistoryController {
   }
 
   async _deleteDoc(id) {
-    // Apagar localmente
+    // 1. Apagar localmente (IndexedDB)
     await offlineDB.deleteDocument(id).catch(() => {});
 
-    // Apagar no Supabase se disponível
+    // 2. Apagar no Supabase se o utilizador estiver autenticado
     const supabase = window.authManager?.supabase;
     const userId   = window.authManager?.user?.id;
     if (supabase && userId) {
-      await supabase.from('documents').delete().eq('id', id).eq('user_id', userId).catch(() => {});
+      const { error } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+      if (error) {
+        console.warn('[History] Supabase delete error:', error.code, error.message);
+        // Não lançar — o documento já foi apagado localmente
+      }
     }
+    // Sinalizar que deve usar IndexedDB na próxima leitura para evitar
+    // dados obsoletos do Supabase (eventual consistency após delete)
+    this._justDeleted = true;
   }
 
-  _docCard(doc) {
+  _docCard(doc, isBlocked = false) {
     const icon    = SERVICE_ICONS[doc.service_type] || '📄';
     const date    = new Date(doc.created_at);
     const dateStr = date.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -283,6 +311,12 @@ export class HistoryController {
       ? '<span style="font-size:10px;color:#f59e0b;font-weight:600;">📴 local</span>'
       : '<span style="font-size:10px;color:#16a34a;font-weight:600;">☁️</span>';
 
+    const actionBtns = isBlocked
+      ? `<button class="hist-view" style="padding:6px 14px;border:none;background:#EFF6FF;color:#1d4ed8;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">👁️ Ver</button>`
+      : `<button class="hist-copy" style="padding:6px 12px;border:1.5px solid #e5e7eb;background:#f9fafb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#334155;">📋 Copiar</button>
+         <button class="hist-view" style="padding:6px 14px;border:none;background:#EFF6FF;color:#1d4ed8;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">👁️ Ver</button>
+         <button class="hist-del" style="padding:6px 10px;border:none;background:#FEF2F2;color:#EF4444;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">🗑️</button>`;
+
     return `
       <div class="hist-card" data-id="${doc.id}"
         style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:10px;">
@@ -295,9 +329,7 @@ export class HistoryController {
         </div>
         <div style="font-size:12px;color:#64748b;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${preview}…</div>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
-          <button class="hist-copy" style="padding:6px 12px;border:1.5px solid #e5e7eb;background:#f9fafb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#334155;">📋 Copiar</button>
-          <button class="hist-view" style="padding:6px 14px;border:none;background:#EFF6FF;color:#1d4ed8;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">👁️ Ver</button>
-          <button class="hist-del" style="padding:6px 10px;border:none;background:#FEF2F2;color:#EF4444;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">🗑️</button>
+          ${actionBtns}
         </div>
       </div>
     `;
