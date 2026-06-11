@@ -802,8 +802,17 @@ USING (EXISTS (
         if (!confirm('Eliminar este documento?')) return;
         this.closeModal();
         try {
-            const { error } = await this.supabase.from('documents').delete().eq('id', docId);
-            if (error) throw error;
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/delete-document', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ docId }),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Erro ao eliminar documento');
             this._notify('✅ Documento eliminado');
             this._loadDocuments();
         } catch (err) { this._notify('❌ ' + err.message, 'error'); }
@@ -1860,4 +1869,6 @@ USING (EXISTS (
 
 
 
-    }window.adminApp = new AdminApp();
+    }
+
+window.adminApp = new AdminApp();
