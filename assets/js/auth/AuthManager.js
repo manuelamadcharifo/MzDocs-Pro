@@ -110,14 +110,15 @@ export class AuthManager {
  try {
  const { data, error } = await this.supabase
  .from('profiles')
- .select('is_admin, credits, full_name, email, phone, account_type, credits_expires_at, free_credit_used')
+ .select('is_admin, is_blocked, credits, full_name, email, phone, account_type, credits_expires_at, free_credit_used')
  .eq('id', userId)
  .single();
  if (error && error.code !== 'PGRST116') {
  console.warn('[AuthManager] _loadProfile erro:', error.message);
  }
  if (data) {
- this._isAdmin = data?.is_admin === true;
+ this._isAdmin   = data?.is_admin   === true;
+ this._isBlocked = data?.is_blocked === true;
  if (this.user) this.user._profile = data || null;
  return;
  }
@@ -133,7 +134,8 @@ export class AuthManager {
 
  async ready() { return this._initPromise; }
  isAuthenticated() { return !!this.user; }
- isAdmin() { return this._isAdmin === true; }
+ isAdmin()   { return this._isAdmin   === true; }
+ isBlocked() { return this._isBlocked === true; }
 
  async _withTimeout(promise, ms, errMsg) {
  return Promise.race([
