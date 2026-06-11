@@ -684,26 +684,11 @@ export class DocumentController {
      // O jsPDF recalcula quebras de pagina de forma diferente do preview — causava
      // documentos com 2 paginas quando o preview mostrava 1 pagina continua.
      // HTMLPDFExporter usa o mesmo CSS do preview: o que se ve = o que se descarrega.
+     // exportWithPageWrap usa CSS proprio optimizado para impressao A4 (1 pagina para CVs).
+     // CSS definido no HTMLPDFExporter — nao precisa ser passado aqui.
      const content = this.docModel.content;
      const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
-     const previewCss = [
-       '*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}',
-       'body{background:#fff;font-family:"Times New Roman",Georgia,serif;}',
-       '.doc-page{width:210mm;padding:25mm 22mm 20mm 25mm;font-size:12pt;line-height:1.5;color:#000;}',
-       'h1{font-size:18pt;font-weight:bold;text-align:center;margin-bottom:16pt;}',
-       'h2{font-size:14pt;font-weight:bold;margin-top:14pt;margin-bottom:8pt;border-bottom:1px solid #ccc;padding-bottom:3pt;}',
-       'h3{font-size:12pt;font-weight:bold;margin-top:10pt;margin-bottom:6pt;}',
-       'h4{font-size:11pt;font-weight:bold;margin-top:8pt;margin-bottom:4pt;}',
-       'p{margin-bottom:8pt;text-align:justify;}',
-       'ul,ol{margin:6pt 0 6pt 18pt;}li{margin-bottom:3pt;}',
-       'table{width:100%;border-collapse:collapse;margin:10pt 0;font-size:11pt;}',
-       'td,th{border:1px solid #000;padding:5pt 7pt;}th{background:#f0f0f0;font-weight:bold;}',
-       'strong{font-weight:bold;}em{font-style:italic;}',
-       'hr{border:none;border-top:1px solid #888;margin:12pt 0;}',
-       'h1,h2,h3,h4{page-break-after:avoid;}',
-     ].join('');
      new HTMLPDFExporter().exportWithPageWrap(content, filename, {
-       templateCss: previewCss,
        title: svc?.title || 'Documento MzDocs Pro',
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
