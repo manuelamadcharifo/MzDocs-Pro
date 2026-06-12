@@ -371,4 +371,35 @@ export const DocumentView = {
     fields.forEach(f => f.row ? f.items.forEach(collect) : collect(f));
     return data;
   },
+
+  // Preenche os campos do formulário com dados do rascunho guardado
+  restoreDraft(fields, draftData) {
+    if (!draftData) return;
+    const restore = f => {
+      const el = document.getElementById(f.id);
+      if (!el || !(f.id in draftData)) return;
+      el.value = draftData[f.id] ?? '';
+    };
+    fields.forEach(f => f.row ? f.items.forEach(restore) : restore(f));
+    // Re-dispara change em todos os selects para activar campos condicionais
+    fields.forEach(f => {
+      const items = f.row ? f.items : [f];
+      items.forEach(fi => {
+        if (fi.type === 'select') {
+          document.getElementById(fi.id)?.dispatchEvent(new Event('change'));
+        }
+      });
+    });
+  },
+
+  // Recolhe todos os campos (incluindo os condicionais ocultos) para guardar rascunho
+  collectAllFields(fields) {
+    const data = {};
+    const collect = f => {
+      const el = document.getElementById(f.id);
+      if (el) data[f.id] = el.value;
+    };
+    fields.forEach(f => f.row ? f.items.forEach(collect) : collect(f));
+    return data;
+  },
 };
