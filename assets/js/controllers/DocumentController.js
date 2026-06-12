@@ -193,6 +193,19 @@ export class DocumentController {
  this.templateCtrl.reset();
  this.templateCtrl.bindEvents();
 
+ // ── Restaurar rascunho guardado (se existir) ──────────────────────────────
+ offlineDB.getDraft(key).then(draft => {
+  if (draft) {
+   DocumentView.restoreDraft(svc.fields, draft);
+   // Re-run conditional bindings after restoring selects
+   DocumentView.bindConditionalFields(document.getElementById('formBody'));
+   this._showDraftBanner(key);
+  }
+ }).catch(() => {});
+
+ // ── Auto-guardar rascunho a cada mudança ──────────────────────────────────
+ this._bindDraftAutoSave(key, svc.fields);
+
  setTimeout(() => {
   const btnGen = document.getElementById('btnGen');
   const btnWa = document.getElementById('btnWaDirect');
@@ -203,9 +216,72 @@ export class DocumentController {
  ModalView.open('formOverlay');
  }
 
+ // ── Auto-save rascunho ────────────────────────────────────────────────────
+ _bindDraftAutoSave(serviceKey, fields) {
+  const formBody = document.getElementById('formBody');
+  if (!formBody) return;
+
+  // Cancelar listener anterior para evitar duplicados
+  if (this._draftAutoSaveHandler) {
+   formBody.removeEventListener('input',  this._draftAutoSaveHandler);
+   formBody.removeEventListener('change', this._draftAutoSaveHandler);
+  }
+
+  let timer = null;
+  this._draftAutoSaveHandler = () => {
+   clearTimeout(timer);
+   timer = setTimeout(() => {
+    const data = DocumentView.collectAllFields(fields);
+    offlineDB.saveDraft(serviceKey, data).catch(() => {});
+   }, 400);
+  };
+
+  formBody.addEventListener('input',  this._draftAutoSaveHandler);
+  formBody.addEventListener('change', this._draftAutoSaveHandler);
+ }
+
+ // Banner discreto que aparece quando o rascunho é restaurado
+ _showDraftBanner(serviceKey) {
+  const existing = document.getElementById('draftBanner');
+  if (existing) return; // já visível
+
+  const banner = document.createElement('div');
+  banner.id = 'draftBanner';
+  banner.innerHTML = `
+   <span>📝 Rascunho restaurado</span>
+   <button id="btnDiscardDraft" style="background:none;border:none;color:#b45309;font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;padding:0 4px;">Descartar</button>
+  `;
+  banner.style.cssText = `
+   display:flex;align-items:center;justify-content:space-between;
+   background:#fef3c7;color:#92400e;border:1px solid #fcd34d;
+   border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;
+   margin:0 0 12px 0;gap:8px;
+  `;
+  const formBody = document.getElementById('formBody');
+  if (formBody) formBody.insertAdjacentElement('beforebegin', banner);
+
+  document.getElementById('btnDiscardDraft')?.addEventListener('click', () => {
+   offlineDB.clearDraft(serviceKey).catch(() => {});
+   banner.remove();
+   // Limpar todos os campos
+   const svc = SERVICES[serviceKey];
+   if (svc) DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
+   this._bindDraftAutoSave(serviceKey, svc?.fields || []);
+   NotificationView.info('🗑️ Rascunho descartado');
+  });
+ }
+
  closeForm() {
  ModalView.close('formOverlay');
  DocumentView.hideLoader(this._genIv);
+ // Limpar listener de auto-save (o rascunho fica guardado — será restaurado na próxima abertura)
+ const formBody = document.getElementById('formBody');
+ if (this._draftAutoSaveHandler && formBody) {
+  formBody.removeEventListener('input',  this._draftAutoSaveHandler);
+  formBody.removeEventListener('change', this._draftAutoSaveHandler);
+  this._draftAutoSaveHandler = null;
+ }
+ document.getElementById('draftBanner')?.remove();
  this.docModel.reset();
  this.templateCtrl.reset();
  this._generating = false;
@@ -225,12 +301,6 @@ export class DocumentController {
  async generate() {
  if (this._generating) {
   console.warn('[DocumentController] generate() chamado enquanto geração em curso — ignorado');
-  return;
- }
-
- // Utilizador bloqueado não pode criar documentos
- if (window.authManager?.isBlocked?.()) {
-  NotificationView.warn('🚫 A sua conta está bloqueada. Não é possível criar documentos.');
   return;
  }
 
@@ -342,6 +412,10 @@ export class DocumentController {
  // Analytics: documento gerado com sucesso
  Analytics.trackDocumentGenerated(key, cost, newHistoryId);
 
+ // Rascunho já não é necessário — documento gerado com sucesso
+ offlineDB.clearDraft(key).catch(() => {});
+ document.getElementById('draftBanner')?.remove();
+
  const activeTemplate = this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null;
  if (activeTemplate) {
    this._activeTemplate = activeTemplate;
@@ -404,6 +478,10 @@ export class DocumentController {
   // Analytics
   const longHistId = crypto.randomUUID();
   Analytics.trackDocumentGenerated(key, cost, longHistId);
+
+  // Rascunho já não é necessário — documento gerado com sucesso
+  offlineDB.clearDraft(key).catch(() => {});
+  document.getElementById('draftBanner')?.remove();
 
   this.docModel.setGenerated(result.document, result.model);
   documentState.set(result.document, this.docModel.service);
@@ -576,12 +654,7 @@ export class DocumentController {
  }
 
  downloadDoc() {
-  // Utilizador bloqueado não pode baixar documentos
-  if (window.authManager?.isBlocked?.()) {
-   NotificationView.warn('🚫 A sua conta está bloqueada. Não é possível baixar documentos.');
-   return;
-  }
-  this._showExportMenu();
+ this._showExportMenu();
  }
 
  _showExportMenu() {
@@ -760,11 +833,6 @@ export class DocumentController {
  }
 
  _openEditor() {
- // Utilizador bloqueado só pode fazer preview — não pode editar
- if (window.authManager?.isBlocked?.()) {
-  NotificationView.warn('🚫 A sua conta está bloqueada. Não é possível editar documentos.');
-  return;
- }
  if (!this.docModel.content) {
   NotificationView.warn('⚠️ Nenhum documento gerado ainda.');
   return;
@@ -823,11 +891,6 @@ export class DocumentController {
  }
 
  async _downloadWithTemplate(tpl, format) {
- // Utilizador bloqueado não pode baixar documentos
- if (window.authManager?.isBlocked?.()) {
-  NotificationView.warn('🚫 A sua conta está bloqueada. Não é possível baixar documentos.');
-  return;
- }
  const content = documentState.currentContent || this.docModel.content;
  if (!content) { NotificationView.warn('⚠️ Nenhum documento para exportar.'); return; }
  this._activeTemplate = tpl;
