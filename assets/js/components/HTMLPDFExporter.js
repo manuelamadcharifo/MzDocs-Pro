@@ -37,7 +37,9 @@ function mdToHtml(md) {
   // Code
   t = t.replace(/`(.+?)`/g,'<code>$1</code>');
 
-  // Page break
+  // Page break — normalizar variantes de "Nova Página" antes de substituir
+  t = t.replace(/^[ \t]*[—–-]{0,3}[ \t]*Nova P[aá]gina[ \t]*[—–-]{0,3}[ \t]*$/gim, '---PAGE_BREAK---');
+  t = t.replace(/\*{1,2}Nova P[aá]gina\*{1,2}/gi, '---PAGE_BREAK---');
   t = t.replace(/---PAGE_BREAK---/g,'<div style="page-break-after:always"></div>');
 
   // HR
