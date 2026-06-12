@@ -277,12 +277,13 @@ DADOS DO TRABALHO:
 - Requisitos do docente: ${data.requisitos || 'seguir normas académicas padrão APA'}
 
 REGRAS ABSOLUTAS DE CONTEÚDO:
-1. O marcador ---PAGE_BREAK--- separa cada folha A4 — use-o exactamente como indicado
+1. O marcador ---PAGE_BREAK--- separa cada folha A4 — use-o exactamente como indicado. NUNCA escreva "Nova Página" ou "— Nova Página —" — use SEMPRE ---PAGE_BREAK---
 2. Cada parágrafo deve ter 6-8 linhas de texto académico denso e contínuo
 3. NUNCA escreva "[PREENCHER]", "[escrever aqui]" ou qualquer marcador de lugar no conteúdo narrativo — escreva o texto real
 4. Use exemplos reais, dados históricos verificáveis, contexto moçambicano e africano sempre que possível
 5. Corrija ortografia e acentuação em português europeu/moçambicano
 6. Títulos e subtítulos em **negrito** e bem hierarquizados
+7. ORDEM OBRIGATÓRIA em cada secção: ---PAGE_BREAK--- → título (## ou ###) → parágrafos. NUNCA coloque um parágrafo antes do título após uma quebra de página
 
 REGRAS DE QUALIDADE (violações tornam o documento inaceitável):
 - NUNCA repita o mesmo parágrafo ou ideia em secções diferentes — cada secção deve trazer conteúdo NOVO
@@ -1959,6 +1960,7 @@ FORMATO ENTRADA GENÉRICA (cv-entry, doc-entry):
 RESPOSTA: Devolva APENAS o HTML, começando com a tag raiz do template e terminando com </div>. SEM markdown, SEM explicações, SEM \`\`\`html.`;
   }
 
+  // ── Dados específicos por tipo de documento para prompt HTML ─────────────
   // ── Dados específicos por tipo de documento para prompt HTML ─────────────
   _buildDataBlock(type, data) {
     const num = (v) => parseInt(v || 0).toLocaleString('pt-MZ');
