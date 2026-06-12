@@ -262,7 +262,11 @@ export class DocumentEditor {
   // ── Converte markdown → HTML rico para o editor Word ──────────
   _mdToRichHTML(md) {
     if (!md) return '<p><br></p>';
-    let html = md
+    // Normalizar "Nova Página" e variantes para o marcador canónico
+    const normalized = md
+      .replace(/^[ \t]*[—–-]{0,3}[ \t]*Nova P[aá]gina[ \t]*[—–-]{0,3}[ \t]*$/gim, '---PAGE_BREAK---')
+      .replace(/\*{1,2}Nova P[aá]gina\*{1,2}/gi, '---PAGE_BREAK---');
+    let html = normalized
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/---PAGE_BREAK---/g, '<div style="page-break-after:always;height:0;margin:0"></div><div style="display:flex;align-items:center;gap:8px;margin:16px 0;"><div style="height:1px;flex:1;background:#d1d5db"></div><span style="font-size:10px;color:#9ca3af;letter-spacing:.5px">— Nova Página —</span><div style="height:1px;flex:1;background:#d1d5db"></div></div>')
       .replace(/^######\s(.+)$/gm, '<h6>$1</h6>')
@@ -765,9 +769,13 @@ export class DocumentEditor {
   }
 
   _mdToHTMLBasic(md) {
+    // Normalizar variantes de "Nova Página" para o marcador canónico
+    const normalized = md
+      .replace(/^[ \t]*[—–-]{0,3}[ \t]*Nova P[aá]gina[ \t]*[—–-]{0,3}[ \t]*$/gim, '---PAGE_BREAK---')
+      .replace(/\*{1,2}Nova P[aá]gina\*{1,2}/gi, '---PAGE_BREAK---');
     // Replace PAGE_BREAK FIRST (before HTML-escaping) so it doesn't get mangled
     const PAGE_BREAK_PLACEHOLDER = '___PB___';
-    let html = md
+    let html = normalized
       .replace(/---PAGE_BREAK---/g, PAGE_BREAK_PLACEHOLDER)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(new RegExp(PAGE_BREAK_PLACEHOLDER,'g'),'<div style="page-break-after:always;height:0;margin:0"></div><div style="display:flex;align-items:center;gap:8px;margin:18px 0;"><div style="height:1px;flex:1;background:#d1d5db"></div><span style="font-size:10px;color:#9ca3af;letter-spacing:.5px">— Nova Página —</span><div style="height:1px;flex:1;background:#d1d5db"></div></div>')
