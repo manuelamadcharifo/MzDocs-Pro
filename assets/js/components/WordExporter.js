@@ -340,7 +340,12 @@ export class WordExporter {
             }
 
             // Processar markdown linha a linha
-            const lines = this._fixAccents(markdownContent).split('\n');
+            // Normalizar variantes de "Nova Página" para o marcador canónico
+            const normalizePageBreaks = (raw) => raw
+                .replace(/^[ \t]*[—–-]{0,3}[ \t]*Nova P[aá]gina[ \t]*[—–-]{0,3}[ \t]*$/gim, '---PAGE_BREAK---')
+                .replace(/\*{1,2}Nova P[aá]gina\*{1,2}/gi, '---PAGE_BREAK---')
+                .replace(/(---PAGE_BREAK---\s*){2,}/g, '---PAGE_BREAK---\n');
+            const lines = normalizePageBreaks(this._fixAccents(markdownContent)).split('\n');
             let i = 0;
             let skipCoverTable = true; // suprimir a tabela de capa do markdown
 
@@ -389,11 +394,14 @@ export class WordExporter {
                     i++; continue;
                 }
                 if (h2) {
+                    const isNumberedChapter = /^\d+[\.\)]\s/.test(h2[1]) ||
+                        /^(Introdução|Conclusão|Referências|Índice|Abstract|Resumo|Metodologia)/i.test(h2[1]);
                     children.push(new Paragraph({
                         heading: HeadingLevel.HEADING_2,
                         spacing: { ...lineSpace, before: 360, after: 180 },
                         keepLines: true, keepNext: true,
                         indent: { firstLine: 0 },
+                        pageBreakBefore: isNumberedChapter,
                         children: inlineRuns(h2[1], { bold: true, size: 24 })
                     }));
                     i++; continue;
