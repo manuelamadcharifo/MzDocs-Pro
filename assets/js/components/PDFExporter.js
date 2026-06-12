@@ -266,7 +266,17 @@ export class PDFExporter {
         };
 
         // ── Parse e renderização do markdown ──────────────────────────────
-        const lines = markdownContent.split('\n');
+        // NORMALIZAÇÃO: converter variantes de "Nova Página" para o marcador canónico
+        const normalizeContent = (raw) => {
+            return raw
+                // "— Nova Página —" (com travessões e variações de espaço/dash)
+                .replace(/^[ \t]*[—–-]{0,3}[ \t]*Nova P[aá]gina[ \t]*[—–-]{0,3}[ \t]*$/gim, '---PAGE_BREAK---')
+                // "**Nova Página**" e variantes em negrito
+                .replace(/\*{1,2}Nova P[aá]gina\*{1,2}/gi, '---PAGE_BREAK---')
+                // Duplo break acidental (colapsar em único)
+                .replace(/(---PAGE_BREAK---\s*){2,}/g, '---PAGE_BREAK---\n');
+        };
+        const lines = normalizeContent(markdownContent).split('\n');
 
         // Detectar se o conteúdo começa com uma capa implícita (tabela)
         // e suprimi-la (a capa já é desenhada aqui)
@@ -314,6 +324,21 @@ export class PDFExporter {
                     newPage();
                 } else if (!isFirstBreak) {
                     newPage();
+                }
+                // Look-ahead: se há parágrafos antes de um H2/H3 logo a seguir,
+                // saltar esses parágrafos "órfãos" que o LLM coloca por engano
+                // antes do título do capítulo (só salta 1 parágrafo no máximo)
+                {
+                    let j = i + 1;
+                    while (j < lines.length && lines[j].trim() === '') j++;
+                    const nextMeaningful = lines[j]?.trim() || '';
+                    // Se a próxima linha com conteúdo NÃO é um heading, não faz nada
+                    // Se for um heading, verificar se i+1..j-1 tem um parágrafo solto
+                    if (/^#{1,3}\s/.test(nextMeaningful)) {
+                        // Mover o cursor para j (saltar linhas vazias)
+                        i = j;
+                        continue;
+                    }
                 }
                 i++; continue;
             }
@@ -379,7 +404,18 @@ export class PDFExporter {
             const h2 = line.match(/^##\s+(.+)/);
             if (h2) {
                 const text = prep(h2[1]);
-                checkHeading(18, 7);
+
+                // Capítulos numerados (ex: "1. Introdução", "2. Metodologia")
+                // SEMPRE começam numa nova página — é estrutura académica obrigatória
+                const isNumberedChapter = /^\d+[\.\)]\s/.test(text) ||
+                    /^(Introdução|Conclusão|Referências|Índice|Abstract|Resumo|Metodologia)/i.test(text);
+
+                if (isNumberedChapter) {
+                    // Só adicionar nova página se já há conteúdo na página actual
+                    if (y > MT + 5) newPage();
+                } else {
+                    checkHeading(18, 7);
+                }
                 gap(7);
                 setFont(true, false, 14, [0,0,0]);
                 const h2Lines = doc.splitTextToSize(text, CW);
@@ -401,7 +437,8 @@ export class PDFExporter {
             const h3 = line.match(/^###\s+(.+)/);
             if (h3) {
                 const text = prep(h3[1]);
-                checkHeading(14, 7);
+                // H3 precisa de pelo menos: própria altura + 3 linhas de parágrafo abaixo
+                checkHeading(14, 21);
                 gap(5);
                 setFont(true, true, 12, [0,0,0]);
                 const h3Lines = doc.splitTextToSize(text, CW);
