@@ -172,6 +172,17 @@ export class OfflineDB {
         });
     }
 
+    async clearDraft(serviceType) {
+        await this.init();
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('drafts', 'readwrite');
+            const store = tx.objectStore('drafts');
+            const request = store.delete(serviceType);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
     // ============================================
     // VERIFICAÇÃO DE CONECTIVIDADE
     // ============================================
