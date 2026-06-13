@@ -749,7 +749,6 @@ window.openLoginFromTeaser = function() {
 <script type="module">
 import { SERVICES } from '/assets/js/services/ServiceDefinitions.js';
 
-// Mapa de cores por serviço (mantém cores originais)
 const SVC_COLOR = {
   cv:'#10B981', trabalho:'#3B82F6', carta:'#F59E0B', orcamento:'#8B5CF6',
   impressao:'#EC4899', foto:'#06B6D4', arrendamento:'#D97706', procuracao:'#4F46E5',
@@ -758,7 +757,6 @@ const SVC_COLOR = {
   acta:'#4B5563', conversao:'#EF4444',
 };
 
-// Créditos por serviço
 const SVC_CREDITS = {
   planonegocio: '2 créditos',
   impressao: null, foto: null, conversao: null,
@@ -769,28 +767,44 @@ function getCredits(id) {
   return `<span class="cost">${SVC_CREDITS[id] || '1 crédito'}</span>`;
 }
 
+// ── Contagem de cliques por categoria (localStorage) ────────────────────────
+const CAT_COUNTS_KEY = 'mz_cat_clicks';
+function getCatCounts() {
+  try { return JSON.parse(localStorage.getItem(CAT_COUNTS_KEY) || '{}'); } catch { return {}; }
+}
+function incrementCatCount(cat) {
+  if (!cat || cat === 'todos') return;
+  const counts = getCatCounts();
+  counts[cat] = (counts[cat] || 0) + 1;
+  try { localStorage.setItem(CAT_COUNTS_KEY, JSON.stringify(counts)); } catch {}
+}
+function getMostUsedCat() {
+  const counts = getCatCounts();
+  if (!Object.keys(counts).length) return null;
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+// ── Renderização dos cartões ─────────────────────────────────────────────────
 function renderServices(cat) {
   const grid = document.getElementById('svcGrid');
   if (!grid) return;
 
-  // Filtrar e ordenar por popularidade
   const entries = Object.entries(SERVICES)
     .filter(([, s]) => cat === 'todos' || s.category === cat)
     .sort((a, b) => (a[1].popularity || 99) - (b[1].popularity || 99));
 
   if (entries.length === 0) {
-    grid.innerHTML = '<div style="grid-column:span 2;text-align:center;padding:32px 0;color:var(--muted);font-size:14px;">Nenhum serviço nesta categoria ainda.</div>';
+    grid.innerHTML = '<div style="grid-column:span 2;text-align:center;padding:32px 16px;color:var(--muted);font-size:14px;">Nenhum serviço nesta categoria ainda.</div>';
     return;
   }
 
   grid.innerHTML = entries.map(([id, s]) => {
     const isWide = id === 'conversao' && cat === 'todos';
-    const badgeHTML = s.hasAI
+    const badge = s.hasAI
       ? '<div class="sc-pro-badge">✦ Pro</div>'
       : '<div class="sc-wa-badge">📲 WhatsApp</div>';
-    return `
-      <div class="sc${isWide ? ' wide' : ''}" data-svc="${id}">
-        ${badgeHTML}
+    return `<div class="sc${isWide ? ' wide' : ''}" data-svc="${id}">
+        ${badge}
         <div class="sc-ico" style="background:${s.bg}">${s.icon}</div>
         <div class="sc-name">${s.title}</div>
         <div class="sc-desc">${s.sub}</div>
@@ -800,17 +814,58 @@ function renderServices(cat) {
   }).join('');
 }
 
-// Inicializar grade com todos os serviços
+// ── Activar botão de filtro ──────────────────────────────────────────────────
+function setActiveFilter(cat) {
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`.cat-btn[data-cat="${cat}"]`);
+  if (btn) btn.classList.add('active');
+}
+
+// ── Delegação de cliques nos cartões ────────────────────────────────────────
+// Funciona mesmo com cartões gerados dinamicamente
+function bindGridClicks() {
+  const grid = document.getElementById('svcGrid');
+  if (!grid || grid._mzBound) return;
+  grid._mzBound = true;
+  grid.addEventListener('click', e => {
+    const card = e.target.closest('.sc[data-svc]');
+    if (!card) return;
+    const svcId = card.dataset.svc;
+    // Registar categoria clicada para pre-selecção futura
+    const svc = SERVICES[svcId];
+    if (svc?.category) incrementCatCount(svc.category);
+    // Abrir serviço via controller global (exposto por app.js)
+    if (window.docController) {
+      window.docController.open(svcId);
+    } else {
+      // fallback: aguardar o controller inicializar (máx 3s)
+      let tries = 0;
+      const iv = setInterval(() => {
+        if (window.docController) {
+          clearInterval(iv);
+          window.docController.open(svcId);
+        } else if (++tries > 30) clearInterval(iv);
+      }, 100);
+    }
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  renderServices('todos');
+  // Pre-selecção: categoria mais usada ou 'todos'
+  const preferred = getMostUsedCat() || 'todos';
+  setActiveFilter(preferred);
+  renderServices(preferred);
+  bindGridClicks();
 
   // Filtros de categoria
   document.getElementById('catFilters')?.addEventListener('click', e => {
     const btn = e.target.closest('.cat-btn');
     if (!btn) return;
-    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    renderServices(btn.dataset.cat);
+    const cat = btn.dataset.cat;
+    setActiveFilter(cat);
+    renderServices(cat);
+    // Re-bind (o innerHTML foi substituído, mas o listener está no grid — OK)
   });
 });
 </script>
