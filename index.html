@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <meta name="theme-color" content="#07101F"/>
-  <meta name="description" content="MzDocs Pro — Crie documentos profissionais em segundos. CV, cartas, trabalhos e orçamentos com IA gratuita para Moçambique."/>
+  <meta name="description" content="MzDocs Pro — Crie documentos profissionais em segundos. CV, cartas, trabalhos e orçamentos para Moçambique."/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -13,18 +13,18 @@
 
   <!-- Open Graph -->
   <meta property="og:type"        content="website"/>
-  <meta property="og:title"       content="MzDocs Pro — Documentos com IA para Moçambique"/>
-  <meta property="og:description" content="Crie CVs, cartas, trabalhos e orçamentos profissionais em segundos com IA gratuita."/>
+  <meta property="og:title"       content="MzDocs Pro — Documentos Profissionais para Moçambique"/>
+  <meta property="og:description" content="Crie CVs, cartas, trabalhos e orçamentos profissionais em segundos."/>
   <meta property="og:url"         content="https://mzdocs.co.mz"/>
   <meta property="og:image" content="/assets/icons/mzdocs-pro-dark.svg"/>
   <meta property="og:locale"      content="pt_MZ"/>
   <!-- Twitter Card -->
   <meta name="twitter:card"        content="summary_large_image"/>
   <meta name="twitter:title"       content="MzDocs Pro"/>
-  <meta name="twitter:description" content="Documentos profissionais com IA para Moçambique"/>
+  <meta name="twitter:description" content="Documentos profissionais para Moçambique"/>
   <meta name="twitter:image" content="/assets/icons/mzdocs-pro-dark.svg"/>
 
-  <title>MzDocs Pro — Documentos com IA</title>
+  <title>MzDocs Pro — Documentos Profissionais</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -171,7 +171,7 @@
       <div class="hs-num">2</div>
       <div class="hs-body">
         <div class="hs-title">Preencha um formulário rápido</div>
-        <div class="hs-desc">Dados simples: nome, datas e detalhes específicos. A IA trata da formatação e linguagem profissional.</div>
+        <div class="hs-desc">Dados simples: nome, datas e detalhes específicos. O sistema trata da formatação e linguagem profissional.</div>
       </div>
     </div>
     <div class="how-step">
@@ -212,7 +212,24 @@
     </div>
   </div>
 
-  <!-- GRADE DE SERVIÇOS — homeController.js controla display -->\n  <div id=\"servicesSection\">\n    <p class=\"grid-label\">O QUE PRECISA CRIAR?</p>\n\n    <!-- FILTROS DE CATEGORIA -->\n    <div class=\"cat-filters\" id=\"catFilters\">\n      <button class=\"cat-btn active\" data-cat=\"todos\">✦ Todos</button>\n      <button class=\"cat-btn\" data-cat=\"pessoal\">👤 Pessoal</button>\n      <button class=\"cat-btn\" data-cat=\"juridico\">⚖️ Jurídico</button>\n      <button class=\"cat-btn\" data-cat=\"negocio\">💼 Negócio</button>\n      <button class=\"cat-btn\" data-cat=\"academico\">📚 Académico</button>\n      <button class=\"cat-btn\" data-cat=\"servicos\">🛠️ Serviços</button>\n    </div>\n\n    <div class=\"svc-grid\" id=\"svcGrid\">\n    <!-- Cartões gerados dinamicamente por homeController.js -->\n    </div>\n  </div><!-- /#servicesSection -->
+  <!-- GRADE DE SERVIÇOS — homeController.js controla display -->
+  <div id="servicesSection">
+    <p class="grid-label">O QUE PRECISA CRIAR?</p>
+
+    <!-- FILTROS DE CATEGORIA -->
+    <div class="cat-filters" id="catFilters">
+      <button class="cat-btn active" data-cat="todos">✦ Todos</button>
+      <button class="cat-btn" data-cat="pessoal">👤 Pessoal</button>
+      <button class="cat-btn" data-cat="juridico">⚖️ Jurídico</button>
+      <button class="cat-btn" data-cat="negocio">💼 Negócio</button>
+      <button class="cat-btn" data-cat="academico">📚 Académico</button>
+      <button class="cat-btn" data-cat="servicos">🛠️ Serviços</button>
+    </div>
+
+    <div class="svc-grid" id="svcGrid">
+    <!-- Cartões gerados dinamicamente por JS abaixo -->
+    </div>
+  </div><!-- /#servicesSection -->
 </main>
 
 <!-- MODAL FORMULÁRIO -->
