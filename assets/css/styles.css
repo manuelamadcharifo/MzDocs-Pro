@@ -118,7 +118,21 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .sc:hover,.sc:active{transform:translateY(-3px);box-shadow:var(--shl);border-color:var(--c,var(--blue))}
 .sc-line{position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--c,var(--blue));transform:scaleX(0);transform-origin:left;transition:transform .3s}
 .sc:hover .sc-line{transform:scaleX(1)}
-.sc-ai{position:absolute;top:10px;right:10px;font-size:9.5px;font-weight:800;background:linear-gradient(90deg,var(--blue),var(--green-l));color:#fff;padding:2px 7px;border-radius:10px;letter-spacing:.4px}
+.sc-pro-badge{position:absolute;top:10px;right:10px;font-size:9px;font-weight:800;background:linear-gradient(90deg,var(--blue),var(--green-l));color:#fff;padding:2px 7px;border-radius:10px;letter-spacing:.4px}
+.sc-wa-badge{position:absolute;top:10px;right:10px;font-size:9px;font-weight:700;background:#25D366;color:#fff;padding:2px 7px;border-radius:10px;letter-spacing:.3px}
+
+/* ── FILTROS DE CATEGORIA ─────────────────────────────────────────────── */
+.cat-filters{display:flex;gap:7px;overflow-x:auto;padding-bottom:12px;margin-bottom:10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.cat-filters::-webkit-scrollbar{display:none}
+.cat-btn{flex-shrink:0;padding:7px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--white);color:var(--dim);font-family:'Bricolage Grotesque',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:var(--t);white-space:nowrap}
+.cat-btn:hover{border-color:var(--blue);color:var(--blue)}
+.cat-btn.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* ── PASSWORD WRAP — campo com botão olho ─────────────────────────────── */
+.pw-wrap{position:relative;display:flex;align-items:center}
+.pw-wrap input{flex:1;padding-right:46px!important}
+.pw-eye{position:absolute;right:12px;background:none;border:none;cursor:pointer;font-size:16px;padding:4px;line-height:1;color:var(--muted);transition:opacity .15s}
+.pw-eye:hover{opacity:.7}
 .sc-ico{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
 .sc-name{font-size:14px;font-weight:800;color:var(--ink);line-height:1.2;word-break:normal;overflow-wrap:break-word}
 .sc-desc{font-size:11.5px;color:var(--muted);line-height:1.5;flex:1;overflow:visible;overflow-wrap:break-word;hyphens:auto;}
