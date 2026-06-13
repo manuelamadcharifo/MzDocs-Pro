@@ -36,7 +36,10 @@ export class AuthUI {
                         </div>
                         <div class="form-group">
                             <label>Password</label>
-                            <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+                            <div class="pw-wrap">
+                                <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+                                <button type="button" class="pw-eye" aria-label="Mostrar password" onclick="(function(btn){var inp=btn.previousElementSibling;inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'👁️':'🙈';})(this)">👁️</button>
+                            </div>
                             <a href="#" class="auth-link" data-view="forgot">Esqueceu a password?</a>
                         </div>
                         <button id="btnLogin" class="btn btn-primary btn-block">Entrar</button>
@@ -69,11 +72,17 @@ export class AuthUI {
                         </div>
                         <div class="form-group">
                             <label>Password <span style="color:#ef4444">*</span></label>
-                            <input type="password" id="regPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+                            <div class="pw-wrap">
+                                <input type="password" id="regPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+                                <button type="button" class="pw-eye" aria-label="Mostrar password" onclick="(function(btn){var inp=btn.previousElementSibling;inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'👁️':'🙈';})(this)">👁️</button>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>Confirmar Password <span style="color:#ef4444">*</span></label>
-                            <input type="password" id="regPasswordConfirm" placeholder="Repita a password" autocomplete="new-password">
+                            <div class="pw-wrap">
+                                <input type="password" id="regPasswordConfirm" placeholder="Repita a password" autocomplete="new-password">
+                                <button type="button" class="pw-eye" aria-label="Mostrar password" onclick="(function(btn){var inp=btn.previousElementSibling;inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'👁️':'🙈';})(this)">👁️</button>
+                            </div>
                         </div>
                         <button id="btnRegister" class="btn btn-primary btn-block">Criar Conta</button>
                     </div>
