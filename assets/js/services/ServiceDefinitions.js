@@ -356,7 +356,7 @@ export const SERVICES = {
   impressao: {
     icon:'🖨️', bg:'#FDF2F8', title:'Impressão de Documentos',
     sub:'Pedido de impressão — entrega coordenada via WhatsApp', hasAI:false,
-    category:'servicos', popularity:15,
+    category:'servicos', popularity:16,
     fields:[
       { id:'nome',   label:'O seu Nome', type:'text', required:true, ph:'Maria Nhantumbo' },
       { id:'tipo',   label:'Tipo de Impressão', type:'select', required:true,
@@ -376,7 +376,7 @@ export const SERVICES = {
   foto: {
     icon:'📷', bg:'#ECFEFF', title:'Foto para Documentos',
     sub:'Fotos com formato correcto para documentos oficiais', hasAI:false,
-    category:'servicos', popularity:16,
+    category:'servicos', popularity:17,
     fields:[
       { id:'nome',      label:'O seu Nome', type:'text', required:true, ph:'Pedro Cossa' },
       { id:'finalidade',label:'Finalidade', type:'select', required:true,
@@ -393,19 +393,9 @@ export const SERVICES = {
 
   conversao: {
     icon:'🔄', bg:'#FEF2F2', title:'Conversão de Ficheiros',
-    sub:'Converta os seus ficheiros para o formato que precisar — rápido e fácil', hasAI:false,
-    category:'servicos', popularity:17,
-    fields:[
-      { id:'nome', label:'O seu Nome', type:'text', required:true, ph:'Fátima Cuna' },
-      { id:'conv', label:'Tipo de Conversão', type:'select', required:true,
-        opts:['PDF → Word (.docx)','Word → PDF','PDF → Excel','Excel → PDF','Imagem → PDF','PDF → Imagem (JPG)','PowerPoint → PDF'] },
-      { row:true, items:[
-        { id:'nfich', label:'Nº de Ficheiros', type:'number', val:'1', min:'1' },
-        { id:'urg',   label:'Urgência', type:'select', opts:['Normal (até 2h)','Urgente (até 30min) +taxa','Imediato +taxa'] },
-      ]},
-    ],
-    buildWA(d) {
-      return `🔄 *CONVERSÃO – MzDocs Pro*\n\n👤 Nome: ${d.nome}\n↔️ Tipo: ${d.conv}\n📂 Ficheiros: ${d.nfich||'1'}\n⚡ Urgência: ${d.urg}\n\n✅ _Envio o ficheiro nesta conversa._`;
-    },
+    sub:'Converta os seus ficheiros para o formato que precisar — rápido e fácil', hasAI:true,
+    category:'servicos', popularity:15,
+    fields:[], // UI injectada pelo FileConverter.js via DocumentController
+    buildWA: null,
   },
 };
