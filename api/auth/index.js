@@ -135,6 +135,7 @@ async function handleSignup(req, res) {
       id: userId, phone: normalized, email: normalizedEmail,
       full_name: normalizedName, updated_at: new Date().toISOString(),
       account_type: 'normal',
+      credits: 1,   // 1 crédito grátis no registo — valor explícito sobrepõe qualquer DEFAULT da DB
       credits_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     };
 
