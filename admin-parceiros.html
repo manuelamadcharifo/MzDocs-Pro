@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="robots" content="noindex,nofollow"/>
+  <title>Admin — Parceiros MzDocs</title>
+  <link rel="icon" href="/assets/icons/icon.svg" type="image/svg+xml"/>
+  <link rel="stylesheet" href="/assets/css/styles.css"/>
+  <style>
+    :root{--ink:#07101F;--muted:#64748B;--border:#E2E8F0;--surface:#F8FAFD;--white:#fff;--blue:#3B82F6;--green:#009A44;--red:#EF4444;--gold:#F59E0B}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Bricolage Grotesque',system-ui,sans-serif;background:var(--surface);color:var(--ink);min-height:100vh}
+    .hdr{background:var(--ink);padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+    .hdr-name{font-size:15px;font-weight:800;color:#fff}
+    .hdr-name span{color:var(--gold)}
+    .btn-back{color:rgba(255,255,255,.6);font-size:13px;text-decoration:none}
+    .wrap{max-width:760px;margin:0 auto;padding:24px 14px 60px}
+    .page-title{font-size:20px;font-weight:800;margin-bottom:4px}
+    .page-sub{font-size:13px;color:var(--muted);margin-bottom:20px}
+    .tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+    .tab{padding:8px 16px;border-radius:20px;border:1.5px solid var(--border);background:var(--white);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+    .tab.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+    .tab .cnt{display:inline-block;background:var(--red);color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:4px;font-weight:800}
+    .card{background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(7,16,31,.05)}
+    .card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px}
+    .card-name{font-size:15px;font-weight:800;color:var(--ink)}
+    .card-owner{font-size:12px;color:var(--muted);margin-top:1px}
+    .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+    .badge-pending{background:#FEF9C3;color:#854D0E}
+    .badge-approved{background:#DCFCE7;color:#166534}
+    .badge-rejected{background:#FEE2E2;color:#991B1B}
+    .badge-off{background:#F1F5F9;color:#475569}
+    .card-info{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12.5px;color:var(--muted);margin-bottom:12px}
+    .card-info strong{color:var(--ink);font-weight:700}
+    .svc-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+    .svc-tag{background:#EFF6FF;color:var(--blue);font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px}
+    .card-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{padding:9px 16px;border-radius:9px;border:none;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:opacity .15s}
+    .btn:active{opacity:.75}
+    .btn-approve{background:var(--green);color:#fff}
+    .btn-reject{background:var(--red);color:#fff}
+    .btn-toggle-on{background:#F1F5F9;color:var(--ink);border:1.5px solid var(--border)}
+    .btn-toggle-off{background:var(--green);color:#fff}
+    .btn-wa{background:#25D366;color:#fff}
+    .empty{text-align:center;padding:48px 16px;color:var(--muted);font-size:14px}
+    #loginSection{max-width:360px;margin:80px auto 0;background:var(--white);border:1.5px solid var(--border);border-radius:20px;padding:28px 24px;text-align:center}
+    #loginSection h2{font-size:18px;font-weight:800;margin-bottom:6px}
+    #loginSection p{font-size:13px;color:var(--muted);margin-bottom:20px}
+    .inp{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;outline:none;margin-bottom:10px;transition:border-color .2s}
+    .inp:focus{border-color:var(--blue)}
+    .btn-login{width:100%;padding:14px;background:var(--ink);color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer}
+    #loginErr{color:var(--red);font-size:13px;margin-top:8px;display:none}
+    #adminPanel{display:none}
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700;800&display=swap" rel="stylesheet"/>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-name">Mz<span>Docs</span> Pro · Admin Parceiros</div>
+  <a href="/" class="btn-back">← Início</a>
+</header>
+
+<!-- LOGIN -->
+<div id="loginSection">
+  <h2>🔐 Área Restrita</h2>
+  <p>Acesso apenas para administradores MzDocs.</p>
+  <input class="inp" type="email" id="adminEmail" placeholder="Email de admin"/>
+  <div style="position:relative">
+    <input class="inp" type="password" id="adminPass" placeholder="Password" style="padding-right:44px"/>
+    <button type="button" style="position:absolute;right:12px;top:13px;background:none;border:none;cursor:pointer;font-size:16px" onclick="(function(b){var i=b.previousElementSibling;i.type=i.type==='password'?'text':'password';b.textContent=i.type==='password'?'👁️':'🙈';})(this)">👁️</button>
+  </div>
+  <button class="btn-login" onclick="doLogin()">Entrar</button>
+  <div id="loginErr">❌ Email ou password incorrectos.</div>
+</div>
+
+<!-- PAINEL ADMIN -->
+<div id="adminPanel">
+  <div class="wrap">
+    <div class="page-title">🏪 Gestão de Parceiros</div>
+    <div class="page-sub">Aprovar, rejeitar e gerir papelarias e gráficas parceiras.</div>
+
+    <div class="tabs">
+      <button class="tab active" data-status="pending" onclick="switchTab(this)">⏳ Pendentes <span class="cnt" id="cntPending">0</span></button>
+      <button class="tab" data-status="approved" onclick="switchTab(this)">✅ Aprovadas</button>
+      <button class="tab" data-status="rejected" onclick="switchTab(this)">❌ Rejeitadas</button>
+    </div>
+
+    <div id="partnersList"></div>
+  </div>
+</div>
+
+<script>
+let AUTH_TOKEN = '';
+let currentStatus = 'pending';
+
+// ── LOGIN ────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('adminEmail').value.trim();
+  const pass  = document.getElementById('adminPass').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+
+  if (!email || !pass) { errEl.style.display='block'; errEl.textContent='⚠️ Preencha email e password.'; return; }
+
+  try {
+    const SUPA_URL  = await getSupaUrl();
+    const SUPA_ANON = await getSupaAnon();
+    const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_ANON },
+      body: JSON.stringify({ email, password: pass }),
+    });
+    const data = await res.json();
+    if (!data.access_token) throw new Error('sem token');
+    AUTH_TOKEN = data.access_token;
+    document.getElementById('loginSection').style.display = 'none';
+    document.getElementById('adminPanel').style.display = 'block';
+    loadPartners('pending');
+  } catch {
+    errEl.style.display = 'block';
+    errEl.textContent = '❌ Email ou password incorrectos ou sem permissão de admin.';
+  }
+}
+
+// Busca config do backend para obter URL e anon key sem expor no código
+async function getSupaUrl()  { const c = await getConfig(); return c.supaUrl || ''; }
+async function getSupaAnon() { const c = await getConfig(); return c.supaAnon || ''; }
+let _cfg = null;
+async function getConfig() {
+  if (_cfg) return _cfg;
+  const r = await fetch('/api/misc?action=config');
+  _cfg = await r.json();
+  return _cfg;
+}
+
+// ── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  currentStatus = btn.dataset.status;
+  loadPartners(currentStatus);
+}
+
+// ── LOAD ─────────────────────────────────────────────────────────────────────
+async function loadPartners(status) {
+  const list = document.getElementById('partnersList');
+  list.innerHTML = '<div class="empty">⏳ A carregar…</div>';
+  try {
+    const res = await fetch(`/api/partners?action=list&status=${status}`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    if (status === 'pending') {
+      const cnt = document.getElementById('cntPending');
+      if (cnt) cnt.textContent = data.partners.length;
+    }
+    renderPartners(data.partners, status);
+  } catch (e) {
+    list.innerHTML = `<div class="empty">❌ Erro: ${e.message}</div>`;
+  }
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function renderPartners(partners, status) {
+  const list = document.getElementById('partnersList');
+  if (!partners.length) {
+    list.innerHTML = `<div class="empty">Nenhuma parceira ${status === 'pending' ? 'pendente' : status === 'approved' ? 'aprovada' : 'rejeitada'}.</div>`;
+    return;
+  }
+
+  const SVC_LABEL = { impressao:'🖨️ Impressão', foto:'📷 Foto Docs', plastificacao:'🧊 Plastificação', encadernacao:'📖 Encadernação', conversao:'🔄 Conversão', digitalizar:'📲 Digitalização' };
+
+  list.innerHTML = partners.map(p => {
+    const badgeCls = p.status === 'approved' ? (p.active ? 'badge-approved' : 'badge-off') : `badge-${p.status}`;
+    const badgeTxt = p.status === 'approved' ? (p.active ? '✅ Activa' : '⏸️ Inactiva') : p.status === 'rejected' ? '❌ Rejeitada' : '⏳ Pendente';
+    const svcs = (p.services || []).map(s => `<span class="svc-tag">${SVC_LABEL[s] || s}</span>`).join('');
+    const rating = p.rating_count > 0 ? `${(p.rating_sum/p.rating_count).toFixed(1)} ⭐ (${p.rating_count})` : 'Sem avaliações';
+    const waLink = `https://wa.me/${p.whatsapp.replace(/\D/g,'')}`;
+
+    let actions = '';
+    if (p.status === 'pending') {
+      actions = `
+        <button class="btn btn-approve" onclick="doAction('approve','${p.id}')">✅ Aprovar</button>
+        <button class="btn btn-reject"  onclick="doAction('reject','${p.id}')">❌ Rejeitar</button>
+        <a href="${waLink}" target="_blank" rel="noopener" class="btn btn-wa">WhatsApp</a>`;
+    } else if (p.status === 'approved') {
+      actions = p.active
+        ? `<button class="btn btn-toggle-on"  onclick="doToggle('${p.id}',false)">⏸️ Desactivar</button>`
+        : `<button class="btn btn-toggle-off" onclick="doToggle('${p.id}',true)">▶️ Activar</button>`;
+      actions += `<a href="${waLink}" target="_blank" rel="noopener" class="btn btn-wa">WhatsApp</a>`;
+    } else {
+      actions = `<button class="btn btn-approve" onclick="doAction('approve','${p.id}')">↩️ Reactivar</button>`;
+    }
+
+    return `<div class="card" id="card-${p.id}">
+      <div class="card-header">
+        <div>
+          <div class="card-name">${p.name}</div>
+          <div class="card-owner">👤 ${p.owner_name}</div>
+        </div>
+        <span class="badge ${badgeCls}">${badgeTxt}</span>
+      </div>
+      <div class="card-info">
+        <div>📞 <strong>${p.phone}</strong></div>
+        <div>📲 <strong>${p.whatsapp}</strong></div>
+        <div>📍 <strong>${p.city}</strong></div>
+        <div>🏠 <strong>${p.address}</strong></div>
+        <div>🕐 <strong>${p.hours || 'Não indicado'}</strong></div>
+        <div>⭐ <strong>${rating}</strong></div>
+        <div>🌐 <strong>${p.lat?.toFixed(4)}, ${p.lng?.toFixed(4)}</strong></div>
+        <div>📅 <strong>${new Date(p.created_at).toLocaleDateString('pt-MZ')}</strong></div>
+      </div>
+      <div class="svc-tags">${svcs}</div>
+      <div class="card-actions">${actions}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────────────────
+async function doAction(action, id) {
+  const card = document.getElementById(`card-${id}`);
+  if (card) card.style.opacity = '0.5';
+  try {
+    const res = await fetch(`/api/partners?action=${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AUTH_TOKEN}` },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    loadPartners(currentStatus);
+  } catch (e) {
+    alert('Erro: ' + e.message);
+    if (card) card.style.opacity = '1';
+  }
+}
+
+async function doToggle(id, active) {
+  const card = document.getElementById(`card-${id}`);
+  if (card) card.style.opacity = '0.5';
+  try {
+    const res = await fetch('/api/partners?action=toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AUTH_TOKEN}` },
+      body: JSON.stringify({ id, active }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    loadPartners(currentStatus);
+  } catch (e) {
+    alert('Erro: ' + e.message);
+    if (card) card.style.opacity = '1';
+  }
+}
+
+// Enter para login
+document.getElementById('adminPass')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+</script>
+</body>
+</html>
