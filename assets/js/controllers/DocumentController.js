@@ -187,9 +187,28 @@ export class DocumentController {
  document.getElementById('shIco').style.background = svc.bg;
  document.getElementById('shTitle').textContent = svc.title;
  document.getElementById('shSub').textContent = svc.sub;
- document.getElementById('ocrZone').style.display = svc.hasAI ? 'block' : 'none';
  window.ocrController?.reset();
 
+ // ── Conversor de ficheiros: substitui todo o modal ───────────────────────
+ if (svc.isConverter) {
+  document.getElementById('ocrZone').style.display = 'none';
+  document.getElementById('formBody').innerHTML = '';
+  document.getElementById('formFoot').innerHTML = '';
+  ModalView.open('formOverlay');
+  setTimeout(() => {
+   const formBody = document.getElementById('formBody');
+   if (!formBody) return;
+   document.getElementById('mz-extra-block')?.remove();
+   const block = document.createElement('div');
+   block.id = 'mz-extra-block';
+   block.innerHTML = buildConverterHTML();
+   formBody.appendChild(block);
+   initConverter(key, this.creditModel);
+  }, 80);
+  return;
+ }
+
+ document.getElementById('ocrZone').style.display = svc.hasAI ? 'block' : 'none';
  DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
 
  this.templateCtrl.reset();
@@ -199,13 +218,11 @@ export class DocumentController {
  offlineDB.getDraft(key).then(draft => {
   if (draft) {
    DocumentView.restoreDraft(svc.fields, draft);
-   // Re-run conditional bindings after restoring selects
    DocumentView.bindConditionalFields(document.getElementById('formBody'));
    this._showDraftBanner(key);
   }
  }).catch(() => {});
 
- // ── Auto-guardar rascunho a cada mudança ──────────────────────────────────
  this._bindDraftAutoSave(key, svc.fields);
 
  setTimeout(() => {
@@ -217,29 +234,18 @@ export class DocumentController {
 
  ModalView.open('formOverlay');
 
- // ── Serviços WhatsApp: injectar parceiras ou conversor ──────────────────
+ // ── Serviços WhatsApp: injectar parceiras próximas ───────────────────────
  if (!svc.hasAI) {
-  // Criar contentor abaixo do formulário
   setTimeout(() => {
    const formBody = document.getElementById('formBody');
    if (!formBody) return;
-   // Remover bloco anterior se existir
    document.getElementById('mz-extra-block')?.remove();
    const block = document.createElement('div');
    block.id = 'mz-extra-block';
-
-   if (key === 'conversao') {
-    // ── CONVERSOR ──────────────────────────────────────────────────────
-    block.innerHTML = buildConverterHTML();
-    formBody.appendChild(block);
-    initConverter();
-   } else {
-    // ── PARCEIRAS (impressao, foto) ────────────────────────────────────
-    block.className = 'np-wrap';
-    block.innerHTML = '<div class="np-loading"><div class="np-spin"></div><span>A procurar parceiras próximas…</span></div>';
-    formBody.appendChild(block);
-    injectPartnersIntoModal(key, '#mz-extra-block');
-   }
+   block.className = 'np-wrap';
+   block.innerHTML = '<div class="np-loading"><div class="np-spin"></div><span>A procurar parceiras próximas…</span></div>';
+   formBody.appendChild(block);
+   injectPartnersIntoModal(key, '#mz-extra-block');
   }, 80);
  }
  }
