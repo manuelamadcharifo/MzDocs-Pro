@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="pt" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+  <meta name="robots" content="index,follow"/>
+  <title>Seja Parceiro MzDocs — Papelarias e Gráficas</title>
+  <meta name="description" content="Registe a sua papelaria ou gráfica como parceira MzDocs e receba pedidos de impressão de clientes próximos em Moçambique."/>
+  <link rel="icon" href="/assets/icons/icon.svg" type="image/svg+xml"/>
+  <link rel="stylesheet" href="/assets/css/styles.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--ink:#07101F;--muted:#64748B;--border:#E2E8F0;--surface:#F8FAFD;--white:#fff;--blue:#3B82F6;--green:#009A44;--gold:#F59E0B;--r:16px;--sh:0 2px 12px rgba(7,16,31,.07)}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);color:var(--ink);min-height:100vh}
+
+    /* HEADER */
+    .hdr{background:var(--ink);padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+    .hdr-logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+    .hdr-badge{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#009A44);display:flex;align-items:center;justify-content:center;font-size:15px}
+    .hdr-name{font-size:16px;font-weight:800;color:#fff}
+    .hdr-name span{color:var(--gold)}
+    .btn-back{color:rgba(255,255,255,.6);font-size:13px;text-decoration:none;display:flex;align-items:center;gap:4px}
+    .btn-back:hover{color:#fff}
+
+    /* HERO */
+    .hero{background:linear-gradient(135deg,var(--ink) 0%,#0F2D4A 100%);padding:48px 20px 52px;text-align:center;position:relative;overflow:hidden}
+    .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(59,130,246,.2),transparent 70%)}
+    .hero-inner{position:relative;max-width:520px;margin:0 auto}
+    .hero-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(0,154,68,.2);border:1px solid rgba(0,154,68,.4);color:#4ade80;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:20px;margin-bottom:18px;letter-spacing:.5px}
+    .hero h1{font-family:'Instrument Serif',serif;font-size:clamp(26px,7vw,40px);line-height:1.1;color:#fff;margin-bottom:14px}
+    .hero h1 em{font-style:italic;color:#93C5FD}
+    .hero p{font-size:14.5px;color:rgba(255,255,255,.65);line-height:1.65;max-width:400px;margin:0 auto 28px}
+    .hero-stats{display:flex;justify-content:center;gap:28px;flex-wrap:wrap}
+    .hs{text-align:center}
+    .hs-val{font-size:22px;font-weight:900;color:#fff}
+    .hs-lbl{font-size:11px;color:rgba(255,255,255,.5);margin-top:2px}
+
+    /* BENEFITS */
+    .section{max-width:560px;margin:0 auto;padding:36px 16px}
+    .sec-label{font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:18px}
+    .benefits-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .benefit{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:18px 14px;box-shadow:var(--sh)}
+    .benefit-ico{font-size:26px;margin-bottom:10px}
+    .benefit-title{font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:5px}
+    .benefit-desc{font-size:12px;color:var(--muted);line-height:1.55}
+
+    /* COMO FUNCIONA */
+    .steps{display:flex;flex-direction:column;gap:12px}
+    .step{display:flex;gap:14px;align-items:flex-start;background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--sh)}
+    .step-num{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#1D4ED8);color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .step-title{font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:3px}
+    .step-desc{font-size:12px;color:var(--muted);line-height:1.5}
+
+    /* FORM */
+    .form-card{background:var(--white);border:1.5px solid var(--border);border-radius:20px;padding:24px 20px;box-shadow:0 4px 24px rgba(7,16,31,.1)}
+    .form-title{font-size:18px;font-weight:800;color:var(--ink);margin-bottom:4px}
+    .form-sub{font-size:13px;color:var(--muted);margin-bottom:22px}
+    .fg{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+    .fg label{font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#334155}
+    .fg input,.fg select,.fg textarea{width:100%;padding:13px 15px;border:1.5px solid var(--border);border-radius:10px;font-family:'Bricolage Grotesque',sans-serif;font-size:14.5px;color:var(--ink);background:var(--white);outline:none;transition:border-color .2s,-webkit-appearance:none}
+    .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+    .fg textarea{resize:vertical;min-height:80px}
+    .fg small{font-size:11px;color:var(--muted)}
+    .fg-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .services-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .svc-check{display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .2s,background .2s;-webkit-user-select:none;user-select:none}
+    .svc-check input{display:none}
+    .svc-check.checked{background:#EFF6FF;border-color:var(--blue)}
+    .svc-check-ico{font-size:18px}
+    .svc-check-lbl{font-size:12.5px;font-weight:700;color:var(--ink)}
+    .loc-btn{width:100%;padding:13px;background:var(--surface);border:1.5px dashed var(--border);border-radius:10px;font-family:'Bricolage Grotesque',sans-serif;font-size:13.5px;font-weight:700;color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:border-color .2s,background .2s}
+    .loc-btn:hover{background:#EFF6FF;border-color:var(--blue)}
+    .loc-ok{background:#ECFDF5;border-color:var(--green);color:var(--green)}
+    .btn-submit{width:100%;padding:16px;background:linear-gradient(135deg,var(--green),#047857);color:#fff;border:none;border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(0,154,68,.35);transition:transform .2s,box-shadow .2s;margin-top:8px}
+    .btn-submit:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,154,68,.45)}
+    .btn-submit:disabled{opacity:.5;cursor:not-allowed}
+    .msg{display:none;padding:14px 16px;border-radius:12px;font-size:13.5px;font-weight:600;margin-top:14px;line-height:1.5}
+    .msg.success{background:#ECFDF5;border:1.5px solid #6EE7B7;color:#065F46;display:block}
+    .msg.error{background:#FEF2F2;border:1.5px solid #FCA5A5;color:#991B1B;display:block}
+
+    /* FOOTER */
+    footer{background:var(--ink);color:rgba(255,255,255,.5);text-align:center;padding:20px 16px;font-size:12px}
+    footer a{color:rgba(255,255,255,.6);text-decoration:none}
+    footer a:hover{color:#fff}
+
+    @media(max-width:400px){.benefits-grid,.services-grid{grid-template-columns:1fr}.fg-row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="hdr">
+  <a href="/" class="hdr-logo">
+    <div class="hdr-badge">📄</div>
+    <div class="hdr-name">Mz<span>Docs</span> Pro</div>
+  </a>
+  <a href="/" class="btn-back">← Voltar ao início</a>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-tag">🤝 Programa de Parceiros</div>
+    <h1>A sua papelaria<br/>alcança mais <em>clientes</em></h1>
+    <p>Junte-se à rede MzDocs e receba pedidos de impressão, fotos para documentos e conversão de ficheiros de utilizadores próximos — sem comissão inicial.</p>
+    <div class="hero-stats">
+      <div class="hs"><div class="hs-val">Grátis</div><div class="hs-lbl">Para aderir</div></div>
+      <div class="hs"><div class="hs-val">5 km</div><div class="hs-lbl">Raio de visibilidade</div></div>
+      <div class="hs"><div class="hs-val">48h</div><div class="hs-lbl">Aprovação</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BENEFÍCIOS -->
+<section class="section">
+  <p class="sec-label">Porquê aderir</p>
+  <div class="benefits-grid">
+    <div class="benefit">
+      <div class="benefit-ico">📍</div>
+      <div class="benefit-title">Visibilidade local</div>
+      <div class="benefit-desc">Apareça automaticamente quando utilizadores próximos precisam de impressão ou fotos.</div>
+    </div>
+    <div class="benefit">
+      <div class="benefit-ico">📲</div>
+      <div class="benefit-title">Pedidos via WhatsApp</div>
+      <div class="benefit-desc">Receba pedidos directamente no seu WhatsApp — sem aplicação nova para aprender.</div>
+    </div>
+    <div class="benefit">
+      <div class="benefit-ico">💰</div>
+      <div class="benefit-title">Sem comissão inicial</div>
+      <div class="benefit-desc">Fica com 100% do valor cobrado ao cliente. O MzDocs cobra apenas por leads futuros.</div>
+    </div>
+    <div class="benefit">
+      <div class="benefit-ico">⭐</div>
+      <div class="benefit-title">Sistema de avaliação</div>
+      <div class="benefit-desc">Clientes avaliam o serviço. Parceiras bem avaliadas aparecem primeiro nos resultados.</div>
+    </div>
+  </div>
+</section>
+
+<!-- COMO FUNCIONA -->
+<section class="section" style="padding-top:0">
+  <p class="sec-label">Como funciona</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <div class="step-title">Preencha o formulário abaixo</div>
+        <div class="step-desc">Nome da papelaria, localização GPS, serviços disponíveis e WhatsApp de contacto.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <div class="step-title">Aprovação em 48h</div>
+        <div class="step-desc">A nossa equipa verifica os dados e contacta-o para confirmar a parceria.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <div class="step-title">Receba pedidos</div>
+        <div class="step-desc">Quando um utilizador próximo pede impressão ou foto, o seu WhatsApp aparece como opção prioritária.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div>
+        <div class="step-title">Conclua e avalie</div>
+        <div class="step-desc">O cliente envia o ficheiro pelo WhatsApp, você entrega o serviço e recebe a avaliação.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FORMULÁRIO -->
+<section class="section" style="padding-top:0;padding-bottom:60px">
+  <p class="sec-label">Candidatura</p>
+  <div class="form-card">
+    <div class="form-title">📋 Registar Papelaria / Gráfica</div>
+    <div class="form-sub">Preencha os dados abaixo. Campos com * são obrigatórios.</div>
+
+    <div class="fg">
+      <label>Nome da Papelaria / Gráfica *</label>
+      <input type="text" id="fName" placeholder="Ex: Papelaria Central Maputo" maxlength="100"/>
+    </div>
+    <div class="fg">
+      <label>Nome do Responsável *</label>
+      <input type="text" id="fOwner" placeholder="Ex: João Machel" maxlength="80"/>
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Telemóvel *</label>
+        <input type="tel" id="fPhone" placeholder="84 XXX XXXX" maxlength="20" inputmode="tel"/>
+        <small>Para contacto da equipa MzDocs</small>
+      </div>
+      <div class="fg">
+        <label>WhatsApp *</label>
+        <input type="tel" id="fWhatsApp" placeholder="258 84 XXX XXXX" maxlength="20" inputmode="tel"/>
+        <small>Número que recebe os pedidos</small>
+      </div>
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Cidade / Bairro *</label>
+        <input type="text" id="fCity" placeholder="Maputo, Matola…" maxlength="60"/>
+      </div>
+      <div class="fg">
+        <label>Endereço *</label>
+        <input type="text" id="fAddress" placeholder="Av. 24 de Julho, n.º 10" maxlength="200"/>
+      </div>
+    </div>
+
+    <!-- LOCALIZAÇÃO GPS -->
+    <div class="fg">
+      <label>Localização GPS *</label>
+      <button type="button" class="loc-btn" id="btnGPS" onclick="getGPS()">
+        📍 Obter localização actual
+      </button>
+      <input type="hidden" id="fLat"/>
+      <input type="hidden" id="fLng"/>
+      <small id="gpsStatus">Clique para detectar a localização da sua papelaria automaticamente</small>
+    </div>
+
+    <!-- SERVIÇOS -->
+    <div class="fg">
+      <label>Serviços disponíveis *</label>
+      <div class="services-grid">
+        <label class="svc-check" data-val="impressao">
+          <input type="checkbox" value="impressao"/>
+          <span class="svc-check-ico">🖨️</span>
+          <span class="svc-check-lbl">Impressão</span>
+        </label>
+        <label class="svc-check" data-val="foto">
+          <input type="checkbox" value="foto"/>
+          <span class="svc-check-ico">📷</span>
+          <span class="svc-check-lbl">Foto Documentos</span>
+        </label>
+        <label class="svc-check" data-val="plastificacao">
+          <input type="checkbox" value="plastificacao"/>
+          <span class="svc-check-ico">🧊</span>
+          <span class="svc-check-lbl">Plastificação</span>
+        </label>
+        <label class="svc-check" data-val="encadernacao">
+          <input type="checkbox" value="encadernacao"/>
+          <span class="svc-check-ico">📖</span>
+          <span class="svc-check-lbl">Encadernação</span>
+        </label>
+        <label class="svc-check" data-val="conversao">
+          <input type="checkbox" value="conversao"/>
+          <span class="svc-check-ico">🔄</span>
+          <span class="svc-check-lbl">Conversão Ficheiros</span>
+        </label>
+        <label class="svc-check" data-val="digitalizar">
+          <input type="checkbox" value="digitalizar"/>
+          <span class="svc-check-ico">📲</span>
+          <span class="svc-check-lbl">Digitalização</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="fg">
+      <label>Horário de Funcionamento</label>
+      <input type="text" id="fHours" placeholder="Ex: Seg–Sex 08h–18h, Sáb 08h–13h" maxlength="100"/>
+    </div>
+
+    <button class="btn-submit" id="btnSubmit" onclick="submitForm()">
+      🚀 Enviar Candidatura
+    </button>
+    <div class="msg" id="formMsg"></div>
+  </div>
+</section>
+
+<footer>
+  <p>© 2026 MzDocs Pro · Moçambique 🇲🇿 &nbsp;|&nbsp; <a href="/legal.html">Termos & Privacidade</a></p>
+  <p style="margin-top:6px">Dúvidas? <a href="mailto:suporte@mzdocs.mz">suporte@mzdocs.mz</a></p>
+</footer>
+
+<script>
+// ── Checkboxes de serviços ────────────────────────────────────────────────
+document.querySelectorAll('.svc-check').forEach(label => {
+  label.addEventListener('click', () => {
+    const cb = label.querySelector('input');
+    cb.checked = !cb.checked;
+    label.classList.toggle('checked', cb.checked);
+  });
+});
+
+// ── GPS ───────────────────────────────────────────────────────────────────
+function getGPS() {
+  const btn = document.getElementById('btnGPS');
+  const status = document.getElementById('gpsStatus');
+  if (!navigator.geolocation) {
+    status.textContent = '❌ Geolocalização não suportada. Introduza as coordenadas manualmente.';
+    return;
+  }
+  btn.textContent = '⏳ A detectar localização…';
+  btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      document.getElementById('fLat').value = pos.coords.latitude.toFixed(6);
+      document.getElementById('fLng').value = pos.coords.longitude.toFixed(6);
+      btn.className = 'loc-btn loc-ok';
+      btn.textContent = `✅ Localização detectada (±${Math.round(pos.coords.accuracy)}m)`;
+      btn.disabled = false;
+      status.textContent = `Coordenadas: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+    },
+    err => {
+      btn.textContent = '📍 Tentar novamente';
+      btn.disabled = false;
+      status.textContent = '❌ Não foi possível detectar. Active o GPS e tente novamente.';
+    },
+    { timeout: 10000, enableHighAccuracy: true }
+  );
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────
+async function submitForm() {
+  const btn = document.getElementById('btnSubmit');
+  const msgEl = document.getElementById('formMsg');
+  msgEl.className = 'msg';
+  msgEl.textContent = '';
+
+  const name      = document.getElementById('fName').value.trim();
+  const ownerName = document.getElementById('fOwner').value.trim();
+  const phone     = document.getElementById('fPhone').value.trim();
+  const whatsapp  = document.getElementById('fWhatsApp').value.trim();
+  const city      = document.getElementById('fCity').value.trim();
+  const address   = document.getElementById('fAddress').value.trim();
+  const lat       = document.getElementById('fLat').value;
+  const lng       = document.getElementById('fLng').value;
+  const hours     = document.getElementById('fHours').value.trim();
+  const services  = [...document.querySelectorAll('.svc-check input:checked')].map(c => c.value);
+
+  if (!name || !ownerName || !phone || !whatsapp || !city || !address) {
+    msgEl.className = 'msg error'; msgEl.textContent = '⚠️ Preencha todos os campos obrigatórios.'; return;
+  }
+  if (!lat || !lng) {
+    msgEl.className = 'msg error'; msgEl.textContent = '📍 Clique em "Obter localização actual" para capturar o GPS.'; return;
+  }
+  if (services.length === 0) {
+    msgEl.className = 'msg error'; msgEl.textContent = '⚠️ Seleccione pelo menos um serviço disponível.'; return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ A enviar candidatura…';
+
+  try {
+    const res = await fetch('/api/partners?action=register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, owner_name: ownerName, phone, whatsapp, city, address, lat, lng, services, hours }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      msgEl.className = 'msg success';
+      msgEl.textContent = '✅ ' + data.message;
+      btn.textContent = '✅ Candidatura enviada!';
+      // Limpar form
+      ['fName','fOwner','fPhone','fWhatsApp','fCity','fAddress','fHours'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('fLat').value = '';
+      document.getElementById('fLng').value = '';
+      document.querySelectorAll('.svc-check').forEach(l => { l.querySelector('input').checked = false; l.classList.remove('checked'); });
+      const gpsBtn = document.getElementById('btnGPS');
+      gpsBtn.className = 'loc-btn';
+      gpsBtn.textContent = '📍 Obter localização actual';
+      document.getElementById('gpsStatus').textContent = 'Clique para detectar a localização da sua papelaria automaticamente';
+    } else {
+      msgEl.className = 'msg error';
+      msgEl.textContent = '❌ ' + (data.error || 'Erro desconhecido. Tente novamente.');
+      btn.disabled = false;
+      btn.textContent = '🚀 Enviar Candidatura';
+    }
+  } catch (err) {
+    msgEl.className = 'msg error';
+    msgEl.textContent = '❌ Erro de ligação. Verifique a internet e tente novamente.';
+    btn.disabled = false;
+    btn.textContent = '🚀 Enviar Candidatura';
+  }
+}
+</script>
+</body>
+</html>
