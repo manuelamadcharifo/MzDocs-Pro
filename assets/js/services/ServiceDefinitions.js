@@ -393,9 +393,10 @@ export const SERVICES = {
 
   conversao: {
     icon:'🔄', bg:'#FEF2F2', title:'Conversão de Ficheiros',
-    sub:'Converta os seus ficheiros para o formato que precisar — rápido e fácil', hasAI:true,
+    sub:'Converta os seus ficheiros para o formato que precisar — rápido e fácil',
+    hasAI:true,       // consome 1 crédito
+    isConverter:true, // flag especial: substitui o modal por UI de upload
     category:'servicos', popularity:15,
-    fields:[], // UI injectada pelo FileConverter.js via DocumentController
-    buildWA: null,
+    fields:[], buildWA: null,
   },
 };
