@@ -66,7 +66,7 @@ export function buildConverterHTML() {
 }
 
 // ── Inicializar handlers após injecção no DOM ─────────────────────────────
-export function initConverter() {
+export function initConverter(svcKey = 'conversao', creditModel = null) {
   let selectedFile = null;
 
   function getConv() { return CONVERSIONS[parseInt(document.getElementById('convType')?.value || '0')]; }
@@ -160,9 +160,24 @@ export function initConverter() {
     if (label) label.textContent = 'A enviar ficheiro…';
 
     try {
+      // ── Verificar e consumir crédito antes de converter ──────────────────
+      if (creditModel) {
+        const canConsume = creditModel.canConsume(1);
+        if (!canConsume) {
+          if (err) { err.textContent = '❌ Créditos insuficientes. Compre mais para continuar.'; err.style.display = 'block'; }
+          if (btn) { btn.disabled = false; btn.textContent = '⚡ Converter agora'; }
+          if (prog) prog.style.display = 'none';
+          window.paymentController?.showPricing(false);
+          return;
+        }
+      }
+
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('to', conv.to);
+      // Enviar token de auth para o servidor validar crédito
+      const authToken = window.authManager?.getToken?.() || '';
+      if (authToken) formData.append('auth_token', authToken);
 
       // Simular progresso durante upload
       let p = 15;
@@ -194,6 +209,11 @@ export function initConverter() {
       if (dlLink) { dlLink.href = url; dlLink.download = outName; }
       if (dlName) dlName.textContent = outName;
       if (res)    res.style.display = 'block';
+
+      // ── Descontar crédito após conversão bem-sucedida ───────────────────
+      if (creditModel) {
+        try { await creditModel.consume(1); } catch (_) {}
+      }
 
       // Auto-revoke após 10 min
       setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
