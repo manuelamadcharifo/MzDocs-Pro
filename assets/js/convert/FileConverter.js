@@ -190,16 +190,30 @@ export function initConverter(svcKey = 'conversao', creditModel = null) {
       const response = await fetch('/api/convert', {
         method: 'POST',
         body: formData,
+      }).catch(netErr => {
+        throw new Error('Erro de rede: verifique a sua ligação à internet.');
       });
 
       clearInterval(iv);
-      if (fill) fill.style.width = '100%';
-      if (label) label.textContent = 'Conversão concluída!';
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Erro HTTP ${response.status}`);
+        // Servidor devolveu erro — tentar ler como JSON, senão usar status
+        let errMsg = `Erro ${response.status}`;
+        try {
+          const ct = response.headers.get('content-type') || '';
+          if (ct.includes('json')) {
+            const data = await response.json();
+            errMsg = data?.error || errMsg;
+          } else {
+            const txt = await response.text();
+            errMsg = txt.slice(0, 200) || errMsg;
+          }
+        } catch (_) {}
+        throw new Error(errMsg);
       }
+
+      if (fill) fill.style.width = '100%';
+      if (label) label.textContent = 'Conversão concluída!';
 
       // A resposta é o ficheiro binário directamente
       const blob = await response.blob();
