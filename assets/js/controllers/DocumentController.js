@@ -9,6 +9,8 @@ import { DocumentModel, QueueModel } from '../models/Models.js';
 import { DocumentView, ModalView, NotificationView } from '../views/Views.js';
 import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
+import { injectPartnersIntoModal } from '../partners/NearbyPartners.js';
+import { buildConverterHTML, initConverter } from '../convert/FileConverter.js';
 import { LongDocumentEngine } from '../services/LongDocumentEngine.js';
 import { Validator } from '../utils/Formatter.js';
 import { DocumentEditor } from '../components/DocumentEditor.js';
@@ -214,6 +216,32 @@ export class DocumentController {
  }, 50);
 
  ModalView.open('formOverlay');
+
+ // ── Serviços WhatsApp: injectar parceiras ou conversor ──────────────────
+ if (!svc.hasAI) {
+  // Criar contentor abaixo do formulário
+  setTimeout(() => {
+   const formBody = document.getElementById('formBody');
+   if (!formBody) return;
+   // Remover bloco anterior se existir
+   document.getElementById('mz-extra-block')?.remove();
+   const block = document.createElement('div');
+   block.id = 'mz-extra-block';
+
+   if (key === 'conversao') {
+    // ── CONVERSOR ──────────────────────────────────────────────────────
+    block.innerHTML = buildConverterHTML();
+    formBody.appendChild(block);
+    initConverter();
+   } else {
+    // ── PARCEIRAS (impressao, foto) ────────────────────────────────────
+    block.className = 'np-wrap';
+    block.innerHTML = '<div class="np-loading"><div class="np-spin"></div><span>A procurar parceiras próximas…</span></div>';
+    formBody.appendChild(block);
+    injectPartnersIntoModal(key, '#mz-extra-block');
+   }
+  }, 80);
+ }
  }
 
  // ── Auto-save rascunho ────────────────────────────────────────────────────
@@ -872,9 +900,18 @@ export class DocumentController {
  sendDirect() {
  const svc = SERVICES[this.docModel.service];
  const data = DocumentView.collectData(svc?.fields || []);
- const nome = data.nome || data.aluno || data.solicitante || 'Cliente';
- const msg = `📋 *Novo pedido — ${svc?.title || 'Documento'}*\n\n👤 Nome: ${nome}\n\n_Via MzDocs Pro_`;
- window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
+ let msg;
+ if (typeof svc?.buildWA === 'function') {
+  // Usar template personalizado da ServiceDefinition
+  msg = svc.buildWA(data);
+ } else {
+  const nome = data.nome || data.aluno || data.solicitante || 'Cliente';
+  msg = `📋 *Novo pedido — ${svc?.title || 'Documento'}*\n\n👤 Nome: ${nome}\n\n_Via MzDocs Pro_`;
+ }
+ // Se há parceira seleccionada pelo utilizador, usar o número dela
+ const targetWA = window._mzSelectedPartnerWA || WA_NUMBER;
+ window.open(`https://wa.me/${targetWA}?text=${encodeURIComponent(msg)}`, '_blank');
+ window._mzSelectedPartnerWA = null; // reset
  }
 
  _applyTemplate(tpl) {
