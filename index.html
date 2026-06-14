@@ -759,11 +759,12 @@ const SVC_COLOR = {
 
 const SVC_CREDITS = {
   planonegocio: '2 créditos',
-  impressao: null, foto: null, conversao: null,
+  impressao: null, foto: null,
+  // conversao agora usa 1 crédito (igual aos outros serviços Pro)
 };
 
 function getCredits(id) {
-  if (SVC_CREDITS[id] === null) return '<span class="cost free">Grátis</span>';
+  if (SVC_CREDITS[id] === null) return '<span class="cost wa-cost">📲 Via Parceiro</span>';
   return `<span class="cost">${SVC_CREDITS[id] || '1 crédito'}</span>`;
 }
 
