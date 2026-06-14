@@ -712,3 +712,6 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .conv-btn-convert:hover:not(:disabled){transform:translateY(-1px)}
 .conv-btn-convert:disabled{opacity:.5;cursor:not-allowed}
 .conv-limit{font-size:11px;color:var(--muted);text-align:center;margin-top:8px}
+
+/* ── Badge "Via Parceiro" nos cartões de serviços com parceiros ─────────── */
+.cost.wa-cost{color:#059669;font-weight:800;font-size:12px;background:#ECFDF5;padding:3px 9px;border-radius:8px;border:1px solid #6EE7B7}
