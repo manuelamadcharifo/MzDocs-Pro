@@ -108,7 +108,7 @@ export class PaymentController {
     } else {
       if (avulsoSec) avulsoSec.style.display = 'none';
       if (payTitle)  payTitle.textContent = 'Adquirir Créditos';
-      if (paySub)    paySub.textContent   = 'Pagamento rápido via M-Pesa';
+      if (paySub)    paySub.textContent   = 'Pagamento manual — M-Pesa, e-Mola ou mKesh via WhatsApp';
     }
 
     ModalView.open('payOverlay');
@@ -182,7 +182,7 @@ export class PaymentController {
     const btnPay     = document.getElementById('btnPay');
     if (mpNote)     mpNote.style.display     = '';
     if (manualInfo) manualInfo.style.display = 'none';
-    if (btnPay)     btnPay.textContent       = 'Pagar com M-Pesa';
+    if (btnPay)     btnPay.textContent       = 'Continuar';
   }
 
   // ── Seleccionar pacote ────────────────────────────────────────────────────
@@ -211,12 +211,14 @@ export class PaymentController {
     if (mpNote)     mpNote.style.display     = 'none';
     if (manualInfo) {
       manualInfo.style.display = 'block';
-      // Mostrar nome do recebedor para o utilizador confirmar antes de pagar
+      // Mostrar nome do recebedor para o utilizador confirmar antes de pagar.
+      // CORRIGIDO (auditoria 3.4/3.6): rótulo genérico — o pagamento é manual
+      // e aceita M-Pesa, e-Mola ou mKesh, não apenas M-Pesa.
       const receiverEl = document.getElementById('payReceiverInfo');
       if (receiverEl) {
         receiverEl.innerHTML =
           `<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.82rem;">` +
-          `<span style="color:#166534;font-weight:700;">📲 Recebedor M-Pesa:</span><br>` +
+          `<span style="color:#166534;font-weight:700;">📲 Recebedor (M-Pesa / e-Mola / mKesh):</span><br>` +
           `<span style="font-size:1rem;font-weight:800;color:#15803d;letter-spacing:.5px;">Manuel Amad Charifo</span><br>` +
           `<span style="color:#6b7280;font-size:.78rem;">Verifique o nome antes de confirmar o pagamento</span>` +
           `</div>`;
