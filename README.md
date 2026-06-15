@@ -1,4 +1,4 @@
-# MzDocs Pro — v11
+# MzDocs Pro — v12
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e M-Pesa.
 
@@ -8,19 +8,23 @@ Plataforma moçambicana de geração, edição e exportação de documentos prof
 
 | Funcionalidade | Descrição |
 |---|---|
-| **Geração com IA** | 15 tipos de documento gerados por Gemini / OpenRouter |
+| **Geração com IA (5 providers)** | Corrida paralela entre Groq, Gemini, OpenRouter, Cerebras e NVIDIA NIM — o primeiro a responder "ganha", garantindo alta disponibilidade a custo zero |
 | **70 Templates Visuais** | 5 templates por serviço, com CSS próprio e layout profissional |
 | **Editor WYSIWYG** | Edição inline com preservação fiel do template (iframe + designMode) |
 | **Export PDF** | Abre janela de impressão com cores e backgrounds preservados (`print-color-adjust: exact`) |
-| **Export Word (.doc)** | Conversão inteligente de layouts flexbox → tabelas Word com `HTMLWordExporter` |
+| **Export Word (.docx)** | Exportação real para OOXML via biblioteca `docx`, e `.doc` via `HTMLWordExporter` para templates HTML |
 | **Export Excel** | Tabelas e orçamentos exportados como `.xls` |
 | **Assinatura Digital** | Canvas de assinatura inserido directamente no documento |
 | **Módulo Académico APA 7** | Citações, bibliography, TOC automático, upload PDF/URL |
 | **Extracção de Template por Imagem** | IA de visão extrai estrutura de qualquer imagem de documento |
-| **OCR** | Extracção de texto de imagens via IA |
+| **OCR** | Extracção de texto de imagens, PDF (pdf.js) e Word (mammoth.js) |
 | **Histórico Offline** | Documentos guardados em IndexedDB, sincronizados quando online |
-| **Sistema de Afiliados** | Comissões automáticas via M-Pesa |
-| **Painel Admin** | Analytics em tempo real, feedback, utilizadores, pagamentos |
+| **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola ou mKesh via WhatsApp — confirmação manual em até 24h (ver secção [💳 Pagamentos](#-pagamentos)) |
+| **Reembolso Automático de Créditos** | Se a geração de IA falhar após o débito do crédito, o crédito é devolvido automaticamente (RPC `refund_credit`) |
+| **Sistema de Afiliados** | Comissões automáticas, levantamento via carteira móvel |
+| **Rede de Parceiros** | Papelarias/cyber cafés parceiros listados perto do utilizador (`parceiros.html`) |
+| **Blog / SEO** | CMS de artigos com geração assistida por IA (`blog_posts`, `blog_categories`) |
+| **Painel Admin** | Analytics em tempo real, feedback, utilizadores, pagamentos, parceiros |
 | **PWA** | Instalável em Android e iOS, funciona offline |
 
 ---
@@ -29,17 +33,23 @@ Plataforma moçambicana de geração, edição e exportação de documentos prof
 
 ```
 MzDocs-Pro/
-├── api/                               # 10 Serverless Functions (Vercel Hobby)
+├── api/                               # 12 Serverless Functions (Vercel Hobby — limite 12, sem margem)
+│   ├── _lib/
+│   │   └── supabaseAdmin.js           # NOVO (v12): cliente Supabase via fetch puro (REST + Auth API),
+│   │                                  #   sem @supabase/supabase-js nem 'ws'. Não conta como function
+│   │                                  #   (prefixo "_"). Todas as funções abaixo devem usar este módulo.
 │   ├── admin/
 │   │   ├── index.js                   # Dashboard, analytics, feedback, pagamentos
 │   │   └── pages.js                   # Blog / páginas estáticas + gerador com IA
 │   ├── auth/
 │   │   └── index.js                   # Login, registo, reset password
-│   ├── generate-document.js           # Geração de documentos (Gemini + OpenRouter)
+│   ├── generate-document.js           # Geração de documentos — 5 providers de IA + reembolso automático (v12)
 │   ├── extract-template.js            # Extracção de template via imagem (IA visão)
 │   ├── verify-credits.js              # Verificar saldo de créditos
-│   ├── deduct-credit.js               # Debitar crédito após geração
-│   ├── process-payment.js             # M-Pesa + comissões afiliados
+│   ├── deduct-credit.js               # Debitar/reembolsar crédito (v3.0 — fetch puro, sem 'ws')
+│   ├── process-payment.js             # Pagamento manual multi-carteira + registo de transação (v3.0)
+│   ├── partners.js                    # API da Rede de Parceiros (parceiros.html / admin-parceiros.html)
+│   ├── convert.js                     # Conversão de ficheiros (OCR / extracção de texto)
 │   ├── delete-temp-account.js         # Limpeza de contas temporárias
 │   ├── cleanup-temp-accounts.js       # Cron diário: limpeza automática
 │   └── misc.js                        # Router auxiliar:
@@ -56,6 +66,8 @@ MzDocs-Pro/
 │   │   ├── marketplace/
 │   │   │   ├── TemplateLibrary.js     # 15 serviços × 5 templates = 70 templates
 │   │   │   └── TemplatePicker.js      # Modal de escolha com preview em tempo real
+│   │   ├── partners/
+│   │   │   └── NearbyPartners.js      # Lista/mapa de parceiros próximos do utilizador
 │   │   ├── admin/
 │   │   │   └── AdminApp.js            # Painel admin completo
 │   │   ├── auth/
@@ -64,6 +76,7 @@ MzDocs-Pro/
 │   │   │   ├── DocumentEditor.js      # Editor WYSIWYG + iframe designMode p/ templates
 │   │   │   ├── HTMLPDFExporter.js     # PDF via impressão (preserva cores de fundo)
 │   │   │   ├── HTMLWordExporter.js    # Word: converte flexbox → tabelas, preserva cores
+│   │   │   ├── HTMLToDocxExporter.js  # Word real (.docx / OOXML) via biblioteca `docx`
 │   │   │   ├── WordExporter.js        # Word para documentos sem template HTML
 │   │   │   ├── PDFExporter.js         # PDF via jsPDF (documentos sem template)
 │   │   │   ├── ExcelExporter.js       # Export Excel (.xls)
@@ -73,15 +86,16 @@ MzDocs-Pro/
 │   │   │   ├── TemplateController.js  # Gestão de templates do marketplace
 │   │   │   ├── HistoryController.js   # Histórico de documentos (IndexedDB)
 │   │   │   ├── OCRController.js       # OCR via IA
-│   │   │   └── PaymentController.js   # Fluxo de pagamento M-Pesa
+│   │   │   └── PaymentController.js   # Fluxo de pagamento manual multi-carteira
 │   │   ├── models/
 │   │   ├── services/
-│   │   │   └── ServiceDefinitions.js  # Definições dos 15 serviços
+│   │   │   ├── ServiceDefinitions.js  # Definições dos 15 serviços
+│   │   │   └── PaymentService.js      # Pacotes, validação de telefone, WhatsApp
 │   │   ├── utils/
 │   │   │   ├── Sanitizer.js           # Sanitização HTML (inclui tags semânticas HTML5)
 │   │   │   ├── Storage.js             # Abstracção de localStorage
 │   │   │   ├── IndexedDB.js           # Persistência offline de documentos
-│   │   │   ├── Formatter.js           # Formatação de texto / moeda
+│   │   │   ├── Formatter.js           # Formatação de texto / moeda / validação de telefone
 │   │   │   └── ExportManager.js       # Coordenação de exportações
 │   │   └── views/
 │   │       └── Views.js               # Renderização de resultados + preview iframe
@@ -90,22 +104,26 @@ MzDocs-Pro/
 │       └── ...
 │
 ├── supabase/
-│   ├── schema.sql                     # Schema base completo
+│   ├── schema.sql                     # Schema base (⚠️ desactualizado — ver "Áreas não cobertas")
 │   ├── migration_v8_1_blog_pages.sql
 │   ├── migration_v8_2_admin_tables.sql
 │   ├── migration_v8_pricing_temp_accounts.sql
 │   ├── migration_v9_analytics_feedback.sql
 │   ├── migration_v10_affiliates.sql
 │   ├── migration_v10_online_userid.sql
-│   └── migration_v11_marketplace.sql
+│   ├── migration_v11_marketplace.sql
+│   ├── supabase-partners-setup.sql    # Tabela `partners` (Rede de Parceiros)
+│   └── migration_v12_refund_credit.sql # NOVO (v12): RPC refund_credit + índice em credit_logs
 │
 ├── afiliado.html                      # Painel de afiliados
 ├── admin.html                         # Painel administrativo
+├── admin-parceiros.html               # Gestão da Rede de Parceiros (admin)
+├── parceiros.html                     # Listagem pública de parceiros
 ├── index.html                         # App principal (PWA)
 ├── offline.html                       # Página offline
 ├── sw.js                              # Service Worker (cache v11)
 ├── manifest.json                      # PWA manifest
-├── vercel.json                        # 10 functions + rewrites + crons
+├── vercel.json                        # 12 functions + rewrites + crons
 └── package.json                       # v11.0.0
 ```
 
@@ -160,7 +178,18 @@ migration_v10_online_userid.sql
 
 -- 7. Template Marketplace
 migration_v11_marketplace.sql
+
+-- 8. Rede de Parceiros
+supabase-partners-setup.sql
+
+-- 9. Reembolso automático de créditos (NOVO v12 — auditoria Junho/2026)
+migration_v12_refund_credit.sql
 ```
+
+> ⚠️ **Nota (auditoria v12):** esta lista não está garantidamente completa nem na ordem 100% correcta —
+> existem ~10 ficheiros adicionais (`migration_fix_*`, `migration_add_*`, `migration_temp_accounts.sql`,
+> `EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `polices.sql`, `transactions.sql`) que foram aplicados directamente
+> em produção ao longo do tempo. Ver secção [⚠️ Áreas não cobertas por esta auditoria](#-áreas-não-cobertas-por-esta-auditoria).
 
 ### 4. Push para GitHub → Vercel faz deploy automático
 
@@ -349,14 +378,14 @@ Admin rejeita      → status: "rejected" + nota de rejeição
 
 | Recurso | Limite | Usado |
 |---------|--------|-------|
-| Serverless Functions | 12 | **10** ✅ (2 de margem) |
+| Serverless Functions | 12 | **12** ✅ (sem margem — `api/_lib/` não conta, prefixo `_`) |
 | `generate-document.js` | 60s | — |
 | `extract-template.js` | 60s | — |
 | `process-payment.js` | 30s | — |
 | Restantes | 10–30s | — |
 | Bandwidth | 100 GB/mês | — |
 
-> **Regra:** Toda nova lógica de API deve ser adicionada a `api/misc.js` ou a functions existentes. Não criar novos ficheiros `.js` em `api/` sem verificar o limite de 12.
+> **Regra:** Toda nova lógica de API deve ser adicionada a `api/misc.js` ou a functions existentes. Não criar novos ficheiros `.js` em `api/` sem verificar o limite de 12. Helpers partilhados (sem `module.exports = async function handler`) devem ir em `api/_lib/`.
 
 ---
 
@@ -372,11 +401,99 @@ Admin rejeita      → status: "rejected" + nota de rejeição
 ## 🔒 Segurança
 
 - RLS activado em todas as tabelas Supabase
-- Tokens JWT validados em todos os endpoints privados
+- Tokens JWT validados em todos os endpoints privados via `api/_lib/supabaseAdmin.js` (REST/Auth API, sem SDK)
 - IPs hasheados (SHA-256) para tracking de cliques — sem dados pessoais
 - `sanitizeHtml()` com lista explícita de tags permitidas (inclui tags semânticas HTML5)
 - Service Role Key nunca exposta ao cliente
+- Erros internos do Supabase (mensagens, códigos, hints) nunca devolvidos ao cliente — apenas em logs do servidor
 - Contas temporárias limpas automaticamente via cron diário
+
+---
+
+## 💳 Pagamentos
+
+O pagamento de pacotes de créditos é **sempre processado manualmente**, via WhatsApp:
+
+1. O utilizador escolhe um pacote e introduz **qualquer número de telemóvel moçambicano válido**
+   (M-Pesa/Vodacom, e-Mola/Movitel ou mKesh/mCel — prefixos `82–87`).
+2. `api/process-payment.js` regista o pedido em `transactions` (status `pending`) e gera uma
+   referência única (`MZ-...`).
+3. O utilizador é encaminhado para o WhatsApp com uma mensagem pré-formatada (inclui a referência,
+   o pacote, o valor e a carteira detectada pelo prefixo do número) e envia o comprovativo.
+4. Um administrador confirma manualmente no painel `admin.html`, normalmente em até 24h.
+
+> Não existe (ainda) integração automática com a API M-Pesa. A interface deixa isto explícito
+> ("Pagamento processado manualmente") para não criar a expectativa de um pedido push automático
+> no telemóvel — ver changelog v12 abaixo.
+
+### Reembolso automático de créditos (v12)
+
+Antes da v12, se `/api/deduct-credit` debitasse um crédito e a geração de IA falhasse
+completamente a seguir (todos os 5 providers indisponíveis), **o crédito era perdido sem
+qualquer compensação** — o pior cenário possível para um novo utilizador a usar o seu único
+crédito grátis.
+
+Agora:
+1. `api/generate-document.js` chama a RPC `refund_credit(p_user_id, p_amount)` automaticamente
+   quando `Promise.any` rejeita (todos os providers falharam).
+2. A RPC incrementa `profiles.credits` e regista a operação em `credit_logs` com
+   `action = 'refund'`.
+3. O cliente recebe `{ refunded: true, creditsRemaining }` e mostra uma notificação clara:
+   *"O crédito foi devolvido automaticamente — tente novamente."*
+4. `api/deduct-credit.js` também aceita `{ refund: true, cost, documentType }` como modo de
+   reembolso de reserva (caso a RPC não exista ainda — fallback manual).
+
+**Acção necessária:** executar `supabase/migration_v12_refund_credit.sql` no SQL Editor do
+Supabase para criar a função `refund_credit`.
+
+---
+
+## 🛠️ Alterações — Auditoria Junho 2026 (v12)
+
+| Ficheiro | Alteração |
+|---|---|
+| `api/_lib/supabaseAdmin.js` | **Novo.** Cliente Supabase via fetch puro (REST + Auth API), sem SDK/`ws`. |
+| `api/deduct-credit.js` | Reescrito (v3.0) para usar `_lib/supabaseAdmin.js`; novo modo `refund`. |
+| `api/generate-document.js` | Removido `require('ws')`; reembolso automático em falha total dos providers. |
+| `api/process-payment.js` | Reescrito (v3.0); erros do Supabase já não são expostos ao cliente; aceita M-Pesa/e-Mola/mKesh. |
+| `assets/js/services/Services.js` | Envia `cost` a `/api/generate-document`; propaga `refunded`/`creditsRemaining` em erro. |
+| `assets/js/controllers/DocumentController.js` | Trata `err.refunded` — actualiza saldo local e avisa o utilizador. |
+| `assets/js/utils/Formatter.js`, `PaymentService.js` | `validatePhone` aceita `8[2-7]` (todos os operadores); novo `detectWallet()`. |
+| `assets/js/controllers/PaymentController.js` | Texto "Recebedor M-Pesa" → "Recebedor (M-Pesa / e-Mola / mKesh)"; subtítulos clarificam pagamento manual. |
+| `index.html` | `viewport` deixa de bloquear zoom (`maximum-scale=1.0` removido); secção de pagamento reescrita para "Pagamento por Carteira Móvel" com aviso explícito de processo manual. |
+| `supabase/migration_v12_refund_credit.sql` | **Novo.** RPC `refund_credit` + índice em `credit_logs`. |
+
+---
+
+## ⚠️ Áreas Não Cobertas por Esta Auditoria
+
+Esta ronda focou-se no fluxo crítico **crédito → geração de documento → pagamento**. As áreas
+abaixo **não foram revistas** e podem precisar de atenção numa próxima ronda:
+
+- **Outras 8 funções de API ainda usam `@supabase/supabase-js` + `require('ws')`**
+  (`api/admin/index.js`, `api/auth/index.js`, `api/verify-credits.js`, `api/misc.js`,
+  `api/partners.js`, `api/delete-temp-account.js`, `api/cleanup-temp-accounts.js`,
+  `api/convert.js`/`api/extract-template.js`). Recomenda-se migrar gradualmente cada uma para
+  `api/_lib/supabaseAdmin.js`, seguindo o padrão usado em `deduct-credit.js` e
+  `process-payment.js`.
+- **Rede de Parceiros** (`api/partners.js`, `parceiros.html`, `admin-parceiros.html`,
+  `assets/js/partners/NearbyPartners.js`, `supabase/supabase-partners-setup.sql`) — fluxo de
+  cadastro/aprovação de parceiros, geolocalização e exibição no mapa não foram testados.
+- **Blog / CMS** (`api/admin/pages.js`, tabelas `blog_pages`, `blog_posts`, `blog_categories`) —
+  geração de artigos por IA, SEO score e fluxo de publicação não foram revistos.
+- **Painel Admin completo** (`admin.html`, `AdminApp.js`) — gestão de utilizadores, confirmação
+  manual de pagamentos, analytics (`analytics_metrics`, `page_views`, `online_sessions`),
+  feedback (`user_feedback`) e logs (`admin_logs`).
+- **Sistema de Afiliados** (`afiliado.html`, `affiliate_clicks`, `affiliate_commissions`,
+  `affiliate_withdrawals`) — apenas a integridade da dedução/reembolso de créditos foi
+  verificada; o cálculo de comissões e levantamentos não foi auditado.
+- **Consolidação do schema SQL** — a pasta `supabase/` tem 21 ficheiros (`EMERGENCIA_*`,
+  `EXECUTAR_AGORA_*`, `migration_fix_*`, `migration_add_*`, etc.). Recomenda-se gerar um
+  `schema_v12_CURRENT.sql` a partir do estado real da base de dados (Dashboard → Database →
+  Schema) e arquivar os ficheiros antigos.
+- **Sistema de templates personalizados** (`templates_custom`, `template_ratings`,
+  `template_downloads`) e **contas temporárias/avulso** (`is_temp`, `temp_ref`,
+  `temp_password`) — lógica de expiração e limpeza não foi revista nesta ronda.
 
 ---
 
@@ -386,8 +503,11 @@ Admin rejeita      → status: "rejected" + nota de rejeição
 |------------|--------|
 | `package.json` | `11.0.0` |
 | `sw.js` (CACHE_VERSION) | `v11` |
-| `README.md` | `v11` |
-| Migrações Supabase | até `v11_marketplace` |
+| `README.md` | `v12` |
+| `api/deduct-credit.js` | `v3.0` |
+| `api/generate-document.js` | `v2.0` |
+| `api/process-payment.js` | `v3.0` |
+| Migrações Supabase | até `v12_refund_credit` (+ migrações soltas, ver secção de áreas não cobertas) |
 | Templates | 70 (15 serviços × 5) |
 
 ---
