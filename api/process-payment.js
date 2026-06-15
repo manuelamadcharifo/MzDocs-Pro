@@ -1,8 +1,18 @@
-// api/process-payment.js — v2.2
-// v2.2: Fix .catch() em PostgrestFilterBuilder (supabase-js v2 não suporta)
+// api/process-payment.js — v3.0 (AUDITORIA Junho/2026)
+//
+// CORREÇÕES v3.0:
+//  1. Removido @supabase/supabase-js + require('ws') — usa
+//     api/_lib/supabaseAdmin.js (fetch puro contra a REST API).
+//  2. Erros internos do Supabase (insertErr.message/code/hint) deixaram de
+//     ser devolvidos ao cliente — apenas registados em console.error.
+//     O cliente recebe uma mensagem genérica + reference_id para suporte.
+//  3. Passou a aceitar QUALQUER número de telemóvel moçambicano válido
+//     (M-Pesa/Vodacom, e-Mola/Movitel, mKesh/Tmcel) — pagamento manual via
+//     WhatsApp, pelo que qualquer carteira móvel pode ser usada para enviar
+//     o comprovativo. A carteira detectada é incluída na mensagem de
+//     WhatsApp para facilitar a conciliação manual.
 
-const { createClient } = require('@supabase/supabase-js');
-const ws = require('ws');
+const { insert } = require('./_lib/supabaseAdmin');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 const WA_NUMBER      = process.env.WA_SUPPORT_NUMBER || '258858695506';
@@ -15,7 +25,10 @@ const PACKAGES = {
   empresa: { credits: 150, price: 1500, name: 'Empresa' },
 };
 
-const UUID_REGEX     = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Qualquer número móvel moçambicano válido (8X XXXXXXX):
+//  82/83 = mCel (mKesh) · 84/85 = Vodacom (M-Pesa) · 86/87 = Movitel (e-Mola)
 const MZ_PHONE_REGEX = /^8[2-7]\d{7}$/;
 
 function generateRef() {
@@ -28,11 +41,14 @@ function normalizePhone(raw) {
   return num;
 }
 
-function createSupabaseAdmin(url, key) {
-  return createClient(url, key, {
-    auth:     { autoRefreshToken: false, persistSession: false },
-    realtime: { transport: ws },
-  });
+// Detecta a carteira móvel pelo prefixo do número, apenas para
+// referência humana na mensagem de WhatsApp (qualquer uma é aceite).
+function detectWallet(cleanPhone) {
+  const prefix = cleanPhone.slice(0, 2);
+  if (prefix === '84' || prefix === '85') return 'M-Pesa (Vodacom)';
+  if (prefix === '86' || prefix === '87') return 'e-Mola (Movitel)';
+  if (prefix === '82' || prefix === '83') return 'mKesh (mCel)';
+  return 'Carteira móvel';
 }
 
 module.exports = async function handler(req, res) {
@@ -65,10 +81,11 @@ module.exports = async function handler(req, res) {
   const cleanPhone = normalizePhone(rawPhone);
   if (!MZ_PHONE_REGEX.test(cleanPhone)) {
     return res.status(400).json({
-      error: 'Número inválido. Use um número M-Pesa moçambicano (ex: 84XXXXXXX).',
+      error: 'Número inválido. Use um número moçambicano válido (M-Pesa, e-Mola ou mKesh — ex: 84XXXXXXX, 86XXXXXXX).',
     });
   }
   const normalizedPhone = `+258${cleanPhone}`;
+  const wallet = detectWallet(cleanPhone);
 
   if (!packageId || !PACKAGES[packageId]) {
     return res.status(400).json({
@@ -80,24 +97,19 @@ module.exports = async function handler(req, res) {
   const userId = rawUserId && UUID_REGEX.test(String(rawUserId)) ? String(rawUserId) : null;
   const pkg    = PACKAGES[packageId];
 
-  // ── Supabase admin client ─────────────────────────────────────────────────
-  const supabaseUrl     = process.env.SUPABASE_URL;
-  const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !supabaseRoleKey) {
+  // ── Supabase configurado? ─────────────────────────────────────────────────
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.error('[process-payment] SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY em falta!');
     return res.status(503).json({ error: 'Serviço temporariamente indisponível. Tente novamente.' });
   }
-
-  const supabase = createSupabaseAdmin(supabaseUrl, supabaseRoleKey);
 
   // ── Modo manual (WhatsApp) ────────────────────────────────────────────────
   if (mode === 'manual') {
     const referenceId = generateRef();
 
-    const { data: txData, error: insertErr } = await supabase
-      .from('transactions')
-      .insert({
+    let txData;
+    try {
+      txData = await insert('transactions', {
         reference_id:   referenceId,
         user_id:        userId,
         package_id:     packageId,
@@ -106,17 +118,15 @@ module.exports = async function handler(req, res) {
         status:         'pending',
         payment_method: 'manual',
         phone_number:   normalizedPhone,
-      })
-      .select('id')
-      .single();
-
-    if (insertErr) {
-      console.error('[process-payment] ERRO ao gravar transação:', insertErr.message, insertErr.code);
+      });
+    } catch (insertErr) {
+      // CORRIGIDO (auditoria 3.5): detalhes internos do Supabase (mensagem,
+      // código, hint, nomes de colunas/constraints) ficam apenas no log do
+      // servidor — nunca são devolvidos ao cliente.
+      console.error('[process-payment] ERRO ao gravar transação:', insertErr.message, insertErr.code, insertErr.hint);
       return res.status(500).json({
-        error:          'Erro ao registar pedido. Por favor tente novamente.',
-        supabase_error: insertErr.message,
-        supabase_code:  insertErr.code,
-        hint:           insertErr.hint || null,
+        error:      'Erro ao registar o pedido. Por favor tente novamente.',
+        referenceId, // permite ao suporte localizar a tentativa nos logs, sem expor detalhes do esquema
       });
     }
 
@@ -126,13 +136,13 @@ module.exports = async function handler(req, res) {
     // Registar em credit_logs — fire-and-forget, nunca bloqueia o fluxo principal
     if (transactionId) {
       try {
-        await supabase.from('credit_logs').insert({
+        await insert('credit_logs', {
           user_id:        userId,
           transaction_id: transactionId,
           action:         'purchase_pending',
           credits:        pkg.credits,
           document_type:  null,
-          note:           `Pacote ${pkg.name} — aguarda confirmação manual`,
+          note:           `Pacote ${pkg.name} — aguarda confirmação manual (${wallet})`,
         });
       } catch (logErr) {
         console.warn('[process-payment] credit_logs insert falhou (não crítico):', logErr.message);
@@ -145,8 +155,8 @@ module.exports = async function handler(req, res) {
       `Pacote: ${pkg.name}\n` +
       `Créditos: ${pkg.credits}\n` +
       `Valor: ${pkg.price} MZN\n` +
-      `Telemóvel: ${normalizedPhone}\n\n` +
-      `Segue o comprovativo de pagamento M-Pesa.`
+      `Telemóvel: ${normalizedPhone} (${wallet})\n\n` +
+      `Segue o comprovativo de pagamento.`
     );
 
     return res.status(200).json({
@@ -156,6 +166,7 @@ module.exports = async function handler(req, res) {
       transactionId,
       package:      pkg,
       phone:        normalizedPhone,
+      wallet,
       whatsappLink: `https://wa.me/${WA_NUMBER}?text=${waMessage}`,
       message:      'Pedido registado. Envie o comprovativo pelo WhatsApp.',
     });
@@ -166,11 +177,11 @@ module.exports = async function handler(req, res) {
     const isConfigured = !!process.env.MPESA_API_KEY && !!process.env.MPESA_SERVICE_CODE;
     if (!isConfigured) {
       return res.status(503).json({
-        error:    'M-Pesa automático não configurado.',
+        error:    'Pagamento automático ainda não disponível. O pagamento é processado manualmente via WhatsApp.',
         fallback: 'Use modo manual',
       });
     }
-    return res.status(503).json({ error: 'Integração M-Pesa ainda não implementada. Use modo manual.' });
+    return res.status(503).json({ error: 'Integração automática ainda não implementada. Use modo manual.' });
   }
 
   return res.status(400).json({ error: `Modo inválido: ${mode}` });
@@ -178,8 +189,7 @@ module.exports = async function handler(req, res) {
   } catch (unexpectedErr) {
     console.error('[process-payment] ERRO INESPERADO:', unexpectedErr.message);
     return res.status(500).json({
-      error:   'Erro interno do servidor. Tente novamente.',
-      details: unexpectedErr.message,
+      error: 'Erro interno do servidor. Tente novamente.',
     });
   }
 };
