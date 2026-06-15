@@ -2,7 +2,7 @@
 <html lang="pt-MZ">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#07101F"/>
   <meta name="description" content="MzDocs Pro — Crie documentos profissionais em segundos. CV, cartas, trabalhos e orçamentos para Moçambique."/>
   <meta name="mobile-web-app-capable" content="yes"/>
@@ -309,7 +309,7 @@
   <div class="sheet" id="paySheet">
     <div class="pill"></div>
     <div class="sheet-hdr">
-      <div><div class="sh-title" id="payTitle">Adquirir Créditos</div><div class="sh-sub" id="paySubtitle">Pagamento rápido via M-Pesa</div></div>
+      <div><div class="sh-title" id="payTitle">Adquirir Créditos</div><div class="sh-sub" id="paySubtitle">Pagamento manual — M-Pesa, e-Mola ou mKesh via WhatsApp</div></div>
       <button class="sh-x" id="payClose">✕</button>
     </div>
     <!-- ACESSO AVULSO (visitantes) -->
@@ -362,20 +362,20 @@
     <div id="mpesaSection" style="display:none">
       <div class="mp-hdr">
         <div class="mp-logo">M</div>
-        <div><strong>Pagamento M-Pesa</strong><p id="mpEnvLabel"></p></div>
+        <div><strong>Pagamento por Carteira Móvel</strong><p id="mpEnvLabel">Processado manualmente — M-Pesa, e-Mola ou mKesh</p></div>
       </div>
-      <label class="field-lbl">Número M-Pesa</label>
+      <label class="field-lbl">Número de telemóvel (M-Pesa, e-Mola ou mKesh)</label>
       <div class="phone-wrap">
         <span>+258</span>
-        <input type="tel" id="phoneInput" placeholder="84 XXX XXXX" maxlength="9" inputmode="numeric"/>
+        <input type="tel" id="phoneInput" placeholder="8X XXX XXXX" maxlength="9" inputmode="numeric"/>
       </div>
       <div class="pay-sum" id="paySummary"></div>
-      <button class="btn-pay" id="btnPay" disabled>Pagar com M-Pesa</button>
-      <p class="mp-note" id="mpNote">Irá receber um pedido de confirmação no seu telemóvel</p>
+      <button class="btn-pay" id="btnPay" disabled>Continuar</button>
+      <p class="mp-note" id="mpNote">⚠️ Pagamento processado manualmente: ao confirmar, será encaminhado para o WhatsApp para enviar o comprovativo.</p>
       <div id="payReceiverInfo"></div>
       <div class="pay-manual-info" id="payManualInfo" style="display:none;margin-top:12px;padding:12px 14px;background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:10px;font-size:13px;color:#92400E;line-height:1.6;">
-        ⚠️ <strong>Pagamento manual:</strong><br/>
-        Após clicar, será redireccionado para o WhatsApp. Envie o comprovativo M-Pesa para o nosso número e os créditos serão activados em até <strong>24 horas</strong>.<br/>
+        ⚠️ <strong>Pagamento manual — não é automático:</strong><br/>
+        Após clicar, será redireccionado para o WhatsApp. Envie o comprovativo (M-Pesa, e-Mola ou mKesh, conforme o número usado) para o nosso número e os créditos serão activados em até <strong>24 horas</strong>.<br/>
         <span style="margin-top:6px;display:block;">📌 Guarde o número de referência que receberá — é necessário para confirmar o pagamento.</span>
         <span style="margin-top:8px;display:block;font-size:12px;">Consulte a nossa <a href="/legal.html#reembolso" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Política de Reembolso</a> · <a href="/legal.html#suporte" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Suporte</a></span>
       </div>
