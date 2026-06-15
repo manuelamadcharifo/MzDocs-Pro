@@ -143,6 +143,7 @@ export class OpenRouterService {
         prompt,
         userId,
         creditsRemaining: creditsAfterDeduct, // enviado de volta para o cliente via resposta
+        cost, // permite ao servidor reembolsar automaticamente este custo se a geração falhar
       }),
     });
 
@@ -151,6 +152,13 @@ export class OpenRouterService {
       const data = await res.json().catch(() => ({}));
       const e = new Error(data.error || `HTTP ${res.status}`);
       e.status = res.status;
+      // CORRIGIDO (auditoria): se o servidor reembolsou o crédito automaticamente
+      // após uma falha total dos providers de IA, propagar essa informação para
+      // que o DocumentController possa actualizar o saldo local e avisar o utilizador.
+      if (data.refunded) {
+        e.refunded = true;
+        e.creditsRemaining = data.creditsRemaining;
+      }
       throw e;
     }
 
