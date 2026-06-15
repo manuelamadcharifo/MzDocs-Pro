@@ -68,6 +68,63 @@
 </div>
 
 <div class="container">
+  <!-- CORRIGIDO (auditoria Junho/2026): as 10 páginas-guia em /pages/*.html são
+       ficheiros estáticos (não vêm da tabela blog_pages), por isso nunca
+       apareciam aqui. Agora estão sempre visíveis, mesmo sem Supabase. -->
+  <div class="articles-grid">
+    <a class="article-card" href="/pages/como-fazer-cv-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Como Fazer um CV Profissional em Moçambique</div>
+      <div class="card-desc">Exemplos reais, dicas para o mercado local e um modelo gratuito gerado por IA.</div>
+    </a>
+    <a class="article-card" href="/pages/carta-formal-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Como Escrever uma Carta Formal em Moçambique</div>
+      <div class="card-desc">Estrutura, linguagem e exemplos para governo, empresas e bancos.</div>
+    </a>
+    <a class="article-card" href="/pages/requerimento-emprego-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Como Escrever um Requerimento de Emprego</div>
+      <div class="card-desc">Modelo e guia prático para o sector público e privado em Moçambique.</div>
+    </a>
+    <a class="article-card" href="/pages/carta-recomendacao-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Carta de Recomendação: Como Escrever e Pedir</div>
+      <div class="card-desc">Exemplos práticos para cartas profissionais e académicas.</div>
+    </a>
+    <a class="article-card" href="/pages/contrato-arrendamento-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Contrato de Arrendamento em Moçambique</div>
+      <div class="card-desc">Cláusulas obrigatórias, direitos do inquilino e do proprietário, registo e modelos.</div>
+    </a>
+    <a class="article-card" href="/pages/declaracao-residencia-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Declaração de Residência: O que é e Como Obter</div>
+      <div class="card-desc">Onde pedir, documentos necessários, validade e como criar a sua online.</div>
+    </a>
+    <a class="article-card" href="/pages/plano-negocios-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Como Fazer um Plano de Negócios em Moçambique</div>
+      <div class="card-desc">Estrutura, financiamento, BCI, BIM e investidores locais.</div>
+    </a>
+    <a class="article-card" href="/pages/procuracao-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Procuração em Moçambique: Como Fazer e Quando Usar</div>
+      <div class="card-desc">Tipos, como redigir, onde autenticar e modelos prontos a usar.</div>
+    </a>
+    <a class="article-card" href="/pages/recibo-pagamento-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Como Emitir um Recibo de Pagamento</div>
+      <div class="card-desc">Quando usar, o que incluir, validade fiscal e como criar recibos com IA.</div>
+    </a>
+    <a class="article-card" href="/pages/trabalho-escolar-mocambique.html">
+      <span class="card-tag">📚 Guia</span>
+      <div class="card-title">Como Fazer um Trabalho Escolar: Guia Completo</div>
+      <div class="card-desc">Estrutura, normas de formatação, citações e uso ético de IA para estudantes.</div>
+    </a>
+  </div>
+
+  <h2 style="margin:36px 0 16px;font-family:'Instrument Serif',serif;font-size:1.4rem;">Artigos do Blog</h2>
   <div id="articlesGrid" class="articles-grid">
     <div class="loading">
       <span class="loading-spinner">⏳</span>
@@ -88,6 +145,18 @@
 
   async function loadArticles() {
     const grid = document.getElementById('articlesGrid');
+    const heading = grid.previousElementSibling;
+
+    // CORRIGIDO (auditoria Junho/2026): se as variáveis Supabase nunca foram
+    // substituídas no build (continuam como "..._PLACEHOLDER"), não há
+    // tabela blog_pages acessível — ocultar esta secção em vez de mostrar
+    // "Erro ao carregar artigos" para sempre.
+    if (!SUPABASE_URL.startsWith('http') || !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes('PLACEHOLDER')) {
+      grid.style.display = 'none';
+      if (heading) heading.style.display = 'none';
+      return;
+    }
+
     try {
       const res  = await fetch(SUPABASE_URL + '/rest/v1/blog_pages?select=slug,title,meta_description,updated_at,views&published=eq.true&order=updated_at.desc', {
         headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
@@ -95,6 +164,7 @@
       const pages = await res.json();
       if (!Array.isArray(pages) || pages.length === 0) {
         grid.innerHTML = '<div class="empty">📭 Ainda não há artigos publicados. Volte em breve!</div>';
+        if (heading) heading.style.display = 'none';
         return;
       }
       grid.innerHTML = pages.map(function(p) {
