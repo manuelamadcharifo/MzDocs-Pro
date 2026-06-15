@@ -485,7 +485,16 @@ export class DocumentController {
  if (err.message === 'cancelled') return;
  DocumentView.hideLoader(this._genIv);
  if (btn) btn.disabled = false;
- NotificationView.error('❌ ' + (err.message || 'Erro ao gerar documento.'));
+ // CORRIGIDO (auditoria): se o servidor reembolsou automaticamente o crédito
+ // (todos os providers de IA falharam após a dedução), actualizar o saldo
+ // local e avisar o utilizador de forma clara — em vez de simplesmente
+ // "perder" o crédito sem explicação.
+ if (err.refunded && typeof err.creditsRemaining === 'number') {
+  this.creditModel.applyServerDeduction(err.creditsRemaining);
+  NotificationView.error('❌ Não foi possível gerar o documento agora. O crédito foi devolvido automaticamente — tente novamente em alguns segundos.');
+ } else {
+  NotificationView.error('❌ ' + (err.message || 'Erro ao gerar documento.'));
+ }
  console.error('[DocumentController] _generateNormal error:', err);
  } finally {
  this._generating = false;
