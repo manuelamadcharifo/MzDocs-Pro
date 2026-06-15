@@ -1,16 +1,27 @@
-// api/deduct-credit.js — v2.3 (corrigido .catch() em Supabase insert)
-// CORREÇÕES v2.3:
-//  1. Substituído .catch() encadeado no supabaseAdmin.from(...).insert() por try/catch.
-//     O Supabase JS v2 retorna um SupabaseQueryBuilder, nao uma Promise nativa,
-//     por isso .catch() nao existe directamente no builder e causava TypeError no Vercel.
-// CORREÇÕES v2.2:
-//  1. Restaurado require('ws') e realtime: { transport: ws } - obrigatorio em Node.js 20
-//     com supabase-js v2.49+ (o supabase instancia RealtimeClient no construtor mesmo
-//     que nunca seja usado; sem ws, crasha com "Node.js 20 detected without native WebSocket")
-//  2. Corrigido _fallbackDeductWithLock: count vinha sempre null (.select() sem { count:'exact' })
+// api/deduct-credit.js — v3.0
+// ──────────────────────────────────────────────────────────────────────────
+// CORREÇÕES v3.0 (AUDITORIA Junho/2026):
+//  1. Removido @supabase/supabase-js e require('ws'). Este ficheiro passou a
+//     usar api/_lib/supabaseAdmin.js, que fala directamente com a REST API
+//     do Supabase via fetch puro. Isto elimina por completo o erro
+//     "Node.js 20 detected without native WebSocket" e o cenário em que o
+//     crédito era debitado mas a função rebentava antes de responder.
+//  2. NOVO: suporta `{ refund: true, cost, documentType }` — devolve créditos
+//     a um utilizador quando /api/generate-document falha após a dedução
+//     (chamado automaticamente pelo servidor em generate-document.js).
+//  3. Lógica de negócio (verificação de conta bloqueada/expirada, RPC
+//     deduct_credits, fallback com optimistic locking, eliminação de contas
+//     avulso a 0 créditos) mantida igual à v2.3.
+// ──────────────────────────────────────────────────────────────────────────
 
-const { createClient } = require('@supabase/supabase-js');
-const ws = require('ws'); // obrigatório em Node 20 para supabase-js v2.49+
+const {
+  getUserFromToken,
+  selectOne,
+  update,
+  insert,
+  rpc,
+  adminDeleteUser,
+} = require('./_lib/supabaseAdmin');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 const VALID_COSTS    = [1, 2]; // custo máximo por operação
@@ -32,25 +43,14 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ error: 'Autenticação obrigatória.', code: 'AUTH_REQUIRED' });
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceKey) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return res.status(503).json({ error: 'Supabase não configurado no servidor.' });
   }
-
-  // CORRECÇÃO v2.2: restaurado realtime: { transport: ws } — obrigatório em Node.js 20
-  // O supabase-js v2.49+ instancia o RealtimeClient no construtor.
-  // Em Node < 22 sem WebSocket nativo é necessário fornecer o pacote 'ws'.
-  const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    realtime: { transport: ws },
-  });
 
   // ── Verificar JWT ─────────────────────────────────────────────────────────
   let userId;
   try {
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    const { user, error } = await getUserFromToken(token);
     if (error || !user) {
       return res.status(401).json({ error: 'Sessão inválida ou expirada. Inicie sessão novamente.' });
     }
@@ -59,9 +59,10 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ error: 'Erro ao verificar sessão: ' + e.message });
   }
 
-  // ── Ler custo do body — validação estrita ─────────────────────────────────
+  // ── Ler corpo do pedido ──────────────────────────────────────────────────
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
+
   const rawCost = parseInt(body?.cost);
   const cost    = VALID_COSTS.includes(rawCost) ? rawCost : 1;
 
@@ -69,13 +70,16 @@ module.exports = async function handler(req, res) {
     ? body.documentType.slice(0, 50).replace(/[^a-z0-9_-]/gi, '')
     : null;
 
-  // ── Verificar se conta está bloqueada ─────────────────────────────────────
+  // ── MODO REEMBOLSO ───────────────────────────────────────────────────────
+  // Usado quando /api/generate-document falhou DEPOIS de o crédito já ter
+  // sido debitado (todos os provedores de IA indisponíveis, etc.).
+  if (body?.refund === true) {
+    return await _refundCredit(userId, cost, documentType, res);
+  }
+
+  // ── Verificar se conta está bloqueada / créditos expirados ────────────────
   try {
-    const { data: profileCheck } = await supabaseAdmin
-      .from('profiles')
-      .select('is_blocked, credits_expires_at, account_type')
-      .eq('id', userId)
-      .single();
+    const profileCheck = await selectOne('profiles', 'id', userId, 'is_blocked,credits_expires_at,account_type');
 
     if (profileCheck?.is_blocked) {
       return res.status(403).json({
@@ -88,11 +92,7 @@ module.exports = async function handler(req, res) {
       profileCheck?.credits_expires_at &&
       new Date(profileCheck.credits_expires_at) < new Date()
     ) {
-      await supabaseAdmin
-        .from('profiles')
-        .update({ credits: 0, updated_at: new Date().toISOString() })
-        .eq('id', userId)
-        .gt('credits', 0);
+      await update('profiles', 'id', userId, { credits: 0, updated_at: new Date().toISOString() }, '&credits=gt.0');
 
       return res.status(402).json({
         error:        'Créditos expirados.',
@@ -111,25 +111,28 @@ module.exports = async function handler(req, res) {
     let rpcOk     = false;
 
     // Tentar função deduct_credits (suporta N créditos)
-    const { data: dataN, error: errN } = await supabaseAdmin
-      .rpc('deduct_credits', { p_user_id: userId, p_amount: cost });
-
-    if (!errN && dataN !== undefined && dataN !== null) {
-      remaining = dataN;
-      rpcOk     = true;
-    } else if (cost === 1) {
-      // Fallback para função antiga (1 crédito)
-      const { data: data1, error: err1 } = await supabaseAdmin
-        .rpc('deduct_credit', { user_id: userId });
-      if (!err1 && data1 !== undefined && data1 !== null) {
-        remaining = data1;
+    try {
+      const dataN = await rpc('deduct_credits', { p_user_id: userId, p_amount: cost });
+      if (dataN !== undefined && dataN !== null) {
+        remaining = dataN;
         rpcOk     = true;
+      }
+    } catch (errN) {
+      if (cost === 1) {
+        // Fallback para função antiga (1 crédito)
+        try {
+          const data1 = await rpc('deduct_credit', { user_id: userId });
+          if (data1 !== undefined && data1 !== null) {
+            remaining = data1;
+            rpcOk     = true;
+          }
+        } catch (err1) { /* segue para fallback manual */ }
       }
     }
 
     if (!rpcOk) {
       // Fallback manual com optimistic locking
-      return await _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType, res);
+      return await _fallbackDeductWithLock(userId, cost, documentType, res);
     }
 
     if (remaining === -1 || remaining === null) {
@@ -142,7 +145,7 @@ module.exports = async function handler(req, res) {
 
     // ── Registar no credit_logs ────────────────────────────────────────────
     try {
-      await supabaseAdmin.from('credit_logs').insert({
+      await insert('credit_logs', {
         user_id:       userId,
         action:        'consume',
         credits:       -cost,
@@ -152,7 +155,7 @@ module.exports = async function handler(req, res) {
     } catch (e) { console.warn('[deduct-credit] credit_logs falhou:', e.message); }
 
     if (remaining === 0) {
-      _tryDeleteAvulsoAccount(supabaseAdmin, userId);
+      _tryDeleteAvulsoAccount(userId);
     }
 
     return res.status(200).json({
@@ -168,15 +171,11 @@ module.exports = async function handler(req, res) {
 };
 
 // ── Fallback com optimistic locking manual ────────────────────────────────
-async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType, res) {
+async function _fallbackDeductWithLock(userId, cost, documentType, res) {
   try {
-    const { data: profile, error: selErr } = await supabaseAdmin
-      .from('profiles')
-      .select('credits, is_temp, account_type')
-      .eq('id', userId)
-      .single();
+    const profile = await selectOne('profiles', 'id', userId, 'credits,is_temp,account_type');
 
-    if (selErr || !profile) {
+    if (!profile) {
       return res.status(404).json({ error: 'Perfil não encontrado.' });
     }
 
@@ -190,19 +189,14 @@ async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType
 
     const newCredits = profile.credits - cost;
 
-    // CORRECÇÃO: usar { count: 'exact' } para obter contagem real de linhas afectadas
-    const { data: updData, error: updErr, count } = await supabaseAdmin
-      .from('profiles')
-      .update({ credits: newCredits, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-      .eq('credits', profile.credits) // optimistic lock
-      .select('id', { count: 'exact' });
+    // Optimistic lock: só actualiza se 'credits' ainda for o valor lido.
+    const updData = await update(
+      'profiles', 'id', userId,
+      { credits: newCredits, updated_at: new Date().toISOString() },
+      `&credits=eq.${profile.credits}`
+    );
 
-    if (updErr) throw updErr;
-
-    // Verificar se a linha foi actualizada (count pode ser null em algumas versões)
-    // Usar data length como alternativa segura
-    const affectedRows = count ?? (Array.isArray(updData) ? updData.length : 0);
+    const affectedRows = Array.isArray(updData) ? updData.length : 0;
     if (affectedRows === 0) {
       return res.status(409).json({
         error: 'Conflito de actualização — tente novamente.',
@@ -211,7 +205,7 @@ async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType
     }
 
     try {
-      await supabaseAdmin.from('credit_logs').insert({
+      await insert('credit_logs', {
         user_id:       userId,
         action:        'consume',
         credits:       -cost,
@@ -221,7 +215,7 @@ async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType
     } catch (e) { console.warn('[deduct-credit] credit_logs fallback falhou:', e.message); }
 
     if (newCredits === 0) {
-      _tryDeleteAvulsoAccount(supabaseAdmin, userId, profile);
+      _tryDeleteAvulsoAccount(userId, profile);
     }
 
     return res.status(200).json({
@@ -235,18 +229,63 @@ async function _fallbackDeductWithLock(supabaseAdmin, userId, cost, documentType
   }
 }
 
-// ── Auto-eliminar conta avulso (fire-and-forget) ──────────────────────────
-async function _tryDeleteAvulsoAccount(supabaseAdmin, userId, knownProfile = null) {
+// ── Reembolso automático (NOVO v3.0) ──────────────────────────────────────
+// Chamado quando /api/generate-document falha por completo após o crédito
+// já ter sido debitado. Devolve `cost` créditos ao utilizador e regista o
+// motivo em credit_logs.
+async function _refundCredit(userId, cost, documentType, res) {
   try {
-    const profile = knownProfile || (await supabaseAdmin
-      .from('profiles')
-      .select('account_type, is_temp')
-      .eq('id', userId)
-      .single()
-    ).data;
+    let newCredits = null;
+    let usedRpc    = false;
+
+    try {
+      const data = await rpc('refund_credit', { p_user_id: userId, p_amount: cost });
+      if (data !== undefined && data !== null) {
+        newCredits = data;
+        usedRpc    = true;
+      }
+    } catch (e) {
+      console.warn('[deduct-credit] RPC refund_credit indisponível, a usar fallback:', e.message);
+    }
+
+    if (!usedRpc) {
+      // Fallback manual: ler créditos actuais e somar
+      const profile = await selectOne('profiles', 'id', userId, 'credits');
+      if (!profile) {
+        return res.status(404).json({ error: 'Perfil não encontrado.' });
+      }
+      newCredits = (profile.credits || 0) + cost;
+      await update('profiles', 'id', userId, { credits: newCredits, updated_at: new Date().toISOString() });
+
+      try {
+        await insert('credit_logs', {
+          user_id:       userId,
+          action:        'refund',
+          credits:       cost,
+          document_type: documentType,
+          note:          'Reembolso automático (fallback) — geração falhou após dedução',
+        });
+      } catch (e) { console.warn('[deduct-credit] credit_logs refund fallback falhou:', e.message); }
+    }
+
+    return res.status(200).json({
+      success:  true,
+      refunded: true,
+      credits:  newCredits,
+    });
+  } catch (e) {
+    console.error('[deduct-credit] Excepção no reembolso:', e.message);
+    return res.status(500).json({ error: 'Erro ao reembolsar crédito.' });
+  }
+}
+
+// ── Auto-eliminar conta avulso (fire-and-forget) ──────────────────────────
+async function _tryDeleteAvulsoAccount(userId, knownProfile = null) {
+  try {
+    const profile = knownProfile || await selectOne('profiles', 'id', userId, 'account_type,is_temp');
 
     if (profile?.is_temp || profile?.account_type === 'avulso') {
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      await adminDeleteUser(userId);
       console.log('[deduct-credit] Conta avulso eliminada após 0 créditos:', userId.slice(0, 8) + '***');
     }
   } catch (e) {
