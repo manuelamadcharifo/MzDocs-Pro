@@ -6,9 +6,25 @@ const ws = require('ws');
 const SITE_URL = (process.env.SITE_URL || 'https://mzdocs.co.mz').replace(/\/$/, '');
 const ORIGIN   = SITE_URL;
 
+// CORRIGIDO (auditoria Junho/2026): as 10 páginas-guia estáticas em /pages/
+// não estavam no sitemap — só artigos da tabela blog_pages eram incluídos.
+// Estas páginas têm SEO completo (schema.org, OG, canonical) mas eram
+// invisíveis para o Google sem isto.
 const STATIC_PAGES = [
-  { loc: '/',           priority: '1.0', changefreq: 'weekly'  },
-  { loc: '/legal.html', priority: '0.3', changefreq: 'monthly' },
+  { loc: '/',                                          priority: '1.0', changefreq: 'weekly'  },
+  { loc: '/pages/',                                    priority: '0.7', changefreq: 'weekly'  },
+  { loc: '/pages/como-fazer-cv-mocambique.html',       priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/carta-formal-mocambique.html',        priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/carta-recomendacao-mocambique.html',  priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/contrato-arrendamento-mocambique.html', priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/declaracao-residencia-mocambique.html', priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/plano-negocios-mocambique.html',      priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/procuracao-mocambique.html',          priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/recibo-pagamento-mocambique.html',    priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/requerimento-emprego-mocambique.html', priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/trabalho-escolar-mocambique.html',    priority: '0.8', changefreq: 'monthly' },
+  { loc: '/parceiros.html',                            priority: '0.6', changefreq: 'monthly' },
+  { loc: '/legal.html',                                priority: '0.3', changefreq: 'monthly' },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────
