@@ -1,5 +1,12 @@
 // assets/js/services/PaymentService.js
-// Pagamento: M-Pesa automático + Manual (fallback WhatsApp)
+// Pagamento: M-Pesa automático (desactivado) + Manual (fallback WhatsApp)
+//
+// CORRIGIDO (auditoria 3.4/3.6): o pagamento é, na prática, sempre PROCESSADO
+// MANUALMENTE via WhatsApp (mpesaActive = false). A interface deve deixar
+// isto explícito para o utilizador desde o início. Além disso, qualquer
+// número moçambicano válido (M-Pesa, e-Mola ou mKesh) é aceite, já que o
+// utilizador apenas envia um comprovativo por WhatsApp — não é exigido um
+// número M-Pesa especificamente.
 
 const WA_NUMBER = '258858695506'; // ← ALTERE PARA O TEU NÚMERO
 
@@ -92,13 +99,25 @@ export class PaymentService {
     };
   }
 
-  openWhatsAppPayment(transactionId, packageName, amount) {
+  // Detecta a carteira móvel pelo prefixo do número, apenas para exibição
+  // (qualquer carteira é aceite — pagamento manual via WhatsApp).
+  detectWallet(raw) {
+    const num = raw.replace(/\D/g, '').replace(/^258/, '');
+    const prefix = num.slice(0, 2);
+    if (prefix === '84' || prefix === '85') return 'M-Pesa';
+    if (prefix === '86' || prefix === '87') return 'e-Mola';
+    if (prefix === '82' || prefix === '83') return 'mKesh';
+    return 'Carteira móvel';
+  }
+
+  openWhatsAppPayment(transactionId, packageName, amount, phoneNumber = '') {
+    const wallet = phoneNumber ? this.detectWallet(phoneNumber) : 'M-Pesa/e-Mola/mKesh';
     const message = encodeURIComponent(
       `*Pagamento MzDocs Pro*\n\n` +
       `Referência: ${transactionId}\n` +
       `Pacote: ${packageName}\n` +
       `Valor: ${amount} MZN\n` +
-      `Recebedor M-Pesa: Manuel Amad Charifo\n\n` +
+      `Recebedor (${wallet}): Manuel Amad Charifo\n\n` +
       `Segue o comprovativo de pagamento:`
     );
     window.open(`https://wa.me/${WA_NUMBER}?text=${message}`, '_blank');
@@ -111,9 +130,11 @@ export class PaymentService {
     return num;
   }
 
+  // CORRIGIDO (auditoria 3.6): aceita qualquer operador móvel moçambicano —
+  // 82/83 mCel (mKesh) · 84/85 Vodacom (M-Pesa) · 86/87 Movitel (e-Mola).
   validatePhone(raw) {
     const num = raw.replace(/\D/g, '');
-    return /^8[4-7]\d{7}$/.test(num);
+    return /^8[2-7]\d{7}$/.test(num);
   }
 }
 
