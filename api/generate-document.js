@@ -1,8 +1,18 @@
-// api/generate-document.js
+// api/generate-document.js — v2.0 (AUDITORIA Junho/2026)
 // 5 providers em corrida paralela: Groq + Gemini + OpenRouter + Cerebras + NVIDIA NIM
 // Suporte a geração em cadeia (_planMode / _sectionMode) com rate-limit generoso
+//
+// CORREÇÕES v2.0:
+//  1. Removido @supabase/supabase-js + require('ws'). A verificação do JWT
+//     passou a usar api/_lib/supabaseAdmin.js (fetch puro contra /auth/v1/user).
+//  2. NOVO: reembolso automático de crédito quando TODOS os providers falham.
+//     O cliente envia `cost` (créditos debitados em /api/deduct-credit); se a
+//     geração falhar por completo, este endpoint chama a RPC `refund_credit`
+//     para devolver o crédito ao utilizador, evitando o cenário
+//     "consumiu crédito e não gerou documento".
 
-const ws = require('ws'); // obrigatório em Node 20 para supabase-js v2.49+
+const { getUserFromToken, rpc } = require('./_lib/supabaseAdmin');
+
 const SYSTEM_PROMPT = `Você é o MzDocs Pro, motor de geração de documentos para Moçambique.
 Gere documentos COMPLETOS e prontos para uso em português (variante moçambicana, formal).
 Use Markdown. Nunca use meta-comentários como "Aqui está o documento...".
@@ -125,6 +135,8 @@ module.exports = async function handler(req, res) {
         _sectionMode, // geração de uma secção individual
         // creditsRemaining enviado pelo cliente após /api/deduct-credit ter debitado com sucesso
         creditsRemaining: preDeductedCredits,
+        // cost: créditos já debitados para este pedido (usado para reembolso automático em caso de falha)
+        cost: deductedCost,
     } = body;
 
     // Chamadas de cadeia (_planMode ou _sectionMode) têm rate-limit próprio
@@ -172,25 +184,14 @@ module.exports = async function handler(req, res) {
             });
         }
         try {
-            const { createClient } = require('@supabase/supabase-js');
-            
-            const supabaseUrl = process.env.SUPABASE_URL;
-            const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
-            if (supabaseUrl && serviceKey) {
-                const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
-                    auth: { autoRefreshToken: false, persistSession: false },
-                    realtime: { transport: ws },
-                    
+            const { user: jwtUser, error: authErr } = await getUserFromToken(token);
+            if (authErr || !jwtUser) {
+                return res.status(401).json({
+                    error: 'Sessão inválida ou expirada. Inicie sessão novamente.',
+                    code: 'AUTH_REQUIRED',
                 });
-                const { data: { user: jwtUser }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-                if (authErr || !jwtUser) {
-                    return res.status(401).json({
-                        error: 'Sessão inválida ou expirada. Inicie sessão novamente.',
-                        code: 'AUTH_REQUIRED',
-                    });
-                }
-                verifiedUserId = jwtUser.id;
             }
+            verifiedUserId = jwtUser.id;
         } catch (e) {
             console.error('[generate-document] Erro ao verificar JWT:', e.message);
             return res.status(401).json({ error: 'Erro ao verificar sessão.' });
@@ -227,13 +228,32 @@ module.exports = async function handler(req, res) {
 
     } catch (err) {
         console.error('[generate-document] Todos os providers falharam:', err?.message);
-        // IMPORTANTE: crédito já foi debitado antes de tentar gerar.
-        // Se a geração falhar, o crédito foi consumido — comportamento intencional
-        // (o servidor processou o pedido; a falha é do provider de IA, não do utilizador).
-        // Para restituir, seria necessário um sistema de reembolso separado.
+
+        // NOVO v2.0: tentar reembolsar automaticamente o crédito já debitado.
+        // Só aplicável a chamadas normais (não-chain), com utilizador autenticado
+        // e um custo válido informado pelo cliente.
+        let refunded = false;
+        let creditsAfterRefund = creditsAfterDeduction;
+
+        if (!isChainCall && verifiedUserId && (deductedCost === 1 || deductedCost === 2)) {
+            try {
+                const newCredits = await rpc('refund_credit', { p_user_id: verifiedUserId, p_amount: deductedCost });
+                if (newCredits !== undefined && newCredits !== null) {
+                    refunded = true;
+                    creditsAfterRefund = newCredits;
+                }
+            } catch (refundErr) {
+                console.error('[generate-document] Falha ao reembolsar crédito automaticamente:', refundErr.message);
+            }
+        }
+
         return res.status(503).json({
-            error: 'Serviço de IA temporariamente indisponível. Tente novamente.',
+            error: refunded
+                ? 'Serviço de IA temporariamente indisponível. O crédito foi devolvido automaticamente — tente novamente.'
+                : 'Serviço de IA temporariamente indisponível. Tente novamente.',
             code: 'SERVICE_UNAVAILABLE',
+            refunded,
+            creditsRemaining: creditsAfterRefund,
         });
     }
 }
