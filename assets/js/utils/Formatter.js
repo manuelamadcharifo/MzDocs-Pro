@@ -2,7 +2,11 @@
 export const Validator = {
   phone(raw) {
     const clean = raw.replace(/\D/g, '');
-    return /^8[4-7]\d{7}$/.test(clean) || /^2588[4-7]\d{7}$/.test(clean);
+    // CORRIGIDO (auditoria 3.6): aceitar qualquer operador móvel moçambicano —
+    // 82/83 mCel (mKesh) · 84/85 Vodacom (M-Pesa) · 86/87 Movitel (e-Mola).
+    // O pagamento é processado manualmente via WhatsApp, pelo que qualquer
+    // carteira móvel pode ser usada para enviar o comprovativo.
+    return /^8[2-7]\d{7}$/.test(clean) || /^2588[2-7]\d{7}$/.test(clean);
   },
   amount(val, validAmounts = [150, 350, 750]) {
     return validAmounts.includes(parseInt(val));
