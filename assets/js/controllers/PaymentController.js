@@ -166,8 +166,14 @@ export class PaymentController {
       overlay.remove();
     });
 
-    // Auto-remover após 12 segundos
-    setTimeout(() => overlay.remove(), 12000);
+    // CORRIGIDO (auditoria M-6): o timer de 12s removia o overlay mesmo em
+    // caso de erro no pagamento, deixando o utilizador sem feedback. Agora é
+    // apenas um safety-net de 60s (caso o utilizador não interaja de todo),
+    // e o overlay é sempre removido explicitamente nas respostas de sucesso/erro.
+    const safetyTimer = setTimeout(() => overlay.remove(), 60000);
+    // Limpar o timer se o utilizador fechar manualmente
+    overlay.querySelector('#lastCreditClose').addEventListener('click', () => clearTimeout(safetyTimer), { once: true });
+    overlay.querySelector('#lastCreditBuy').addEventListener('click', () => clearTimeout(safetyTimer), { once: true });
   }
 
   // ── Fechar modal ─────────────────────────────────────────────────────────
