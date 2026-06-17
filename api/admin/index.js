@@ -45,6 +45,12 @@ module.exports = async function handler(req, res) {
     case 'pages':           return handleBlogPages(req, res);
     case 'generate-page':   return handleGeneratePage(req, res);
     case 'affiliates':      return handleAffiliates(req, res);
+    case 'templates':       return handleAdminTemplates(req, res);
+    case 'template-approve': return handleAdminTplAction(req, res, 'approve');
+    case 'template-reject':  return handleAdminTplAction(req, res, 'reject');
+    case 'template-feature': return handleAdminTplAction(req, res, 'feature');
+    case 'template-type':    return handleAdminTplAction(req, res, 'type');
+    case 'template-edit':    return handleAdminTplAction(req, res, 'edit');
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
@@ -1179,4 +1185,138 @@ async function _generateStaticPage(page, SITE_URL) {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: `Gerar página: ${page.slug}`, content: Buffer.from(html).toString('base64'), sha }),
   });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ADMIN TEMPLATES — Gestão completa de templates comunitários
+// Rota: /api/admin/templates  (GET=lista) e /api/admin/template-* (POST=acção)
+// ════════════════════════════════════════════════════════════════════════════
+
+async function handleAdminTemplates(req, res) {
+  const supabase = await getAdminClient();
+  const token    = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const { error: authErr } = await validateAdmin(supabase, token);
+  if (authErr) return res.status(authErr.status || 403).json({ error: authErr.error || authErr });
+
+  const q      = req.query || {};
+  const status = q.status || 'pending';   // pending | approved | rejected | all
+  const type   = q.type   || null;        // official | community | premium | private
+  const limit  = Math.min(parseInt(q.limit  || 50), 200);
+  const offset = Math.max(parseInt(q.offset ||  0),   0);
+
+  let query = supabase
+    .from('templates_custom')
+    .select(`
+      id, template_type, service_type, template_name, description,
+      thumbnail_url, preview_url, tags, status, rejection_note,
+      admin_note, is_featured, featured_order, credit_cost,
+      downloads, use_count, likes, rating_sum, rating_count,
+      created_at, updated_at, user_id,
+      author:profiles!user_id(full_name, email),
+      reviewer:profiles!reviewed_by(full_name)
+    `)
+    .order('created_at', { ascending: status === 'pending' })
+    .range(offset, offset + limit - 1);
+
+  if (status !== 'all') query = query.eq('status', status);
+  if (type) query = query.eq('template_type', type);
+
+  const { data, error, count } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Contar pendentes para badge no admin
+  const { count: pendingCount } = await supabase
+    .from('templates_custom').select('*', { count: 'exact', head: true })
+    .eq('status', 'pending');
+
+  // Reports não resolvidos
+  const { count: reportCount } = await supabase
+    .from('template_reports').select('*', { count: 'exact', head: true })
+    .eq('resolved', false);
+
+  return res.status(200).json({
+    success: true,
+    templates: data || [],
+    meta: { pending: pendingCount || 0, reports: reportCount || 0 },
+  });
+}
+
+async function handleAdminTplAction(req, res, action) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const supabase = await getAdminClient();
+  const token    = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const { error: authErr, user } = await validateAdmin(supabase, token);
+  if (authErr) return res.status(authErr.status || 403).json({ error: authErr.error || authErr });
+
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  const { template_id, note, featured, featured_order, new_type, credit_cost } = body;
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+
+  let result;
+  switch (action) {
+    case 'approve':
+      ({ data: result } = await supabase.rpc('admin_approve_template', {
+        p_template_id: template_id,
+        p_admin_id:    user.id,
+        p_note:        note || '',
+        p_featured:    featured === true,
+      }));
+      break;
+
+    case 'reject':
+      ({ data: result } = await supabase.rpc('admin_reject_template', {
+        p_template_id: template_id,
+        p_admin_id:    user.id,
+        p_note:        note || '',
+      }));
+      break;
+
+    case 'feature':
+      ({ data: result } = await supabase.rpc('admin_feature_template', {
+        p_template_id: template_id,
+        p_admin_id:    user.id,
+        p_featured:    featured !== false,
+        p_order:       featured_order || null,
+      }));
+      break;
+
+    case 'type':
+      if (!new_type) return res.status(400).json({ error: 'new_type obrigatório' });
+      ({ data: result } = await supabase.rpc('admin_change_template_type', {
+        p_template_id: template_id,
+        p_admin_id:    user.id,
+        p_new_type:    new_type,
+        p_credit_cost: parseInt(credit_cost || 0),
+        p_note:        note || '',
+      }));
+      break;
+
+    case 'edit': {
+      // Edição directa de campos textuais (sem mudar status)
+      const allowed = ['template_name','description','thumbnail_url','preview_url','tags','admin_note'];
+      const updates = {};
+      allowed.forEach(k => { if (body[k] !== undefined) updates[k] = body[k]; });
+      if (!Object.keys(updates).length)
+        return res.status(400).json({ error: 'Nenhum campo para actualizar' });
+      updates.updated_at = new Date().toISOString();
+      const { error: upErr } = await supabase
+        .from('templates_custom').update(updates).eq('id', template_id);
+      if (upErr) return res.status(500).json({ error: upErr.message });
+      // Registar no histórico
+      await supabase.from('template_history').insert({
+        template_id, actor_id: user.id, action: 'edited',
+        new_value: updates, note: note || '',
+      });
+      result = { success: true };
+      break;
+    }
+
+    default:
+      return res.status(400).json({ error: 'Acção desconhecida' });
+  }
+
+  if (result?.success === false)
+    return res.status(400).json({ error: result.error || 'Erro ao executar acção' });
+
+  return res.status(200).json({ success: true, action, template_id });
 }
