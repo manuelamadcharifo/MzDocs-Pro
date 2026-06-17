@@ -135,6 +135,66 @@
       "destination": "/admin-parceiros.html"
     },
     {
+      "source": "/api/templates/gallery",
+      "destination": "/api/misc?_ns=templates&_a=gallery"
+    },
+    {
+      "source": "/api/templates/mine",
+      "destination": "/api/misc?_ns=templates&_a=mine"
+    },
+    {
+      "source": "/api/templates/saved",
+      "destination": "/api/misc?_ns=templates&_a=saved"
+    },
+    {
+      "source": "/api/templates/save",
+      "destination": "/api/misc?_ns=templates&_a=save"
+    },
+    {
+      "source": "/api/templates/use",
+      "destination": "/api/misc?_ns=templates&_a=use"
+    },
+    {
+      "source": "/api/templates/report",
+      "destination": "/api/misc?_ns=templates&_a=report"
+    },
+    {
+      "source": "/api/templates/share-token",
+      "destination": "/api/misc?_ns=templates&_a=share-token"
+    },
+    {
+      "source": "/api/templates/by-token",
+      "destination": "/api/misc?_ns=templates&_a=by-token"
+    },
+    {
+      "source": "/api/templates/delete",
+      "destination": "/api/misc?_ns=templates&_a=delete"
+    },
+    {
+      "source": "/api/admin/templates",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/admin/template-approve",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/admin/template-reject",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/admin/template-feature",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/admin/template-type",
+      "destination": "/api/admin/index"
+    },
+    {
+      "source": "/api/admin/template-edit",
+      "destination": "/api/admin/index"
+    },
+    {
       "source": "/(.*)",
       "destination": "/$1"
     }
