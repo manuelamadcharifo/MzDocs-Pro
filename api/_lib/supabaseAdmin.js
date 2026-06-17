@@ -153,3 +153,45 @@ module.exports = {
   rpc,
   adminDeleteUser,
 };
+
+/**
+ * Chama o endpoint de autenticação GoTrue usando a ANON key (não a service_role).
+ * Usada por api/auth/index.js para signIn e signUp (onde o utilizador ainda não tem JWT).
+ */
+async function anonAuthRequest(path, body) {
+  const ANON_KEY = process.env.SUPABASE_ANON_KEY;
+  if (!SUPABASE_URL || !ANON_KEY) throw new Error('Supabase não configurado (falta URL ou ANON_KEY)');
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+    method: 'POST',
+    headers: {
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { data, ok: res.ok, status: res.status };
+}
+
+/**
+ * Envia email de reset de password via GoTrue Admin API (service_role).
+ */
+async function adminSendRecovery(email, redirectTo) {
+  assertConfigured();
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, redirect_to: redirectTo }),
+  });
+  return res.ok;
+}
+
+module.exports = Object.assign(module.exports, {
+  anonAuthRequest,
+  adminSendRecovery,
+});
