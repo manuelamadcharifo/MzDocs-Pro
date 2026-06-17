@@ -555,8 +555,11 @@ export class DocumentController {
      if (creditsRemaining > 2) return;
 
      // Controlar frequência: máx 1x por sessão
-     if (sessionStorage.getItem('mz_upsell_shown')) return;
-     sessionStorage.setItem('mz_upsell_shown', '1');
+     // CORRIGIDO (auditoria M-8): usar timestamp em vez de booleano — o upsell
+     // pode ser mostrado novamente após 5 minutos (em vez de nunca mais na sessão).
+     const lastUpsell = parseInt(sessionStorage.getItem('mz_upsell_ts') || '0');
+     if (Date.now() - lastUpsell < 5 * 60 * 1000) return;
+     sessionStorage.setItem('mz_upsell_ts', String(Date.now()));
 
      // Delay para não sobrepor ao modal de resultado
      setTimeout(() => this._showUpsellModal(creditsRemaining), 2500);
