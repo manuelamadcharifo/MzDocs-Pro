@@ -217,13 +217,18 @@
     <p class="grid-label">O QUE PRECISA CRIAR?</p>
 
     <!-- FILTROS DE CATEGORIA -->
-    <div class="cat-filters" id="catFilters">
-      <button class="cat-btn active" data-cat="todos">✦ Todos</button>
-      <button class="cat-btn" data-cat="pessoal">👤 Pessoal</button>
-      <button class="cat-btn" data-cat="juridico">⚖️ Jurídico</button>
-      <button class="cat-btn" data-cat="negocio">💼 Negócio</button>
-      <button class="cat-btn" data-cat="academico">📚 Académico</button>
-      <button class="cat-btn" data-cat="servicos">🛠️ Serviços</button>
+    <div class="cat-filters-wrap" id="catFiltersWrap">
+      <button class="cat-scroll-arrow cat-scroll-left" id="catScrollLeft" aria-label="Rolar para a esquerda">‹</button>
+      <div class="cat-filters" id="catFilters">
+        <button class="cat-btn active" data-cat="populares">🔥 Mais Buscados</button>
+        <button class="cat-btn" data-cat="pessoal">👤 Pessoal</button>
+        <button class="cat-btn" data-cat="academico">📚 Académico</button>
+        <button class="cat-btn" data-cat="juridico">⚖️ Jurídico</button>
+        <button class="cat-btn" data-cat="negocio">💼 Negócio</button>
+        <button class="cat-btn" data-cat="servicos">🛠️ Serviços</button>
+        <button class="cat-btn" data-cat="todos">✦ Todos</button>
+      </div>
+      <button class="cat-scroll-arrow cat-scroll-right" id="catScrollRight" aria-label="Rolar para a direita">›</button>
     </div>
 
     <div class="svc-grid" id="svcGrid">
@@ -790,8 +795,18 @@ function renderServices(cat) {
   const grid = document.getElementById('svcGrid');
   if (!grid) return;
 
+  // 'populares' = top 6 serviços por popularidade (os mais buscados)
+  const POPULAR_IDS = Object.entries(SERVICES)
+    .sort((a, b) => (a[1].popularity || 99) - (b[1].popularity || 99))
+    .slice(0, 6)
+    .map(([id]) => id);
+
   const entries = Object.entries(SERVICES)
-    .filter(([, s]) => cat === 'todos' || s.category === cat)
+    .filter(([id, s]) => {
+      if (cat === 'todos') return true;
+      if (cat === 'populares') return POPULAR_IDS.includes(id);
+      return s.category === cat;
+    })
     .sort((a, b) => (a[1].popularity || 99) - (b[1].popularity || 99));
 
   if (entries.length === 0) {
@@ -853,8 +868,8 @@ function bindGridClicks() {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Pre-selecção: categoria mais usada ou 'todos'
-  const preferred = getMostUsedCat() || 'todos';
+  // Pre-selecção: categoria mais usada ou 'populares'
+  const preferred = getMostUsedCat() || 'populares';
   setActiveFilter(preferred);
   renderServices(preferred);
   bindGridClicks();
@@ -867,6 +882,33 @@ document.addEventListener('DOMContentLoaded', () => {
     setActiveFilter(cat);
     renderServices(cat);
     // Re-bind (o innerHTML foi substituído, mas o listener está no grid — OK)
+  });
+
+  // ── Setas de scroll das categorias ─────────────────────────────────────
+  const filtersEl = document.getElementById('catFilters');
+  const leftArrow  = document.getElementById('catScrollLeft');
+  const rightArrow = document.getElementById('catScrollRight');
+
+  function updateArrows() {
+    if (!filtersEl || !leftArrow || !rightArrow) return;
+    leftArrow.style.opacity  = filtersEl.scrollLeft > 4 ? '1' : '0';
+    leftArrow.style.pointerEvents = filtersEl.scrollLeft > 4 ? 'auto' : 'none';
+    const maxScroll = filtersEl.scrollWidth - filtersEl.clientWidth;
+    rightArrow.style.opacity = filtersEl.scrollLeft < maxScroll - 4 ? '1' : '0';
+    rightArrow.style.pointerEvents = filtersEl.scrollLeft < maxScroll - 4 ? 'auto' : 'none';
+  }
+
+  if (filtersEl) {
+    filtersEl.addEventListener('scroll', updateArrows, { passive: true });
+    // Inicializar após render
+    setTimeout(updateArrows, 100);
+  }
+
+  leftArrow?.addEventListener('click', () => {
+    filtersEl?.scrollBy({ left: -120, behavior: 'smooth' });
+  });
+  rightArrow?.addEventListener('click', () => {
+    filtersEl?.scrollBy({ left: 120, behavior: 'smooth' });
   });
 });
 </script>
