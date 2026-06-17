@@ -544,19 +544,68 @@
 
     <!-- ══ TEMPLATES MARKETPLACE ══ -->
     <section id="section-templates" class="admin-section">
-      <div class="section-toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px">
+      <!-- Cabeçalho -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
         <div>
-          <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">🎨 Templates do Marketplace</h2>
-          <p style="font-size:13px;color:#64748b">Aprove ou rejeite templates submetidos pelos utilizadores</p>
+          <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">🎨 Templates Comunitários</h2>
+          <p style="font-size:13px;color:#64748b">Aprove, rejeite, destaque e gerencie todos os templates da plataforma</p>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button onclick="window.adminApp._loadTemplates('pending')" style="padding:8px 14px;border:1.5px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#b45309;font-weight:700;font-size:13px;cursor:pointer">⏳ Pendentes</button>
-          <button onclick="window.adminApp._loadTemplates('approved')" style="padding:8px 14px;border:1.5px solid #16a34a;border-radius:8px;background:#f0fdf4;color:#15803d;font-weight:700;font-size:13px;cursor:pointer">✅ Aprovados</button>
-          <button onclick="window.adminApp._loadTemplates('rejected')" style="padding:8px 14px;border:1.5px solid #dc2626;border-radius:8px;background:#fef2f2;color:#b91c1c;font-weight:700;font-size:13px;cursor:pointer">❌ Rejeitados</button>
+        <a href="/templates.html" target="_blank" style="padding:8px 14px;background:#07101F;color:#fff;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none">🔗 Ver Galeria</a>
+      </div>
+
+      <!-- Stats rápidos -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+        <div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:20px;font-weight:800;color:#b45309" id="tplStatPending">—</div>
+          <div style="font-size:11px;color:#92400e;font-weight:600">⏳ Pendentes</div>
+        </div>
+        <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:20px;font-weight:800;color:#15803d" id="tplStatApproved">—</div>
+          <div style="font-size:11px;color:#166534;font-weight:600">✅ Aprovados</div>
+        </div>
+        <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:20px;font-weight:800;color:#b91c1c" id="tplStatRejected">—</div>
+          <div style="font-size:11px;color:#991b1b;font-weight:600">❌ Rejeitados</div>
+        </div>
+        <div style="background:#fff7ed;border:1.5px solid #fdba74;border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:20px;font-weight:800;color:#c2410c" id="tplStatReports">—</div>
+          <div style="font-size:11px;color:#9a3412;font-weight:600">⚑ Reports</div>
         </div>
       </div>
-      <div id="templates-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
-        <div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">A carregar templates…</div>
+
+      <!-- Filtros de estado -->
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+        <button id="tplBtnPending"  onclick="adminApp._filterTemplates('pending')"
+          style="padding:7px 14px;border:1.5px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#b45309;font-weight:700;font-size:12px;cursor:pointer">
+          ⏳ Pendentes
+        </button>
+        <button id="tplBtnApproved" onclick="adminApp._filterTemplates('approved')"
+          style="padding:7px 14px;border:1.5px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#475569;font-weight:700;font-size:12px;cursor:pointer">
+          ✅ Aprovados
+        </button>
+        <button id="tplBtnRejected" onclick="adminApp._filterTemplates('rejected')"
+          style="padding:7px 14px;border:1.5px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#475569;font-weight:700;font-size:12px;cursor:pointer">
+          ❌ Rejeitados
+        </button>
+        <button id="tplBtnAll"      onclick="adminApp._filterTemplates('all')"
+          style="padding:7px 14px;border:1.5px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#475569;font-weight:700;font-size:12px;cursor:pointer">
+          ✦ Todos
+        </button>
+      </div>
+
+      <!-- Filtros de tipo (secundários) -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+        <span style="font-size:11px;color:#94a3b8;font-weight:700;align-self:center;margin-right:2px">TIPO:</span>
+        <button onclick="adminApp._filterTemplateType('')"   id="tplTypeBtnAll"       style="padding:5px 11px;border:1.5px solid #0f172a;border-radius:20px;background:#0f172a;color:#fff;font-size:11px;font-weight:700;cursor:pointer">Todos</button>
+        <button onclick="adminApp._filterTemplateType('official')"   id="tplTypeBtnOfficial"   style="padding:5px 11px;border:1.5px solid #3B82F6;border-radius:20px;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:700;cursor:pointer">🏛️ Oficial</button>
+        <button onclick="adminApp._filterTemplateType('community')"  id="tplTypeBtnCommunity"  style="padding:5px 11px;border:1.5px solid #10B981;border-radius:20px;background:#ecfdf5;color:#065f46;font-size:11px;font-weight:700;cursor:pointer">👥 Comunidade</button>
+        <button onclick="adminApp._filterTemplateType('premium')"    id="tplTypeBtnPremium"    style="padding:5px 11px;border:1.5px solid #F59E0B;border-radius:20px;background:#fffbeb;color:#92400e;font-size:11px;font-weight:700;cursor:pointer">⭐ Premium</button>
+        <button onclick="adminApp._filterTemplateType('private')"    id="tplTypeBtnPrivate"    style="padding:5px 11px;border:1.5px solid #6B7280;border-radius:20px;background:#f9fafb;color:#374151;font-size:11px;font-weight:700;cursor:pointer">🔒 Privado</button>
+      </div>
+
+      <!-- Grid -->
+      <div id="templates-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">
+        <div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px;grid-column:1/-1">A carregar templates…</div>
       </div>
     </section>
 
