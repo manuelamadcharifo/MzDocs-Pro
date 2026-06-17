@@ -218,7 +218,6 @@
 
     <!-- FILTROS DE CATEGORIA -->
     <div class="cat-filters-wrap" id="catFiltersWrap">
-      <button class="cat-scroll-arrow cat-scroll-left" id="catScrollLeft" aria-label="Rolar para a esquerda">‹</button>
       <div class="cat-filters" id="catFilters">
         <button class="cat-btn active" data-cat="populares">🔥 Mais Buscados</button>
         <button class="cat-btn" data-cat="pessoal">👤 Pessoal</button>
@@ -228,7 +227,8 @@
         <button class="cat-btn" data-cat="servicos">🛠️ Serviços</button>
         <button class="cat-btn" data-cat="todos">✦ Todos</button>
       </div>
-      <button class="cat-scroll-arrow cat-scroll-right" id="catScrollRight" aria-label="Rolar para a direita">›</button>
+      <button class="cat-scroll-arrow cat-scroll-right" id="catScrollRight" aria-label="Ver mais categorias">›</button>
+      <button class="cat-scroll-arrow cat-scroll-left" id="catScrollLeft" aria-label="Ver categorias anteriores" style="opacity:0;pointer-events:none">‹</button>
     </div>
 
     <div class="svc-grid" id="svcGrid">
@@ -890,26 +890,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const rightArrow = document.getElementById('catScrollRight');
 
   function updateArrows() {
-    if (!filtersEl || !leftArrow || !rightArrow) return;
-    leftArrow.style.opacity  = filtersEl.scrollLeft > 4 ? '1' : '0';
-    leftArrow.style.pointerEvents = filtersEl.scrollLeft > 4 ? 'auto' : 'none';
-    const maxScroll = filtersEl.scrollWidth - filtersEl.clientWidth;
-    rightArrow.style.opacity = filtersEl.scrollLeft < maxScroll - 4 ? '1' : '0';
-    rightArrow.style.pointerEvents = filtersEl.scrollLeft < maxScroll - 4 ? 'auto' : 'none';
+    if (!filtersEl) return;
+    const atStart = filtersEl.scrollLeft < 4;
+    const atEnd   = filtersEl.scrollLeft >= filtersEl.scrollWidth - filtersEl.clientWidth - 4;
+    if (leftArrow) {
+      leftArrow.style.opacity = atStart ? '0' : '1';
+      leftArrow.style.pointerEvents = atStart ? 'none' : 'auto';
+    }
+    if (rightArrow) {
+      rightArrow.style.opacity = atEnd ? '0' : '1';
+      rightArrow.style.pointerEvents = atEnd ? 'none' : 'auto';
+    }
   }
 
   if (filtersEl) {
     filtersEl.addEventListener('scroll', updateArrows, { passive: true });
-    // Inicializar após render
-    setTimeout(updateArrows, 100);
+    setTimeout(updateArrows, 150);
   }
 
-  leftArrow?.addEventListener('click', () => {
-    filtersEl?.scrollBy({ left: -120, behavior: 'smooth' });
-  });
-  rightArrow?.addEventListener('click', () => {
-    filtersEl?.scrollBy({ left: 120, behavior: 'smooth' });
-  });
+  leftArrow?.addEventListener('click', () => filtersEl?.scrollBy({ left: -130, behavior: 'smooth' }));
+  rightArrow?.addEventListener('click', () => filtersEl?.scrollBy({ left: 130, behavior: 'smooth' }));
 });
 </script>
 </body>
