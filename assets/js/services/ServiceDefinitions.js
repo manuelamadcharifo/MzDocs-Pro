@@ -2,12 +2,13 @@
 
 // Categorias disponíveis
 export const CATEGORIES = [
-  { id: 'todos',      label: '✦ Todos',          },
-  { id: 'pessoal',    label: '👤 Pessoal'         },
-  { id: 'juridico',   label: '⚖️ Jurídico'        },
-  { id: 'negocio',    label: '💼 Negócio'         },
-  { id: 'academico',  label: '📚 Académico'       },
-  { id: 'servicos',   label: '🛠️ Serviços'        },
+  { id: 'populares',  label: '🔥 Mais Buscados'   },
+  { id: 'pessoal',    label: '👤 Pessoal'          },
+  { id: 'academico',  label: '📚 Académico'        },
+  { id: 'juridico',   label: '⚖️ Jurídico'         },
+  { id: 'negocio',    label: '💼 Negócio'          },
+  { id: 'servicos',   label: '🛠️ Serviços'         },
+  { id: 'todos',      label: '✦ Todos'             },
 ];
 
 export const SERVICES = {
