@@ -196,8 +196,8 @@ async function handleConfig(req, res) {
     configured:    true,
     isSandbox,
     docsGenerated,
-    // supabaseAnonKey REMOVIDA intencionalmente (auditoria C-1)
-    // supabaseUrl REMOVIDA intencionalmente (auditoria C-1)
+    supabaseUrl,
+    supabaseAnonKey,
   });
 }
 
