@@ -1,21 +1,48 @@
-// api/process-payment.js — v3.0 (AUDITORIA Junho/2026)
+// api/process-payment.js — v4.0 (AUDITORIA Junho/2026)
 //
-// CORREÇÕES v3.0:
-//  1. Removido @supabase/supabase-js + require('ws') — usa
-//     api/_lib/supabaseAdmin.js (fetch puro contra a REST API).
-//  2. Erros internos do Supabase (insertErr.message/code/hint) deixaram de
-//     ser devolvidos ao cliente — apenas registados em console.error.
-//     O cliente recebe uma mensagem genérica + reference_id para suporte.
-//  3. Passou a aceitar QUALQUER número de telemóvel moçambicano válido
-//     (M-Pesa/Vodacom, e-Mola/Movitel, mKesh/Tmcel) — pagamento manual via
-//     WhatsApp, pelo que qualquer carteira móvel pode ser usada para enviar
-//     o comprovativo. A carteira detectada é incluída na mensagem de
-//     WhatsApp para facilitar a conciliação manual.
+// CORREÇÕES v4.0 (auditoria C-3):
+//  1. NOVO: Rate limit de 3 pedidos por IP por hora (Upstash Redis + fallback Map).
+//     Impede bots de criar centenas de transacções pending e poluir o painel admin.
+//  2. NOVO: Verificação de transacção pending recente (30min) para o mesmo
+//     utilizador + pacote — evita duplicados mesmo que o rate limit não seja atingido.
+//  3. Mantidas todas as correcções da v3.0 (REST puro, multi-carteira, erros sanitizados).
 
-const { insert } = require('./_lib/supabaseAdmin');
+const { insert, restRequest, getUserFromToken } = require('./_lib/supabaseAdmin');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 const WA_NUMBER      = process.env.WA_SUPPORT_NUMBER || '258858695506';
+
+// ── Rate limit (partilha o mesmo padrão de generate-document.js) ─────────────
+const _paymentRateMap = new Map();
+
+async function checkPaymentRateLimit(req) {
+  const ip  = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  const key = `rl:pay:${ip}`;
+  const limit = 3;      // máx 3 pedidos de pagamento por IP por hora
+  const windowSec = 3600;
+
+  const redisUrl   = process.env.UPSTASH_REDIS_REST_URL;
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (redisUrl && redisToken) {
+    try {
+      const headers = { Authorization: `Bearer ${redisToken}`, 'Content-Type': 'application/json' };
+      const incrRes  = await fetch(`${redisUrl}/incr/${encodeURIComponent(key)}`, { method: 'POST', headers });
+      const count    = (await incrRes.json()).result;
+      if (count === 1) await fetch(`${redisUrl}/expire/${encodeURIComponent(key)}/${windowSec}`, { method: 'POST', headers });
+      return count <= limit;
+    } catch (_) {}
+  }
+
+  const now   = Date.now();
+  const entry = _paymentRateMap.get(key) || { count: 0, reset: now + windowSec * 1000 };
+  if (now > entry.reset) { entry.count = 0; entry.reset = now + windowSec * 1000; }
+  entry.count++;
+  _paymentRateMap.set(key, entry);
+  return entry.count <= limit;
+}
+
+
 
 const PACKAGES = {
   avulso:  { credits: 3,   price: 50,   name: 'Avulso'  },
@@ -60,6 +87,15 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Método não permitido' });
+
+  // ── Rate limit: 3 pedidos/IP/hora (C-3) ──────────────────────────────────
+  const allowed = await checkPaymentRateLimit(req);
+  if (!allowed) {
+    return res.status(429).json({
+      error: 'Demasiados pedidos. Aguarde antes de tentar novamente.',
+      code:  'RATE_LIMITED',
+    });
+  }
 
   try {
 
@@ -109,6 +145,20 @@ module.exports = async function handler(req, res) {
 
     let txData;
     try {
+      // ── Verificar pending duplicado (mesmo userId + pacote nos últimos 30min) ─
+      if (userId) {
+        const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+        const existing = await restRequest(
+          `transactions?user_id=eq.${userId}&package_id=eq.${packageId}&status=eq.pending&created_at=gte.${encodeURIComponent(cutoff)}&select=reference_id&limit=1`
+        ).catch(() => null);
+        if (Array.isArray(existing) && existing.length > 0) {
+          return res.status(409).json({
+            error: 'Já tem um pedido de pagamento pendente para este pacote. Verifique o WhatsApp ou aguarde 30 minutos.',
+            referenceId: existing[0].reference_id,
+          });
+        }
+      }
+
       txData = await insert('transactions', {
         reference_id:   referenceId,
         user_id:        userId,
