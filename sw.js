@@ -53,6 +53,16 @@ workbox.precaching.precacheAndRoute([
     { url: '/assets/js/academic/AcademicEngine.js',          revision: CACHE_VERSION },
     { url: '/assets/js/academic/AcademicUI.js',              revision: CACHE_VERSION },
     { url: '/assets/js/controllers/TemplateController.js',   revision: CACHE_VERSION },
+    // CORRIGIDO (auditoria A-2): ficheiros que existiam no disco mas não
+    // estavam na lista de precache — causavam falha offline silenciosa.
+    { url: '/assets/js/homeController.js',                   revision: CACHE_VERSION },
+    { url: '/assets/js/analytics/Analytics.js',              revision: CACHE_VERSION },
+    { url: '/assets/js/components/HTMLPDFExporter.js',       revision: CACHE_VERSION },
+    { url: '/assets/js/partners/NearbyPartners.js',          revision: CACHE_VERSION },
+    { url: '/assets/js/convert/FileConverter.js',            revision: CACHE_VERSION },
+    { url: '/assets/js/admin/AdminApp.js',                   revision: CACHE_VERSION },
+    { url: '/assets/js/admin/AdminDashboard.js',             revision: CACHE_VERSION },
+    { url: '/assets/js/admin/AdminTransactions.js',          revision: CACHE_VERSION },
     // Ícones
     { url: '/assets/icons/icon.svg',            revision: CACHE_VERSION },
     { url: '/assets/icons/icon-192x192.png',    revision: CACHE_VERSION },
