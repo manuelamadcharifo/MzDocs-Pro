@@ -221,7 +221,16 @@ async function handleTemplates(action, req, res) {
     case 'download': return tplDownload(req, res, supabase);
     case 'approve':  return tplApprove(req, res, supabase);
     case 'reject':   return tplReject(req, res, supabase);
-    case 'pending':  return tplPending(req, res, supabase);
+    case 'pending':      return tplPending(req, res, supabase);
+    case 'mine':         return tplMine(req, res, supabase);
+    case 'saved':        return tplSaved(req, res, supabase);
+    case 'save':         return tplToggleSave(req, res, supabase);
+    case 'use':          return tplUse(req, res, supabase);
+    case 'report':       return tplReport(req, res, supabase);
+    case 'share-token':  return tplShareToken(req, res, supabase);
+    case 'by-token':     return tplByToken(req, res);
+    case 'delete':       return tplDelete(req, res, supabase);
+    case 'gallery':      return tplGallery(req, res);
     default:         return res.status(404).json({ error: 'Acção de template não encontrada' });
   }
 }
@@ -249,22 +258,187 @@ async function tplSubmit(req, res, supabase) {
   const user = await getUser(supabase, req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   const body = parseBody(req);
-  const { service_type, template_name, description, template_css, thumbnail_url, template_file } = body;
-  if (!service_type || !template_name || !template_css)
+  const {
+    service_type, template_name, description,
+    template_css, template_html, thumbnail_url,
+    template_file, preview_url, tags,
+    template_type = 'community',
+  } = body;
+  if (!service_type || !template_name || (!template_css && !template_html))
     return res.status(400).json({ error: 'service_type, template_name e template_css são obrigatórios' });
-  const { data, error } = await supabase.from('templates_custom').insert({
-    user_id: user.id,
-    service_type:  service_type.trim().slice(0, 50),
-    template_name: template_name.trim().slice(0, 100),
-    description:   (description || '').trim().slice(0, 300),
-    template_css:  template_css.slice(0, 20000),
-    thumbnail_url: thumbnail_url || null,
-    template_file: template_file || null,
-    status:        'pending',
-    is_public:     false,
-  }).select('id').single();
+  if (!['community','private'].includes(template_type))
+    return res.status(400).json({ error: 'template_type deve ser community ou private' });
+  const { data, error } = await supabase.rpc('submit_community_template', {
+    p_user_id:       user.id,
+    p_service_type:  service_type.trim().slice(0, 50),
+    p_template_name: template_name.trim().slice(0, 100),
+    p_description:   (description || '').trim().slice(0, 500),
+    p_template_html: (template_html || '').slice(0, 50000),
+    p_template_css:  (template_css  || '').slice(0, 20000),
+    p_thumbnail_url: thumbnail_url  || null,
+    p_template_file: template_file  || null,
+    p_preview_url:   preview_url    || null,
+    p_tags:          Array.isArray(tags) ? tags.slice(0, 10) : [],
+    p_template_type: template_type,
+  });
   if (error) return res.status(500).json({ error: error.message });
-  return res.status(201).json({ success: true, id: data.id, message: 'Template submetido! Aguarda aprovação.' });
+  return res.status(201).json({
+    success:     true,
+    id:          data.id,
+    status:      data.status,
+    share_token: data.share_token || null,
+    message: template_type === 'private'
+      ? 'Template privado criado com sucesso!'
+      : 'Template submetido! Aguarda aprovação pela equipa MzDocs.',
+  });
+}
+
+// ── Galeria pública v2 (usa VIEW v_templates_gallery) ───────────────────────
+async function tplGallery(req, res) {
+  const q      = req.query || {};
+  const service = q.service || null;
+  const type    = q.type    || null;
+  const sort    = q.sort    || 'featured';
+  const limit   = Math.min(parseInt(q.limit  || 48), 100);
+  const offset  = Math.max(parseInt(q.offset ||  0),   0);
+  let path = `v_templates_gallery?limit=${limit}&offset=${offset}`;
+  if (service) path += `&service_type=eq.${encodeURIComponent(service)}`;
+  if (type)    path += `&template_type=eq.${encodeURIComponent(type)}`;
+  const orderMap = {
+    featured: 'is_featured.desc,featured_order.asc,popularity_score.desc',
+    newest:   'created_at.desc',
+    popular:  'popularity_score.desc',
+    rating:   'avg_rating.desc,rating_count.desc',
+    used:     'use_count.desc',
+  };
+  path += `&order=${orderMap[sort] || orderMap.featured}`;
+  try {
+    const data = await restRequest(path);
+    return res.status(200).json({ success: true, templates: Array.isArray(data) ? data : [] });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ── Meus templates ────────────────────────────────────────────────────────────
+async function tplMine(req, res, supabase) {
+  const user = await getUser(supabase, req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { data, error } = await supabase
+    .from('v_my_templates').select('*')
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ success: true, templates: data || [] });
+}
+
+// ── Templates guardados ───────────────────────────────────────────────────────
+async function tplSaved(req, res, supabase) {
+  const user = await getUser(supabase, req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { data, error } = await supabase
+    .from('template_saves')
+    .select('saved_at, template:templates_custom(id,template_type,service_type,template_name,description,thumbnail_url,use_count,is_featured)')
+    .eq('user_id', user.id)
+    .order('saved_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ success: true, templates: (data || []).map(r => r.template) });
+}
+
+// ── Guardar / remover colecção pessoal ────────────────────────────────────────
+async function tplToggleSave(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const user = await getUser(supabase, req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { template_id } = parseBody(req);
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+  const { data, error } = await supabase.rpc('toggle_save_template', {
+    p_template_id: template_id, p_user_id: user.id,
+  });
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ success: true, saved: data?.saved ?? false });
+}
+
+// ── Registar uso de template ──────────────────────────────────────────────────
+async function tplUse(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const { template_id, session_id, service_key } = parseBody(req);
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+  const user = await getUser(supabase, req).catch(() => null);
+  const { data, error } = await supabase.rpc('use_template', {
+    p_template_id: template_id,
+    p_user_id:     user?.id || null,
+    p_session_id:  session_id || null,
+    p_service_key: service_key || '',
+  });
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json(data || { success: true });
+}
+
+// ── Reportar template ─────────────────────────────────────────────────────────
+async function tplReport(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const user = await getUser(supabase, req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { template_id, reason, detail } = parseBody(req);
+  const validReasons = ['spam','inappropriate','copyright','poor_quality','other'];
+  if (!template_id || !validReasons.includes(reason))
+    return res.status(400).json({ error: 'template_id e reason válido são obrigatórios' });
+  const { error } = await supabase.from('template_reports').insert({
+    template_id, reporter_id: user.id,
+    reason, detail: (detail || '').slice(0, 500),
+  });
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ success: true, message: 'Relatório enviado. A equipa irá analisar.' });
+}
+
+// ── Gerar share_token (templates privados) ────────────────────────────────────
+async function tplShareToken(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const user = await getUser(supabase, req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { template_id } = parseBody(req);
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+  const { data, error } = await supabase.rpc('regenerate_share_token', {
+    p_template_id: template_id, p_user_id: user.id,
+  });
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data?.success) return res.status(403).json({ error: data?.error || 'Não autorizado' });
+  return res.status(200).json({ success: true, share_token: data.share_token });
+}
+
+// ── Aceder a template privado por share_token ─────────────────────────────────
+async function tplByToken(req, res) {
+  const token = req.query?.token || parseBody(req).token;
+  if (!token) return res.status(400).json({ error: 'token obrigatório' });
+  const fields = 'id,template_type,service_type,template_name,description,thumbnail_url,template_html,template_css,use_count,created_at';
+  try {
+    const data = await restRequest(
+      `templates_custom?share_token=eq.${encodeURIComponent(token)}&select=${fields}&limit=1`
+    );
+    const tpl = Array.isArray(data) ? data[0] : null;
+    if (!tpl) return res.status(404).json({ error: 'Template não encontrado ou link expirado' });
+    return res.status(200).json({ success: true, template: tpl });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ── Apagar template (dono, apenas community/private) ──────────────────────────
+async function tplDelete(req, res, supabase) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const user = await getUser(supabase, req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { template_id } = parseBody(req);
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+  const { data: tpl } = await supabase
+    .from('templates_custom').select('user_id,template_type')
+    .eq('id', template_id).single();
+  if (!tpl) return res.status(404).json({ error: 'Template não encontrado' });
+  if (tpl.user_id !== user.id) return res.status(403).json({ error: 'Não autorizado' });
+  if (['official','premium'].includes(tpl.template_type))
+    return res.status(403).json({ error: 'Templates official/premium só podem ser apagados pelo admin' });
+  await supabase.from('templates_custom').delete().eq('id', template_id);
+  return res.status(200).json({ success: true });
 }
 
 async function tplRate(req, res, supabase) {
