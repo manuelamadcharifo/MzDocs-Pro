@@ -169,6 +169,17 @@ module.exports = async function handler(req, res) {
 
     if (!finalPrompt) return res.status(400).json({ error: 'prompt obrigatório' });
 
+    // CORRIGIDO (auditoria A-3): limite de tamanho do prompt — sem isto um
+    // pedido malicioso com 100.000+ caracteres consome tokens de todos os 5
+    // providers, pode causar timeout dos 60s da Vercel e ainda debitar crédito.
+    const MAX_PROMPT_LENGTH = 15000;
+    if (finalPrompt.length > MAX_PROMPT_LENGTH) {
+        return res.status(400).json({
+            error: `Prompt demasiado longo (${finalPrompt.length} caracteres). Máximo: ${MAX_PROMPT_LENGTH}.`,
+            code:  'PROMPT_TOO_LONG',
+        });
+    }
+
     // ── Autenticação obrigatória para chamadas normais (não-chain) ───────────
     // A DEDUÇÃO DE CRÉDITOS é feita ANTES desta chamada pelo cliente via /api/deduct-credit.
     // Este endpoint apenas verifica o JWT (para logging) e gera o documento.
