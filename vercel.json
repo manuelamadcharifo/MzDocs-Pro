@@ -55,6 +55,10 @@
       "destination": "/api/misc"
     },
     {
+      "source": "/api/verify-receipt",
+      "destination": "/api/misc"
+    },
+    {
       "source": "/sitemap.xml",
       "destination": "/api/misc?_a=sitemap.xml"
     },
