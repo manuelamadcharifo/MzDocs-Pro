@@ -5,200 +5,482 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <meta name="robots" content="noindex"/>
   <title>Painel de Afiliado — MzDocs Pro</title>
-  <link rel="icon" href="/assets/img/favicon.png"/>
-  <link rel="stylesheet" href="/assets/css/styles.css"/>
+  <link rel="icon" href="/assets/icons/icon.svg" type="image/svg+xml"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',system-ui,sans-serif;background:#F8FAFC;color:#0F172A;min-height:100vh}
-    .aff-header{background:#0F172A;color:#fff;padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between}
-    .aff-header .logo{font-size:1.1rem;font-weight:800;color:#fff;text-decoration:none}
-    .aff-header .logo span{color:#009A44}
-    .aff-wrap{max-width:900px;margin:0 auto;padding:1.5rem 1rem 4rem}
-    .aff-title{font-size:1.4rem;font-weight:800;margin-bottom:.25rem}
-    .aff-sub{color:#64748b;font-size:.875rem;margin-bottom:1.5rem}
-    .aff-status{display:inline-flex;align-items:center;gap:.4rem;font-size:.75rem;font-weight:700;padding:.3rem .8rem;border-radius:20px;margin-bottom:1.5rem}
-    .aff-status.approved{background:#dcfce7;color:#166534}
-    .aff-status.pending{background:#fef9c3;color:#854d0e}
-    .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.875rem;margin-bottom:1.5rem}
-    @media(min-width:640px){.stats-grid{grid-template-columns:repeat(4,1fr)}}
-    .stat-box{background:#fff;border-radius:12px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-    .stat-box .val{font-size:1.5rem;font-weight:800;color:#0F172A}
-    .stat-box .lbl{font-size:.72rem;color:#64748b;margin-top:.15rem}
-    .card{background:#fff;border-radius:14px;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.07);margin-bottom:1rem}
-    .card-title{font-size:.9rem;font-weight:700;margin-bottom:.875rem;display:flex;align-items:center;gap:.4rem}
-    .link-box{background:#f1f5f9;border-radius:10px;padding:.875rem 1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
-    .link-text{font-size:.8rem;color:#3B82F6;word-break:break-all;flex:1;font-family:monospace}
-    .btn{border:none;border-radius:8px;padding:.6rem 1.1rem;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s}
+    :root{
+      --ink:#07101F;--ink2:#0F1E3B;--muted:#64748B;--border:#E2E8F0;
+      --surface:#F8FAFD;--white:#fff;
+      --blue:#3B82F6;--blue-d:#1D4ED8;--blue-s:#EFF6FF;
+      --green:#009A44;--green-d:#047857;--green-s:#ECFDF5;
+      --gold:#F59E0B;--gold-s:#FFFBEB;
+      --red:#EF4444;--red-s:#FEF2F2;
+      --purple:#7C3AED;--purple-s:#F5F3FF;
+      --teal:#0891B2;
+      --r:14px;--sh:0 2px 12px rgba(7,16,31,.07);
+      --t:all .22s cubic-bezier(.4,0,.2,1);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);color:var(--ink);min-height:100svh}
+
+    /* HEADER */
+    .hdr{background:var(--ink);height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.07)}
+    .hdr-logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+    .hdr-badge{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--blue),var(--green));display:flex;align-items:center;justify-content:center;font-size:15px}
+    .hdr-name{font-size:16px;font-weight:800;color:#fff}
+    .hdr-back{color:rgba(255,255,255,.55);font-size:13px;text-decoration:none;transition:var(--t)}
+    .hdr-back:hover{color:#fff}
+
+    /* WRAP */
+    .wrap{max-width:680px;margin:0 auto;padding:20px 14px 80px}
+
+    /* HERO do afiliado */
+    .aff-hero{background:linear-gradient(135deg,var(--ink) 0%,#0F2D4A 100%);border-radius:20px;padding:22px 20px 20px;margin-bottom:20px;position:relative;overflow:hidden}
+    .aff-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 60% at 100% 0%,rgba(0,154,68,.25),transparent 65%)}
+    .aff-hero-inner{position:relative}
+    .aff-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+    .aff-hero-name{font-size:18px;font-weight:800;color:#fff;line-height:1.2}
+    .aff-hero-sub{font-size:12.5px;color:rgba(255,255,255,.55);margin-top:3px}
+    .tier-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;font-size:11.5px;font-weight:800;letter-spacing:.3px}
+    .tier-bronze{background:rgba(161,93,0,.3);border:1px solid rgba(161,93,0,.5);color:#FCD34D}
+    .tier-prata{background:rgba(100,116,139,.3);border:1px solid rgba(100,116,139,.5);color:#CBD5E1}
+    .tier-ouro{background:rgba(245,158,11,.25);border:1px solid rgba(245,158,11,.4);color:#FCD34D}
+    .tier-diamante{background:rgba(124,58,237,.3);border:1px solid rgba(124,58,237,.5);color:#C4B5FD}
+    .aff-hero-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .hs{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px;text-align:center}
+    .hs-val{font-size:18px;font-weight:800;color:#fff}
+    .hs-lbl{font-size:10px;color:rgba(255,255,255,.5);margin-top:2px}
+
+    /* PROGRESS TIER */
+    .tier-progress{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:var(--sh)}
+    .tier-progress-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+    .tpl-title{font-size:13px;font-weight:800;color:var(--ink)}
+    .tpl-next{font-size:11.5px;color:var(--muted)}
+    .tier-bar-wrap{height:8px;background:var(--surface);border-radius:4px;overflow:hidden;margin-bottom:8px}
+    .tier-bar-fill{height:100%;border-radius:4px;transition:width .6s ease;background:linear-gradient(90deg,var(--green),var(--gold))}
+    .tier-steps{display:flex;justify-content:space-between}
+    .tier-step{text-align:center;font-size:10px;color:var(--muted);position:relative}
+    .tier-step.done{color:var(--green);font-weight:700}
+    .tier-step.active{color:var(--gold);font-weight:800}
+
+    /* LINK */
+    .link-card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:var(--sh)}
+    .card-title{font-size:13px;font-weight:800;color:var(--ink);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+    .link-box{background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px}
+    .link-text{font-size:12px;color:var(--blue);word-break:break-all;flex:1;font-family:monospace;font-weight:600}
+    .btn{border:none;border-radius:10px;padding:9px 14px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:'Bricolage Grotesque',sans-serif;transition:var(--t);display:inline-flex;align-items:center;gap:5px}
     .btn:active{opacity:.8}
-    .btn-green{background:#009A44;color:#fff}
-    .btn-blue{background:#3B82F6;color:#fff}
-    .btn-dark{background:#0F172A;color:#fff}
-    .btn-ghost{background:#f1f5f9;color:#0F172A}
-    .btn-wa{background:#25D366;color:#fff;display:flex;align-items:center;gap:.4rem}
-    .table{width:100%;border-collapse:collapse;font-size:.8rem}
-    .table th{text-align:left;padding:.5rem .75rem;color:#64748b;font-weight:600;border-bottom:2px solid #f1f5f9}
-    .table td{padding:.6rem .75rem;border-bottom:1px solid #f8fafc}
-    .badge{display:inline-block;padding:.2rem .5rem;border-radius:6px;font-size:.7rem;font-weight:700}
-    .badge-pending{background:#fef9c3;color:#854d0e}
-    .badge-approved{background:#dcfce7;color:#166534}
-    .badge-paid{background:#dbeafe;color:#1e40af}
-    .badge-cancelled{background:#fee2e2;color:#991b1b}
-    .input{width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:.6rem .875rem;font-size:.85rem;font-family:inherit;outline:none;transition:border-color .15s}
-    .input:focus{border-color:#3B82F6}
-    .empty{text-align:center;padding:2rem;color:#94a3b8;font-size:.82rem}
-    .rates-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem}
-    @media(min-width:480px){.rates-grid{grid-template-columns:repeat(5,1fr)}}
-    .rate-pill{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:.5rem;text-align:center}
-    .rate-pill .pkg{font-size:.68rem;color:#64748b;margin-bottom:.15rem}
-    .rate-pill .pct{font-size:1rem;font-weight:800;color:#009A44}
-    #notApproved{background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;font-size:.85rem;color:#92400e}
-    #registerSection{text-align:center;padding:3rem 1rem}
-    #registerSection .big{font-size:1.8rem;margin-bottom:.5rem}
-    #registerSection h2{font-size:1.2rem;font-weight:800;margin-bottom:.5rem}
-    #registerSection p{color:#64748b;font-size:.85rem;margin-bottom:1.5rem;max-width:380px;margin-left:auto;margin-right:auto}
-    .withdraw-form{display:grid;gap:.75rem}
-    #msg{display:none;padding:.75rem 1rem;border-radius:8px;font-size:.82rem;font-weight:600;margin-top:.5rem}
-    #msg.ok{background:#dcfce7;color:#166534}
-    #msg.err{background:#fee2e2;color:#991b1b}
-    .share-btns{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.75rem}
-    .loading{text-align:center;padding:4rem;color:#94a3b8}
+    .btn-copy{background:var(--blue);color:#fff}
+    .btn-wa{background:#25D366;color:#fff}
+    .btn-fb{background:#1877F2;color:#fff}
+    .btn-share{background:var(--surface);color:var(--ink);border:1.5px solid var(--border)}
+    .btn-green{background:var(--green);color:#fff}
+    .btn-ghost{background:var(--surface);color:var(--ink);border:1.5px solid var(--border)}
+    .btn-red{background:var(--red-s);color:var(--red);border:1.5px solid #FECACA}
+    .share-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+    .code-pill{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;font-family:monospace;color:var(--ink)}
+
+    /* STATS GRID */
+    .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+    @media(min-width:480px){.stats-grid{grid-template-columns:repeat(4,1fr)}}
+    .stat-box{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:13px;box-shadow:var(--sh)}
+    .stat-box .val{font-size:20px;font-weight:800;color:var(--ink)}
+    .stat-box .lbl{font-size:10.5px;color:var(--muted);margin-top:2px}
+    .stat-box .delta{font-size:10px;margin-top:4px;font-weight:700}
+    .delta-up{color:var(--green)}
+    .delta-dn{color:var(--red)}
+
+    /* CARD */
+    .card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:var(--sh)}
+
+    /* RANKING */
+    .ranking-list{display:flex;flex-direction:column;gap:8px}
+    .ranking-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px}
+    .ranking-item.me{background:var(--blue-s);border-color:var(--blue)}
+    .rank-pos{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0}
+    .rank-pos.p1{background:#F59E0B;color:#fff}
+    .rank-pos.p2{background:#94A3B8;color:#fff}
+    .rank-pos.p3{background:#CD7C47;color:#fff}
+    .rank-pos.pn{background:var(--border);color:var(--muted);font-size:11px}
+    .rank-name{font-size:13px;font-weight:700;flex:1}
+    .rank-conv{font-size:11.5px;color:var(--muted)}
+    .rank-earn{font-size:13px;font-weight:800;color:var(--green);white-space:nowrap}
+
+    /* TABLE */
+    .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+    .tbl th{padding:8px 10px;text-align:left;color:var(--muted);font-weight:700;border-bottom:2px solid var(--surface);white-space:nowrap;font-size:11px;letter-spacing:.3px}
+    .tbl td{padding:9px 10px;border-bottom:1px solid var(--surface)}
+    .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:10.5px;font-weight:800}
+    .badge-pending{background:#FEF9C3;color:#854D0E}
+    .badge-approved{background:#DCFCE7;color:#166534}
+    .badge-paid{background:#DBEAFE;color:#1E40AF}
+    .badge-cancelled{background:#FEE2E2;color:#991B1B}
+    .badge-processing{background:#F5F3FF;color:#5B21B6}
+    .badge-completed{background:#ECFDF5;color:#065F46}
+    .badge-rejected{background:#FEE2E2;color:#991B1B}
+
+    /* TAXAS */
+    .rates-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+    @media(max-width:420px){.rates-grid{grid-template-columns:repeat(2,1fr)}}
+    .rate-pill{background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:10px 6px;text-align:center}
+    .rate-pill.bonus{border-color:var(--green);background:var(--green-s)}
+    .rate-pkg{font-size:9.5px;color:var(--muted);margin-bottom:2px}
+    .rate-pct{font-size:16px;font-weight:800;color:var(--green)}
+    .rate-mzn{font-size:9px;color:var(--muted);margin-top:1px}
+
+    /* SEGMENTO */
+    .seg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    @media(min-width:400px){.seg-grid{grid-template-columns:repeat(5,1fr)}}
+    .seg-btn{background:var(--surface);border:2px solid var(--border);border-radius:10px;padding:10px 6px;text-align:center;cursor:pointer;font-family:inherit;transition:var(--t)}
+    .seg-btn.selected{border-color:var(--blue);background:var(--blue-s)}
+    .seg-btn .seg-ico{font-size:20px;margin-bottom:3px}
+    .seg-btn .seg-lbl{font-size:10px;font-weight:700;color:var(--ink)}
+
+    /* FORM */
+    .inp{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;font-family:'Bricolage Grotesque',sans-serif;color:var(--ink);background:var(--white);outline:none;transition:var(--t)}
+    .inp:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+    .fg{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+    .fg label{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+
+    /* MSG */
+    .msg-box{padding:12px 14px;border-radius:10px;font-size:13px;font-weight:600;display:none}
+    .msg-ok{background:var(--green-s);border:1.5px solid #6EE7B7;color:#065F46}
+    .msg-err{background:var(--red-s);border:1.5px solid #FCA5A5;color:#991B1B}
+
+    /* STATUS ALERT */
+    .status-alert{border-radius:12px;padding:12px 14px;font-size:12.5px;margin-bottom:14px;line-height:1.5}
+    .sa-pending{background:#FFFBEB;border:1.5px solid #FCD34D;color:#92400E}
+    .sa-blocked{background:var(--red-s);border:1.5px solid #FCA5A5;color:#991B1B}
+    .sa-approved{background:var(--green-s);border:1.5px solid #6EE7B7;color:#065F46}
+
+    /* TABS */
+    .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0}
+    .tab-btn{background:none;border:none;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:700;color:var(--muted);padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:var(--t)}
+    .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
+    .tab-panel{display:none}
+    .tab-panel.active{display:block}
+
+    /* NOTIF DOT */
+    .notif-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-left:4px;vertical-align:middle}
+
+    /* ANTIFRAUDE INFO */
+    .fraud-info{background:#F0F9FF;border:1.5px solid #BAE6FD;border-radius:10px;padding:10px 12px;font-size:11.5px;color:#0369A1;line-height:1.55;margin-top:10px}
+
+    /* EMPTY */
+    .empty{text-align:center;padding:32px 16px;color:var(--muted);font-size:13px}
+
+    /* LOADING */
+    #loadingState{text-align:center;padding:60px 16px;color:var(--muted)}
+    .spin{display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* REGISTER */
+    .register-wrap{text-align:center;padding:40px 16px}
+    .reg-ico{font-size:48px;margin-bottom:12px}
+    .reg-h2{font-size:20px;font-weight:800;margin-bottom:8px}
+    .reg-p{font-size:13.5px;color:var(--muted);line-height:1.6;max-width:380px;margin:0 auto 20px}
+    .seg-note{font-size:11.5px;color:var(--muted);background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin:12px 0;text-align:left}
   </style>
 </head>
 <body>
 
-<header class="aff-header">
-  <a class="logo" href="/" style="display:flex;align-items:center;text-decoration:none">
-    <img src="/assets/icons/mzdocs-pro-light.svg" alt="MzDocs Pro"
-         style="height:32px;width:auto"
-         onerror="this.outerHTML='MzDocs<span style=color:#009A44>Pro</span>'">
+<header class="hdr">
+  <a class="hdr-logo" href="/">
+    <div class="hdr-badge">📄</div>
+    <div class="hdr-name">MzDocs Pro</div>
   </a>
-  <a href="/" style="color:#94a3b8;font-size:.8rem;text-decoration:none">← Voltar ao site</a>
+  <a href="/" class="hdr-back">← Início</a>
 </header>
 
-<div class="aff-wrap">
-  <div id="loadingState" class="loading">A carregar…</div>
-
-  <!-- Não autenticado -->
-  <div id="notAuth" style="display:none;text-align:center;padding:3rem 1rem">
-    <div style="font-size:2.5rem;margin-bottom:.5rem">🔒</div>
-    <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:.5rem">Necessário iniciar sessão</h2>
-    <p style="color:#64748b;font-size:.85rem;margin-bottom:1.5rem">Para aceder ao painel de afiliado, entre na sua conta MzDocs Pro.</p>
-    <a href="/?auth=login" class="btn btn-green">Entrar na conta</a>
+<div class="wrap">
+  <!-- LOADING -->
+  <div id="loadingState" style="text-align:center;padding:60px 16px">
+    <div class="spin"></div>
+    <p style="margin-top:12px;font-size:13px;color:var(--muted)">A carregar painel…</p>
   </div>
 
-  <!-- Registo como afiliado -->
+  <!-- NÃO AUTENTICADO -->
+  <div id="notAuth" style="display:none;text-align:center;padding:60px 16px">
+    <div style="font-size:48px;margin-bottom:12px">🔒</div>
+    <h2 style="font-size:18px;font-weight:800;margin-bottom:8px">Necessário iniciar sessão</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Aceda à sua conta MzDocs Pro para ver o painel de afiliado.</p>
+    <a href="/?auth=login" class="btn btn-green" style="text-decoration:none">Entrar na conta</a>
+  </div>
+
+  <!-- REGISTO -->
   <div id="registerSection" style="display:none">
-    <div class="big">🤝</div>
-    <h2>Torne-se Parceiro MzDocs Pro</h2>
-    <p>Partilhe o seu link único e ganhe comissão em cada pagamento dos seus referidos. Simples, gratuito e sem risco.</p>
-    <div class="rates-grid" style="max-width:400px;margin:0 auto 1.5rem">
-      <div class="rate-pill"><div class="pkg">Avulso</div><div class="pct">10%</div></div>
-      <div class="rate-pill"><div class="pkg">Starter</div><div class="pct">15%</div></div>
-      <div class="rate-pill"><div class="pkg">Básico</div><div class="pct">15%</div></div>
-      <div class="rate-pill"><div class="pkg">Pro</div><div class="pct">20%</div></div>
-      <div class="rate-pill"><div class="pkg">Empresa</div><div class="pct">20%</div></div>
+    <div class="register-wrap">
+      <div class="reg-ico">🤝</div>
+      <h2 class="reg-h2">Torne-se Parceiro MzDocs Pro</h2>
+      <p class="reg-p">Partilhe o seu link único e ganhe comissão em cada pagamento. Pagamentos via M-Pesa, sem riscos.</p>
+
+      <div class="card" style="text-align:left;margin-bottom:16px">
+        <div class="card-title">👤 Perfil do Parceiro</div>
+        <div class="fg">
+          <label>Tipo de Parceiro</label>
+          <div class="seg-grid" id="segGrid">
+            <button class="seg-btn selected" data-seg="individual" onclick="selectSeg(this)"><div class="seg-ico">👤</div><div class="seg-lbl">Individual</div></button>
+            <button class="seg-btn" data-seg="papelaria" onclick="selectSeg(this)"><div class="seg-ico">🖨️</div><div class="seg-lbl">Papelaria</div></button>
+            <button class="seg-btn" data-seg="cyber" onclick="selectSeg(this)"><div class="seg-ico">💻</div><div class="seg-lbl">Cyber Café</div></button>
+            <button class="seg-btn" data-seg="universidade" onclick="selectSeg(this)"><div class="seg-ico">🎓</div><div class="seg-lbl">Universidade</div></button>
+            <button class="seg-btn" data-seg="explicacao" onclick="selectSeg(this)"><div class="seg-ico">📚</div><div class="seg-lbl">Explicação</div></button>
+            <button class="seg-btn" data-seg="digitador" onclick="selectSeg(this)"><div class="seg-ico">⌨️</div><div class="seg-lbl">Digitador</div></button>
+          </div>
+        </div>
+        <div class="fg" id="businessNameFg" style="display:none">
+          <label>Nome do Negócio / Instituição</label>
+          <input type="text" class="inp" id="businessName" placeholder="Ex: Papelaria Central Maputo"/>
+        </div>
+        <div class="fg">
+          <label>Cidade</label>
+          <input type="text" class="inp" id="affCity" placeholder="Ex: Maputo, Beira, Nampula…"/>
+        </div>
+        <div class="fg">
+          <label>Número M-Pesa (para receber)</label>
+          <input type="tel" class="inp" id="affMpesa" placeholder="258 8X XXX XXXX"/>
+        </div>
+        <div class="seg-note" id="segNote">💡 Como <strong>Individual</strong>, ganha comissão partilhando o seu link com amigos e família.</div>
+      </div>
+
+      <!-- Taxas -->
+      <div class="card" style="text-align:left;margin-bottom:20px">
+        <div class="card-title">💰 Comissões por Pacote</div>
+        <div class="rates-grid">
+          <div class="rate-pill"><div class="rate-pkg">Avulso</div><div class="rate-pct">10%</div><div class="rate-mzn">= 5 MZN</div></div>
+          <div class="rate-pill"><div class="rate-pkg">Starter</div><div class="rate-pct">15%</div><div class="rate-mzn">= 18 MZN</div></div>
+          <div class="rate-pill"><div class="rate-pkg">Básico</div><div class="rate-pct">15%</div><div class="rate-mzn">= 42 MZN</div></div>
+          <div class="rate-pill"><div class="rate-pkg">Pro</div><div class="rate-pct">20%</div><div class="rate-mzn">= 120 MZN</div></div>
+          <div class="rate-pill"><div class="rate-pkg">Empresa</div><div class="rate-pct">20%</div><div class="rate-mzn">= 300 MZN</div></div>
+        </div>
+        <p style="font-size:11px;color:var(--green);margin-top:10px;font-weight:700">✨ Papelarias, Cyber Cafés e Universidades ganham bónus extra de 3–5%</p>
+      </div>
+
+      <button class="btn btn-green" id="btnRegister" style="font-size:15px;padding:14px 32px;width:100%;justify-content:center">
+        ✅ Quero ser Parceiro
+      </button>
+      <div id="registerMsg" style="margin-top:10px;font-size:12.5px;color:var(--muted)"></div>
     </div>
-    <button class="btn btn-green" id="btnRegister" style="font-size:.95rem;padding:.75rem 2rem">
-      ✅ Quero ser Afiliado
-    </button>
-    <div id="registerMsg" style="margin-top:.75rem;font-size:.82rem;color:#64748b"></div>
   </div>
 
-  <!-- Dashboard do afiliado -->
+  <!-- DASHBOARD -->
   <div id="dashboard" style="display:none">
-    <div class="aff-title">Painel de Afiliado</div>
-    <div class="aff-sub">Acompanhe os seus ganhos e partilhe o seu link</div>
 
-    <div id="statusBadge"></div>
-    <div id="notApproved" style="display:none">
-      ⏳ <strong>Aprovação pendente.</strong> O seu pedido está em análise. Enquanto aguarda, já pode partilhar o seu link — as comissões serão registadas assim que for aprovado.
-    </div>
-
-    <!-- Stats -->
-    <div class="stats-grid">
-      <div class="stat-box"><div class="val" id="statBalance">—</div><div class="lbl">💰 Saldo (MZN)</div></div>
-      <div class="stat-box"><div class="val" id="statEarned">—</div><div class="lbl">📈 Total Ganho</div></div>
-      <div class="stat-box"><div class="val" id="statClicks">—</div><div class="lbl">👆 Cliques</div></div>
-      <div class="stat-box"><div class="val" id="statConversions">—</div><div class="lbl">✅ Conversões</div></div>
-    </div>
-
-    <!-- Link de afiliado -->
-    <div class="card">
-      <div class="card-title">🔗 O Seu Link de Partilha</div>
-      <div class="link-box">
-        <span class="link-text" id="affLink">—</span>
-        <button class="btn btn-blue" id="btnCopyLink" onclick="copyLink()">Copiar</button>
+    <!-- HERO -->
+    <div class="aff-hero">
+      <div class="aff-hero-inner">
+        <div class="aff-hero-top">
+          <div>
+            <div class="aff-hero-name" id="heroName">Parceiro</div>
+            <div class="aff-hero-sub" id="heroSub">Código: —</div>
+          </div>
+          <div id="tierBadge" class="tier-badge tier-bronze">🥉 Bronze</div>
+        </div>
+        <div class="aff-hero-stats">
+          <div class="hs"><div class="hs-val" id="heroBalance">0</div><div class="hs-lbl">Saldo MZN</div></div>
+          <div class="hs"><div class="hs-val" id="heroEarned">0</div><div class="hs-lbl">Total Ganho</div></div>
+          <div class="hs"><div class="hs-val" id="heroRate">0%</div><div class="hs-lbl">Conversão</div></div>
+        </div>
       </div>
-      <div class="share-btns">
-        <button class="btn btn-wa" onclick="shareWhatsApp()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-          WhatsApp
+    </div>
+
+    <!-- STATUS ALERT -->
+    <div id="statusAlert" style="display:none"></div>
+
+    <!-- TIER PROGRESS -->
+    <div class="tier-progress">
+      <div class="tier-progress-label">
+        <span class="tpl-title">🏆 Progresso de Nível</span>
+        <span class="tpl-next" id="tierNextLabel">Próximo: Prata (5 conversões)</span>
+      </div>
+      <div class="tier-bar-wrap"><div class="tier-bar-fill" id="tierBar" style="width:0%"></div></div>
+      <div class="tier-steps">
+        <span class="tier-step" id="tsB">🥉 Bronze<br/>0</span>
+        <span class="tier-step" id="tsP">🥈 Prata<br/>5</span>
+        <span class="tier-step" id="tsO">🥇 Ouro<br/>20</span>
+        <span class="tier-step" id="tsD">💎 Diamante<br/>50</span>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('overview',this)">📊 Visão Geral</button>
+      <button class="tab-btn" onclick="switchTab('ranking',this)">🏆 Ranking</button>
+      <button class="tab-btn" onclick="switchTab('commissions',this)">💰 Comissões</button>
+      <button class="tab-btn" onclick="switchTab('withdraw',this)">💸 Levantamentos</button>
+    </div>
+
+    <!-- TAB: VISÃO GERAL -->
+    <div class="tab-panel active" id="tab-overview">
+
+      <!-- STATS -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="val" id="statBalance">—</div>
+          <div class="lbl">💰 Saldo (MZN)</div>
+        </div>
+        <div class="stat-box">
+          <div class="val" id="statConversions">—</div>
+          <div class="lbl">✅ Conversões</div>
+        </div>
+        <div class="stat-box">
+          <div class="val" id="statClicks">—</div>
+          <div class="lbl">👆 Cliques</div>
+        </div>
+        <div class="stat-box">
+          <div class="val" id="statEarned">—</div>
+          <div class="lbl">📈 Total MZN</div>
+        </div>
+      </div>
+
+      <!-- LINK -->
+      <div class="link-card">
+        <div class="card-title">🔗 O Seu Link de Partilha</div>
+        <div class="link-box">
+          <span class="link-text" id="affLink">—</span>
+          <button class="btn btn-copy" onclick="copyLink()">Copiar</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+          <span class="code-pill" id="affCodeDisp">—</span>
+          <span style="font-size:11px;color:var(--muted)">Taxa de conversão: <strong id="statRate">—</strong>%</span>
+        </div>
+        <div class="share-row">
+          <button class="btn btn-wa" onclick="shareWhatsApp()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            WhatsApp
+          </button>
+          <button class="btn btn-fb" onclick="shareFacebook()">📘 Facebook</button>
+          <button class="btn btn-share" onclick="shareNative()">📤 Partilhar</button>
+        </div>
+      </div>
+
+      <!-- TAXAS -->
+      <div class="card">
+        <div class="card-title">📊 Taxas de Comissão</div>
+        <div class="rates-grid" id="ratesGrid">
+          <div class="rate-pill"><div class="rate-pkg">Avulso</div><div class="rate-pct">10%</div><div class="rate-mzn">5 MZN</div></div>
+          <div class="rate-pill"><div class="rate-pkg">Starter</div><div class="rate-pct">15%</div><div class="rate-mzn">18 MZN</div></div>
+          <div class="rate-pill"><div class="rate-pkg">Básico</div><div class="rate-pct">15%</div><div class="rate-mzn">42 MZN</div></div>
+          <div class="rate-pill"><div class="rate-pkg">Pro</div><div class="rate-pct">20%</div><div class="rate-mzn">120 MZN</div></div>
+          <div class="rate-pill"><div class="rate-pkg">Empresa</div><div class="rate-pct">20%</div><div class="rate-mzn">300 MZN</div></div>
+        </div>
+        <div id="segmentBonusNote" style="display:none" class="seg-note" style="margin-top:10px"></div>
+      </div>
+
+      <!-- DICAS POR SEGMENTO -->
+      <div class="card" id="tipCard">
+        <div class="card-title">💡 Estratégias para o Seu Perfil</div>
+        <div id="tipContent" style="font-size:13px;color:var(--muted);line-height:1.7"></div>
+      </div>
+    </div>
+
+    <!-- TAB: RANKING -->
+    <div class="tab-panel" id="tab-ranking">
+      <div class="card">
+        <div class="card-title">🏆 Top Parceiros do Mês</div>
+        <div id="rankingList" class="ranking-list">
+          <div class="empty">A carregar ranking…</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🎖️ Níveis e Benefícios</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="background:#FEF9C3;border:1.5px solid #FDE68A;border-radius:10px;padding:12px">
+            <div style="font-size:13px;font-weight:800;color:#92400E">🥉 Bronze (0–4 conversões)</div>
+            <div style="font-size:12px;color:#A16207;margin-top:4px">Taxa base de comissão · Pagamentos via M-Pesa em 48h</div>
+          </div>
+          <div style="background:#F1F5F9;border:1.5px solid #CBD5E1;border-radius:10px;padding:12px">
+            <div style="font-size:13px;font-weight:800;color:#334155">🥈 Prata (5–19 conversões)</div>
+            <div style="font-size:12px;color:#475569;margin-top:4px">+2% bónus · Processamento prioritário de levantamentos</div>
+          </div>
+          <div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:10px;padding:12px">
+            <div style="font-size:13px;font-weight:800;color:#92400E">🥇 Ouro (20–49 conversões)</div>
+            <div style="font-size:12px;color:#A16207;margin-top:4px">+5% bónus · Suporte dedicado · Badge especial no perfil</div>
+          </div>
+          <div style="background:#F5F3FF;border:1.5px solid #C4B5FD;border-radius:10px;padding:12px">
+            <div style="font-size:13px;font-weight:800;color:#4C1D95">💎 Diamante (50+ conversões)</div>
+            <div style="font-size:12px;color:#5B21B6;margin-top:4px">+8% bónus · Levantamento mínimo reduzido · Acesso antecipado a novidades</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: COMISSÕES -->
+    <div class="tab-panel" id="tab-commissions">
+      <div class="card">
+        <div class="card-title">💳 Histórico de Comissões</div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Data</th><th>Pacote</th><th>Venda</th><th>Comissão</th><th>Estado</th>
+            </tr></thead>
+            <tbody id="commissionsTable">
+              <tr><td colspan="5" class="empty">Sem comissões ainda. Comece a partilhar!</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: LEVANTAMENTOS -->
+    <div class="tab-panel" id="tab-withdraw">
+      <!-- Form levantamento -->
+      <div class="card">
+        <div class="card-title">💸 Pedir Levantamento</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Mínimo: <strong id="minWithdrawLbl">200</strong> MZN · Via M-Pesa em até 48h · Apenas para afiliados aprovados</p>
+        <div class="fg">
+          <label>Valor (MZN)</label>
+          <input type="number" id="withdrawAmount" class="inp" placeholder="Ex: 500" min="200" step="50"/>
+        </div>
+        <div class="fg">
+          <label>Número M-Pesa</label>
+          <input type="tel" id="withdrawPhone" class="inp" placeholder="258 8X XXX XXXX" id="affMpesaSaved"/>
+        </div>
+        <button class="btn btn-green" id="btnWithdraw" onclick="submitWithdraw()" style="width:100%;justify-content:center;padding:12px">
+          Pedir Levantamento
         </button>
-        <button class="btn btn-ghost" onclick="shareFacebook()">📘 Facebook</button>
-        <button class="btn btn-ghost" onclick="shareNative()">📤 Partilhar</button>
+        <div class="msg-box" id="withdrawMsg"></div>
+        <div class="fraud-info">🛡️ <strong>Protecção antifraude:</strong> Levantamentos são verificados manualmente para garantir a segurança da sua conta e dos utilizadores referidos.</div>
       </div>
-      <div style="margin-top:.75rem;font-size:.72rem;color:#94a3b8">Taxa de conversão: <strong id="statRate">—</strong>% · Código: <strong id="affCode">—</strong></div>
-    </div>
 
-    <!-- Comissões -->
-    <div class="card">
-      <div class="card-title">💳 Comissões Recentes</div>
-      <div style="overflow-x:auto">
-        <table class="table">
-          <thead><tr><th>Data</th><th>Pacote</th><th>Venda</th><th>Comissão</th><th>Estado</th></tr></thead>
-          <tbody id="commissionsTable"><tr><td colspan="5" class="empty">Sem comissões ainda</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Levantamento -->
-    <div class="card">
-      <div class="card-title">💸 Pedir Levantamento</div>
-      <p style="font-size:.8rem;color:#64748b;margin-bottom:.875rem">Mínimo: <strong id="minWithdraw">200</strong> MZN · Processado em até 48h via M-Pesa</p>
-      <div class="withdraw-form">
-        <div>
-          <label style="font-size:.78rem;color:#64748b;margin-bottom:.3rem;display:block">Valor (MZN)</label>
-          <input type="number" id="withdrawAmount" class="input" placeholder="Ex: 500" min="200" step="50"/>
+      <!-- Histórico levantamentos -->
+      <div class="card">
+        <div class="card-title">📋 Histórico de Levantamentos</div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Data</th><th>Valor</th><th>M-Pesa</th><th>Estado</th>
+            </tr></thead>
+            <tbody id="withdrawalsTable">
+              <tr><td colspan="4" class="empty">Nenhum levantamento ainda</td></tr>
+            </tbody>
+          </table>
         </div>
-        <div>
-          <label style="font-size:.78rem;color:#64748b;margin-bottom:.3rem;display:block">Número M-Pesa</label>
-          <input type="tel" id="withdrawPhone" class="input" placeholder="258 8X XXX XXXX"/>
-        </div>
-        <button class="btn btn-green" id="btnWithdraw" onclick="submitWithdraw()">Pedir Levantamento</button>
-        <div id="msg"></div>
       </div>
     </div>
 
-    <!-- Levantamentos anteriores -->
-    <div class="card">
-      <div class="card-title">📋 Histórico de Levantamentos</div>
-      <div style="overflow-x:auto">
-        <table class="table">
-          <thead><tr><th>Data</th><th>Valor</th><th>M-Pesa</th><th>Estado</th></tr></thead>
-          <tbody id="withdrawalsTable"><tr><td colspan="4" class="empty">Sem levantamentos</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Taxas de comissão -->
-    <div class="card">
-      <div class="card-title">📊 Taxas de Comissão por Pacote</div>
-      <div class="rates-grid">
-        <div class="rate-pill"><div class="pkg">Avulso (50 MZN)</div><div class="pct">10%</div><div style="font-size:.65rem;color:#94a3b8">= 5 MZN</div></div>
-        <div class="rate-pill"><div class="pkg">Starter (120 MZN)</div><div class="pct">15%</div><div style="font-size:.65rem;color:#94a3b8">= 18 MZN</div></div>
-        <div class="rate-pill"><div class="pkg">Básico (280 MZN)</div><div class="pct">15%</div><div style="font-size:.65rem;color:#94a3b8">= 42 MZN</div></div>
-        <div class="rate-pill"><div class="pkg">Pro (600 MZN)</div><div class="pct">20%</div><div style="font-size:.65rem;color:#94a3b8">= 120 MZN</div></div>
-        <div class="rate-pill"><div class="pkg">Empresa (1500 MZN)</div><div class="pct">20%</div><div style="font-size:.65rem;color:#94a3b8">= 300 MZN</div></div>
-      </div>
-    </div>
-  </div>
-</div>
+  </div><!-- /dashboard -->
+</div><!-- /wrap -->
 
 <script type="module">
 import { authManager } from '/assets/js/auth/AuthManager.js';
 
 let _token = null;
 let _affLink = '';
+let _affData = null;
+let _segment = 'individual';
+
+const SEG_NOTES = {
+  individual:   '💡 Partilhe o seu link com amigos, família e colegas. Cada vez que alguém se registar e pagar, ganha comissão automaticamente.',
+  papelaria:    '🖨️ <strong>Papelaria:</strong> Coloque o seu link e código QR no balcão. Quando clientes geram documentos com MzDocs e precisam de impressão, referencie-os. Ganhe +5% de bónus.',
+  cyber:        '💻 <strong>Cyber Café:</strong> Ajude os seus clientes a criar CVs, cartas e documentos via MzDocs Pro. O seu link de afiliado ganha +3% de bónus extra.',
+  universidade: '🎓 <strong>Universidade / Centro:</strong> Partilhe com estudantes que precisam de trabalhos, CVs e cartas formais. Ideal para delegados de turma. Bónus extra de +5%.',
+  explicacao:   '📚 <strong>Centro de Explicação:</strong> Recomende MzDocs Pro aos seus alunos para trabalhos escolares e CVs. Uma forma passiva de rendimento extra.',
+  digitador:    '⌨️ <strong>Digitador:</strong> Apresente MzDocs Pro como alternativa rápida aos seus clientes. Eles criam o documento e você complementa com impressão e acabamentos.',
+};
 
 async function init() {
   await authManager.ready();
@@ -215,136 +497,268 @@ async function init() {
 }
 
 async function loadDashboard() {
-  const res  = await fetch('/api/affiliate/dashboard', {
-    headers: { Authorization: 'Bearer ' + _token },
-  }).catch(() => null);
+  try {
+    const res = await fetch('/api/affiliate/dashboard', {
+      headers: { Authorization: 'Bearer ' + _token },
+    });
 
-  if (!res || res.status === 404) {
-    // Ainda não é afiliado — mostrar ecrã de registo
-    document.getElementById('registerSection').style.display = 'block';
-    setupRegister();
-    return;
+    if (!res.ok && res.status === 404) {
+      showRegister();
+      return;
+    }
+
+    const d = await res.json();
+    if (!d.success) { showRegister(); return; }
+
+    _affData = d;
+    showDashboard(d);
+  } catch (err) {
+    showRegister();
   }
+}
 
-  const d = await res.json();
-  if (!d.success) {
-    document.getElementById('registerSection').style.display = 'block';
-    setupRegister();
-    return;
-  }
-
-  showDashboard(d);
+function showRegister() {
+  document.getElementById('registerSection').style.display = 'block';
+  setupRegister();
 }
 
 function showDashboard(d) {
   document.getElementById('dashboard').style.display = 'block';
   const p = d.profile;
-
   _affLink = p.link;
+  _segment = p.segment || 'individual';
 
-  // Status badge
-  const badge = document.getElementById('statusBadge');
-  badge.innerHTML = p.is_affiliate
-    ? '<div class="aff-status approved">✅ Afiliado Aprovado</div>'
-    : '<div class="aff-status pending">⏳ Aprovação Pendente</div>';
+  // Hero
+  const name = document.getElementById('heroName');
+  if (name) name.textContent = p.name || 'Parceiro';
+  document.getElementById('heroSub').textContent = 'Código: ' + p.ref_code;
+  document.getElementById('heroBalance').textContent = (p.balance||0).toLocaleString('pt-MZ');
+  document.getElementById('heroEarned').textContent = (p.total_earned||0).toLocaleString('pt-MZ');
+  document.getElementById('heroRate').textContent = (p.conversion_rate||0) + '%';
 
-  if (!p.is_affiliate) document.getElementById('notApproved').style.display = 'block';
+  // Tier badge
+  const tierMap = {
+    bronze:   { cls:'tier-bronze', lbl:'🥉 Bronze' },
+    prata:    { cls:'tier-prata',  lbl:'🥈 Prata' },
+    ouro:     { cls:'tier-ouro',   lbl:'🥇 Ouro' },
+    diamante: { cls:'tier-diamante',lbl:'💎 Diamante' },
+  };
+  const tier = tierMap[p.tier || 'bronze'];
+  const tb = document.getElementById('tierBadge');
+  tb.className = 'tier-badge ' + tier.cls;
+  tb.textContent = tier.lbl;
+
+  // Tier progress bar
+  updateTierProgress(p.conversions || 0, p.tier || 'bronze');
+
+  // Status alert
+  const sa = document.getElementById('statusAlert');
+  if (p.is_blocked) {
+    sa.style.display = 'block';
+    sa.className = 'status-alert sa-blocked';
+    sa.innerHTML = '⛔ <strong>Conta suspensa.</strong> ' + (p.block_reason || 'Contacte o suporte para mais informações.');
+  } else if (!p.is_affiliate) {
+    sa.style.display = 'block';
+    sa.className = 'status-alert sa-pending';
+    sa.innerHTML = '⏳ <strong>Aprovação pendente.</strong> A sua candidatura está em análise. Já pode partilhar o link — as comissões serão registadas após aprovação.';
+  } else {
+    sa.style.display = 'none';
+  }
 
   // Stats
-  document.getElementById('statBalance').textContent     = p.balance.toLocaleString('pt-MZ');
-  document.getElementById('statEarned').textContent      = p.total_earned.toLocaleString('pt-MZ');
-  document.getElementById('statClicks').textContent      = p.clicks.toLocaleString('pt-MZ');
-  document.getElementById('statConversions').textContent = p.conversions;
-  document.getElementById('statRate').textContent        = p.conversion_rate;
-  document.getElementById('affLink').textContent         = p.link;
-  document.getElementById('affCode').textContent         = p.ref_code;
+  document.getElementById('statBalance').textContent = (p.balance||0).toLocaleString('pt-MZ');
+  document.getElementById('statConversions').textContent = (p.conversions||0).toLocaleString();
+  document.getElementById('statClicks').textContent = (p.clicks||0).toLocaleString('pt-MZ');
+  document.getElementById('statEarned').textContent = (p.total_earned||0).toLocaleString('pt-MZ');
+  document.getElementById('statRate').textContent = p.conversion_rate || 0;
 
-  const minW = d.config?.aff_min_withdraw || 200;
-  document.getElementById('minWithdraw').textContent = minW;
-  document.getElementById('withdrawAmount').min = minW;
+  // Link
+  document.getElementById('affLink').textContent = p.link;
+  document.getElementById('affCodeDisp').textContent = '🔑 ' + p.ref_code;
+
+  // Segmento — bónus note
+  const bonusMap = { papelaria:5, cyber:3, universidade:5, explicacao:0, digitador:0 };
+  const bonus = bonusMap[_segment] || 0;
+  const bonusEl = document.getElementById('segmentBonusNote');
+  if (bonus > 0) {
+    bonusEl.style.display = 'block';
+    bonusEl.innerHTML = `🎁 Bónus <strong>+${bonus}%</strong> activo para o seu segmento (${segLabel(_segment)}). Continue a partilhar para maximizar os seus ganhos!`;
+  }
+
+  // Dicas por segmento
+  document.getElementById('tipContent').innerHTML = SEG_NOTES[_segment] || SEG_NOTES.individual;
 
   // Comissões
   const ct = document.getElementById('commissionsTable');
-  ct.innerHTML = d.commissions.length
+  ct.innerHTML = (d.commissions||[]).length
     ? d.commissions.map(c => `
         <tr>
-          <td>${new Date(c.created_at).toLocaleDateString('pt-MZ')}</td>
-          <td>${c.package_id}</td>
-          <td>${c.sale_amount} MZN</td>
-          <td style="font-weight:700;color:#009A44">+${c.commission_mzn} MZN</td>
+          <td style="white-space:nowrap">${new Date(c.created_at).toLocaleDateString('pt-MZ')}</td>
+          <td style="font-weight:700">${c.package_id}</td>
+          <td>${(c.sale_amount||0).toLocaleString('pt-MZ')} MZN</td>
+          <td style="font-weight:800;color:var(--green)">+${(c.commission_mzn||0)} MZN</td>
           <td><span class="badge badge-${c.status}">${statusLabel(c.status)}</span></td>
         </tr>`).join('')
-    : '<tr><td colspan="5" class="empty">Ainda sem comissões. Partilhe o seu link!</td></tr>';
+    : '<tr><td colspan="5" class="empty">Sem comissões ainda. Comece a partilhar o seu link!</td></tr>';
 
   // Levantamentos
   const wt = document.getElementById('withdrawalsTable');
-  wt.innerHTML = d.withdrawals.length
+  wt.innerHTML = (d.withdrawals||[]).length
     ? d.withdrawals.map(w => `
         <tr>
-          <td>${new Date(w.created_at).toLocaleDateString('pt-MZ')}</td>
-          <td style="font-weight:700">${w.amount} MZN</td>
-          <td>${w.mpesa_phone}</td>
+          <td style="white-space:nowrap">${new Date(w.created_at).toLocaleDateString('pt-MZ')}</td>
+          <td style="font-weight:800">${(w.amount||0).toLocaleString('pt-MZ')} MZN</td>
+          <td style="font-size:11px">${w.mpesa_phone}</td>
           <td><span class="badge badge-${w.status}">${statusLabel(w.status)}</span></td>
         </tr>`).join('')
-    : '<tr><td colspan="4" class="empty">Sem levantamentos</td></tr>';
+    : '<tr><td colspan="4" class="empty">Nenhum levantamento ainda</td></tr>';
+
+  // M-Pesa pre-fill
+  if (p.mpesa_phone) {
+    const mp = document.getElementById('withdrawPhone');
+    if (mp) mp.value = p.mpesa_phone;
+  }
+
+  // Min withdraw
+  const minW = d.config?.aff_min_withdraw || 200;
+  const mwl = document.getElementById('minWithdrawLbl');
+  if (mwl) mwl.textContent = minW;
+  const wa = document.getElementById('withdrawAmount');
+  if (wa) wa.min = minW;
+
+  // Ranking
+  loadRanking(d.ranking || [], p.ref_code);
 }
 
+function updateTierProgress(conversions, tier) {
+  const tiers = [
+    { key:'bronze', min:0, max:5,  id:'tsB' },
+    { key:'prata',  min:5, max:20, id:'tsP' },
+    { key:'ouro',   min:20,max:50, id:'tsO' },
+    { key:'diamante',min:50,max:50,id:'tsD' },
+  ];
+  const active = tiers.find(t => t.key === tier) || tiers[0];
+  tiers.forEach(t => {
+    const el = document.getElementById(t.id);
+    if (!el) return;
+    if (t.key === tier) el.className = 'tier-step active';
+    else if (tiers.indexOf(t) < tiers.indexOf(active)) el.className = 'tier-step done';
+    else el.className = 'tier-step';
+  });
+
+  let pct = 0, nextLabel = 'Nível máximo atingido!';
+  if (tier === 'bronze') { pct = Math.min((conversions/5)*100, 100); nextLabel = `Próximo: Prata (${5-conversions} conversões em falta)`; }
+  else if (tier === 'prata') { pct = 25 + Math.min(((conversions-5)/15)*25, 25); nextLabel = `Próximo: Ouro (${20-conversions} em falta)`; }
+  else if (tier === 'ouro') { pct = 50 + Math.min(((conversions-20)/30)*40, 40); nextLabel = `Próximo: Diamante (${50-conversions} em falta)`; }
+  else { pct = 100; }
+
+  const bar = document.getElementById('tierBar');
+  if (bar) bar.style.width = pct + '%';
+  const nl = document.getElementById('tierNextLabel');
+  if (nl) nl.textContent = nextLabel;
+}
+
+function loadRanking(ranking, myCode) {
+  const el = document.getElementById('rankingList');
+  if (!ranking.length) { el.innerHTML = '<div class="empty">Ranking ainda sem dados este mês.</div>'; return; }
+  el.innerHTML = ranking.slice(0,10).map((r, i) => {
+    const pos = r.rank_position || (i+1);
+    const posClass = pos === 1 ? 'p1' : pos === 2 ? 'p2' : pos === 3 ? 'p3' : 'pn';
+    const isMe = r.ref_code === myCode;
+    return `<div class="ranking-item${isMe?' me':''}">
+      <div class="rank-pos ${posClass}">${pos <= 3 ? ['🥇','🥈','🥉'][pos-1] : pos}</div>
+      <div>
+        <div class="rank-name">${r.name}${isMe?' <span style="color:var(--blue);font-size:10px">(Você)</span>':''}</div>
+        <div class="rank-conv">${r.conversions} conversões · ${segLabel(r.segment)}</div>
+      </div>
+      <div class="rank-earn">${(r.commission_mzn||0).toLocaleString('pt-MZ')} MZN</div>
+    </div>`;
+  }).join('');
+}
+
+function segLabel(s) {
+  return { individual:'Individual',papelaria:'Papelaria',cyber:'Cyber Café',universidade:'Universidade',explicacao:'Explicação',digitador:'Digitador' }[s] || s;
+}
+
+function statusLabel(s) {
+  return { pending:'Pendente',approved:'Aprovado',paid:'Pago',cancelled:'Cancelado',
+           processing:'A processar',completed:'Concluído',rejected:'Rejeitado' }[s] || s;
+}
+
+// ── REGISTO ──────────────────────────────────────────────────────────────────
 function setupRegister() {
   document.getElementById('btnRegister').addEventListener('click', async () => {
     const btn = document.getElementById('btnRegister');
     const msg = document.getElementById('registerMsg');
-    btn.disabled = true; btn.textContent = 'A processar…';
+    const city = document.getElementById('affCity').value.trim();
+    const mpesa = document.getElementById('affMpesa').value.trim();
+    const busName = document.getElementById('businessName').value.trim();
+
+    btn.disabled = true; btn.textContent = 'A registar…';
     try {
       const res = await fetch('/api/affiliate/register', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + _token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          segment: _segment,
+          business_name: busName || null,
+          city: city || null,
+          mpesa_phone: mpesa || null,
+        }),
       });
       let d = {};
-      const rawText = await res.text().catch(() => '');
-      try { d = JSON.parse(rawText); }
-      catch (_) {
-        // Servidor devolveu HTML (erro 500) — mostrar mensagem útil
-        console.error('[affiliate/register] server error:', res.status, rawText.slice(0, 200));
-        d = { error: `Erro do servidor (${res.status}). Verifique as variáveis de ambiente no Vercel.` };
-      }
+      try { d = await res.json(); } catch (_) { d = { error: 'Erro do servidor (' + res.status + ')' }; }
 
       if (d.success) {
-        if (msg) msg.textContent = '';
         document.getElementById('registerSection').style.display = 'none';
         await loadDashboard();
-      } else if (d.sql_needed) {
-        if (msg) msg.innerHTML = '⚠️ Execute o SQL de migração no Supabase primeiro. <a href="#sql-instructions" style="color:#1d4ed8;text-decoration:underline">Ver instruções abaixo</a>';
-        btn.disabled = false; btn.textContent = 'Quero ser Afiliado';
       } else {
-        if (msg) msg.textContent = d.error || 'Erro ao registar. Tente de novo.';
-        btn.disabled = false; btn.textContent = 'Quero ser Afiliado';
+        msg.textContent = d.error || 'Erro ao registar. Tente de novo.';
+        btn.disabled = false; btn.textContent = '✅ Quero ser Parceiro';
       }
     } catch (err) {
-      if (msg) msg.textContent = 'Sem ligação. Verifique a internet e tente de novo.';
-      btn.disabled = false; btn.textContent = 'Quero ser Afiliado';
+      msg.textContent = 'Sem ligação. Verifique a internet.';
+      btn.disabled = false; btn.textContent = '✅ Quero ser Parceiro';
     }
   });
 }
 
-function statusLabel(s) {
-  return { pending:'Pendente', approved:'Aprovado', paid:'Pago', cancelled:'Cancelado',
-           processing:'A processar', completed:'Concluído', rejected:'Rejeitado' }[s] || s;
-}
+// ── TABS ─────────────────────────────────────────────────────────────────────
+window.switchTab = function(tab, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const panel = document.getElementById('tab-' + tab);
+  if (panel) panel.classList.add('active');
+  if (btn) btn.classList.add('active');
+};
 
-// ── Partilha ─────────────────────────────────────────────────────────────
+// ── SEGMENTO ─────────────────────────────────────────────────────────────────
+window.selectSeg = function(el) {
+  document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  _segment = el.dataset.seg;
+  const bfg = document.getElementById('businessNameFg');
+  const note = document.getElementById('segNote');
+  bfg.style.display = ['papelaria','cyber','universidade','explicacao'].includes(_segment) ? 'flex' : 'none';
+  note.innerHTML = SEG_NOTES[_segment] || SEG_NOTES.individual;
+};
+
+// ── PARTILHA ─────────────────────────────────────────────────────────────────
 window.copyLink = function() {
   navigator.clipboard.writeText(_affLink).then(() => {
-    document.getElementById('btnCopyLink').textContent = '✅ Copiado!';
-    setTimeout(() => { document.getElementById('btnCopyLink').textContent = 'Copiar'; }, 2000);
+    const btn = document.querySelector('[onclick="copyLink()"]');
+    if (btn) { btn.textContent = '✅ Copiado!'; setTimeout(() => { btn.textContent = 'Copiar'; }, 2000); }
   });
 };
 
 window.shareWhatsApp = function() {
-  const msg = encodeURIComponent(
-    `📄 *MzDocs Pro — Documentos profissionais em segundos!*\n\n` +
-    `Trabalhos escolares, CVs, cartas, orçamentos e muito mais — feito por IA em segundos.\n\n` +
-    `Registe-se aqui e ganhe 1 crédito grátis: ${_affLink}`
-  );
+  const segMsg = {
+    papelaria: '🖨️ *Precisa de documentos profissionais? Use MzDocs Pro!*\n\nCVs, cartas, contratos e muito mais — gerados por IA em segundos. Depois imprima aqui connosco!\n\n👉 Registe-se: ',
+    cyber:     '💻 *Crie documentos profissionais em segundos com MzDocs Pro!*\n\nCVs, requerimentos, cartas formais — feitos por IA. Use no nosso cyber café!\n\n👉 Registe-se: ',
+    universidade: '🎓 *Estudantes MzDocs Pro — Documentos académicos em segundos!*\n\nTrabalhos, cartas de candidatura, CVs e mais, com IA adaptada a Moçambique.\n\n👉 Registe-se gratuitamente: ',
+    individual: '📄 *MzDocs Pro — Documentos profissionais em segundos!*\n\nCVs, cartas formais, contratos e muito mais, gerados por IA em português moçambicano.\n\n👉 Registe-se e ganhe 1 crédito grátis: ',
+  };
+  const msg = encodeURIComponent((segMsg[_segment] || segMsg.individual) + _affLink);
   window.open('https://wa.me/?text=' + msg, '_blank');
 };
 
@@ -355,34 +769,37 @@ window.shareFacebook = function() {
 window.shareNative = function() {
   if (navigator.share) {
     navigator.share({ title: 'MzDocs Pro', text: 'Documentos profissionais em segundos!', url: _affLink });
-  } else {
-    window.copyLink();
-  }
+  } else { window.copyLink(); }
 };
 
-// ── Levantamento ─────────────────────────────────────────────────────────
+// ── LEVANTAMENTO ─────────────────────────────────────────────────────────────
 window.submitWithdraw = async function() {
   const amount = parseInt(document.getElementById('withdrawAmount').value || 0);
   const phone  = document.getElementById('withdrawPhone').value.trim();
-  const msg    = document.getElementById('msg');
+  const msgEl  = document.getElementById('withdrawMsg');
   const btn    = document.getElementById('btnWithdraw');
 
   const show = (text, ok) => {
-    msg.style.display = 'block';
-    msg.className = ok ? 'ok' : 'err';
-    msg.textContent = text;
+    msgEl.style.display = 'block';
+    msgEl.className = 'msg-box ' + (ok ? 'msg-ok' : 'msg-err');
+    msgEl.textContent = text;
   };
 
   btn.disabled = true; btn.textContent = 'A processar…';
-  const res = await fetch('/api/affiliate/withdraw', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + _token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount, phone }),
-  });
-  const d = await res.json();
-  btn.disabled = false; btn.textContent = 'Pedir Levantamento';
-  if (d.success) { show(d.message, true); await loadDashboard(); }
-  else show(d.error || 'Erro', false);
+  try {
+    const res = await fetch('/api/affiliate/withdraw', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + _token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, phone }),
+    });
+    const d = await res.json();
+    btn.disabled = false; btn.textContent = 'Pedir Levantamento';
+    if (d.success) { show(d.message, true); await loadDashboard(); }
+    else show(d.error || 'Erro ao processar pedido.', false);
+  } catch (err) {
+    btn.disabled = false; btn.textContent = 'Pedir Levantamento';
+    show('Sem ligação. Tente de novo.', false);
+  }
 };
 
 init();
