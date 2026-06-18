@@ -1,13 +1,16 @@
-// api/process-payment.js — v4.0 (AUDITORIA Junho/2026)
+// api/process-payment.js — v5.0 (Verificação automática de comprovativos)
 //
-// CORREÇÕES v4.0 (auditoria C-3):
-//  1. NOVO: Rate limit de 3 pedidos por IP por hora (Upstash Redis + fallback Map).
-//     Impede bots de criar centenas de transacções pending e poluir o painel admin.
-//  2. NOVO: Verificação de transacção pending recente (30min) para o mesmo
-//     utilizador + pacote — evita duplicados mesmo que o rate limit não seja atingido.
-//  3. Mantidas todas as correcções da v3.0 (REST puro, multi-carteira, erros sanitizados).
+// ALTERAÇÕES v5.0:
+//  1. NOVO: campo opcional receiptImage (base64) no body.
+//     Se presente, chama verifyReceiptInternal() de misc.js directamente
+//     (sem HTTP round-trip) para tentar aprovação automática via IA visão.
+//  2. Se receiptImage ausente, mantém fluxo anterior: status "pending",
+//     utilizador envia comprovativo pelo WhatsApp.
+//  3. Resposta inclui nextStep: "upload_receipt" | "completed" | "awaiting_review".
+//  4. Mantidas todas as correcções da v4.0 (rate limit, duplicate check, REST puro).
 
 const { insert, restRequest, getUserFromToken } = require('./_lib/supabaseAdmin');
+const { verifyReceiptInternal } = require('./misc');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 const WA_NUMBER      = process.env.WA_SUPPORT_NUMBER || '258858695506';
@@ -108,6 +111,8 @@ module.exports = async function handler(req, res) {
   const rawPhone   = String(body.phone || body.phoneNumber || '').trim();
   const mode       = String(body.mode  || 'manual').toLowerCase();
   const rawUserId  = body.userId || null;
+  const receiptImage     = body.receiptImage     || null; // base64, opcional
+  const receiptMimeType  = body.receiptMimeType  || 'image/jpeg';
 
   // ── Validações ────────────────────────────────────────────────────────────
   if (!rawPhone) {
@@ -209,6 +214,56 @@ module.exports = async function handler(req, res) {
       `Segue o comprovativo de pagamento.`
     );
 
+    // ── Verificação automática via IA (se receiptImage enviado) ──────────
+    if (receiptImage && transactionId) {
+      console.log('[process-payment] receiptImage presente — a tentar verificação automática...');
+
+      // Validação rápida do tamanho antes de chamar IA (~2MB em base64 = ~2.74MB string)
+      const MAX_B64 = 2 * 1024 * 1024 * 1.37;
+      if (receiptImage.length > MAX_B64) {
+        return res.status(400).json({
+          success: false,
+          error:   'Imagem demasiado grande (máx 2MB). Reduza o tamanho e tente de novo.',
+          referenceId,
+        });
+      }
+
+      let verifyResult;
+      try {
+        verifyResult = await verifyReceiptInternal({
+          imageBase64:   receiptImage,
+          mimeType:      receiptMimeType,
+          reference:     referenceId,
+          phone:         normalizedPhone,
+          amount:        pkg.price,
+          wallet:        wallet,
+          userId:        userId,
+          transactionId: transactionId,
+          packageId:     packageId,
+        });
+      } catch (verifyErr) {
+        console.error('[process-payment] verifyReceiptInternal crash:', verifyErr.message);
+        verifyResult = { success: true, verified: false, autoApproved: false, nextStep: 'awaiting_review', message: 'Erro na verificação automática. A equipa irá confirmar em 15 min.' };
+      }
+
+      return res.status(200).json({
+        success:      true,
+        mode:         'auto_verify',
+        referenceId,
+        transactionId,
+        package:      pkg,
+        phone:        normalizedPhone,
+        wallet,
+        autoVerified: verifyResult.autoApproved || false,
+        verified:     verifyResult.verified     || false,
+        creditsAdded: verifyResult.creditsAdded || 0,
+        nextStep:     verifyResult.nextStep     || 'awaiting_review',
+        message:      verifyResult.message      || 'A processar pagamento.',
+        whatsappLink: `https://wa.me/${WA_NUMBER}?text=${waMessage}`, // fallback sempre disponível
+      });
+    }
+
+    // ── Sem imagem: fluxo manual original ────────────────────────────────
     return res.status(200).json({
       success:      true,
       mode:         'manual',
@@ -217,8 +272,10 @@ module.exports = async function handler(req, res) {
       package:      pkg,
       phone:        normalizedPhone,
       wallet,
+      autoVerified: false,
+      nextStep:     'upload_receipt',
       whatsappLink: `https://wa.me/${WA_NUMBER}?text=${waMessage}`,
-      message:      'Pedido registado. Envie o comprovativo pelo WhatsApp.',
+      message:      'Pedido registado. Envie o comprovativo abaixo ou pelo WhatsApp.',
     });
   }
 
