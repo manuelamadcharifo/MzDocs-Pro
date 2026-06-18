@@ -420,7 +420,27 @@ export class PaymentController {
           packageId:     this.selectedPkg,
         }),
       });
-      const data = await resp.json();
+
+      // Tratar erros HTTP antes de tentar parse JSON
+      let data;
+      const contentType = resp.headers.get('content-type') || '';
+      if (!resp.ok) {
+        const errorText = contentType.includes('json')
+          ? (await resp.json().catch(() => ({}))).error
+          : await resp.text().catch(() => '');
+        throw new Error(
+          resp.status === 404
+            ? 'Rota de verificação não encontrada. Verifique o deploy.'
+            : resp.status === 429
+              ? 'Demasiados pedidos. Aguarde 1 minuto.'
+              : errorText || `Erro do servidor (${resp.status})`
+        );
+      }
+      try {
+        data = await resp.json();
+      } catch {
+        throw new Error('Resposta inválida do servidor. Tente de novo.');
+      }
 
       if (data.autoApproved && data.verified) {
         // ✅ Aprovação automática
