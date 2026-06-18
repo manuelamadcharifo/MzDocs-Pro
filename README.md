@@ -2,6 +2,14 @@
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e M-Pesa.
 
+> ⚠️ **Acção urgente — plano Vercel:** este projecto processa pagamentos (`api/process-payment.js`,
+> tabela `transactions`). Os Termos de Serviço da Vercel definem **qualquer fluxo de cobrança a
+> visitantes do site** como uso comercial, que **não é permitido no plano Hobby** — apenas no Pro
+> (US$20/mês) ou Enterprise. Um projecto no plano errado pode ser suspenso sem aviso prévio.
+> Recomenda-se a migração para o plano Pro **antes** de qualquer campanha de crescimento, independentemente
+> do número de utilizadores. Ver análise completa e roteiro de escala em
+> [`ROADMAP-ESCALA.md`](./ROADMAP-ESCALA.md).
+
 ---
 
 ## ✨ Funcionalidades Principais
@@ -39,8 +47,9 @@ MzDocs-Pro/
 │   │                                  #   sem @supabase/supabase-js nem 'ws'. Não conta como function
 │   │                                  #   (prefixo "_"). Todas as funções abaixo devem usar este módulo.
 │   ├── admin/
-│   │   ├── index.js                   # Dashboard, analytics, feedback, pagamentos
-│   │   └── pages.js                   # Blog / páginas estáticas + gerador com IA
+│   │   └── index.js                   # Dashboard, analytics, feedback, pagamentos,
+│   │                                  #   blog/páginas estáticas + gerador de artigos com IA
+│   │                                  #   (tudo num único ficheiro — conta como 1 das 12 functions)
 │   ├── auth/
 │   │   └── index.js                   # Login, registo, reset password
 │   ├── generate-document.js           # Geração de documentos — 5 providers de IA + reembolso automático (v12)
@@ -376,6 +385,11 @@ Admin rejeita      → status: "rejected" + nota de rejeição
 
 ## ⚙️ Limites Vercel Hobby
 
+> ⚠️ Ver aviso sobre uso comercial no topo deste documento — este projecto processa pagamentos,
+> o que tecnicamente exige o plano Pro. As linhas abaixo descrevem os limites técnicos do Hobby
+> tal como o código foi desenhado para respeitar (12 functions), mas isso não substitui a
+> necessidade de migrar o plano por razões contratuais.
+
 | Recurso | Limite | Usado |
 |---------|--------|-------|
 | Serverless Functions | 12 | **12** ✅ (sem margem — `api/_lib/` não conta, prefixo `_`) |
@@ -391,7 +405,7 @@ Admin rejeita      → status: "rejected" + nota de rejeição
 
 ## 📱 PWA
 
-- Service Worker com cache estratégico (versão `v11`)
+- Service Worker com cache estratégico (`CACHE_VERSION` actualizada automaticamente a cada deploy por `scripts/inject-version.js`, ex.: `v12-20260531`)
 - Funciona offline — documentos pendentes sincronizam quando a internet volta
 - Instalável em Android e iOS (atalhos para CV, Carta, Trabalho, Orçamento)
 - Background sync para documentos gerados offline
@@ -502,7 +516,7 @@ abaixo **não foram revistas** e podem precisar de atenção numa próxima ronda
 | Componente | Versão |
 |------------|--------|
 | `package.json` | `11.0.0` |
-| `sw.js` (CACHE_VERSION) | `v11` |
+| `sw.js` (CACHE_VERSION) | `v12-20260531` (auto-actualizado pelo build) |
 | `README.md` | `v12` |
 | `api/deduct-credit.js` | `v3.0` |
 | `api/generate-document.js` | `v2.0` |
