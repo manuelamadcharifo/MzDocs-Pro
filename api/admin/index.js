@@ -45,12 +45,6 @@ module.exports = async function handler(req, res) {
     case 'pages':           return handleBlogPages(req, res);
     case 'generate-page':   return handleGeneratePage(req, res);
     case 'affiliates':      return handleAffiliates(req, res);
-    case 'templates':       return handleAdminTemplates(req, res);
-    case 'template-approve': return handleAdminTplAction(req, res, 'approve');
-    case 'template-reject':  return handleAdminTplAction(req, res, 'reject');
-    case 'template-feature': return handleAdminTplAction(req, res, 'feature');
-    case 'template-type':    return handleAdminTplAction(req, res, 'type');
-    case 'template-edit':    return handleAdminTplAction(req, res, 'edit');
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
@@ -1116,24 +1110,171 @@ async function handleAffiliates(req, res) {
     const auth     = await validateAdmin(supabase, token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
-    if (req.method === 'GET') {
+    const q = req.query || {};
+
+    // ── GET: listagem de afiliados ────────────────────────────────────────
+    if (req.method === 'GET' && !q.sub) {
       const { data, error } = await supabase.from('profiles')
-        .select('id, full_name, email, phone, ref_code, is_affiliate, aff_clicks, aff_conversions, aff_balance, aff_total_earned, created_at')
+        .select('id,full_name,email,phone,ref_code,is_affiliate,aff_clicks,aff_conversions,aff_balance,aff_total_earned,aff_segment,aff_tier,aff_business_name,aff_city,aff_phone_mpesa,aff_is_blocked,aff_block_reason,aff_joined_at,created_at')
         .not('ref_code', 'is', null)
-        .order('created_at', { ascending: false });
+        .order('aff_total_earned', { ascending: false });
       if (error) throw error;
-      return res.status(200).json({ affiliates: data || [] });
+
+      // Fraud flags count por afiliado
+      const { data: fraudData } = await supabase.from('affiliate_fraud_flags')
+        .select('affiliate_id').eq('resolved', false);
+      const fraudCount = {};
+      (fraudData || []).forEach(f => { fraudCount[f.affiliate_id] = (fraudCount[f.affiliate_id] || 0) + 1; });
+
+      // Levantamentos pendentes count
+      const { data: wPending } = await supabase.from('affiliate_withdrawals')
+        .select('affiliate_id').eq('status', 'pending');
+      const wCount = {};
+      (wPending || []).forEach(w => { wCount[w.affiliate_id] = (wCount[w.affiliate_id] || 0) + 1; });
+
+      return res.status(200).json({
+        affiliates: (data || []).map(a => ({
+          ...a,
+          fraud_flags: fraudCount[a.id] || 0,
+          pending_withdrawals: wCount[a.id] || 0,
+        })),
+      });
     }
 
-    if (req.method === 'POST') {
-      const body      = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-      const { action, user_id } = body;
-      if (!user_id) return res.status(400).json({ error: 'user_id em falta' });
-      if (!['approve', 'revoke'].includes(action)) return res.status(400).json({ error: 'action inválida' });
-      const { error } = await supabase.from('profiles')
-        .update({ is_affiliate: action === 'approve' }).eq('id', user_id);
+    // ── GET: levantamentos pendentes ──────────────────────────────────────
+    if (req.method === 'GET' && q.sub === 'withdrawals') {
+      const status = q.status || 'pending';
+      const { data, error } = await supabase.from('affiliate_withdrawals')
+        .select('id,affiliate_id,amount,mpesa_phone,status,admin_note,created_at,processed_at')
+        .eq('status', status).order('created_at', { ascending: false }).limit(50);
       if (error) throw error;
-      return res.status(200).json({ success: true, message: action === 'approve' ? 'Afiliado aprovado.' : 'Aprovação revogada.' });
+      // Enriquecer com nome do afiliado
+      const ids = [...new Set((data || []).map(w => w.affiliate_id))];
+      const { data: pnames } = await supabase.from('profiles').select('id,full_name,email,phone,aff_tier').in('id', ids);
+      const pm = {};
+      (pnames || []).forEach(p => { pm[p.id] = p; });
+      return res.status(200).json({
+        withdrawals: (data || []).map(w => ({ ...w, affiliate: pm[w.affiliate_id] || {} })),
+      });
+    }
+
+    // ── GET: flags de fraude ──────────────────────────────────────────────
+    if (req.method === 'GET' && q.sub === 'fraud') {
+      const { data, error } = await supabase.from('affiliate_fraud_flags')
+        .select('id,affiliate_id,flag_type,description,severity,resolved,created_at')
+        .eq('resolved', false).order('severity', { ascending: false }).limit(50);
+      if (error) throw error;
+      const ids = [...new Set((data || []).map(f => f.affiliate_id))];
+      const { data: pnames } = await supabase.from('profiles').select('id,full_name,ref_code').in('id', ids);
+      const pm = {};
+      (pnames || []).forEach(p => { pm[p.id] = p; });
+      return res.status(200).json({
+        flags: (data || []).map(f => ({ ...f, affiliate: pm[f.affiliate_id] || {} })),
+      });
+    }
+
+    // ── GET: ranking do mês ───────────────────────────────────────────────
+    if (req.method === 'GET' && q.sub === 'ranking') {
+      const month = q.month || new Date().toISOString().slice(0, 7);
+      const { data, error } = await supabase.from('affiliate_ranking')
+        .select('affiliate_id,rank_position,conversions,revenue_mzn,commission_mzn,tier')
+        .eq('month', month).order('rank_position', { ascending: true }).limit(20);
+      if (error) throw error;
+      const ids = (data || []).map(r => r.affiliate_id);
+      const { data: pnames } = await supabase.from('profiles').select('id,full_name,aff_segment,ref_code').in('id', ids);
+      const pm = {};
+      (pnames || []).forEach(p => { pm[p.id] = p; });
+      return res.status(200).json({
+        month, ranking: (data || []).map(r => ({
+          ...r,
+          name: pm[r.affiliate_id]?.full_name || 'Parceiro',
+          segment: pm[r.affiliate_id]?.aff_segment || 'individual',
+          ref_code: pm[r.affiliate_id]?.ref_code || '',
+        })),
+      });
+    }
+
+    // ── POST: acções admin ────────────────────────────────────────────────
+    if (req.method === 'POST') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+      const { action, user_id, withdrawal_id, flag_id, note, amount } = body;
+
+      // Aprovar / revogar afiliado
+      if (action === 'approve' || action === 'revoke') {
+        if (!user_id) return res.status(400).json({ error: 'user_id em falta' });
+        const updates = { is_affiliate: action === 'approve' };
+        if (action === 'approve') updates.aff_joined_at = new Date().toISOString();
+        const { error } = await supabase.from('profiles').update(updates).eq('id', user_id);
+        if (error) throw error;
+        // Notificação ao afiliado
+        if (action === 'approve') {
+          await supabase.from('affiliate_notifications').insert({
+            affiliate_id: user_id, type: 'commission',
+            title: '🎉 Candidatura Aprovada!',
+            body: 'A sua conta de afiliado MzDocs Pro foi aprovada. Comece a partilhar o seu link e ganhe comissões!',
+          }).catch(() => {});
+        }
+        return res.status(200).json({ success: true, message: action === 'approve' ? 'Afiliado aprovado.' : 'Aprovação revogada.' });
+      }
+
+      // Bloquear / desbloquear afiliado
+      if (action === 'block' || action === 'unblock') {
+        if (!user_id) return res.status(400).json({ error: 'user_id em falta' });
+        const updates = { aff_is_blocked: action === 'block' };
+        if (action === 'block') updates.aff_block_reason = note || 'Conta suspensa por actividade suspeita.';
+        else updates.aff_block_reason = null;
+        const { error } = await supabase.from('profiles').update(updates).eq('id', user_id);
+        if (error) throw error;
+        return res.status(200).json({ success: true, message: action === 'block' ? 'Conta suspensa.' : 'Conta reactivada.' });
+      }
+
+      // Processar levantamento
+      if (action === 'process_withdrawal') {
+        if (!withdrawal_id) return res.status(400).json({ error: 'withdrawal_id em falta' });
+        const newStatus = body.status || 'completed';
+        if (!['completed','rejected'].includes(newStatus)) return res.status(400).json({ error: 'status inválido' });
+        const { data: wd, error: wErr } = await supabase.from('affiliate_withdrawals')
+          .select('affiliate_id,amount,status').eq('id', withdrawal_id).single();
+        if (wErr || !wd) return res.status(404).json({ error: 'Levantamento não encontrado' });
+        if (wd.status !== 'pending') return res.status(400).json({ error: 'Levantamento não está pendente' });
+        const { error } = await supabase.from('affiliate_withdrawals').update({
+          status: newStatus, admin_note: note || null, processed_at: new Date().toISOString(),
+        }).eq('id', withdrawal_id);
+        if (error) throw error;
+        // Se rejeitado: devolver saldo
+        if (newStatus === 'rejected') {
+          const { data: prof } = await supabase.from('profiles').select('aff_balance').eq('id', wd.affiliate_id).single();
+          await supabase.from('profiles').update({ aff_balance: (prof?.aff_balance || 0) + wd.amount }).eq('id', wd.affiliate_id);
+        }
+        // Notificação ao afiliado
+        await supabase.from('affiliate_notifications').insert({
+          affiliate_id: wd.affiliate_id, type: 'withdrawal',
+          title: newStatus === 'completed' ? '✅ Levantamento Pago!' : '❌ Levantamento Rejeitado',
+          body: newStatus === 'completed'
+            ? `O seu levantamento de ${wd.amount} MZN foi processado via M-Pesa.`
+            : `O seu pedido de ${wd.amount} MZN foi rejeitado. ${note ? 'Motivo: ' + note : 'Contacte o suporte.'}`,
+        }).catch(() => {});
+        return res.status(200).json({ success: true, message: 'Levantamento actualizado.' });
+      }
+
+      // Resolver flag de fraude
+      if (action === 'resolve_fraud') {
+        if (!flag_id) return res.status(400).json({ error: 'flag_id em falta' });
+        const { error } = await supabase.from('affiliate_fraud_flags').update({
+          resolved: true, resolved_at: new Date().toISOString(),
+        }).eq('id', flag_id);
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      // Gerar ranking mensal
+      if (action === 'generate_ranking') {
+        const month = body.month || new Date().toISOString().slice(0, 7);
+        await supabase.rpc('generate_monthly_ranking', { p_month: month }).catch(e => { throw e; });
+        return res.status(200).json({ success: true, message: `Ranking de ${month} gerado.` });
+      }
+
+      return res.status(400).json({ error: 'action desconhecida: ' + action });
     }
 
     return res.status(405).json({ error: 'Método não permitido' });
@@ -1142,6 +1283,7 @@ async function handleAffiliates(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared utilities
@@ -1185,138 +1327,4 @@ async function _generateStaticPage(page, SITE_URL) {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: `Gerar página: ${page.slug}`, content: Buffer.from(html).toString('base64'), sha }),
   });
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// ADMIN TEMPLATES — Gestão completa de templates comunitários
-// Rota: /api/admin/templates  (GET=lista) e /api/admin/template-* (POST=acção)
-// ════════════════════════════════════════════════════════════════════════════
-
-async function handleAdminTemplates(req, res) {
-  const supabase = await getAdminClient();
-  const token    = (req.headers.authorization || '').replace('Bearer ', '').trim();
-  const { error: authErr } = await validateAdmin(supabase, token);
-  if (authErr) return res.status(authErr.status || 403).json({ error: authErr.error || authErr });
-
-  const q      = req.query || {};
-  const status = q.status || 'pending';   // pending | approved | rejected | all
-  const type   = q.type   || null;        // official | community | premium | private
-  const limit  = Math.min(parseInt(q.limit  || 50), 200);
-  const offset = Math.max(parseInt(q.offset ||  0),   0);
-
-  let query = supabase
-    .from('templates_custom')
-    .select(`
-      id, template_type, service_type, template_name, description,
-      thumbnail_url, preview_url, tags, status, rejection_note,
-      admin_note, is_featured, featured_order, credit_cost,
-      downloads, use_count, likes, rating_sum, rating_count,
-      created_at, updated_at, user_id,
-      author:profiles!user_id(full_name, email),
-      reviewer:profiles!reviewed_by(full_name)
-    `)
-    .order('created_at', { ascending: status === 'pending' })
-    .range(offset, offset + limit - 1);
-
-  if (status !== 'all') query = query.eq('status', status);
-  if (type) query = query.eq('template_type', type);
-
-  const { data, error, count } = await query;
-  if (error) return res.status(500).json({ error: error.message });
-
-  // Contar pendentes para badge no admin
-  const { count: pendingCount } = await supabase
-    .from('templates_custom').select('*', { count: 'exact', head: true })
-    .eq('status', 'pending');
-
-  // Reports não resolvidos
-  const { count: reportCount } = await supabase
-    .from('template_reports').select('*', { count: 'exact', head: true })
-    .eq('resolved', false);
-
-  return res.status(200).json({
-    success: true,
-    templates: data || [],
-    meta: { pending: pendingCount || 0, reports: reportCount || 0 },
-  });
-}
-
-async function handleAdminTplAction(req, res, action) {
-  if (req.method !== 'POST') return res.status(405).end();
-  const supabase = await getAdminClient();
-  const token    = (req.headers.authorization || '').replace('Bearer ', '').trim();
-  const { error: authErr, user } = await validateAdmin(supabase, token);
-  if (authErr) return res.status(authErr.status || 403).json({ error: authErr.error || authErr });
-
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-  const { template_id, note, featured, featured_order, new_type, credit_cost } = body;
-  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
-
-  let result;
-  switch (action) {
-    case 'approve':
-      ({ data: result } = await supabase.rpc('admin_approve_template', {
-        p_template_id: template_id,
-        p_admin_id:    user.id,
-        p_note:        note || '',
-        p_featured:    featured === true,
-      }));
-      break;
-
-    case 'reject':
-      ({ data: result } = await supabase.rpc('admin_reject_template', {
-        p_template_id: template_id,
-        p_admin_id:    user.id,
-        p_note:        note || '',
-      }));
-      break;
-
-    case 'feature':
-      ({ data: result } = await supabase.rpc('admin_feature_template', {
-        p_template_id: template_id,
-        p_admin_id:    user.id,
-        p_featured:    featured !== false,
-        p_order:       featured_order || null,
-      }));
-      break;
-
-    case 'type':
-      if (!new_type) return res.status(400).json({ error: 'new_type obrigatório' });
-      ({ data: result } = await supabase.rpc('admin_change_template_type', {
-        p_template_id: template_id,
-        p_admin_id:    user.id,
-        p_new_type:    new_type,
-        p_credit_cost: parseInt(credit_cost || 0),
-        p_note:        note || '',
-      }));
-      break;
-
-    case 'edit': {
-      // Edição directa de campos textuais (sem mudar status)
-      const allowed = ['template_name','description','thumbnail_url','preview_url','tags','admin_note'];
-      const updates = {};
-      allowed.forEach(k => { if (body[k] !== undefined) updates[k] = body[k]; });
-      if (!Object.keys(updates).length)
-        return res.status(400).json({ error: 'Nenhum campo para actualizar' });
-      updates.updated_at = new Date().toISOString();
-      const { error: upErr } = await supabase
-        .from('templates_custom').update(updates).eq('id', template_id);
-      if (upErr) return res.status(500).json({ error: upErr.message });
-      // Registar no histórico
-      await supabase.from('template_history').insert({
-        template_id, actor_id: user.id, action: 'edited',
-        new_value: updates, note: note || '',
-      });
-      result = { success: true };
-      break;
-    }
-
-    default:
-      return res.status(400).json({ error: 'Acção desconhecida' });
-  }
-
-  if (result?.success === false)
-    return res.status(400).json({ error: result.error || 'Erro ao executar acção' });
-
-  return res.status(200).json({ success: true, action, template_id });
 }
