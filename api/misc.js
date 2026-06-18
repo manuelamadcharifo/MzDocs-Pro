@@ -221,16 +221,7 @@ async function handleTemplates(action, req, res) {
     case 'download': return tplDownload(req, res, supabase);
     case 'approve':  return tplApprove(req, res, supabase);
     case 'reject':   return tplReject(req, res, supabase);
-    case 'pending':      return tplPending(req, res, supabase);
-    case 'mine':         return tplMine(req, res, supabase);
-    case 'saved':        return tplSaved(req, res, supabase);
-    case 'save':         return tplToggleSave(req, res, supabase);
-    case 'use':          return tplUse(req, res, supabase);
-    case 'report':       return tplReport(req, res, supabase);
-    case 'share-token':  return tplShareToken(req, res, supabase);
-    case 'by-token':     return tplByToken(req, res);
-    case 'delete':       return tplDelete(req, res, supabase);
-    case 'gallery':      return tplGallery(req, res);
+    case 'pending':  return tplPending(req, res, supabase);
     default:         return res.status(404).json({ error: 'Acção de template não encontrada' });
   }
 }
@@ -258,187 +249,22 @@ async function tplSubmit(req, res, supabase) {
   const user = await getUser(supabase, req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   const body = parseBody(req);
-  const {
-    service_type, template_name, description,
-    template_css, template_html, thumbnail_url,
-    template_file, preview_url, tags,
-    template_type = 'community',
-  } = body;
-  if (!service_type || !template_name || (!template_css && !template_html))
+  const { service_type, template_name, description, template_css, thumbnail_url, template_file } = body;
+  if (!service_type || !template_name || !template_css)
     return res.status(400).json({ error: 'service_type, template_name e template_css são obrigatórios' });
-  if (!['community','private'].includes(template_type))
-    return res.status(400).json({ error: 'template_type deve ser community ou private' });
-  const { data, error } = await supabase.rpc('submit_community_template', {
-    p_user_id:       user.id,
-    p_service_type:  service_type.trim().slice(0, 50),
-    p_template_name: template_name.trim().slice(0, 100),
-    p_description:   (description || '').trim().slice(0, 500),
-    p_template_html: (template_html || '').slice(0, 50000),
-    p_template_css:  (template_css  || '').slice(0, 20000),
-    p_thumbnail_url: thumbnail_url  || null,
-    p_template_file: template_file  || null,
-    p_preview_url:   preview_url    || null,
-    p_tags:          Array.isArray(tags) ? tags.slice(0, 10) : [],
-    p_template_type: template_type,
-  });
+  const { data, error } = await supabase.from('templates_custom').insert({
+    user_id: user.id,
+    service_type:  service_type.trim().slice(0, 50),
+    template_name: template_name.trim().slice(0, 100),
+    description:   (description || '').trim().slice(0, 300),
+    template_css:  template_css.slice(0, 20000),
+    thumbnail_url: thumbnail_url || null,
+    template_file: template_file || null,
+    status:        'pending',
+    is_public:     false,
+  }).select('id').single();
   if (error) return res.status(500).json({ error: error.message });
-  return res.status(201).json({
-    success:     true,
-    id:          data.id,
-    status:      data.status,
-    share_token: data.share_token || null,
-    message: template_type === 'private'
-      ? 'Template privado criado com sucesso!'
-      : 'Template submetido! Aguarda aprovação pela equipa MzDocs.',
-  });
-}
-
-// ── Galeria pública v2 (usa VIEW v_templates_gallery) ───────────────────────
-async function tplGallery(req, res) {
-  const q      = req.query || {};
-  const service = q.service || null;
-  const type    = q.type    || null;
-  const sort    = q.sort    || 'featured';
-  const limit   = Math.min(parseInt(q.limit  || 48), 100);
-  const offset  = Math.max(parseInt(q.offset ||  0),   0);
-  let path = `v_templates_gallery?limit=${limit}&offset=${offset}`;
-  if (service) path += `&service_type=eq.${encodeURIComponent(service)}`;
-  if (type)    path += `&template_type=eq.${encodeURIComponent(type)}`;
-  const orderMap = {
-    featured: 'is_featured.desc,featured_order.asc,popularity_score.desc',
-    newest:   'created_at.desc',
-    popular:  'popularity_score.desc',
-    rating:   'avg_rating.desc,rating_count.desc',
-    used:     'use_count.desc',
-  };
-  path += `&order=${orderMap[sort] || orderMap.featured}`;
-  try {
-    const data = await restRequest(path);
-    return res.status(200).json({ success: true, templates: Array.isArray(data) ? data : [] });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-}
-
-// ── Meus templates ────────────────────────────────────────────────────────────
-async function tplMine(req, res, supabase) {
-  const user = await getUser(supabase, req);
-  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
-  const { data, error } = await supabase
-    .from('v_my_templates').select('*')
-    .order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
-  return res.status(200).json({ success: true, templates: data || [] });
-}
-
-// ── Templates guardados ───────────────────────────────────────────────────────
-async function tplSaved(req, res, supabase) {
-  const user = await getUser(supabase, req);
-  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
-  const { data, error } = await supabase
-    .from('template_saves')
-    .select('saved_at, template:templates_custom(id,template_type,service_type,template_name,description,thumbnail_url,use_count,is_featured)')
-    .eq('user_id', user.id)
-    .order('saved_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
-  return res.status(200).json({ success: true, templates: (data || []).map(r => r.template) });
-}
-
-// ── Guardar / remover colecção pessoal ────────────────────────────────────────
-async function tplToggleSave(req, res, supabase) {
-  if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
-  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
-  const { template_id } = parseBody(req);
-  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
-  const { data, error } = await supabase.rpc('toggle_save_template', {
-    p_template_id: template_id, p_user_id: user.id,
-  });
-  if (error) return res.status(500).json({ error: error.message });
-  return res.status(200).json({ success: true, saved: data?.saved ?? false });
-}
-
-// ── Registar uso de template ──────────────────────────────────────────────────
-async function tplUse(req, res, supabase) {
-  if (req.method !== 'POST') return res.status(405).end();
-  const { template_id, session_id, service_key } = parseBody(req);
-  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
-  const user = await getUser(supabase, req).catch(() => null);
-  const { data, error } = await supabase.rpc('use_template', {
-    p_template_id: template_id,
-    p_user_id:     user?.id || null,
-    p_session_id:  session_id || null,
-    p_service_key: service_key || '',
-  });
-  if (error) return res.status(500).json({ error: error.message });
-  return res.status(200).json(data || { success: true });
-}
-
-// ── Reportar template ─────────────────────────────────────────────────────────
-async function tplReport(req, res, supabase) {
-  if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
-  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
-  const { template_id, reason, detail } = parseBody(req);
-  const validReasons = ['spam','inappropriate','copyright','poor_quality','other'];
-  if (!template_id || !validReasons.includes(reason))
-    return res.status(400).json({ error: 'template_id e reason válido são obrigatórios' });
-  const { error } = await supabase.from('template_reports').insert({
-    template_id, reporter_id: user.id,
-    reason, detail: (detail || '').slice(0, 500),
-  });
-  if (error) return res.status(500).json({ error: error.message });
-  return res.status(200).json({ success: true, message: 'Relatório enviado. A equipa irá analisar.' });
-}
-
-// ── Gerar share_token (templates privados) ────────────────────────────────────
-async function tplShareToken(req, res, supabase) {
-  if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
-  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
-  const { template_id } = parseBody(req);
-  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
-  const { data, error } = await supabase.rpc('regenerate_share_token', {
-    p_template_id: template_id, p_user_id: user.id,
-  });
-  if (error) return res.status(500).json({ error: error.message });
-  if (!data?.success) return res.status(403).json({ error: data?.error || 'Não autorizado' });
-  return res.status(200).json({ success: true, share_token: data.share_token });
-}
-
-// ── Aceder a template privado por share_token ─────────────────────────────────
-async function tplByToken(req, res) {
-  const token = req.query?.token || parseBody(req).token;
-  if (!token) return res.status(400).json({ error: 'token obrigatório' });
-  const fields = 'id,template_type,service_type,template_name,description,thumbnail_url,template_html,template_css,use_count,created_at';
-  try {
-    const data = await restRequest(
-      `templates_custom?share_token=eq.${encodeURIComponent(token)}&select=${fields}&limit=1`
-    );
-    const tpl = Array.isArray(data) ? data[0] : null;
-    if (!tpl) return res.status(404).json({ error: 'Template não encontrado ou link expirado' });
-    return res.status(200).json({ success: true, template: tpl });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-}
-
-// ── Apagar template (dono, apenas community/private) ──────────────────────────
-async function tplDelete(req, res, supabase) {
-  if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
-  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
-  const { template_id } = parseBody(req);
-  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
-  const { data: tpl } = await supabase
-    .from('templates_custom').select('user_id,template_type')
-    .eq('id', template_id).single();
-  if (!tpl) return res.status(404).json({ error: 'Template não encontrado' });
-  if (tpl.user_id !== user.id) return res.status(403).json({ error: 'Não autorizado' });
-  if (['official','premium'].includes(tpl.template_type))
-    return res.status(403).json({ error: 'Templates official/premium só podem ser apagados pelo admin' });
-  await supabase.from('templates_custom').delete().eq('id', template_id);
-  return res.status(200).json({ success: true });
+  return res.status(201).json({ success: true, id: data.id, message: 'Template submetido! Aguarda aprovação.' });
 }
 
 async function tplRate(req, res, supabase) {
@@ -500,7 +326,7 @@ async function tplPending(req, res, supabase) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// AFILIADOS  (/api/affiliate/:action) — ainda usa SDK (sem ws)
+// AFILIADOS  (/api/affiliate/:action) — v2 Pro (segmentos, ranking, antifraude)
 // ════════════════════════════════════════════════════════════════════════════
 async function handleAffiliate(action, req, res) {
   res.setHeader('Access-Control-Allow-Origin', ORIGIN);
@@ -510,12 +336,14 @@ async function handleAffiliate(action, req, res) {
   try {
     const supabase = makeSdkClient();
     switch (action) {
-      case 'register':  return await affRegister(req, res, supabase);
-      case 'dashboard': return await affDashboard(req, res, supabase);
-      case 'click':     return await affClick(req, res, supabase);
-      case 'withdraw':  return await affWithdraw(req, res, supabase);
-      case 'check':     return await affCheck(req, res, supabase);
-      default:          return res.status(404).json({ error: 'Acção de afiliado não encontrada' });
+      case 'register':      return await affRegister(req, res, supabase);
+      case 'dashboard':     return await affDashboard(req, res, supabase);
+      case 'click':         return await affClick(req, res, supabase);
+      case 'withdraw':      return await affWithdraw(req, res, supabase);
+      case 'check':         return await affCheck(req, res, supabase);
+      case 'ranking':       return await affRanking(req, res, supabase);
+      case 'notifications': return await affNotifications(req, res, supabase);
+      default:              return res.status(404).json({ error: 'Acção não encontrada' });
     }
   } catch (err) {
     console.error('[handleAffiliate] crash:', action, err.message);
@@ -528,6 +356,12 @@ async function affRegister(req, res, supabase) {
   try {
     const user = await getUser(supabase, req);
     if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+    const body = parseBody(req);
+    const segment     = ['papelaria','cyber','universidade','explicacao','digitador','individual'].includes(body.segment) ? body.segment : 'individual';
+    const businessName = (body.business_name || '').trim().slice(0, 100) || null;
+    const city         = (body.city || '').trim().slice(0, 60) || null;
+    const mpesaPhone   = (body.mpesa_phone || '').replace(/\s/g, '').slice(0, 20) || null;
+
     const { data: profile, error: profileErr } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
     if (profileErr) return res.status(500).json({ error: 'Erro ao ler perfil: ' + profileErr.message });
     if (!profile) {
@@ -541,28 +375,45 @@ async function affRegister(req, res, supabase) {
       if (insertErr) return res.status(500).json({ error: 'Não foi possível criar o perfil: ' + insertErr.message });
       const { data: newProfile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
       if (!newProfile) return res.status(500).json({ error: 'Perfil criado mas não encontrado. Tente de novo.' });
-      return continueRegister(res, supabase, user, newProfile);
+      return continueRegister(res, supabase, user, newProfile, { segment, businessName, city, mpesaPhone });
     }
-    if (profile.ref_code) return res.status(200).json({ success: true, ref_code: profile.ref_code, is_affiliate: profile.is_affiliate });
-    return continueRegister(res, supabase, user, profile);
+    if (profile.ref_code) {
+      // Já registado — actualizar segmento/info extra se fornecido
+      const updates = { aff_segment: segment };
+      if (businessName) updates.aff_business_name = businessName;
+      if (city) updates.aff_city = city;
+      if (mpesaPhone) updates.aff_phone_mpesa = mpesaPhone;
+      await supabase.from('profiles').update(updates).eq('id', user.id);
+      return res.status(200).json({ success: true, ref_code: profile.ref_code, is_affiliate: profile.is_affiliate });
+    }
+    return continueRegister(res, supabase, user, profile, { segment, businessName, city, mpesaPhone });
   } catch (err) {
     return res.status(500).json({ error: 'Erro interno. Tente de novo.' });
   }
 }
 
-async function continueRegister(res, supabase, user, profile) {
+async function continueRegister(res, supabase, user, profile, extra = {}) {
   try {
     const namePart = (profile.full_name || user.email || 'MZD').replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
     const ref_code = namePart + Math.floor(10000 + Math.random() * 90000);
     const { data: existing } = await supabase.from('profiles').select('id').eq('ref_code', ref_code).maybeSingle();
     const finalCode = existing ? ref_code + Math.floor(Math.random() * 9) : ref_code;
-    const { error: updateErr } = await supabase.from('profiles').update({ ref_code: finalCode, is_affiliate: false }).eq('id', user.id);
+    const updates = {
+      ref_code: finalCode,
+      is_affiliate: false,
+      aff_segment:  extra.segment || 'individual',
+      aff_joined_at: new Date().toISOString(),
+    };
+    if (extra.businessName) updates.aff_business_name = extra.businessName;
+    if (extra.city)         updates.aff_city          = extra.city;
+    if (extra.mpesaPhone)   updates.aff_phone_mpesa   = extra.mpesaPhone;
+    const { error: updateErr } = await supabase.from('profiles').update(updates).eq('id', user.id);
     if (updateErr) {
       if (updateErr.message.includes('column') || updateErr.code === '42703')
-        return res.status(500).json({ error: 'Colunas de afiliado em falta na BD. Execute o SQL de migração.', sql_needed: true });
+        return res.status(500).json({ error: 'Colunas em falta. Execute o SQL de migração v14.', sql_needed: true });
       return res.status(500).json({ error: 'Erro ao guardar código: ' + updateErr.message });
     }
-    return res.status(200).json({ success: true, ref_code: finalCode, is_affiliate: false, message: 'Código criado! Aguarde aprovação.' });
+    return res.status(200).json({ success: true, ref_code: finalCode, is_affiliate: false, message: 'Candidatura enviada! Aguarde aprovação em 24-48h.' });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao gerar código: ' + err.message });
   }
@@ -572,37 +423,79 @@ async function affDashboard(req, res, supabase) {
   if (req.method !== 'GET') return res.status(405).end();
   const user = await getUser(supabase, req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+
   const { data: profile } = await supabase.from('profiles')
-    .select('ref_code,is_affiliate,aff_balance,aff_total_earned,aff_clicks,aff_conversions,full_name,phone')
+    .select('ref_code,is_affiliate,aff_balance,aff_total_earned,aff_clicks,aff_conversions,full_name,phone,aff_segment,aff_tier,aff_business_name,aff_city,aff_phone_mpesa,aff_is_blocked,aff_block_reason')
     .eq('id', user.id).single();
   if (!profile?.ref_code) return res.status(404).json({ error: 'Não é afiliado' });
+
   const { data: commissions } = await supabase.from('affiliate_commissions')
     .select('id,package_id,sale_amount,commission_mzn,status,created_at').eq('affiliate_id', user.id)
     .order('created_at', { ascending: false }).limit(20);
+
   const { data: withdrawals } = await supabase.from('affiliate_withdrawals')
     .select('id,amount,mpesa_phone,status,created_at,processed_at').eq('affiliate_id', user.id)
     .order('created_at', { ascending: false }).limit(10);
-  const since30 = new Date(); since30.setDate(since30.getDate() - 30);
-  const { data: clicksRaw } = await supabase.from('affiliate_clicks')
-    .select('created_at,converted').eq('affiliate_id', user.id).gte('created_at', since30.toISOString());
-  const clicksByDay = {};
-  (clicksRaw || []).forEach(c => {
-    const day = c.created_at.split('T')[0];
-    if (!clicksByDay[day]) clicksByDay[day] = { clicks: 0, conversions: 0 };
-    clicksByDay[day].clicks++;
-    if (c.converted) clicksByDay[day].conversions++;
-  });
+
+  // Ranking do mês actual
+  const currentMonth = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+  const { data: rankingRaw } = await supabase.from('affiliate_ranking')
+    .select('affiliate_id,rank_position,conversions,commission_mzn,tier')
+    .eq('month', currentMonth)
+    .order('rank_position', { ascending: true })
+    .limit(10);
+
+  // Enriquecer ranking com nomes
+  let ranking = [];
+  if (rankingRaw && rankingRaw.length > 0) {
+    const ids = rankingRaw.map(r => r.affiliate_id);
+    const { data: pnames } = await supabase.from('profiles')
+      .select('id,full_name,aff_segment,ref_code').in('id', ids);
+    const nameMap = {};
+    (pnames || []).forEach(p => { nameMap[p.id] = p; });
+    ranking = rankingRaw.map(r => ({
+      ...r,
+      name: nameMap[r.affiliate_id]?.full_name?.split(' ')[0] + ' ' + (nameMap[r.affiliate_id]?.full_name?.split(' ')[1]?.[0] || '') + '.' || 'Parceiro',
+      segment: nameMap[r.affiliate_id]?.aff_segment || 'individual',
+      ref_code: nameMap[r.affiliate_id]?.ref_code || '',
+    }));
+  }
+
+  // Notificações não lidas
+  const { data: notifs, count: unreadCount } = await supabase.from('affiliate_notifications')
+    .select('id,type,title,body,created_at', { count: 'exact' })
+    .eq('affiliate_id', user.id).eq('is_read', false)
+    .order('created_at', { ascending: false }).limit(5);
+
   const { data: settings } = await supabase.from('system_settings').select('key,value')
-    .in('key', ['aff_min_withdraw', 'aff_rate_basico', 'aff_rate_pro', 'aff_rate_empresa']);
+    .in('key', ['aff_min_withdraw', 'aff_rate_basico', 'aff_rate_pro', 'aff_rate_empresa', 'aff_bonus_papelaria', 'aff_bonus_cyber', 'aff_bonus_universidade']);
   const cfg = {};
   (settings || []).forEach(s => { cfg[s.key] = s.value; });
+
   return res.status(200).json({
     success: true,
-    profile: { ref_code: profile.ref_code, is_affiliate: profile.is_affiliate, balance: profile.aff_balance || 0,
-      total_earned: profile.aff_total_earned || 0, clicks: profile.aff_clicks || 0, conversions: profile.aff_conversions || 0,
-      link: `${SITE_URL}/?ref=${profile.ref_code}`,
-      conversion_rate: profile.aff_clicks > 0 ? Math.round((profile.aff_conversions / profile.aff_clicks) * 100) : 0 },
-    commissions: commissions || [], withdrawals: withdrawals || [], clicksByDay, config: cfg,
+    profile: {
+      ref_code:     profile.ref_code,
+      is_affiliate: profile.is_affiliate,
+      is_blocked:   profile.aff_is_blocked || false,
+      block_reason: profile.aff_block_reason || null,
+      balance:      profile.aff_balance || 0,
+      total_earned: profile.aff_total_earned || 0,
+      clicks:       profile.aff_clicks || 0,
+      conversions:  profile.aff_conversions || 0,
+      name:         profile.full_name || 'Parceiro',
+      mpesa_phone:  profile.aff_phone_mpesa || profile.phone || '',
+      segment:      profile.aff_segment || 'individual',
+      tier:         profile.aff_tier || 'bronze',
+      link:         `${SITE_URL}/?ref=${profile.ref_code}`,
+      conversion_rate: profile.aff_clicks > 0 ? Math.round((profile.aff_conversions / profile.aff_clicks) * 100) : 0,
+    },
+    commissions:  commissions || [],
+    withdrawals:  withdrawals || [],
+    ranking,
+    notifications: notifs || [],
+    unread_notifications: unreadCount || 0,
+    config: cfg,
   });
 }
 
@@ -614,6 +507,23 @@ async function affClick(req, res, supabase) {
   if (!refCode) return res.status(400).json({ error: 'ref_code em falta' });
   const ip     = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
   const ipHash = crypto.createHash('sha256').update(ip + refCode).digest('hex').slice(0, 16);
+  // Antifraude: verificar burst de cliques antes de registar
+  const { data: recentClicks } = await supabase.from('affiliate_clicks')
+    .select('id', { count: 'exact' })
+    .eq('ip_hash', ipHash)
+    .gte('created_at', new Date(Date.now() - 3600000).toISOString());
+  const clickCount = recentClicks?.length || 0;
+  if (clickCount >= 30) {
+    // Burst detectado — registar fraude mas retornar ok silenciosamente
+    const { data: aff } = await supabase.from('profiles').select('id').eq('ref_code', refCode).maybeSingle();
+    if (aff) {
+      await supabase.from('affiliate_fraud_flags').insert({
+        affiliate_id: aff.id, flag_type: 'ip_burst',
+        description: 'IP com ' + (clickCount+1) + ' cliques na última hora', severity: 'critical',
+      }).catch(() => {});
+    }
+    return res.status(200).json({ ok: true });
+  }
   const { error } = await supabase.rpc('register_affiliate_click', { p_ref_code: refCode, p_ip_hash: ipHash, p_page: page });
   if (error) console.error('[affClick] error:', error.message);
   return res.status(200).json({ ok: true });
@@ -627,27 +537,84 @@ async function affWithdraw(req, res, supabase) {
   const phone  = (body.phone || '').replace(/\s/g, '');
   const amount = parseInt(body.amount || 0);
   if (!phone || !/^(\+?258)?[0-9]{9}$/.test(phone.replace('+258', '')))
-    return res.status(400).json({ error: 'Número inválido' });
-  const { data: profile } = await supabase.from('profiles').select('aff_balance,is_affiliate').eq('id', user.id).single();
-  if (!profile?.is_affiliate) return res.status(403).json({ error: 'Não é afiliado aprovado' });
+    return res.status(400).json({ error: 'Número M-Pesa inválido' });
+  const { data: profile } = await supabase.from('profiles')
+    .select('aff_balance,is_affiliate,aff_is_blocked,aff_tier').eq('id', user.id).single();
+  if (!profile?.is_affiliate) return res.status(403).json({ error: 'Apenas afiliados aprovados podem levantar' });
+  if (profile.aff_is_blocked) return res.status(403).json({ error: 'Conta suspensa. Contacte o suporte.' });
   const { data: minSetting } = await supabase.from('system_settings').select('value').eq('key', 'aff_min_withdraw').single();
-  const minWithdraw = parseInt(minSetting?.value || '200');
+  let minWithdraw = parseInt(minSetting?.value || '200');
+  // Diamante tem mínimo reduzido
+  if (profile.aff_tier === 'diamante') minWithdraw = Math.max(50, Math.floor(minWithdraw * 0.5));
   if (amount < minWithdraw) return res.status(400).json({ error: `Valor mínimo: ${minWithdraw} MZN` });
   if (amount > (profile.aff_balance || 0)) return res.status(400).json({ error: 'Saldo insuficiente' });
-  const { error } = await supabase.from('affiliate_withdrawals').insert({ affiliate_id: user.id, amount, mpesa_phone: phone, status: 'pending' });
+  // Verificar levantamento pendente em duplicado
+  const { data: pendingW } = await supabase.from('affiliate_withdrawals')
+    .select('id').eq('affiliate_id', user.id).eq('status', 'pending').limit(1);
+  if (pendingW && pendingW.length > 0)
+    return res.status(400).json({ error: 'Já tem um levantamento pendente. Aguarde a conclusão.' });
+  const { error } = await supabase.from('affiliate_withdrawals')
+    .insert({ affiliate_id: user.id, amount, mpesa_phone: phone, status: 'pending' });
   if (error) return res.status(500).json({ error: error.message });
-  await supabase.from('profiles').update({ aff_balance: profile.aff_balance - amount }).eq('id', user.id);
-  return res.status(200).json({ success: true, message: `Pedido de ${amount} MZN submetido. Processado em até 48 horas.` });
+  await supabase.from('profiles').update({ aff_balance: (profile.aff_balance || 0) - amount }).eq('id', user.id);
+  // Notificação
+  await supabase.from('affiliate_notifications').insert({
+    affiliate_id: user.id, type: 'withdrawal',
+    title: '💸 Pedido de Levantamento',
+    body: `Pedido de ${amount} MZN submetido. Processado em até 48h via M-Pesa.`,
+  }).catch(() => {});
+  return res.status(200).json({ success: true, message: `Pedido de ${amount} MZN submetido. Processado em até 48 horas via M-Pesa.` });
 }
 
 async function affCheck(req, res, supabase) {
   const refCode = req.query?.ref || '';
   if (!refCode) return res.status(400).json({ error: 'ref em falta' });
-  const { data } = await supabase.from('profiles').select('full_name,is_affiliate,ref_code').eq('ref_code', refCode).single();
+  const { data } = await supabase.from('profiles')
+    .select('full_name,is_affiliate,ref_code,aff_segment').eq('ref_code', refCode).single();
   if (!data) return res.status(404).json({ error: 'Link inválido' });
-  return res.status(200).json({ valid: true, is_affiliate: data.is_affiliate, name: data.full_name || 'Parceiro MzDocs' });
+  return res.status(200).json({
+    valid: true, is_affiliate: data.is_affiliate,
+    name: data.full_name || 'Parceiro MzDocs',
+    segment: data.aff_segment || 'individual',
+  });
 }
 
+async function affRanking(req, res, supabase) {
+  if (req.method !== 'GET') return res.status(405).end();
+  const month = req.query?.month || new Date().toISOString().slice(0, 7);
+  const { data: ranking } = await supabase.from('affiliate_ranking')
+    .select('affiliate_id,rank_position,conversions,revenue_mzn,commission_mzn,tier')
+    .eq('month', month).order('rank_position', { ascending: true }).limit(20);
+  if (!ranking || !ranking.length) return res.status(200).json({ success: true, ranking: [], month });
+  const ids = ranking.map(r => r.affiliate_id);
+  const { data: profiles } = await supabase.from('profiles')
+    .select('id,full_name,aff_segment').in('id', ids);
+  const pm = {};
+  (profiles || []).forEach(p => { pm[p.id] = p; });
+  return res.status(200).json({
+    success: true, month,
+    ranking: ranking.map(r => ({
+      ...r,
+      name: pm[r.affiliate_id]?.full_name?.split(' ').slice(0,2).join(' ') || 'Parceiro',
+      segment: pm[r.affiliate_id]?.aff_segment || 'individual',
+    })),
+  });
+}
+
+async function affNotifications(req, res, supabase) {
+  const user = await getUser(supabase, req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  if (req.method === 'POST') {
+    // Marcar como lidas
+    await supabase.from('affiliate_notifications')
+      .update({ is_read: true }).eq('affiliate_id', user.id).eq('is_read', false);
+    return res.status(200).json({ success: true });
+  }
+  const { data } = await supabase.from('affiliate_notifications')
+    .select('id,type,title,body,is_read,created_at')
+    .eq('affiliate_id', user.id).order('created_at', { ascending: false }).limit(20);
+  return res.status(200).json({ success: true, notifications: data || [] });
+}
 // ════════════════════════════════════════════════════════════════════════════
 // OCR-ANALYZE — proxy IA (preservado integralmente da v1.0)
 // ════════════════════════════════════════════════════════════════════════════
