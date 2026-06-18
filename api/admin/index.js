@@ -29,26 +29,28 @@ module.exports = async function handler(req, res) {
     : (req.query?.action || req.headers['x-action'] || '');
 
   switch (action) {
-    case 'confirm-payment': return handleConfirmPayment(req, res);
-    case 'confirm-avulso':  return handleConfirmAvulso(req, res);
-    case 'fix-profiles':    return handleFixProfiles(req, res);
-    case 'stats':           return handleStats(req, res);
-    case 'transactions':    return handleTransactions(req, res);
-    case 'settings':        return handleSettings(req, res);
-    case 'audit-log':       return handleAuditLog(req, res);
-    case 'delete-user':     return handleDeleteUser(req, res);
-    case 'analytics':       return handleAnalytics(req, res);
-    case 'feedback':        return handleFeedback(req, res);
-    case 'static-pages':    return handleStaticPages(req, res);
-    case 'delete-document':  return handleDeleteDocument(req, res);
-    case 'documents':       return handleDocuments(req, res);
-    case 'pages':           return handleBlogPages(req, res);
-    case 'generate-page':   return handleGeneratePage(req, res);
-    case 'affiliates':      return handleAffiliates(req, res);
+    case 'confirm-payment':   return handleConfirmPayment(req, res);
+    case 'confirm-avulso':    return handleConfirmAvulso(req, res);
+    case 'fix-profiles':      return handleFixProfiles(req, res);
+    case 'stats':             return handleStats(req, res);
+    case 'transactions':      return handleTransactions(req, res);
+    case 'settings':          return handleSettings(req, res);
+    case 'audit-log':         return handleAuditLog(req, res);
+    case 'delete-user':       return handleDeleteUser(req, res);
+    case 'analytics':         return handleAnalytics(req, res);
+    case 'feedback':          return handleFeedback(req, res);
+    case 'static-pages':      return handleStaticPages(req, res);
+    case 'delete-document':   return handleDeleteDocument(req, res);
+    case 'documents':         return handleDocuments(req, res);
+    case 'pages':             return handleBlogPages(req, res);
+    case 'generate-page':     return handleGeneratePage(req, res);
+    case 'affiliates':        return handleAffiliates(req, res);
+    case 'pending-receipts':  return handlePendingReceipts(req, res);
+    case 'approve-receipt':   return handleApproveReceipt(req, res);
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
-        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','pages','generate-page','affiliates'],
+        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','pages','generate-page','affiliates','pending-receipts','approve-receipt'],
       });
   }
 };
@@ -1327,4 +1329,167 @@ async function _generateStaticPage(page, SITE_URL) {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: `Gerar página: ${page.slug}`, content: Buffer.from(html).toString('base64'), sha }),
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PENDING-RECEIPTS — lista transacções a aguardar revisão manual
+// GET /api/admin/pending-receipts
+// ─────────────────────────────────────────────────────────────────────────────
+async function handlePendingReceipts(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
+  const token = req.headers.authorization?.replace('Bearer ', '').trim();
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    // Buscar transacções com status review_needed ordenadas por data (mais antigas primeiro)
+    const { data, error } = await supabase
+      .from('transactions')
+      .select(`
+        id,
+        reference_id,
+        user_id,
+        package_id,
+        amount,
+        credits,
+        status,
+        phone_number,
+        receipt_confidence,
+        review_reason,
+        created_at,
+        profiles!transactions_user_id_fkey(full_name, email, phone)
+      `)
+      .eq('status', 'review_needed')
+      .order('created_at', { ascending: true })
+      .limit(50);
+
+    if (error) {
+      // Fallback sem join se FK não estiver registada
+      const { data: simple, error: simpleErr } = await supabase
+        .from('transactions')
+        .select('id,reference_id,user_id,package_id,amount,credits,status,phone_number,receipt_confidence,review_reason,created_at')
+        .eq('status', 'review_needed')
+        .order('created_at', { ascending: true })
+        .limit(50);
+      if (simpleErr) throw simpleErr;
+      return res.status(200).json({ success: true, data: simple || [], total: (simple || []).length });
+    }
+
+    return res.status(200).json({ success: true, data: data || [], total: (data || []).length });
+  } catch (err) {
+    console.error('[admin/pending-receipts]', err.message);
+    return res.status(500).json({ error: err.message || 'Erro interno' });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPROVE-RECEIPT — admin aprova manualmente um comprovativo em revisão
+// POST /api/admin/approve-receipt
+// Body: { transactionId, approved: boolean, note?: string }
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleApproveReceipt(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+  const token = req.headers.authorization?.replace('Bearer ', '').trim();
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    let body;
+    try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
+    catch { return res.status(400).json({ error: 'Body JSON inválido' }); }
+
+    const { transactionId, approved, note } = body;
+    if (!transactionId || approved === undefined) {
+      return res.status(400).json({ error: 'transactionId e approved são obrigatórios' });
+    }
+
+    // Buscar transacção
+    const { data: tx, error: txErr } = await supabase
+      .from('transactions')
+      .select('id,user_id,package_id,credits,status,reference_id')
+      .eq('id', transactionId)
+      .in('status', ['review_needed', 'pending'])
+      .single();
+
+    if (txErr || !tx) {
+      return res.status(404).json({ error: 'Transacção não encontrada ou já processada.' });
+    }
+
+    if (!approved) {
+      // REJEITAR
+      await supabase.from('transactions').update({
+        status:              'failed',
+        confirmed_by:        auth.user.id,
+        confirmed_at:        new Date().toISOString(),
+        verification_method: 'manual',
+        review_reason:       note || 'Rejeitado pelo admin',
+      }).eq('id', transactionId);
+
+      // Log de auditoria
+      await supabase.from('admin_audit_log').insert({
+        admin_id: auth.user.id,
+        action:   'reject_receipt',
+        details:  { transactionId, reference_id: tx.reference_id, note: note || '' },
+      }).catch(() => {});
+
+      return res.status(200).json({ success: true, approved: false, message: 'Comprovativo rejeitado.' });
+    }
+
+    // APROVAR
+    const creditsInt = parseInt(tx.credits) || 0;
+    if (creditsInt <= 0) {
+      return res.status(400).json({ error: 'Créditos inválidos na transacção.' });
+    }
+
+    // 1. Atualizar transacção
+    await supabase.from('transactions').update({
+      status:              'confirmed',
+      confirmed_by:        auth.user.id,
+      confirmed_at:        new Date().toISOString(),
+      receipt_verified:    true,
+      verification_method: 'manual',
+      review_reason:       note || null,
+    }).eq('id', transactionId);
+
+    // 2. Adicionar créditos via RPC
+    let newCredits = creditsInt;
+    if (tx.user_id) {
+      const { data: creditData } = await supabase
+        .rpc('add_credits', { user_id: tx.user_id, amount: creditsInt });
+      newCredits = creditData || creditsInt;
+
+      // 3. Registar credit_logs
+      await supabase.from('credit_logs').insert({
+        user_id:        tx.user_id,
+        transaction_id: transactionId,
+        action:         'bonus',
+        credits:        creditsInt,
+        document_type:  null,
+        note:           `Comprovativo aprovado manualmente pelo admin ${auth.user.id.slice(0, 8)} — pacote ${tx.package_id}${note ? ' | ' + note : ''}`,
+      }).catch(e => console.warn('[approve-receipt] credit_logs:', e.message));
+    }
+
+    // 4. Log de auditoria
+    await supabase.from('admin_audit_log').insert({
+      admin_id: auth.user.id,
+      action:   'approve_receipt',
+      details:  { transactionId, reference_id: tx.reference_id, credits: creditsInt, user_id: tx.user_id },
+    }).catch(() => {});
+
+    console.log('[admin/approve-receipt] Aprovado:', transactionId, 'créditos:', creditsInt, 'user:', tx.user_id);
+
+    return res.status(200).json({
+      success:     true,
+      approved:    true,
+      creditsAdded: creditsInt,
+      newCredits,
+      message:     `${creditsInt} créditos adicionados com sucesso.`,
+    });
+
+  } catch (err) {
+    console.error('[admin/approve-receipt]', err.message);
+    return res.status(500).json({ error: err.message || 'Erro interno' });
+  }
 }
