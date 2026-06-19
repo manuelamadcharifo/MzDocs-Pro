@@ -405,8 +405,8 @@ export class PaymentController {
     const phone  = document.getElementById('phoneInput')?.value || '';
 
     confirmBtn.disabled    = true;
-    confirmBtn.textContent = '⏳ A validar comprovativo…';
-    this._showReceiptStatus(statusDiv, 'loading', '🔍 A analisar comprovativo com IA… (pode demorar 10-20 segundos)');
+    confirmBtn.textContent = '⏳ A verificar comprovativo…';
+    this._showReceiptStatus(statusDiv, 'loading', '🔍 A verificar comprovativo… (pode demorar 10-20 segundos)');
 
     try {
       const resp = await fetch('/api/verify-receipt', {
@@ -425,26 +425,33 @@ export class PaymentController {
         }),
       });
 
-      // Tratar erros HTTP antes de tentar parse JSON
+      // Ler JSON independentemente do status HTTP.
+      // 400 pode ser resposta de negócio válida (ex: imagem inválida),
+      // não necessariamente erro de rede.
       let data;
       const contentType = resp.headers.get('content-type') || '';
-      if (!resp.ok) {
-        const errorText = contentType.includes('json')
-          ? (await resp.json().catch(() => ({}))).error
-          : await resp.text().catch(() => '');
-        throw new Error(
-          resp.status === 404
-            ? 'Rota de verificação não encontrada. Verifique o deploy.'
-            : resp.status === 429
-              ? 'Demasiados pedidos. Aguarde 1 minuto.'
-              : errorText || `Erro do servidor (${resp.status})`
-        );
+
+      if (resp.status === 404) {
+        throw new Error('Serviço temporariamente indisponível. Tente de novo em alguns segundos.');
       }
-      try {
-        data = await resp.json();
-      } catch {
-        throw new Error('Resposta inválida do servidor. Tente de novo.');
+      if (resp.status === 429) {
+        throw new Error('Demasiados pedidos. Aguarde 1 minuto e tente de novo.');
       }
+      if (resp.status >= 500) {
+        throw new Error('Erro interno do servidor. Tente de novo ou use o WhatsApp abaixo.');
+      }
+
+      // Para 200, 400 e outros — tentar ler JSON sempre
+      if (contentType.includes('json')) {
+        try { data = await resp.json(); }
+        catch { throw new Error('Resposta inválida. Tente de novo.'); }
+      } else {
+        // Servidor devolveu HTML (ex: erro Vercel) — erro de infra
+        await resp.text(); // consumir body
+        throw new Error('Serviço temporariamente indisponível. Tente de novo.');
+      }
+
+      // ── Tratar todas as respostas de negócio ──────────────────────────
 
       if (data.autoApproved && data.verified) {
         // ✅ Aprovação automática
@@ -457,24 +464,20 @@ export class PaymentController {
         this._sendPushNotification(`+${data.creditsAdded} créditos adicionados ao MzDocs Pro!`);
         setTimeout(() => this.close(), 3000);
 
-      } else if (data.code === 'NOT_A_RECEIPT') {
-        // ❌ Imagem não é comprovativo
-        this._showReceiptStatus(statusDiv, 'error',
-          `❌ <strong>Imagem inválida.</strong> ${data.error || 'Envie o screenshot do comprovativo do M-Pesa, e-Mola ou mKesh após fazer o pagamento.'}`);
-        confirmBtn.textContent = '📷 Escolher outra imagem';
-        confirmBtn.disabled    = false;
-        confirmBtn.style.opacity = '1';
-        // Resetar para permitir nova imagem
+      } else if (data.code === 'NOT_A_RECEIPT' || (data.success === false && data.error)) {
+        // ❌ Imagem não é comprovativo ou inválida — mostrar mensagem clara
+        const userMsg = data.error || 'A imagem enviada não é um comprovativo de transferência. Envie o screenshot do M-Pesa, e-Mola ou mKesh após fazer o pagamento.';
+        this._showReceiptStatus(statusDiv, 'error', `❌ ${userMsg}`);
+        confirmBtn.textContent   = '📷 Escolher outra imagem';
+        confirmBtn.disabled      = true;
+        confirmBtn.style.opacity = '.5';
+        // Resetar área de upload para nova tentativa
         this._receiptBase64 = null;
         this._receiptMime   = null;
-        const preview  = document.getElementById('receiptPreview');
-        const dropZone = document.getElementById('receiptDropZone');
-        const fileInp  = document.getElementById('receiptFileInput');
-        if (preview)  preview.style.display   = 'none';
-        if (dropZone) dropZone.style.display  = 'block';
-        if (fileInp)  fileInp.value           = '';
-        confirmBtn.disabled    = true;
-        confirmBtn.style.opacity = '.5';
+        document.getElementById('receiptPreview') ?.style && (document.getElementById('receiptPreview').style.display  = 'none');
+        document.getElementById('receiptDropZone')?.style && (document.getElementById('receiptDropZone').style.display = 'block');
+        const fi = document.getElementById('receiptFileInput');
+        if (fi) fi.value = '';
 
       } else if (data.nextStep === 'awaiting_review') {
         // ⏳ Revisão manual
@@ -485,25 +488,27 @@ export class PaymentController {
         NotificationView.info('📋 Comprovativo em análise. Receberá os créditos em breve.');
 
       } else if (data.error) {
-        // ❌ Outro erro
-        this._showReceiptStatus(statusDiv, 'error',
-          `❌ ${data.error}`);
-        confirmBtn.textContent = 'Tentar de Novo';
-        confirmBtn.disabled    = false;
+        // ❌ Outro erro de negócio
+        this._showReceiptStatus(statusDiv, 'error', `❌ ${data.error}`);
+        confirmBtn.textContent   = 'Tentar de Novo';
+        confirmBtn.disabled      = false;
         confirmBtn.style.opacity = '1';
 
       } else {
         this._showReceiptStatus(statusDiv, 'pending', data.message || 'A processar…');
-        confirmBtn.textContent = 'Confirmar Pagamento';
-        confirmBtn.disabled    = false;
+        confirmBtn.textContent   = 'Confirmar Pagamento';
+        confirmBtn.disabled      = false;
         confirmBtn.style.opacity = '1';
       }
 
     } catch (err) {
+      // Apenas erros reais de rede/infra chegam aqui
       console.error('[PaymentController] _submitReceipt:', err);
       this._showReceiptStatus(statusDiv, 'error',
-        '❌ Erro de ligação. Verifique a internet e tente de novo, ou use o WhatsApp.');
-      confirmBtn.textContent = 'Tentar de Novo';
+        `❌ ${err.message || 'Erro de ligação. Verifique a internet e tente de novo.'}`);
+      confirmBtn.textContent   = 'Tentar de Novo';
+      confirmBtn.disabled      = false;
+      confirmBtn.style.opacity = '1';
       confirmBtn.disabled    = false;
       confirmBtn.style.opacity = '1';
     }
