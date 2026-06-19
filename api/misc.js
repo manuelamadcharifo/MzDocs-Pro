@@ -221,7 +221,6 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
       code:         'NOT_A_RECEIPT',
     };
   }
-
   // ── 4. Validações de negócio ───────────────────────────────────────────
   const pkg = PACKAGES[packageId];
 
@@ -403,7 +402,9 @@ async function handleVerifyReceipt(req, res) {
       wallet: wallet || 'móvel',
       userId, transactionId, packageId,
     });
-    return res.status(result.success === false ? 400 : 200).json(result);
+    // Sempre 200 — success:false é resposta de negócio, não erro HTTP.
+    // O frontend distingue pelos campos success/code/nextStep.
+    return res.status(200).json(result);
   } catch (err) {
     console.error('[verify-receipt] erro inesperado:', err.message);
     return res.status(500).json({ error: 'Erro interno. Tente novamente.' });
