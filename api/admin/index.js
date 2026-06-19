@@ -548,6 +548,11 @@ async function handleTransactions(req, res) {
       confirmed_by,
       confirmed_at,
       created_at,
+      receipt_hash,
+      receipt_verified,
+      receipt_confidence,
+      verification_method,
+      review_reason,
       profiles!transactions_user_id_fkey(full_name, email, phone)
     `, { count: 'exact' });
 
