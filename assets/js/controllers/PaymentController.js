@@ -202,7 +202,7 @@ export class PaymentController {
       if (receiverEl) {
         receiverEl.innerHTML =
           `<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:.82rem;">` +
-          `<span style="color:#166534;font-weight:700;">📲 Recebedor (M-Pesa / e-Mola / mKesh):</span><br>` +
+          `<span style="color:#166534;font-weight:700;">📲 Recebedor (M-Pesa):</span><br>` +
           `<span style="font-size:1rem;font-weight:800;color:#15803d;letter-spacing:.5px;">Manuel Amad Charifo - 858695506</span><br>` +
           `<span style="color:#6b7280;font-size:.78rem;">Verifique o nome antes de confirmar o pagamento</span>` +
           `</div>`;
