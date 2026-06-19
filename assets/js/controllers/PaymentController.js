@@ -235,18 +235,22 @@ export class PaymentController {
 
     try {
       const userId = authManager?.user?.id || null;
-      // Fase 1: apenas registar a transacção (sem imagem ainda)
       const result = await this.payment.processPayment(this.selectedPkg, phone, userId);
 
       this._currentTxId = result.transactionId || null;
       this._currentRef  = result.referenceId   || null;
       this._waLink      = result.whatsappLink   || null;
 
-      // Mostrar área de upload do comprovativo
+      // Mostrar área de upload (tanto pedido novo como duplicado pendente)
       this._showReceiptUpload(pkg, result);
 
-      btn.textContent = 'Confirmar Pagamento';
-      btn.disabled    = true; // desactivar até imagem ser carregada
+      if (result.duplicate) {
+        // Pedido duplicado — reutilizar transacção existente
+        btn.textContent = 'Confirmar Pagamento';
+      } else {
+        btn.textContent = 'Confirmar Pagamento';
+      }
+      btn.disabled = true; // espera imagem
     } catch (err) {
       NotificationView.error('❌ ' + (err.message || 'Erro no pagamento'));
       btn.disabled    = false;
