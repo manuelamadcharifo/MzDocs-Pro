@@ -201,10 +201,14 @@ export class PaymentController {
       const receiverEl = document.getElementById('payReceiverInfo');
       if (receiverEl) {
         receiverEl.innerHTML =
-          `<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.82rem;">` +
+          `<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:.82rem;">` +
           `<span style="color:#166534;font-weight:700;">📲 Recebedor (M-Pesa / e-Mola / mKesh):</span><br>` +
           `<span style="font-size:1rem;font-weight:800;color:#15803d;letter-spacing:.5px;">Manuel Amad Charifo</span><br>` +
           `<span style="color:#6b7280;font-size:.78rem;">Verifique o nome antes de confirmar o pagamento</span>` +
+          `</div>` +
+          `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;font-size:.78rem;color:#1e40af;margin-bottom:4px;">` +
+          `⚡ <strong>Confirmação automática em 2-5 minutos</strong> após envio do comprovativo.<br>` +
+          `Em casos raros, a equipa verifica manualmente em até 15 minutos.` +
           `</div>`;
       }
     }
@@ -266,7 +270,7 @@ export class PaymentController {
           ✅ Pedido registado! Referência: <span style="color:#2563eb;font-family:monospace;">${result.referenceId || ''}</span>
         </p>
         <p style="font-size:.8rem;color:#6b7280;margin-bottom:10px;">
-          Faça o pagamento de <strong>${pkg.price} MZN</strong> e depois envie o comprovativo abaixo para confirmação automática (2-5 min).
+          Faça a transferência de <strong>${pkg.price} MZN</strong> para o número acima e depois envie o screenshot do comprovativo. A confirmação é automática em <strong>2-5 minutos</strong>.
         </p>
 
         <!-- Área de upload drag & drop -->
@@ -276,10 +280,10 @@ export class PaymentController {
         ">
           <div style="font-size:1.6rem;margin-bottom:4px;">📷</div>
           <p style="margin:0;font-size:.82rem;color:#1d4ed8;font-weight:600;">
-            Toque para enviar comprovativo
+            Toque para enviar screenshot do comprovativo
           </p>
           <p style="margin:2px 0 0;font-size:.75rem;color:#6b7280;">
-            JPEG ou PNG, máx 2MB
+            Screenshot do M-Pesa, e-Mola ou mKesh · JPEG/PNG · máx 2MB
           </p>
           <input type="file" id="receiptFileInput" accept="image/jpeg,image/png,image/webp"
             style="position:absolute;opacity:0;width:0;height:0;">
@@ -309,7 +313,7 @@ export class PaymentController {
           <p style="font-size:.75rem;color:#9ca3af;margin-bottom:4px;">Problemas com o upload?</p>
           <a id="receiptWaFallback" href="${result.whatsappLink || '#'}" target="_blank"
             style="font-size:.78rem;color:#25d366;font-weight:600;text-decoration:none;">
-            📱 Enviar pelo WhatsApp em vez disso
+            📱 Enviar screenshot pelo WhatsApp em vez disso
           </a>
         </div>
       </div>
@@ -448,14 +452,29 @@ export class PaymentController {
           `✅ Pagamento confirmado! <strong>+${data.creditsAdded} créditos</strong> adicionados à sua conta.`);
         confirmBtn.textContent = '✅ Confirmado!';
 
-        // Atualizar créditos no UI sem reload
         await this.creditModel._syncFromServer().catch(() => {});
         NotificationView.success(`✅ +${data.creditsAdded} créditos adicionados!`);
-
-        // Notificação push via Service Worker
         this._sendPushNotification(`+${data.creditsAdded} créditos adicionados ao MzDocs Pro!`);
-
         setTimeout(() => this.close(), 3000);
+
+      } else if (data.code === 'NOT_A_RECEIPT') {
+        // ❌ Imagem não é comprovativo
+        this._showReceiptStatus(statusDiv, 'error',
+          `❌ <strong>Imagem inválida.</strong> ${data.error || 'Envie o screenshot do comprovativo do M-Pesa, e-Mola ou mKesh após fazer o pagamento.'}`);
+        confirmBtn.textContent = '📷 Escolher outra imagem';
+        confirmBtn.disabled    = false;
+        confirmBtn.style.opacity = '1';
+        // Resetar para permitir nova imagem
+        this._receiptBase64 = null;
+        this._receiptMime   = null;
+        const preview  = document.getElementById('receiptPreview');
+        const dropZone = document.getElementById('receiptDropZone');
+        const fileInp  = document.getElementById('receiptFileInput');
+        if (preview)  preview.style.display   = 'none';
+        if (dropZone) dropZone.style.display  = 'block';
+        if (fileInp)  fileInp.value           = '';
+        confirmBtn.disabled    = true;
+        confirmBtn.style.opacity = '.5';
 
       } else if (data.nextStep === 'awaiting_review') {
         // ⏳ Revisão manual
@@ -463,17 +482,17 @@ export class PaymentController {
           `⏳ ${data.message || 'Comprovativo recebido. A equipa irá verificar em até 15 minutos.'}`);
         confirmBtn.textContent = '⏳ Em revisão…';
         confirmBtn.disabled    = true;
-        NotificationView.info('📋 Comprovativo enviado para revisão. Receberá os créditos em breve.');
+        NotificationView.info('📋 Comprovativo em análise. Receberá os créditos em breve.');
 
       } else if (data.error) {
-        // ❌ Erro / comprovativo inválido
+        // ❌ Outro erro
         this._showReceiptStatus(statusDiv, 'error',
-          `❌ ${data.error || 'Comprovativo inválido. Tente uma foto mais nítida.'}`);
+          `❌ ${data.error}`);
         confirmBtn.textContent = 'Tentar de Novo';
         confirmBtn.disabled    = false;
         confirmBtn.style.opacity = '1';
+
       } else {
-        // Fallback
         this._showReceiptStatus(statusDiv, 'pending', data.message || 'A processar…');
         confirmBtn.textContent = 'Confirmar Pagamento';
         confirmBtn.disabled    = false;
