@@ -203,12 +203,8 @@ export class PaymentController {
         receiverEl.innerHTML =
           `<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:.82rem;">` +
           `<span style="color:#166534;font-weight:700;">📲 Recebedor (M-Pesa / e-Mola / mKesh):</span><br>` +
-          `<span style="font-size:1rem;font-weight:800;color:#15803d;letter-spacing:.5px;">Manuel Amad Charifo</span><br>` +
+          `<span style="font-size:1rem;font-weight:800;color:#15803d;letter-spacing:.5px;">Manuel Amad Charifo - 858695506</span><br>` +
           `<span style="color:#6b7280;font-size:.78rem;">Verifique o nome antes de confirmar o pagamento</span>` +
-          `</div>` +
-          `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;font-size:.78rem;color:#1e40af;margin-bottom:4px;">` +
-          `⚡ <strong>Confirmação automática em 2-5 minutos</strong> após envio do comprovativo.<br>` +
-          `Em casos raros, a equipa verifica manualmente em até 15 minutos.` +
           `</div>`;
       }
     }
