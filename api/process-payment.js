@@ -2,12 +2,11 @@
 //
 // ALTERAÇÕES v5.0:
 //  1. NOVO: campo opcional receiptImage (base64) no body.
-//     Se presente, chama verifyReceiptInternal() de misc.js directamente
-//     (sem HTTP round-trip) para tentar aprovação automática via IA visão.
-//  2. Se receiptImage ausente, mantém fluxo anterior: status "pending",
-//     utilizador envia comprovativo pelo WhatsApp.
-//  3. Resposta inclui nextStep: "upload_receipt" | "completed" | "awaiting_review".
-//  4. Mantidas todas as correcções da v4.0 (rate limit, duplicate check, REST puro).
+//     Se presente, chama verifyReceiptInternal() de misc.js directamente.
+//  2. FIX: duplicate check (409) agora devolve transactionId do registo existente.
+//  3. Se receiptImage ausente → status "pending", utilizador faz upload a seguir.
+//  4. Resposta inclui nextStep: "upload_receipt" | "completed" | "awaiting_review".
+//  5. Mantidas todas as correcções da v4.0 (rate limit, REST puro, erros sanitizados).
 
 const { insert, restRequest, getUserFromToken } = require('./_lib/supabaseAdmin');
 const { verifyReceiptInternal } = require('./misc');
@@ -107,12 +106,12 @@ module.exports = async function handler(req, res) {
   try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
   catch { return res.status(400).json({ error: 'Body JSON inválido' }); }
 
-  const packageId  = String(body.packageId  || '').toLowerCase().trim();
-  const rawPhone   = String(body.phone || body.phoneNumber || '').trim();
-  const mode       = String(body.mode  || 'manual').toLowerCase();
-  const rawUserId  = body.userId || null;
-  const receiptImage     = body.receiptImage     || null; // base64, opcional
-  const receiptMimeType  = body.receiptMimeType  || 'image/jpeg';
+  const packageId        = String(body.packageId  || '').toLowerCase().trim();
+  const rawPhone         = String(body.phone || body.phoneNumber || '').trim();
+  const mode             = String(body.mode  || 'manual').toLowerCase();
+  const rawUserId        = body.userId || null;
+  const receiptImage     = body.receiptImage    || null; // base64, opcional
+  const receiptMimeType  = body.receiptMimeType || 'image/jpeg';
 
   // ── Validações ────────────────────────────────────────────────────────────
   if (!rawPhone) {
@@ -154,12 +153,22 @@ module.exports = async function handler(req, res) {
       if (userId) {
         const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
         const existing = await restRequest(
-          `transactions?user_id=eq.${userId}&package_id=eq.${packageId}&status=eq.pending&created_at=gte.${encodeURIComponent(cutoff)}&select=reference_id&limit=1`
+          `transactions?user_id=eq.${userId}&package_id=eq.${packageId}&status=in.(pending,review_needed)&created_at=gte.${encodeURIComponent(cutoff)}&select=id,reference_id&limit=1`
         ).catch(() => null);
         if (Array.isArray(existing) && existing.length > 0) {
-          return res.status(409).json({
-            error: 'Já tem um pedido de pagamento pendente para este pacote. Verifique o WhatsApp ou aguarde 30 minutos.',
-            referenceId: existing[0].reference_id,
+          // FIX v5.0: devolve transactionId para que o frontend possa fazer upload
+          // do comprovativo sem criar uma nova transacção duplicada.
+          const existingTx  = existing[0];
+          const waMsg = encodeURIComponent(`*MzDocs Pro — Pagamento Pendente*\nReferência: ${existingTx.reference_id}\nPackage: ${packageId}`);
+          return res.status(200).json({
+            success:       true,
+            mode:          'manual',
+            duplicate:     true,
+            referenceId:   existingTx.reference_id,
+            transactionId: existingTx.id,
+            nextStep:      'upload_receipt',
+            message:       'Já tem um pedido pendente para este pacote. Envie o comprovativo abaixo para confirmar.',
+            whatsappLink:  `https://wa.me/${WA_NUMBER}?text=${waMsg}`,
           });
         }
       }
@@ -213,21 +222,14 @@ module.exports = async function handler(req, res) {
       `Telemóvel: ${normalizedPhone} (${wallet})\n\n` +
       `Segue o comprovativo de pagamento.`
     );
+    const whatsappLink = `https://wa.me/${WA_NUMBER}?text=${waMessage}`;
 
-    // ── Verificação automática via IA (se receiptImage enviado) ──────────
+    // ── Verificação automática via IA (se receiptImage enviado junto) ─────
     if (receiptImage && transactionId) {
-      console.log('[process-payment] receiptImage presente — a tentar verificação automática...');
-
-      // Validação rápida do tamanho antes de chamar IA (~2MB em base64 = ~2.74MB string)
       const MAX_B64 = 2 * 1024 * 1024 * 1.37;
       if (receiptImage.length > MAX_B64) {
-        return res.status(400).json({
-          success: false,
-          error:   'Imagem demasiado grande (máx 2MB). Reduza o tamanho e tente de novo.',
-          referenceId,
-        });
+        return res.status(400).json({ error: 'Imagem demasiado grande (máx 2MB).', referenceId, transactionId });
       }
-
       let verifyResult;
       try {
         verifyResult = await verifyReceiptInternal({
@@ -236,34 +238,26 @@ module.exports = async function handler(req, res) {
           reference:     referenceId,
           phone:         normalizedPhone,
           amount:        pkg.price,
-          wallet:        wallet,
-          userId:        userId,
-          transactionId: transactionId,
-          packageId:     packageId,
+          wallet,
+          userId,
+          transactionId,
+          packageId,
         });
-      } catch (verifyErr) {
-        console.error('[process-payment] verifyReceiptInternal crash:', verifyErr.message);
-        verifyResult = { success: true, verified: false, autoApproved: false, nextStep: 'awaiting_review', message: 'Erro na verificação automática. A equipa irá confirmar em 15 min.' };
+      } catch (e) {
+        verifyResult = { success: true, verified: false, autoApproved: false, nextStep: 'awaiting_review', message: 'Erro na verificação. A equipa confirma em 15 min.' };
       }
-
       return res.status(200).json({
-        success:      true,
-        mode:         'auto_verify',
-        referenceId,
-        transactionId,
-        package:      pkg,
-        phone:        normalizedPhone,
-        wallet,
+        success: true, mode: 'auto_verify', referenceId, transactionId,
+        package: pkg, phone: normalizedPhone, wallet, whatsappLink,
         autoVerified: verifyResult.autoApproved || false,
         verified:     verifyResult.verified     || false,
         creditsAdded: verifyResult.creditsAdded || 0,
         nextStep:     verifyResult.nextStep     || 'awaiting_review',
         message:      verifyResult.message      || 'A processar pagamento.',
-        whatsappLink: `https://wa.me/${WA_NUMBER}?text=${waMessage}`, // fallback sempre disponível
       });
     }
 
-    // ── Sem imagem: fluxo manual original ────────────────────────────────
+    // ── Sem imagem: registar pedido e pedir upload ─────────────────────────
     return res.status(200).json({
       success:      true,
       mode:         'manual',
@@ -274,8 +268,8 @@ module.exports = async function handler(req, res) {
       wallet,
       autoVerified: false,
       nextStep:     'upload_receipt',
-      whatsappLink: `https://wa.me/${WA_NUMBER}?text=${waMessage}`,
-      message:      'Pedido registado. Envie o comprovativo abaixo ou pelo WhatsApp.',
+      whatsappLink,
+      message:      'Pedido registado. Envie o comprovativo abaixo para confirmação automática.',
     });
   }
 
