@@ -122,16 +122,17 @@ const PACKAGES = {
 };
 
 const RECEIPT_PROMPT = (wallet) =>
-  `Analisa este comprovativo de transferência ${wallet}. ` +
-  `Extrai os dados e responde APENAS em JSON válido (sem markdown, sem texto extra): ` +
-  `{"valid":boolean,"amount":number,"reference":"string","recipient_phone":"string","status":"string","transaction_date":"string","confidence":0.0}. ` +
-  `"valid" é true se a transferência foi bem-sucedida. ` +
-  `"status" deve ser um de: SUCESSO, CONFIRMADO, PENDENTE, FALHA. ` +
-  `"confidence" é a tua certeza de 0.0 a 1.0 de que extraíste os dados correctamente. ` +
-  `"amount" é o valor em MZN como número. ` +
-  `"reference" é o código/número de referência da transacção. ` +
-  `"recipient_phone" é o número do destinatário. ` +
-  `"transaction_date" é a data/hora no formato ISO 8601.`;
+  `És um verificador de comprovativos de transferência bancária moçambicana (M-Pesa, e-Mola, mKesh). ` +
+  `Analisa esta imagem com MUITO RIGOR. ` +
+  `PRIMEIRO verifica: esta imagem É um comprovativo/recibo de transferência de dinheiro? ` +
+  `Se NÃO for (ex: selfie, paisagem, documento qualquer, screenshot aleatório, imagem escura, imagem ilegível, etc.), ` +
+  `devolve imediatamente: {"valid":false,"amount":0,"reference":"","recipient_phone":"","status":"NAO_COMPROVATIVO","transaction_date":"","confidence":0.0,"rejection_reason":"Imagem não é um comprovativo de transferência"}. ` +
+  `Se FOR um comprovativo ${wallet}, extrai os dados e responde APENAS em JSON válido (sem markdown, sem texto extra): ` +
+  `{"valid":boolean,"amount":number,"reference":"string","recipient_phone":"string","status":"string","transaction_date":"string","confidence":0.0,"rejection_reason":""}. ` +
+  `"status" deve ser EXACTAMENTE um de: SUCESSO, CONFIRMADO, PENDENTE, FALHA. ` +
+  `"confidence" é a tua certeza de 0.0 a 1.0 de que extraíste os dados correctamente — se a imagem estiver desfocada ou ilegível, usa 0.0. ` +
+  `"amount" é o valor em MZN como número. "reference" é o código de transacção. ` +
+  `"rejection_reason" é vazio se válido, ou o motivo de rejeição se inválido.`;
 
 /**
  * verifyReceiptInternal — lógica de verificação reutilizável.
@@ -201,13 +202,25 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
     };
   }
 
-  const confidence = Number(aiResult.confidence) || 0;
-  const aiAmount   = Number(aiResult.amount) || 0;
-  const aiStatus   = String(aiResult.status || '').toUpperCase();
-  const aiRef      = String(aiResult.reference || '');
-  const aiDate     = aiResult.transaction_date || '';
+  const confidence      = Number(aiResult.confidence) || 0;
+  const aiAmount        = Number(aiResult.amount) || 0;
+  const aiStatus        = String(aiResult.status || '').toUpperCase();
+  const aiRef           = String(aiResult.reference || '');
+  const aiDate          = aiResult.transaction_date || '';
+  const rejectionReason = aiResult.rejection_reason || '';
 
-  console.log('[verify-receipt] IA resultado:', { confidence, aiAmount, aiStatus, aiRef });
+  console.log('[verify-receipt] IA resultado:', { confidence, aiAmount, aiStatus, aiRef, rejectionReason });
+
+  // ── Rejeição explícita: não é comprovativo ─────────────────────────────
+  if (aiStatus === 'NAO_COMPROVATIVO' || (rejectionReason && confidence === 0)) {
+    return {
+      success:      false,
+      verified:     false,
+      autoApproved: false,
+      error:        rejectionReason || 'A imagem enviada não é um comprovativo de transferência. Por favor envie o screenshot do M-Pesa, e-Mola ou mKesh após o pagamento.',
+      code:         'NOT_A_RECEIPT',
+    };
+  }
 
   // ── 4. Validações de negócio ───────────────────────────────────────────
   const pkg = PACKAGES[packageId];
