@@ -935,30 +935,51 @@ export class DocumentController {
  _applyTemplate(tpl) {
   this._activeTemplate = tpl;
   const content = documentState.currentContent || this.docModel.content;
-  if (!content) return;
+  if (!content) { NotificationView.warn('⚠️ Nenhum documento para aplicar o modelo.'); return; }
+
+  // Modelo próprio (PDF/Word enviado pelo utilizador) — não tem htmlTemplate
+  // O template já foi guardado pelo TemplateController; apenas notificar.
+  if (tpl._isOwnModel || !tpl.htmlTemplate) {
+    // Manter o preview actual com o CSS base do modelo
+    if (tpl.css) {
+      DocumentView._activeTemplateCss = tpl.css;
+      DocumentView._renderResultFrame('pdf', content);
+    }
+    NotificationView.success('✅ Modelo próprio aplicado! O próximo documento usará este layout.');
+    return;
+  }
+
   try {
-    // Preencher o template com os dados reais do documento
-    const filled = templatePicker._fillTemplate(
-      tpl.htmlTemplate,
-      templatePicker._extractRealData(content, this.docModel.service)
-    );
+    const realData = templatePicker._extractRealData(content, this.docModel.service);
+    const filled   = templatePicker._fillTemplate(tpl.htmlTemplate, realData);
+
+    if (!filled || filled.trim().length < 20) {
+      // Fallback: mostrar conteúdo markdown com CSS do template
+      console.warn('[_applyTemplate] HTML preenchido vazio — a usar fallback markdown');
+      DocumentView._activeTemplateCss = tpl.css || null;
+      DocumentView._renderResultFrame('pdf', content);
+      NotificationView.success('✅ Estilo do modelo aplicado!');
+      return;
+    }
+
     this._activeTemplateHtml = filled;
 
-    // FIX: actualizar o preview principal com o HTML e CSS do template.
-    // Antes apenas guardava _activeTemplateHtml sem re-renderizar o iframe.
-    // Agora passa o CSS do template para renderResult que o injeta no iframe.
+    // Actualizar preview principal com o HTML + CSS do template
+    // templateCss é passado para _activeTemplateCss dentro de renderResult
     DocumentView.renderResult(
-      filled,               // conteúdo já em HTML com o layout do template
+      filled,
       this.docModel,
       this.creditModel.value,
       this.docModel.model,
-      tpl.css || null       // CSS do template para o iframe
+      tpl.css || null
     );
 
     NotificationView.success('✅ Modelo aplicado!');
   } catch (e) {
     console.error('[_applyTemplate]', e);
-    NotificationView.error('Erro ao aplicar modelo. Tente de novo.');
+    // Fallback seguro: re-renderizar com o conteúdo original
+    DocumentView._renderResultFrame('pdf', content);
+    NotificationView.error('Não foi possível aplicar o modelo. A mostrar conteúdo original.');
   }
  }
 
