@@ -384,7 +384,14 @@ export class HistoryController {
     }
 
     // ── 4. Renderizar ────────────────────────────────────────────────────────
+    // CORRIGIDO: abrir o modal ANTES de renderResult(). Antes, o preview A4
+    // era renderizado enquanto o overlay ainda estava com display:none —
+    // o contentor tinha clientWidth 0 e as folhas ficavam com escala 0
+    // (invisíveis), mesmo depois do modal abrir. Abrir primeiro garante que
+    // o A4Renderer já vê a largura real do contentor.
     import('../views/Views.js').then(({ DocumentView, ModalView }) => {
+      ModalView.open('resultOverlay');
+
       const svc = { title: doc.title || doc.service_type };
       DocumentView.renderResult(doc.content, svc, null, doc.model_used || '');
 
@@ -393,7 +400,6 @@ export class HistoryController {
       if (meta)  meta.innerHTML = `<span>📁 Do arquivo · ${new Date(doc.created_at).toLocaleDateString('pt-MZ')}</span>`;
       if (model) model.textContent = doc.model_used || '';
 
-      ModalView.open('resultOverlay');
       ctrl?._bindEditBtn?.();
     });
   }
