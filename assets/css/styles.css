@@ -321,22 +321,32 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 #resultSheet {
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* o scroll fica dentro do preview, não no sheet */
+  /* max-height já vem de .sheet.tall (96svh) — manter */
+  overflow: hidden;
 }
-/* O preview ocupa todo o espaço sobrante entre o header e a barra de botões */
-#resPreview {
+/* Header e meta nunca encolhem */
+#resultSheet .result-hdr,
+#resultSheet .res-meta {
+  flex-shrink: 0;
+}
+/* Preview ocupa todo o espaço sobrante */
+#resultSheet #resPreview {
   flex: 1 1 0;
-  min-height: 0;     /* necessário para flex funcionar em iOS */
+  min-height: 120px; /* garante visibilidade mínima */
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-/* A barra de botões fica sempre colada ao fundo, nunca cortada */
-.res-actions {
-  flex-shrink: 0;
+/* Wrap do A4: scroll interno, ocupa o espaço do preview */
+#resultSheet .res-a4-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto !important; /* anular qualquer height fixo do JS */
 }
-.result-hdr, .res-meta {
+/* Barra de botões sempre visível — nunca empurrada para fora */
+#resultSheet .res-actions {
   flex-shrink: 0;
+  position: relative; /* garante visibilidade mesmo sem flex */
 }
 
 .result-hdr{display:flex;align-items:center;gap:10px;padding:18px 18px 12px;border-bottom:1px solid var(--border)}
@@ -350,16 +360,16 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .res-tab{padding:5px 11px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;transition:all 0.15s;}
 .res-tab.active{background:#07101F;color:#fff;border-color:#07101F;}
 .res-preview-stats{font-size:11px;color:#94a3b8;font-weight:600;}
-/* Frame A4 no modal de resultado — ocupa todo o espaço disponível com scroll interno */
+/* Frame A4 no modal de resultado — scroll interno, altura adaptável */
 .res-a4-wrap{
-  flex:1 1 0;
-  min-height:0;
-  overflow:auto;
-  display:flex;
-  justify-content:center;
-  padding:16px;
-  background:#d1d5db;
-  -webkit-overflow-scrolling:touch;
+  overflow: auto;
+  min-height: 200px;
+  max-height: 55svh; /* nunca ocupa mais de 55% da viewport, deixando espaço para botões */
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: #d1d5db;
+  -webkit-overflow-scrolling: touch;
 }
 /* O iframe é escalado via JS para caber na largura do contentor mas mantém proporção A4 */
 .res-a4-frame{
