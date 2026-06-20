@@ -121,8 +121,14 @@ async function handleSignup(req, res) {
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedName  = (fullName || '').trim();
 
-  if (!SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-    return res.status(503).json({ error: 'Supabase não configurado no servidor' });
+  // Verificar env vars antes de qualquer chamada
+  if (!SUPABASE_URL) {
+    console.error('[auth/signup] SUPABASE_URL não configurado');
+    return res.status(503).json({ error: 'Serviço temporariamente indisponível. Tente de novo em alguns minutos.' });
+  }
+  if (!process.env.SUPABASE_ANON_KEY) {
+    console.error('[auth/signup] SUPABASE_ANON_KEY não configurado nas variáveis de ambiente do Vercel');
+    return res.status(503).json({ error: 'Serviço temporariamente indisponível. Tente de novo em alguns minutos.' });
   }
 
   try {
