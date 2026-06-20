@@ -195,14 +195,10 @@ export const DocumentView = {
     // CORRIGIDO: guardar templateCss activo para usar no _renderResultFrame
     this._activeTemplateCss = templateCss || null;
 
-    // svc pode ser uma string (título) ou um objecto docModel — normalizar
-    const svcTitle = (typeof svc === 'string') ? svc
-      : (svc?.title || svc?.service || '');
-
     // CORRIGIDO: "null créditos restantes" — credits pode ser null quando vem do histórico
     const creditsLabel = (credits != null && credits !== '') ? `⚡ ${credits} créditos restantes &nbsp;|&nbsp; ` : '';
     document.getElementById('resMeta').innerHTML =
-      `📄 ${svcTitle} &nbsp;|&nbsp; ${creditsLabel}🕐 ${new Date().toLocaleTimeString('pt')}`;
+      `📄 ${svc.title} &nbsp;|&nbsp; ${creditsLabel}🕐 ${new Date().toLocaleTimeString('pt')}`;
 
     const previewContainer = document.getElementById('resPreview');
     if (!previewContainer) return;
@@ -243,87 +239,78 @@ export const DocumentView = {
     });
   },
 
+  // ── Escalar o iframe A4 para caber no contentor sem distorcer ──────────
   _scaleResultFrame() {
     const wrap   = document.getElementById('resA4Wrap');
     const scaler = document.getElementById('resA4Scaler');
     const frame  = document.getElementById('resPreviewFrame');
     if (!wrap || !scaler || !frame) return;
-
-    // Largura disponível menos padding (16px × 2)
     const wrapW = Math.max(100, wrap.clientWidth - 32);
-    const a4W   = 794;  // 210mm @ 96dpi
+    const a4W   = 794;
     const scale = Math.min(1, wrapW / a4W);
-
+    const a4H   = 1123;
     frame.style.transform       = `scale(${scale})`;
     frame.style.transformOrigin = 'top left';
-
-    // Ajustar o scaler: largura e altura escaladas
-    const a4H = 1123; // 297mm @ 96dpi
     scaler.style.width  = Math.ceil(a4W * scale) + 'px';
     scaler.style.height = Math.ceil(a4H * scale) + 'px';
-    // Nunca definir altura no wrap — o CSS flex controla
+    // NUNCA forçar altura no wrap — o flex CSS controla
   },
 
   _renderResultFrame(format, content) {
     const frame = document.getElementById('resPreviewFrame');
     if (!frame) return;
 
-    // Se receber HTML completo de um template (começa com '<')
-    // pode já ter estilos embutidos — verificar se é documento completo
-    const trimmed   = (content || '').trimStart();
-    const isFullDoc = trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html');
-    const isRawHTML = trimmed.startsWith('<') && !isFullDoc;
+    // ── Detecção automática HTML vs Markdown ────────────────────────────────
+    // Se o conteúdo começa com '<' é HTML estruturado gerado pelo htmlTemplate.
+    // Usar directamente no iframe sem passar pelo conversor md→html.
+    const isRawHTML = content && content.trimStart().startsWith('<');
 
-    let pageHtml;
-
-    if (isFullDoc) {
-      // Documento HTML completo — usar directamente
-      pageHtml = content;
-
-    } else if (isRawHTML) {
-      // HTML de template (div/section/etc.) — envolver com CSS do template
-      const templateCss = this._activeTemplateCss || 'body{font-family:Calibri,Arial,sans-serif;padding:0;margin:0;}';
-      pageHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>*{box-sizing:border-box;}${templateCss}</style>
-</head><body>${content}</body></html>`;
-
+    let bodyHTML;
+    if (isRawHTML) {
+      bodyHTML = content;
     } else {
-      // Markdown — converter e aplicar CSS de formato
       const converted = this._markdownToHTML(content);
-      const bodyHTML  = converted.replace('<div class="md-preview">', '').replace(/<\/div>$/, '');
-
-      let css;
-      if (format === 'word') {
-        css = `body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.15;color:#000;padding:18mm;}
-h1{font-size:16pt;color:#2E74B5;margin-bottom:12pt;}
-h2{font-size:13pt;color:#2E74B5;margin-top:10pt;margin-bottom:6pt;}
-h3{font-size:12pt;font-weight:bold;margin-top:8pt;}
-p{margin-bottom:7pt;}
-ul,ol{margin:5pt 0 5pt 18pt;}li{margin-bottom:2pt;}
-table{width:100%;border-collapse:collapse;margin:8pt 0;}
-td,th{border:1px solid #BFBFBF;padding:4pt 6pt;}
-th{background:#D9E2F3;color:#1F3864;font-weight:bold;}
-strong{font-weight:bold;}em{font-style:italic;}`;
-      } else if (format === 'text') {
-        css = `body{font-family:monospace;font-size:11pt;line-height:1.6;color:#1e293b;padding:16px;white-space:pre-wrap;}h1,h2,h3{font-weight:bold;}`;
-      } else {
-        // PDF (default) — usar CSS do template activo ou Times New Roman
-        css = this._activeTemplateCss ||
-          `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:18mm 18mm 14mm;}
-h1{font-size:17pt;text-align:center;margin-bottom:14pt;font-weight:bold;}
-h2{font-size:13pt;font-weight:bold;margin-top:12pt;margin-bottom:6pt;border-bottom:1px solid #bbb;padding-bottom:2pt;}
-h3{font-size:12pt;font-weight:bold;margin-top:8pt;}
-p{margin-bottom:8pt;text-align:justify;}
-ul,ol{margin:6pt 0 6pt 18pt;}li{margin-bottom:2pt;}
-table{width:100%;border-collapse:collapse;margin:8pt 0;}
-td,th{border:1px solid #000;padding:4pt 6pt;font-size:11pt;}
-th{background:#f0f0f0;font-weight:bold;}
-strong{font-weight:bold;}em{font-style:italic;}hr{border:none;border-top:1px solid #888;margin:10pt 0;}`;
-      }
-      pageHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}${css}</style></head><body>${bodyHTML}</body></html>`;
+      bodyHTML = converted.replace('<div class="md-preview">', '').replace('</div>', '');
     }
 
-    // Injectar no iframe
+    // ── Construir CSS para o formato pedido ────────────────────────────────
+    let css = '';
+    if (isRawHTML) {
+      // HTML estruturado: usar CSS do template activo ou reset mínimo
+      css = this._activeTemplateCss
+        ? this._activeTemplateCss
+        : 'body{font-family:Calibri,Arial,sans-serif;}';
+    } else if (format === 'pdf') {
+      css = this._activeTemplateCss ||
+        `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:18mm 18mm 14mm;}
+        h1{font-size:17pt;text-align:center;margin-bottom:14pt;font-weight:bold;}
+        h2{font-size:13pt;font-weight:bold;margin-top:12pt;margin-bottom:6pt;border-bottom:1px solid #bbb;padding-bottom:2pt;}
+        h3{font-size:12pt;font-weight:bold;margin-top:8pt;}
+        p{margin-bottom:8pt;text-align:justify;}
+        ul,ol{margin:6pt 0 6pt 18pt;}li{margin-bottom:2pt;}
+        table{width:100%;border-collapse:collapse;margin:8pt 0;}
+        td,th{border:1px solid #000;padding:4pt 6pt;font-size:11pt;}
+        th{background:#f0f0f0;font-weight:bold;}
+        strong{font-weight:bold;}em{font-style:italic;}hr{border:none;border-top:1px solid #888;margin:10pt 0;}
+        div[style*="page-break"]{margin:16pt 0;}`;
+    } else if (format === 'word') {
+      css = `body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.15;color:#000;padding:18mm;}
+        h1{font-size:16pt;color:#2E74B5;margin-bottom:12pt;}
+        h2{font-size:13pt;color:#2E74B5;margin-top:10pt;margin-bottom:6pt;}
+        h3{font-size:12pt;font-weight:bold;margin-top:8pt;}
+        p{margin-bottom:7pt;}
+        ul,ol{margin:5pt 0 5pt 18pt;}li{margin-bottom:2pt;}
+        table{width:100%;border-collapse:collapse;margin:8pt 0;}
+        td,th{border:1px solid #BFBFBF;padding:4pt 6pt;}
+        th{background:#D9E2F3;color:#1F3864;font-weight:bold;}
+        strong{font-weight:bold;}em{font-style:italic;}`;
+    } else {
+      css = `body{font-family:monospace;font-size:11pt;line-height:1.6;color:#1e293b;padding:16px;white-space:pre-wrap;}
+        h1,h2,h3{font-weight:bold;}`;
+    }
+
+    // ── Montar HTML final e injectar no iframe ─────────────────────────────
+    const pageHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0;}' + css + '</style></head><body>' + bodyHTML + '</body></html>';
     try {
       frame.srcdoc = pageHtml;
       frame.onload = () => { DocumentView._scaleResultFrame(); };
