@@ -316,85 +316,91 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .ls.done .ls-dot{background:var(--green)}.ls.active .ls-dot{background:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.2);animation:pd 1s infinite}
 @keyframes pd{0%,100%{transform:scale(1)}50%{transform:scale(1.5)}}
 
-/* ══════════════════════════════════════════════════════════════
-   RESULT SHEET — layout flex coluna, botões sempre visíveis
-   ══════════════════════════════════════════════════════════════ */
-
-/* 1. O sheet do resultado usa flex-column com altura máxima da viewport */
-#resultSheet {
-  display: flex;
-  flex-direction: column;
-  max-height: 92svh;
-  overflow: hidden; /* scroll fica dentro do wrap A4, não no sheet */
-}
-
-/* 2. Header, meta e barra de botões nunca encolhem */
-#resultSheet .result-hdr,
-#resultSheet .res-meta,
-#resultSheet .res-actions {
-  flex-shrink: 0;
-}
-
-/* 3. Zona de preview cresce para preencher o espaço disponível */
-#resultSheet #resPreview {
-  flex: 1 1 0;
-  min-height: 0;      /* crítico: sem isto o flex-child ignora o overflow no iOS */
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* 4. Header das tabs não encolhe */
-#resultSheet .res-preview-header {
-  flex-shrink: 0;
-}
-
-/* 5. O wrap do A4 ocupa o espaço restante dentro do preview */
-#resultSheet .res-a4-wrap {
-  flex: 1 1 0;
-  min-height: 160px;  /* visibilidade mínima garantida */
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* ── Estilos base do resultado (fora do contexto #resultSheet) ── */
+/* RESULT */
 .result-hdr{display:flex;align-items:center;gap:10px;padding:18px 18px 12px;border-bottom:1px solid var(--border)}
 .res-ok{font-size:15px;font-weight:800;color:var(--green)}
 .res-model{font-size:10.5px;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:600}
 .res-meta{padding:10px 18px;font-size:12px;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:14px;flex-wrap:wrap}
 .res-preview{padding:0;font-size:13.5px;line-height:1.75;color:var(--ink);border-bottom:1px solid var(--border);background:#d1d5db;}
 /* Header das tabs do preview de resultado */
-.res-preview-header{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#f8fafd;border-bottom:1px solid #e2e8f0;flex-shrink:0;}
+.res-preview-header{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#f8fafd;border-bottom:1px solid #e2e8f0;}
 .res-preview-tabs{display:flex;gap:4px;}
 .res-tab{padding:5px 11px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;transition:all 0.15s;}
 .res-tab.active{background:#07101F;color:#fff;border-color:#07101F;}
 .res-preview-stats{font-size:11px;color:#94a3b8;font-weight:600;}
-/* Frame A4 no modal de resultado */
-.res-a4-wrap{
-  overflow:auto;
-  min-height:200px;
-  display:flex;
-  justify-content:center;
-  padding:16px;
-  background:#d1d5db;
-  -webkit-overflow-scrolling:touch;
+/* ══════════════════════════════════════════════════════
+   RESULT SHEET  — layout definitivo
+   ══════════════════════════════════════════════════════
+
+   .res-sheet  →  flex-column, altura máxima da viewport
+   .result-hdr →  fixo no topo
+   .res-meta   →  fixo abaixo do header
+   #resPreview →  cresce para preencher espaço, scroll interno
+   .res-actions→  sempre visível no fundo
+*/
+
+/* 1. Sheet sem overflow próprio — o scroll fica dentro do preview */
+.res-sheet {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  max-height: 96svh !important;
 }
-/* O iframe é escalado via JS — dimensões A4 reais */
+
+/* 2. Header e meta não encolhem */
+.res-sheet .result-hdr,
+.res-sheet .res-meta {
+  flex-shrink: 0;
+}
+
+/* 3. Preview cresce e faz scroll internamente */
+.res-sheet #resPreview {
+  flex: 1 1 0;
+  min-height: 0;        /* crítico para o flex funcionar em iOS/Android */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 4. Barra de botões: nunca encolhe, sempre visível */
+.res-sheet .res-actions {
+  flex-shrink: 0;
+}
+
+/* ── Wrap do iframe A4 — scroll interno dentro do preview ── */
+.res-a4-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: #d1d5db;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Header das tabs: não encolhe */
+.res-preview-header {
+  flex-shrink: 0;
+}
+/* O iframe é escalado via JS para caber na largura do contentor mas mantém proporção A4 */
 .res-a4-frame{
-  width:794px;
-  height:1123px;
+  /* Dimensões A4 reais — o scale é aplicado via JS abaixo */
+  width:794px;       /* 210mm @ 96dpi */
+  height:1123px;     /* 297mm @ 96dpi */
   border:none;
   background:#fff;
   box-shadow:0 4px 24px rgba(0,0,0,0.25);
   display:block;
   flex-shrink:0;
-  transform-origin:top left;
+  transform-origin:top center;
 }
+/* Container que envolve iframe + escala */
 .res-a4-scaler{
   display:flex;
   flex-direction:column;
-  align-items:flex-start;
-  transform-origin:top left;
+  align-items:center;
+  transform-origin:top center;
 }
 
 .res-preview h1{font-size:17px;font-weight:800;margin:12px 0 6px}
