@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v12-20260531'; // HTMLToDocxExporter substitui HTMLWordExporter; removidos ficheiros mortos
+const CACHE_VERSION = 'v13-20260620'; // A4Renderer.js: motor único de preview A4 (tabelas GFM reais + páginas separadas)
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
@@ -47,6 +47,7 @@ workbox.precaching.precacheAndRoute([
     { url: '/assets/js/utils/Storage.js',                    revision: CACHE_VERSION },
     { url: '/assets/js/utils/Formatter.js',                  revision: CACHE_VERSION },
     { url: '/assets/js/utils/IndexedDB.js',                  revision: CACHE_VERSION },
+    { url: '/assets/js/utils/A4Renderer.js',                 revision: CACHE_VERSION },
     // Marketplace & Academic modules
     { url: '/assets/js/marketplace/TemplatePicker.js',       revision: CACHE_VERSION },
     { url: '/assets/js/marketplace/TemplateLibrary.js',      revision: CACHE_VERSION },
