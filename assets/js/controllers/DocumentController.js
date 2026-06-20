@@ -933,16 +933,33 @@ export class DocumentController {
  }
 
  _applyTemplate(tpl) {
- this._activeTemplate = tpl;
- const content = documentState.currentContent || this.docModel.content;
- if (!content) return;
- try {
-  const filled = templatePicker._fillTemplate(tpl.htmlTemplate, templatePicker._extractRealData(content, this.docModel.service));
-  this._activeTemplateHtml = filled;
-  NotificationView.success('✅ Modelo aplicado!');
- } catch (e) {
-  console.error('[_applyTemplate]', e);
- }
+  this._activeTemplate = tpl;
+  const content = documentState.currentContent || this.docModel.content;
+  if (!content) return;
+  try {
+    // Preencher o template com os dados reais do documento
+    const filled = templatePicker._fillTemplate(
+      tpl.htmlTemplate,
+      templatePicker._extractRealData(content, this.docModel.service)
+    );
+    this._activeTemplateHtml = filled;
+
+    // FIX: actualizar o preview principal com o HTML e CSS do template.
+    // Antes apenas guardava _activeTemplateHtml sem re-renderizar o iframe.
+    // Agora passa o CSS do template para renderResult que o injeta no iframe.
+    DocumentView.renderResult(
+      filled,               // conteúdo já em HTML com o layout do template
+      this.docModel,
+      this.creditModel.value,
+      this.docModel.model,
+      tpl.css || null       // CSS do template para o iframe
+    );
+
+    NotificationView.success('✅ Modelo aplicado!');
+  } catch (e) {
+    console.error('[_applyTemplate]', e);
+    NotificationView.error('Erro ao aplicar modelo. Tente de novo.');
+  }
  }
 
  async _downloadWithTemplate(tpl, format) {
