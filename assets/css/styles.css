@@ -367,40 +367,21 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
   flex-shrink: 0;
 }
 
-/* ── Wrap do iframe A4 — scroll interno dentro do preview ── */
+/* ── Contentor das folhas A4 do resultado — múltiplas páginas reais,
+   classe partilhada com o A4Renderer (.a4-pages-outer / .a4-page).
+   O #resA4Wrap recebe esta classe via JS em Views.js. Scroll interno
+   dentro do preview; cada folha cresce conforme o seu próprio conteúdo. ── */
+#resA4Wrap.a4-pages-outer,
 .res-a4-wrap {
   flex: 1 1 0;
   min-height: 0;
   overflow: auto;
-  display: flex;
-  justify-content: center;
-  padding: 16px;
-  background: #d1d5db;
   -webkit-overflow-scrolling: touch;
 }
 
 /* Header das tabs: não encolhe */
 .res-preview-header {
   flex-shrink: 0;
-}
-/* O iframe é escalado via JS para caber na largura do contentor mas mantém proporção A4 */
-.res-a4-frame{
-  /* Dimensões A4 reais — o scale é aplicado via JS abaixo */
-  width:794px;       /* 210mm @ 96dpi */
-  height:1123px;     /* 297mm @ 96dpi */
-  border:none;
-  background:#fff;
-  box-shadow:0 4px 24px rgba(0,0,0,0.25);
-  display:block;
-  flex-shrink:0;
-  transform-origin:top center;
-}
-/* Container que envolve iframe + escala */
-.res-a4-scaler{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  transform-origin:top center;
 }
 
 .res-preview h1{font-size:17px;font-weight:800;margin:12px 0 6px}
