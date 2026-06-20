@@ -195,10 +195,14 @@ export const DocumentView = {
     // CORRIGIDO: guardar templateCss activo para usar no _renderResultFrame
     this._activeTemplateCss = templateCss || null;
 
+    // svc pode ser uma string (título) ou um objecto docModel — normalizar
+    const svcTitle = (typeof svc === 'string') ? svc
+      : (svc?.title || svc?.service || '');
+
     // CORRIGIDO: "null créditos restantes" — credits pode ser null quando vem do histórico
     const creditsLabel = (credits != null && credits !== '') ? `⚡ ${credits} créditos restantes &nbsp;|&nbsp; ` : '';
     document.getElementById('resMeta').innerHTML =
-      `📄 ${svc.title} &nbsp;|&nbsp; ${creditsLabel}🕐 ${new Date().toLocaleTimeString('pt')}`;
+      `📄 ${svcTitle} &nbsp;|&nbsp; ${creditsLabel}🕐 ${new Date().toLocaleTimeString('pt')}`;
 
     const previewContainer = document.getElementById('resPreview');
     if (!previewContainer) return;
@@ -241,22 +245,22 @@ export const DocumentView = {
 
   // ── Escalar o iframe A4 para caber no contentor sem distorcer ──────────
   _scaleResultFrame() {
-    const wrap  = document.getElementById('resA4Wrap');
+    const wrap   = document.getElementById('resA4Wrap');
     const scaler = document.getElementById('resA4Scaler');
-    const frame = document.getElementById('resPreviewFrame');
+    const frame  = document.getElementById('resPreviewFrame');
     if (!wrap || !scaler || !frame) return;
+
     const wrapW = wrap.clientWidth - 32; // 16px padding × 2
     const a4W   = 794; // 210mm @ 96dpi
     const scale = Math.min(1, wrapW / a4W);
-    frame.style.transform = `scale(${scale})`;
+    frame.style.transform       = `scale(${scale})`;
     frame.style.transformOrigin = 'top center';
-    // Adjust scaler height so wrap doesn't collapse
+
+    // Ajustar o scaler para a altura escalada — o wrap cresce via flex
     const a4H = 1123;
     scaler.style.height = (a4H * scale) + 'px';
     scaler.style.width  = (a4W * scale) + 'px';
-    // Wrap height: show about 1 page by default
-    const wrapH = Math.min(500, (a4H * scale) + 32);
-    wrap.style.height = wrapH + 'px';
+    // Não forçar altura no wrap — o CSS flex trata disso
   },
 
   _renderResultFrame(format, content) {
