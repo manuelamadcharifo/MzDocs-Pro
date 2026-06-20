@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v13-20260620'; // A4Renderer.js: motor único de preview A4 (tabelas GFM reais + páginas separadas)
+const CACHE_VERSION = 'v14-20260620b'; // FIX: preview A4 invisível quando modal abre depois do render (clientWidth 0)
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
