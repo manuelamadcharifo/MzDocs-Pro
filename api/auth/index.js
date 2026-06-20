@@ -121,14 +121,8 @@ async function handleSignup(req, res) {
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedName  = (fullName || '').trim();
 
-  // Verificar env vars antes de qualquer chamada
-  if (!SUPABASE_URL) {
-    console.error('[auth/signup] SUPABASE_URL não configurado');
-    return res.status(503).json({ error: 'Serviço temporariamente indisponível. Tente de novo em alguns minutos.' });
-  }
-  if (!process.env.SUPABASE_ANON_KEY) {
-    console.error('[auth/signup] SUPABASE_ANON_KEY não configurado nas variáveis de ambiente do Vercel');
-    return res.status(503).json({ error: 'Serviço temporariamente indisponível. Tente de novo em alguns minutos.' });
+  if (!SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    return res.status(503).json({ error: 'Supabase não configurado no servidor' });
   }
 
   try {
@@ -188,29 +182,51 @@ async function handleSignup(req, res) {
     });
 
     // ── Gravar perfil em background ───────────────────────────────────────
+    // NOTA: o trigger handle_new_user já criou o perfil com full_name='' e
+    // phone='' (porque raw_user_meta_data pode não estar pronto no momento
+    // do trigger). Aqui fazemos UPDATE explícito para sobrepor esses valores.
     if (!SERVICE_KEY) {
-      console.warn(`[auth/signup] Sem service role — perfil não gravado para ${userId.slice(0,8)}***`);
+      console.warn(`[auth/signup] Sem service role — perfil não actualizado para ${userId.slice(0,8)}***`);
       return;
     }
 
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 800)); // dar tempo ao trigger para terminar
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        await restRequest('profiles', {
-          method: 'POST',
-          body:   profilePayload,
-          prefer: 'resolution=merge-duplicates,return=minimal',
-          headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        // Primeiro tentar UPDATE (o trigger já criou a linha)
+        await restRequest(`profiles?id=eq.${userId}`, {
+          method: 'PATCH',
+          body: {
+            phone:     normalized,
+            email:     normalizedEmail,
+            full_name: normalizedName,
+            updated_at: new Date().toISOString(),
+          },
+          prefer: 'return=minimal',
         });
-        console.log(`[auth/signup] Perfil gravado (tentativa ${attempt + 1})`);
+        console.log(`[auth/signup] Perfil actualizado com nome/telefone (tentativa ${attempt + 1})`);
         return;
       } catch (err) {
-        console.warn(`[auth/signup] upsert tentativa ${attempt + 1}/3:`, err.message);
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        console.warn(`[auth/signup] PATCH tentativa ${attempt + 1}/3:`, err.message);
+        if (attempt === 0) {
+          // Fallback: tentar upsert se o PATCH falhar (perfil pode não existir ainda)
+          try {
+            await restRequest('profiles', {
+              method: 'POST',
+              body:   profilePayload,
+              prefer: 'resolution=merge-duplicates,return=minimal',
+            });
+            console.log(`[auth/signup] Perfil inserido via upsert`);
+            return;
+          } catch (upsertErr) {
+            console.warn(`[auth/signup] upsert fallback:`, upsertErr.message);
+          }
+        }
+        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
       }
     }
-    console.error(`[auth/signup] Perfil NÃO gravado após 3 tentativas para ${userId.slice(0,8)}***`);
+    console.error(`[auth/signup] Perfil NÃO actualizado após 3 tentativas para ${userId.slice(0,8)}***`);
 
   } catch (err) {
     console.error('[auth/signup]', err.message);
