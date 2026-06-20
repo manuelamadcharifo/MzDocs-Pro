@@ -288,7 +288,7 @@
 
 <!-- MODAL RESULTADO -->
 <div class="overlay" id="resultOverlay">
-  <div class="sheet tall" id="resultSheet">
+  <div class="sheet tall res-sheet" id="resultSheet">
     <div class="pill"></div>
     <div class="result-hdr">
       <span class="res-ok">✅ Seu Documento está Pronto</span>
@@ -296,8 +296,9 @@
       <button class="sh-x" id="resultClose">✕</button>
     </div>
     <div class="res-meta" id="resMeta"></div>
+    <!-- Preview ocupa o espaço disponível com scroll interno -->
     <div class="res-preview" id="resPreview"></div>
-    <!-- Barra de acções principal — scroll horizontal em mobile -->
+    <!-- Barra de acções — NUNCA fica fora do ecrã -->
     <div class="res-actions" id="resActions">
       <button id="btnDl"        class="res-btn res-btn-primary">⬇️ Download</button>
       <button id="btnCopy"      class="res-btn">📋 Copiar</button>
@@ -314,7 +315,7 @@
   <div class="sheet" id="paySheet">
     <div class="pill"></div>
     <div class="sheet-hdr">
-      <div><div class="sh-title" id="payTitle">Adquirir Créditos</div><div class="sh-sub" id="paySubtitle">Pagamento via M-Pesa, e-Mola ou mKesh · Confirmação em 2-5 min</div></div>
+      <div><div class="sh-title" id="payTitle">Adquirir Créditos</div><div class="sh-sub" id="paySubtitle">Pagamento manual — M-Pesa, e-Mola ou mKesh via WhatsApp</div></div>
       <button class="sh-x" id="payClose">✕</button>
     </div>
     <!-- ACESSO AVULSO (visitantes) -->
@@ -376,13 +377,13 @@
       </div>
       <div class="pay-sum" id="paySummary"></div>
       <button class="btn-pay" id="btnPay" disabled>Continuar</button>
-      <p class="mp-note" id="mpNote">Seleccione um pacote para continuar. O pagamento é feito via M-Pesa, e-Mola ou mKesh.</p>
+      <p class="mp-note" id="mpNote">⚠️ Pagamento processado manualmente: ao confirmar, será encaminhado para o WhatsApp para enviar o comprovativo.</p>
       <div id="payReceiverInfo"></div>
-      <div class="pay-manual-info" id="payManualInfo" style="display:none;margin-top:12px;padding:12px 14px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;font-size:13px;color:#1e40af;line-height:1.6;">
-        ⚡ <strong>Confirmação semi-automática em 2-5 minutos:</strong><br/>
-        Após fazer a transferência, envie o screenshot do comprovativo abaixo. O sistema valida automaticamente e adiciona os créditos à sua conta.<br/>
-        <span style="margin-top:6px;display:block;">📌 Em casos raros, a nossa equipa verifica manualmente em até 15 minutos.</span>
-        <span style="margin-top:8px;display:block;font-size:12px;">Consulte a nossa <a href="/legal.html#reembolso" target="_blank" style="color:#1e40af;font-weight:700;text-decoration:underline;">Política de Reembolso</a> · <a href="/legal.html#suporte" target="_blank" style="color:#1e40af;font-weight:700;text-decoration:underline;">Suporte</a></span>
+      <div class="pay-manual-info" id="payManualInfo" style="display:none;margin-top:12px;padding:12px 14px;background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:10px;font-size:13px;color:#92400E;line-height:1.6;">
+        ⚠️ <strong>Pagamento manual — não é automático:</strong><br/>
+        Após clicar, será redireccionado para o WhatsApp. Envie o comprovativo (M-Pesa, e-Mola ou mKesh, conforme o número usado) para o nosso número e os créditos serão activados em até <strong>24 horas</strong>.<br/>
+        <span style="margin-top:6px;display:block;">📌 Guarde o número de referência que receberá — é necessário para confirmar o pagamento.</span>
+        <span style="margin-top:8px;display:block;font-size:12px;">Consulte a nossa <a href="/legal.html#reembolso" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Política de Reembolso</a> · <a href="/legal.html#suporte" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Suporte</a></span>
       </div>
     </div>
   </div>
