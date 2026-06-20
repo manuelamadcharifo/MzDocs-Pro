@@ -268,7 +268,14 @@ ${extraCss || ''}
 // pageEl: a folha (.a4-page) que recebe altura/largura finais em px.
 // iframe: o iframe com o conteúdo real a escalar via transform.
 export function scalePage(containerEl, pageEl, iframe) {
-  const containerW = containerEl?.clientWidth || pageEl.clientWidth || 320;
+  const containerW = containerEl?.clientWidth || pageEl.clientWidth || 0;
+  // CRÍTICO: se o contentor ainda está oculto (display:none — ex: modal/overlay
+  // que abre DEPOIS de renderResult() ter corrido), clientWidth é 0. Escalar
+  // para 0 deixaria a folha invisível para sempre. Em vez disso, não escalamos
+  // agora — o ResizeObserver em renderA4Pages() vai chamar isto de novo assim
+  // que o contentor ganhar largura real (overlay a abrir).
+  if (containerW <= 0) return false;
+
   const scale = Math.min(1, containerW / A4_WIDTH_PX);
 
   iframe.style.transform       = `scale(${scale})`;
@@ -290,6 +297,7 @@ export function scalePage(containerEl, pageEl, iframe) {
   applyHeight();
   // Segunda passagem após fontes/imagens carregarem por completo
   setTimeout(applyHeight, 350);
+  return true;
 }
 
 /**
@@ -330,6 +338,7 @@ export function renderA4Pages(container, content, opts = {}) {
   }
 
   const pageEls = [];
+  const iframeEls = [];
 
   pageMarkdowns.forEach((pageContent, idx) => {
     if (idx > 0 && showPageLabel) {
@@ -349,6 +358,7 @@ export function renderA4Pages(container, content, opts = {}) {
     pageEl.appendChild(iframe);
     container.appendChild(pageEl);
     pageEls.push(pageEl);
+    iframeEls.push(iframe);
 
     const bodyHtml = isRawHTML ? String(pageContent || '') : markdownToHtml(pageContent);
     const doc = _buildPageDoc(bodyHtml, css);
@@ -357,10 +367,11 @@ export function renderA4Pages(container, content, opts = {}) {
 
     let scaled = false;
     const doScale = () => {
-      if (scaled) return;
-      scaled = true;
-      scalePage(container, pageEl, iframe);
-      onPageRendered?.(idx, pageEl, iframe);
+      // Não marcar como "scaled" se o contentor ainda estava oculto — o
+      // ResizeObserver abaixo vai tentar de novo quando ganhar largura.
+      const ok = scalePage(container, pageEl, iframe);
+      if (ok) scaled = true;
+      if (ok) onPageRendered?.(idx, pageEl, iframe);
     };
     iframe.addEventListener('load', doScale, { once: true });
     // Fallback: Android/Chrome por vezes não dispara 'load' em srcdoc
@@ -377,6 +388,27 @@ export function renderA4Pages(container, content, opts = {}) {
 
   // Primeira escala assim que possível (antes do load, para evitar "salto" visual)
   requestAnimationFrame(rescale);
+
+  // ── CRÍTICO: ResizeObserver no contentor ──────────────────────────────────
+  // Resolve o caso em que renderA4Pages() corre ANTES do modal/overlay abrir
+  // (display:none → clientWidth 0 → folhas ficavam congeladas com escala 0
+  // para sempre). Sempre que o contentor ganhar largura real (overlay a
+  // abrir, rotação de ecrã, resize), reaplica a escala em todas as folhas.
+  // Desliga-se a si próprio depois de confirmar uma largura válida estável,
+  // para não gastar recursos desnecessariamente depois do render inicial.
+  if (typeof ResizeObserver !== 'undefined') {
+    let stableCount = 0;
+    const ro = new ResizeObserver(() => {
+      if (container.clientWidth > 0) {
+        rescale();
+        stableCount++;
+        // Após 2 medições consecutivas com largura válida, já não precisamos
+        // de continuar a observar — evita overhead em scrolls/animações longas.
+        if (stableCount >= 2) ro.disconnect();
+      }
+    });
+    ro.observe(container);
+  }
 
   return { pages: pageEls, rescale };
 }
