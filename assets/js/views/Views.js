@@ -243,24 +243,23 @@ export const DocumentView = {
     });
   },
 
-  // ── Escalar o iframe A4 para caber no contentor sem distorcer ──────────
   _scaleResultFrame() {
     const wrap   = document.getElementById('resA4Wrap');
     const scaler = document.getElementById('resA4Scaler');
     const frame  = document.getElementById('resPreviewFrame');
     if (!wrap || !scaler || !frame) return;
 
-    const wrapW = wrap.clientWidth - 32; // 16px padding × 2
-    const a4W   = 794; // 210mm @ 96dpi
+    const wrapW = Math.max(200, wrap.clientWidth - 32);
+    const a4W   = 794;
     const scale = Math.min(1, wrapW / a4W);
+
     frame.style.transform       = `scale(${scale})`;
     frame.style.transformOrigin = 'top center';
 
-    // Ajustar o scaler para a altura escalada — o wrap cresce via flex
     const a4H = 1123;
     scaler.style.height = (a4H * scale) + 'px';
     scaler.style.width  = (a4W * scale) + 'px';
-    // Não forçar altura no wrap — o CSS flex trata disso
+    // Nunca forçar altura no wrap — o CSS (max-height / flex) controla
   },
 
   _renderResultFrame(format, content) {
