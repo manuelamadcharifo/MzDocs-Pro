@@ -466,8 +466,12 @@ export class DocumentController {
  }
 
  ModalView.close('formOverlay');
- DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
+ // CORRIGIDO: abrir o modal ANTES de renderResult() — o A4Renderer precisa
+ // do contentor já visível (clientWidth real) para calcular a escala das
+ // folhas A4. Antes, o preview era renderizado com o overlay ainda oculto
+ // (display:none → clientWidth 0), deixando as páginas invisíveis.
  ModalView.open('resultOverlay');
+ DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
  this._bindEditBtn();
 
  // Mostrar CTA de referral no painel de resultado
@@ -532,8 +536,9 @@ export class DocumentController {
   this._activeTemplate     = null;
   this._activeTemplateHtml = null;
   ModalView.close('formOverlay');
-  DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
+  // CORRIGIDO: abrir o modal ANTES de renderResult() — ver explicação acima.
   ModalView.open('resultOverlay');
+  DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
   this._bindEditBtn();
   this._showReferralCTA();
 
