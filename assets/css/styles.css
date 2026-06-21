@@ -652,10 +652,8 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
   --doc-table-head:  #D9E2F3;
 }
 
-/* Aplicar consistência ao preview A4 dentro do iframe */
-@media screen {
-  .ed-a4-frame { border: none; display: block; }
-}
+/* Aplicar consistência ao preview A4 dentro do iframe — agora via .a4-page-iframe,
+   definida no CSS partilhado A4_PAGES_CONTAINER_CSS (A4Renderer.js). */
 
 /* Estilos de impressão globais — quando o utilizador manda imprimir a página */
 @media print {
