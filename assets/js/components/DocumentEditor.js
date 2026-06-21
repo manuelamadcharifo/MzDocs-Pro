@@ -2,7 +2,7 @@
 // Editor WYSIWYG estilo Word — preview A4 fiel + edição rich text com toolbar
 import { sanitizeHtml } from '../utils/Sanitizer.js';
 import { getFormatCSS } from './DocumentEditorStyles.js';
-import { renderA4Pages, A4_PAGES_CONTAINER_CSS, scalePage, markdownToHtml as a4MarkdownToHtml } from '../utils/A4Renderer.js';
+import { renderA4Pages, A4_PAGES_CONTAINER_CSS, scalePage, markdownToHtml as a4MarkdownToHtml, DEFAULT_PAGE_CSS } from '../utils/A4Renderer.js';
 
 export class DocumentEditor {
   constructor() {
@@ -571,10 +571,15 @@ export class DocumentEditor {
       return;
     }
 
-    const availW = editWrap.clientWidth || window.innerWidth;
+    // CORRIGIDO: mesma consistência aplicada em _updateEditorScale — subtrair
+    // o padding do contentor (se existir) UMA VEZ, e usar esse valor já
+    // corrigido tanto na escala como no marginLeft, para a folha ficar
+    // sempre centrada (nunca descentrada para a esquerda).
+    const rawW = editWrap.clientWidth || window.innerWidth;
+    const availW = Math.max(0, rawW - 16);
     const a4Px       = 794;
     const a4HeightPx = a4Px * 1.414; // proporção A4
-    const scale = Math.min(0.9, (availW - 16) / a4Px);
+    const scale = Math.min(0.9, availW / a4Px);
     const marginLeft = Math.max(0, (availW - a4Px * scale) / 2);
 
     editFrame.style.transformOrigin = 'top left';
@@ -621,13 +626,20 @@ export class DocumentEditor {
       return;
     }
 
-    const availW = pageWrap.clientWidth || window.innerWidth;
+    // CORRIGIDO: clientWidth do pageWrap já INCLUI o seu próprio padding
+    // (8px de cada lado = 16px). Antes a escala subtraía esses 16px mas o
+    // marginLeft (que centra a folha) usava a largura cheia sem subtrair —
+    // a folha ficava descentrada para a esquerda, com um vazio à direita
+    // (exactamente o problema reportado: "muito à esquerda... a escapar").
+    // Agora subtrai o padding UMA VEZ e usa esse valor em todos os cálculos.
+    const rawW = pageWrap.clientWidth || window.innerWidth;
+    const availW = Math.max(0, rawW - 16); // 16 = 8px padding × 2 lados
     const a4Px       = 794;  // 210mm @ 96dpi
     const a4HeightPx = 1123; // 297mm @ 96dpi
     // CORRIGIDO: 0.9 — a folha ocupa ~90% da largura disponível por padrão,
     // com margem cinza visível ao redor (igual ao Preview/TemplatePicker),
     // em vez de width:100% que ia de borda a borda sem respiro visual.
-    const scale = Math.min(0.9, (availW - 16) / a4Px);
+    const scale = Math.min(0.9, availW / a4Px);
     const marginLeft = Math.max(0, (availW - a4Px * scale) / 2);
 
     wordPage.style.transformOrigin = 'top left';
@@ -693,9 +705,14 @@ export class DocumentEditor {
     // Bug original: o templateCss só era usado para HTML raw — para markdown usava sempre
     // _getFormatCSS() genérico, fazendo o editor mostrar um layout completamente diferente
     // do preview do resultado após o utilizador escolher um template (imagem 4 vs imagem 3).
+    // CORRIGIDO: usar o MESMO CSS base do resultado/TemplatePicker (DEFAULT_PAGE_CSS)
+    // em vez de _getFormatCSS() — esse CSS antigo foi desenhado para o sistema
+    // anterior de "simulação de páginas" num único scroll e não tinha margem A4
+    // horizontal própria (só padding vertical), fazendo o texto aparecer colado
+    // à esquerda/topo da folha, sem a margem de 30mm/25mm esperada.
     const css = this._templateCss
       ? `*{box-sizing:border-box;}${this._templateCss}`
-      : this._getFormatCSS(format);
+      : DEFAULT_PAGE_CSS;
 
     // Conteúdo markdown → renderA4Pages faz o split por ---PAGE_BREAK--- e a
     // conversão markdown→HTML internamente (com tabelas GFM reais incluídas,
