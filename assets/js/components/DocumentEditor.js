@@ -139,11 +139,10 @@ export class DocumentEditor {
             <div class="a4-pages-outer" id="edA4Wrap"></div>
           </div>
 
-          <!-- EDITOR WYSIWYG (estilo Word) -->
+          <!-- EDITOR WYSIWYG (estilo Word) — múltiplas folhas A4 reais, uma por
+               página, visualmente separadas (igual ao Preview), cada uma editável. -->
           <div class="ed-edit-wrap" id="edEditWrap" style="display:none;">
-            <div class="ed-word-page-wrap">
-              <div class="ed-word-page" id="edWordDoc" contenteditable="true" spellcheck="true"></div>
-            </div>
+            <div class="ed-word-page-wrap" id="edWordPagesWrap"></div>
           </div>
         </div>
       </div>
@@ -248,28 +247,91 @@ export class DocumentEditor {
       this._syncContentFromEditor();
     });
 
-    // Sync ao editar no contenteditable
-    const wordDoc = this.modal.querySelector('#edWordDoc');
-    if (wordDoc) {
-      wordDoc.addEventListener('input', () => {
+    // Sync ao editar no contenteditable — delegação de eventos no contentor,
+    // porque as folhas (.ed-word-page) são criadas dinamicamente em
+    // _renderEditorPages() e podem não existir ainda neste momento do setup.
+    const pagesWrap = this._getEditorPagesWrap();
+    if (pagesWrap) {
+      pagesWrap.addEventListener('input', (e) => {
+        if (!e.target.classList?.contains('ed-word-page')) return;
         this._syncContentFromEditor();
         this._updateStats();
       });
-      wordDoc.addEventListener('keyup', () => this._updateToolbarState());
-      wordDoc.addEventListener('mouseup', () => this._updateToolbarState());
+      pagesWrap.addEventListener('keyup', (e) => {
+        if (e.target.classList?.contains('ed-word-page')) this._updateToolbarState();
+      });
+      pagesWrap.addEventListener('mouseup', (e) => {
+        if (e.target.classList?.contains('ed-word-page')) this._updateToolbarState();
+      });
     }
   }
 
-  // ── Converte markdown → HTML rico para o editor Word ──────────
+  // ── Helpers para múltiplas folhas editáveis (#edWordPagesWrap) ──────────
+  // Substituem o antigo #edWordDoc único — cada página real é agora a sua
+  // própria folha A4 (div contenteditable), visualmente separada, igual ao
+  // Preview, sem depender do A4Renderer (que usa iframes, incompatíveis com
+  // edição directa de texto).
+  _getEditorPagesWrap() {
+    return this.modal?.querySelector('#edWordPagesWrap') || null;
+  }
+
+  _getEditorPages() {
+    const wrap = this._getEditorPagesWrap();
+    return wrap ? Array.from(wrap.querySelectorAll('.ed-word-page')) : [];
+  }
+
+  // Folha actualmente focada pelo utilizador, ou a primeira como fallback —
+  // usada pela toolbar (bold/italic/listas/tabela) e por inserções (assinatura).
+  _getActiveEditorPage() {
+    const pages = this._getEditorPages();
+    if (!pages.length) return null;
+    const active = pages.find(p => p.contains(document.activeElement) || p === document.activeElement);
+    return active || pages[0];
+  }
+
+  // Cria as folhas A4 editáveis a partir de um array de blocos HTML (1 por página).
+  _renderEditorPages(htmlPages) {
+    const wrap = this._getEditorPagesWrap();
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const pages = (Array.isArray(htmlPages) && htmlPages.length) ? htmlPages : ['<p><br></p>'];
+    pages.forEach((pageHtml, idx) => {
+      if (idx > 0) {
+        const sep = document.createElement('div');
+        sep.className = 'ed-word-page-sep-label';
+        sep.textContent = `Página ${idx + 1}`;
+        wrap.appendChild(sep);
+      }
+      const pageEl = document.createElement('div');
+      pageEl.className = 'ed-word-page';
+      pageEl.contentEditable = 'true';
+      pageEl.spellcheck = true;
+      pageEl.dataset.pageIndex = String(idx);
+      pageEl.innerHTML = pageHtml;
+      wrap.appendChild(pageEl);
+    });
+  }
+
+
+  // CORRIGIDO: antes devolvia uma única string com um separador visual inline
+  // ("— Nova Página —" dentro do mesmo contenteditable) — agora devolve um
+  // array, uma página por folha A4 real e editável, igual ao Preview.
   _mdToRichHTML(md) {
-    if (!md) return '<p><br></p>';
+    if (!md) return ['<p><br></p>'];
     // Normalizar "Nova Página" e variantes para o marcador canónico
     const normalized = md
       .replace(/^[ \t]*[—–-]{0,3}[ \t]*Nova P[aá]gina[ \t]*[—–-]{0,3}[ \t]*$/gim, '---PAGE_BREAK---')
       .replace(/\*{1,2}Nova P[aá]gina\*{1,2}/gi, '---PAGE_BREAK---');
-    let html = normalized
+
+    const pages = normalized.split(/---PAGE_BREAK---/g).map(p => p.trim());
+    return (pages.length ? pages : [normalized]).map(pageMd => this._mdToRichHTMLSingle(pageMd));
+  }
+
+  // ── Converte o markdown de UMA página → HTML rico (sem separador) ──
+  _mdToRichHTMLSingle(md) {
+    if (!md) return '<p><br></p>';
+    let html = md
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/---PAGE_BREAK---/g, '<div style="page-break-after:always;height:0;margin:0"></div><div style="display:flex;align-items:center;gap:8px;margin:16px 0;"><div style="height:1px;flex:1;background:#d1d5db"></div><span style="font-size:10px;color:#9ca3af;letter-spacing:.5px">— Nova Página —</span><div style="height:1px;flex:1;background:#d1d5db"></div></div>')
       .replace(/^######\s(.+)$/gm, '<h6>$1</h6>')
       .replace(/^#####\s(.+)$/gm,  '<h5>$1</h5>')
       .replace(/^####\s(.+)$/gm,   '<h4>$1</h4>')
@@ -348,12 +410,14 @@ export class DocumentEditor {
   }
 
   _syncContentFromEditor() {
-    const doc = this.modal.querySelector('#edWordDoc');
-    if (doc) {
-      // Guardar o HTML rico E converter para markdown para o preview
-      this._richHTML = doc.innerHTML;
-      this.content   = this._richHTMLToMd(doc.innerHTML);
-    }
+    const pages = this._getEditorPages();
+    if (!pages.length) return;
+    // Guardar o HTML rico de cada folha (para reabrir o editor sem reconverter)
+    // e o markdown equivalente (para o Preview), juntando as páginas com o
+    // marcador canónico — exactamente como o conteúdo original gerado pela IA.
+    this._richHTMLPages = pages.map(p => p.innerHTML);
+    this._richHTML = this._richHTMLPages.join('\n---PAGE_BREAK---\n'); // compat. com código antigo que lia _richHTML
+    this.content = pages.map(p => this._richHTMLToMd(p.innerHTML)).join('\n\n---PAGE_BREAK---\n\n');
   }
 
   // ── Actualiza estado visual dos botões da toolbar ──────────────
@@ -397,7 +461,7 @@ export class DocumentEditor {
     const editWrap    = this.modal.querySelector('#edEditWrap');
     const subtoolbar  = this.modal.querySelector('#edSubtoolbar');
     const wordToolbar = this.modal.querySelector('#edWordToolbar');
-    const wordDoc     = this.modal.querySelector('#edWordDoc');
+    const pagesWrap   = this._getEditorPagesWrap();
 
     this.modal.querySelectorAll('[data-fmt]').forEach(b => {
       b.classList.toggle('active', b.dataset.fmt === mode);
@@ -413,11 +477,8 @@ export class DocumentEditor {
         }
         // Ocultar iframe de edição e restaurar word-page-wrap
         if (editFrame) editFrame.style.display = 'none';
-        const pageWrap = this.modal.querySelector('.ed-word-page-wrap');
-        if (pageWrap) pageWrap.style.display = '';
-        const wordDocEl = this.modal.querySelector('#edWordDoc');
-        if (wordDocEl) wordDocEl.style.display = '';
-      } else if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+        if (pagesWrap) pagesWrap.style.display = '';
+      } else if (this._getEditorPages().some(p => p.innerHTML && p.innerHTML.trim().length > 10)) {
         this._syncContentFromEditor();
       }
       previewWrap.style.display = 'flex';
@@ -431,16 +492,15 @@ export class DocumentEditor {
       editWrap.style.display    = 'flex';
       subtoolbar.style.display  = 'none';
       wordToolbar.style.display = 'flex';
-      // Renderizar conteúdo rico no editor
-      if (wordDoc) {
+      // Renderizar conteúdo rico no editor — múltiplas folhas A4 reais
+      if (pagesWrap) {
         if (this._templateHtml && this._templateCss) {
           // Template HTML com layout estruturado (flexbox, 2 colunas, etc.)
           // Usar iframe com designMode='on' para preservar o layout visual exacto
           document.getElementById('ed-tpl-style')?.remove();
           const editWrapEl = this.modal.querySelector('#edEditWrap');
-          // Ocultar o ed-word-page-wrap para não ocupar espaço
-          const pageWrap = editWrapEl?.querySelector('.ed-word-page-wrap');
-          if (pageWrap) pageWrap.style.display = 'none';
+          // Ocultar o wrap de páginas para não ocupar espaço
+          if (pagesWrap) pagesWrap.style.display = 'none';
           // Criar ou reutilizar iframe de edição de template
           let editFrame = this.modal.querySelector('#edTemplateEditFrame');
           if (!editFrame) {
@@ -450,7 +510,6 @@ export class DocumentEditor {
             editWrapEl?.appendChild(editFrame);
           }
           editFrame.style.display = 'block';
-          wordDoc.style.display = 'none';
           const editHtml = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>
             * { box-sizing: border-box; }
             body { margin: 0; padding: 0; background: #e8ecf0; }
@@ -473,23 +532,22 @@ export class DocumentEditor {
           // Limpar iframe de edição de template se existir
           const editFrame = this.modal.querySelector('#edTemplateEditFrame');
           if (editFrame) { editFrame.style.display = 'none'; }
-          // Restaurar ed-word-page-wrap
-          const pageWrap = this.modal.querySelector('.ed-word-page-wrap');
-          if (pageWrap) pageWrap.style.display = '';
-          const wordDocWrap = this.modal.querySelector('#edWordDoc');
-          if (wordDocWrap) { wordDocWrap.style.display = ''; }
+          // Restaurar wrap de páginas
+          if (pagesWrap) pagesWrap.style.display = '';
           document.getElementById('ed-tpl-style')?.remove();
-          wordDoc.style.padding = '';
-          wordDoc.style.fontFamily = '';
           const isRawHTML = this.content && this.content.trimStart().startsWith('<');
           if (isRawHTML) {
-            wordDoc.innerHTML = this.content;
+            // HTML estruturado sem template (ex: gerado via htmlTemplate da IA) —
+            // tratado como uma única página editável (não há ---PAGE_BREAK--- aqui).
+            this._renderEditorPages([this.content]);
+          } else if (this._richHTMLPages && this._richHTMLPages.length) {
+            this._renderEditorPages(this._richHTMLPages);
           } else {
-            wordDoc.innerHTML = this._richHTML || this._mdToRichHTML(this.content);
+            this._renderEditorPages(this._mdToRichHTML(this.content));
           }
         }
         setTimeout(() => {
-          wordDoc.focus();
+          this._getEditorPages()[0]?.focus();
           this._updateEditorScale();
         }, 50);
       }
@@ -530,27 +588,29 @@ export class DocumentEditor {
       return;
     }
 
-    // Para editor de texto (div contenteditable)
-    const wordPage = this.modal.querySelector('#edWordDoc');
-    if (!wordPage) return;
-    const isZoomedOut = wordPage.dataset.zoomedOut === '1';
-    const pageWrap    = this.modal.querySelector('.ed-word-page-wrap');
+    // Para editor de texto (múltiplas folhas .ed-word-page)
+    const pagesWrap = this._getEditorPagesWrap();
+    const pages = this._getEditorPages();
+    if (!pagesWrap || !pages.length) return;
+    const isZoomedOut = pagesWrap.dataset.zoomedOut === '1';
 
     if (isZoomedOut) {
       // CORRIGIDO: "zoomedOut=1" aqui significa tamanho real (1:1) — voltar
       // ao modo padrão "encaixar" (~90%, igual ao Preview) via _updateEditorScale.
-      wordPage.dataset.zoomedOut = '0';
+      pagesWrap.dataset.zoomedOut = '0';
       this._updateEditorScale();
-      if (pageWrap) pageWrap.style.overflow = '';
+      pagesWrap.style.overflow = '';
       if (btn) btn.textContent = '🔍 Zoom';
     } else {
       // Tamanho real (1:1) — útil para editar com mais precisão/zoom do dedo.
-      wordPage.style.transform       = '';
-      wordPage.style.transformOrigin = '';
-      wordPage.style.marginLeft      = '';
-      wordPage.style.marginBottom    = '';
-      if (pageWrap) pageWrap.style.overflow = 'auto';
-      wordPage.dataset.zoomedOut = '1';
+      pages.forEach(p => {
+        p.style.transform       = '';
+        p.style.transformOrigin = '';
+        p.style.marginLeft      = '';
+        p.style.marginBottom    = '';
+      });
+      pagesWrap.style.overflow = 'auto';
+      pagesWrap.dataset.zoomedOut = '1';
       if (btn) btn.textContent = '🔎 Normal';
     }
   }
@@ -605,24 +665,26 @@ export class DocumentEditor {
     this._updateTemplateFrameScale();
   }
 
-  // ── Escala a folha editável (#edWordDoc) para caber a ~90% da largura ──
+  // ── Escala todas as folhas editáveis para caber a ~90% da largura ──────
   // disponível, igual ao Preview — só em mobile (≤900px). Em desktop a folha
   // já tem largura A4 fixa (210mm) e não precisa de escala. Chamado sempre
   // que o modo "edit" é activado e ao redimensionar a janela; o "Zoom" do
   // toolbar só alterna entre este modo "encaixar tudo" e tamanho real (1:1).
   _updateEditorScale() {
-    const wordPage = this.modal?.querySelector('#edWordDoc');
-    const pageWrap  = this.modal?.querySelector('.ed-word-page-wrap');
-    if (!wordPage || !pageWrap) return;
+    const pageWrap = this.modal?.querySelector('#edWordPagesWrap');
+    const pages    = this._getEditorPages();
+    if (!pageWrap || !pages.length) return;
     // Não reaplicar se o utilizador pediu explicitamente tamanho real (zoom 1:1)
-    if (wordPage.dataset.zoomedOut === '1') return;
+    if (pageWrap.dataset.zoomedOut === '1') return;
 
     const isMobile = window.innerWidth <= 900;
     if (!isMobile) {
-      // Desktop: sem escala — folha A4 no tamanho real definido pelo CSS base.
-      wordPage.style.transform    = '';
-      wordPage.style.marginLeft   = '';
-      wordPage.style.marginBottom = '';
+      // Desktop: sem escala — folhas A4 no tamanho real definido pelo CSS base.
+      pages.forEach(p => {
+        p.style.transform    = '';
+        p.style.marginLeft   = '';
+        p.style.marginBottom = '';
+      });
       return;
     }
 
@@ -642,10 +704,14 @@ export class DocumentEditor {
     const scale = Math.min(0.9, availW / a4Px);
     const marginLeft = Math.max(0, (availW - a4Px * scale) / 2);
 
-    wordPage.style.transformOrigin = 'top left';
-    wordPage.style.transform       = `scale(${scale})`;
-    wordPage.style.marginLeft      = `${marginLeft}px`;
-    wordPage.style.marginBottom    = `${(a4HeightPx * scale) - a4HeightPx}px`;
+    // Aplicar a MESMA escala a todas as folhas — mantém a paginação visual
+    // consistente (todas as páginas com o mesmo tamanho), igual ao Preview.
+    pages.forEach(p => {
+      p.style.transformOrigin = 'top left';
+      p.style.transform       = `scale(${scale})`;
+      p.style.marginLeft      = `${marginLeft}px`;
+      p.style.marginBottom    = `${(a4HeightPx * scale) - a4HeightPx}px`;
+    });
   }
 
   // ── Preview A4 — MESMO motor renderA4Pages() usado no resultado/TemplatePicker ──
@@ -776,8 +842,8 @@ export class DocumentEditor {
     const orig = btn.textContent;
     // Sync from rich-text editor before export ONLY when no template HTML is active
     // (syncContentFromEditor converts innerHTML back to markdown which would corrupt templateHtml)
-    const wordDoc = this.modal.querySelector('#edWordDoc');
-    if (!this._templateHtml && wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+    const hasEditedContent = this._getEditorPages().some(p => p.innerHTML && p.innerHTML.trim().length > 10);
+    if (!this._templateHtml && hasEditedContent) {
       this._syncContentFromEditor();
     }
     btn.disabled = true; btn.textContent = '⏳…';
@@ -1028,9 +1094,10 @@ export class DocumentEditor {
         </div>
       `;
 
-      // Inserir no editor: se estiver em modo edição, insere no cursor; senão appenda ao markdown
-      const wordDoc = this.modal.querySelector('#edWordDoc');
-      if (wordDoc && document.activeElement === wordDoc) {
+      // Inserir no editor: se estiver em modo edição, insere no cursor da folha
+      // activa; senão appenda à última página (local típico de uma assinatura).
+      const activePage = this._getActiveEditorPage();
+      if (activePage && document.activeElement === activePage) {
         document.execCommand('insertHTML', false, sigHTML);
         this._syncContentFromEditor();
       } else {
@@ -1040,9 +1107,10 @@ export class DocumentEditor {
         this._pendingSignatureImg = dataUrl;
         this._switchMode('edit');
         setTimeout(() => {
-          const doc = this.modal.querySelector('#edWordDoc');
-          if (doc) {
-            doc.innerHTML += sigHTML;
+          const pages = this._getEditorPages();
+          const lastPage = pages[pages.length - 1];
+          if (lastPage) {
+            lastPage.innerHTML += sigHTML;
             this._syncContentFromEditor();
           }
         }, 100);
@@ -1162,8 +1230,8 @@ export class DocumentEditor {
         try { finalTemplate = editFrame.contentDocument.body.innerHTML; } catch(_) {}
       }
     } else {
-      const wordDoc = this.modal.querySelector('#edWordDoc');
-      if (wordDoc && wordDoc.innerHTML && wordDoc.innerHTML.trim().length > 10) {
+      const hasEditedContent = this._getEditorPages().some(p => p.innerHTML && p.innerHTML.trim().length > 10);
+      if (hasEditedContent) {
         this._syncContentFromEditor();
         finalContent = this.content;
       }
