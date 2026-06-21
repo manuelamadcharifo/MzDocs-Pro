@@ -202,6 +202,14 @@ export const DocumentView = {
     // CORRIGIDO: guardar templateCss activo para usar no _renderResultFrame
     this._activeTemplateCss = templateCss || null;
 
+    // CORRIGIDO: blindar contra content nulo/undefined/não-string — alguns
+    // documentos antigos do histórico podem ter content vazio. Sem isto,
+    // content.trim() lançava TypeError e interrompia a função ANTES de
+    // desenhar qualquer coisa em #resPreview — a área ficava completamente
+    // vazia (cabeçalho aparecia, preview não), exactamente o bug reportado
+    // ao abrir certos documentos "Do arquivo".
+    const safeContent = (typeof content === 'string') ? content : (content == null ? '' : String(content));
+
     // CORRIGIDO: "null créditos restantes" — credits pode ser null quando vem do histórico
     const creditsLabel = (credits != null && credits !== '') ? `⚡ ${credits} créditos restantes &nbsp;|&nbsp; ` : '';
     document.getElementById('resMeta').innerHTML =
@@ -210,8 +218,22 @@ export const DocumentView = {
     const previewContainer = document.getElementById('resPreview');
     if (!previewContainer) return;
 
-    const words = content.trim().split(/\s+/).length;
-    const pages = Math.max(1, Math.ceil(content.length / 2800));
+    if (!safeContent.trim()) {
+      // Sem conteúdo real para mostrar — avisar visivelmente em vez de
+      // deixar a área em branco sem qualquer explicação.
+      previewContainer.innerHTML = `
+        <div class="res-preview-header">
+          <div class="res-preview-tabs" id="resPreviewTabs"></div>
+          <div class="res-preview-stats">0 palavras</div>
+        </div>
+        <div class="a4-pages-outer" id="resA4Wrap">
+          <p style="color:#fff;text-align:center;padding:40px 20px;">⚠️ Este documento não tem conteúdo para mostrar.</p>
+        </div>`;
+      return;
+    }
+
+    const words = safeContent.trim().split(/\s+/).length;
+    const pages = Math.max(1, Math.ceil(safeContent.length / 2800));
 
     // Injectar CSS partilhado das folhas A4 uma única vez (idempotente)
     if (!document.getElementById('a4PagesSharedStyle')) {
@@ -233,7 +255,7 @@ export const DocumentView = {
       <div class="a4-pages-outer" id="resA4Wrap"></div>
     `;
 
-    this._renderResultFrame('pdf', content);
+    this._renderResultFrame('pdf', safeContent);
 
     if (!this._resizeResultHandler) {
       this._resizeResultHandler = () => this._scaleResultFrame();
@@ -244,7 +266,7 @@ export const DocumentView = {
       btn.addEventListener('click', () => {
         previewContainer.querySelectorAll('.res-tab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        this._renderResultFrame(btn.dataset.rfmt, content);
+        this._renderResultFrame(btn.dataset.rfmt, safeContent);
       });
     });
   },
@@ -263,10 +285,15 @@ export const DocumentView = {
     const outer = document.getElementById('resA4Wrap');
     if (!outer) return;
 
+    // CORRIGIDO: normalizar para string sempre — protege contra content
+    // nulo/undefined/não-string vindo de chamadas directas (ex: DocumentController
+    // chama _renderResultFrame('pdf', content) fora de renderResult()).
+    const safeContent = (typeof content === 'string') ? content : (content == null ? '' : String(content));
+
     // ── Detecção automática HTML vs Markdown ────────────────────────────────
     // Se o conteúdo começa com '<' é HTML estruturado gerado pelo htmlTemplate.
     // Usar directamente no preview sem passar pelo conversor md→html.
-    const isRawHTML = content && content.trimStart().startsWith('<');
+    const isRawHTML = !!safeContent && safeContent.trimStart().startsWith('<');
 
     // ── CSS para o formato pedido ───────────────────────────────────────────
     let css = '';
@@ -308,7 +335,7 @@ export const DocumentView = {
     // isRawHTML: o conteúdo (eventualmente já dividido por PAGE_BREAK) é HTML puro.
     // Caso contrário, o A4Renderer faz split por ---PAGE_BREAK--- e converte cada
     // página de markdown para HTML (com tabelas GFM reais incluídas).
-    renderA4Pages(outer, content, {
+    renderA4Pages(outer, safeContent, {
       css,
       isRawHTML,
       showPageLabel: true,
@@ -360,4 +387,3 @@ export const DocumentView = {
     return data;
   },
 };
-
