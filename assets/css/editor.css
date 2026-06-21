@@ -709,16 +709,21 @@
   .ed-word-group { gap: 1px; padding-right: 4px; }
   .ed-wbtn { padding: 3px 5px; font-size: 11px; }
   .ed-sel  { font-size: 11px; padding: 2px 4px; }
-  /* CORRIGIDO: o ed-word-page com padding:16px e sem min-height causava o layout
-     partido com "zoom" na imagem 4 — o documento parecia uma coluna estreita.
-     Agora usa padding em mm proporcional e font-size legível sem overflow. */
-  .ed-word-page-wrap { padding: 8px; }
+  /* CORRIGIDO: a folha deixou de ter width:100% (que a esticava de borda a
+     borda, ignorando a proporção A4 e cortando a margem cinza ao redor —
+     "ocupa toda a tela ignorando margens"). Agora mantém a largura A4 real
+     (794px) e é escalada via JS (_updateA4Scale) para ~90% da largura
+     disponível, exactamente como o Preview/TemplatePicker — mesma aparência
+     em todos os previews da app, com ou sem zoom. */
+  .ed-word-page-wrap { padding: 8px; overflow: auto; }
   .ed-word-page {
-    width: 100%;
-    min-height: auto;
-    padding: 12mm 10mm;
-    font-size: 11pt;
+    width: 794px;
+    min-height: 1123px;
+    padding: 25mm 22mm 20mm 25mm;
+    font-size: 12pt;
     box-shadow: 0 1px 8px rgba(0,0,0,.12);
+    transform-origin: top left;
+    /* transform/margin aplicados via JS em _updateA4Scale() */
   }
   /* Esconder alguns botões menos usados em mobile */
   #edBtnTable, #edBtnHr, #edBtnLink { display: none; }
