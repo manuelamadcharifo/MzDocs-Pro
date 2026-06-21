@@ -467,6 +467,7 @@ export class DocumentEditor {
               editFrame.contentDocument.designMode = 'on';
               this._templateEditFrame = editFrame;
             } catch(e) { console.warn('[editor] designMode failed:', e); }
+            this._updateTemplateFrameScale();
           };
         } else {
           // Limpar iframe de edição de template se existir
@@ -487,7 +488,10 @@ export class DocumentEditor {
             wordDoc.innerHTML = this._richHTML || this._mdToRichHTML(this.content);
           }
         }
-        setTimeout(() => { wordDoc.focus(); }, 50);
+        setTimeout(() => {
+          wordDoc.focus();
+          this._updateEditorScale();
+        }, 50);
       }
       this._updateStats();
       this._updateToolbarState();
@@ -509,19 +513,17 @@ export class DocumentEditor {
     if (editFrame && editFrame.style.display !== 'none') {
       const isZoomedOut = editFrame.dataset.zoomedOut === '1';
       if (isZoomedOut) {
-        editFrame.style.transform = '';
-        editFrame.style.transformOrigin = '';
-        editFrame.style.width = '100%';
+        // Voltar ao modo padrão "encaixar" (~90%)
         editFrame.dataset.zoomedOut = '0';
+        this._updateTemplateFrameScale();
         if (btn) btn.textContent = '🔍 Zoom';
       } else {
-        const availW = editWrap.clientWidth;
-        const a4Px   = 794; // aprox px de 210mm a 96dpi
-        const scale  = Math.min(0.95, availW / a4Px);
-        editFrame.style.transformOrigin = 'top left';
-        editFrame.style.transform       = `scale(${scale})`;
-        editFrame.style.width           = `${100 / scale}%`;
-        editFrame.style.marginBottom    = `${(a4Px * 1.414 * scale) - (a4Px * 1.414)}px`;
+        // Tamanho real (1:1)
+        editFrame.style.transform       = '';
+        editFrame.style.transformOrigin = '';
+        editFrame.style.marginLeft      = '';
+        editFrame.style.marginBottom    = '';
+        editFrame.style.width           = '100%';
         editFrame.dataset.zoomedOut = '1';
         if (btn) btn.textContent = '🔎 Normal';
       }
@@ -535,29 +537,51 @@ export class DocumentEditor {
     const pageWrap    = this.modal.querySelector('.ed-word-page-wrap');
 
     if (isZoomedOut) {
-      // Voltar ao normal
-      wordPage.style.transform       = '';
-      wordPage.style.transformOrigin = '';
-      wordPage.style.width           = '';
-      wordPage.style.marginBottom    = '';
-      if (pageWrap) pageWrap.style.overflow = '';
+      // CORRIGIDO: "zoomedOut=1" aqui significa tamanho real (1:1) — voltar
+      // ao modo padrão "encaixar" (~90%, igual ao Preview) via _updateEditorScale.
       wordPage.dataset.zoomedOut = '0';
+      this._updateEditorScale();
+      if (pageWrap) pageWrap.style.overflow = '';
       if (btn) btn.textContent = '🔍 Zoom';
     } else {
-      // Aplicar zoom out para ver a página inteira
-      const availW = editWrap.clientWidth || 360;
-      const pageW  = 794; // largura A4 em px
-      const scale  = Math.min(0.95, (availW - 16) / pageW);
-      const marginLeft = Math.max(0, (availW - pageW * scale) / 2);
-      wordPage.style.transformOrigin = 'top left';
-      wordPage.style.transform       = `scale(${scale})`;
-      wordPage.style.marginLeft      = `${marginLeft}px`;
-      wordPage.style.marginBottom    = `${(1123 * scale) - 1123}px`; // 1123px ≈ A4 height
-      wordPage.style.width           = `${pageW}px`;
+      // Tamanho real (1:1) — útil para editar com mais precisão/zoom do dedo.
+      wordPage.style.transform       = '';
+      wordPage.style.transformOrigin = '';
+      wordPage.style.marginLeft      = '';
+      wordPage.style.marginBottom    = '';
       if (pageWrap) pageWrap.style.overflow = 'auto';
       wordPage.dataset.zoomedOut = '1';
       if (btn) btn.textContent = '🔎 Normal';
     }
+  }
+
+  // ── Escala o iframe de edição de template (~90% em mobile, igual aos outros previews) ──
+  _updateTemplateFrameScale() {
+    const editFrame = this.modal?.querySelector('#edTemplateEditFrame');
+    const editWrap  = this.modal?.querySelector('#edEditWrap');
+    if (!editFrame || !editWrap) return;
+    if (editFrame.dataset.zoomedOut === '1') return; // utilizador pediu tamanho real
+
+    const isMobile = window.innerWidth <= 900;
+    if (!isMobile) {
+      editFrame.style.transform    = '';
+      editFrame.style.marginLeft   = '';
+      editFrame.style.marginBottom = '';
+      editFrame.style.width        = '100%';
+      return;
+    }
+
+    const availW = editWrap.clientWidth || window.innerWidth;
+    const a4Px       = 794;
+    const a4HeightPx = a4Px * 1.414; // proporção A4
+    const scale = Math.min(0.9, (availW - 16) / a4Px);
+    const marginLeft = Math.max(0, (availW - a4Px * scale) / 2);
+
+    editFrame.style.transformOrigin = 'top left';
+    editFrame.style.transform       = `scale(${scale})`;
+    editFrame.style.width           = `${a4Px}px`;
+    editFrame.style.marginLeft      = `${marginLeft}px`;
+    editFrame.style.marginBottom    = `${(a4HeightPx * scale) - a4HeightPx}px`;
   }
 
   // ── Escala A4 para mobile ──────────────────────────────────────
@@ -569,6 +593,47 @@ export class DocumentEditor {
       const iframe = pageEl.querySelector('iframe');
       if (iframe) scalePage(outer, pageEl, iframe);
     });
+    // O modo Editar (contenteditable, sem iframe) usa a sua própria escala —
+    // mantém a mesma aparência (folha A4 reduzida a ~90%, centrada) em
+    // ambos os modos, em vez do antigo width:100% que esticava a folha.
+    this._updateEditorScale();
+    this._updateTemplateFrameScale();
+  }
+
+  // ── Escala a folha editável (#edWordDoc) para caber a ~90% da largura ──
+  // disponível, igual ao Preview — só em mobile (≤900px). Em desktop a folha
+  // já tem largura A4 fixa (210mm) e não precisa de escala. Chamado sempre
+  // que o modo "edit" é activado e ao redimensionar a janela; o "Zoom" do
+  // toolbar só alterna entre este modo "encaixar tudo" e tamanho real (1:1).
+  _updateEditorScale() {
+    const wordPage = this.modal?.querySelector('#edWordDoc');
+    const pageWrap  = this.modal?.querySelector('.ed-word-page-wrap');
+    if (!wordPage || !pageWrap) return;
+    // Não reaplicar se o utilizador pediu explicitamente tamanho real (zoom 1:1)
+    if (wordPage.dataset.zoomedOut === '1') return;
+
+    const isMobile = window.innerWidth <= 900;
+    if (!isMobile) {
+      // Desktop: sem escala — folha A4 no tamanho real definido pelo CSS base.
+      wordPage.style.transform    = '';
+      wordPage.style.marginLeft   = '';
+      wordPage.style.marginBottom = '';
+      return;
+    }
+
+    const availW = pageWrap.clientWidth || window.innerWidth;
+    const a4Px       = 794;  // 210mm @ 96dpi
+    const a4HeightPx = 1123; // 297mm @ 96dpi
+    // CORRIGIDO: 0.9 — a folha ocupa ~90% da largura disponível por padrão,
+    // com margem cinza visível ao redor (igual ao Preview/TemplatePicker),
+    // em vez de width:100% que ia de borda a borda sem respiro visual.
+    const scale = Math.min(0.9, (availW - 16) / a4Px);
+    const marginLeft = Math.max(0, (availW - a4Px * scale) / 2);
+
+    wordPage.style.transformOrigin = 'top left';
+    wordPage.style.transform       = `scale(${scale})`;
+    wordPage.style.marginLeft      = `${marginLeft}px`;
+    wordPage.style.marginBottom    = `${(a4HeightPx * scale) - a4HeightPx}px`;
   }
 
   // ── Preview A4 — MESMO motor renderA4Pages() usado no resultado/TemplatePicker ──
