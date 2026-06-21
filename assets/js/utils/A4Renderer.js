@@ -268,7 +268,22 @@ ${extraCss || ''}
 // pageEl: a folha (.a4-page) que recebe altura/largura finais em px.
 // iframe: o iframe com o conteúdo real a escalar via transform.
 export function scalePage(containerEl, pageEl, iframe) {
-  const containerW = containerEl?.clientWidth || pageEl.clientWidth || 0;
+  let containerW = containerEl?.clientWidth || pageEl.clientWidth || 0;
+
+  // CORRIGIDO: clientWidth do contentor já INCLUI o seu próprio padding
+  // horizontal (ex: .a4-pages-outer tem padding:16px 12px). Sem subtrair
+  // esse padding, a folha era calculada para ocupar a largura total —
+  // "comendo" visualmente o respiro lateral e ficando colada nas bordas
+  // da tela (sem o fundo escuro visível dos lados, como reportado).
+  if (containerEl) {
+    try {
+      const cs = (containerEl.ownerDocument?.defaultView || window).getComputedStyle(containerEl);
+      const padLeft  = parseFloat(cs.paddingLeft)  || 0;
+      const padRight = parseFloat(cs.paddingRight) || 0;
+      containerW = Math.max(0, containerW - padLeft - padRight);
+    } catch (_) { /* getComputedStyle indisponível — usar containerW tal qual */ }
+  }
+
   // CRÍTICO: se o contentor ainda está oculto (display:none — ex: modal/overlay
   // que abre DEPOIS de renderResult() ter corrido), clientWidth é 0. Escalar
   // para 0 deixaria a folha invisível para sempre. Em vez disso, não escalamos
