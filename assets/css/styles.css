@@ -356,7 +356,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 /* 3. Preview cresce e faz scroll internamente */
 .res-sheet #resPreview {
   flex: 1 1 0;
-  min-height: 0;        /* crítico para o flex funcionar em iOS/Android */
+  min-height: 70vh;        /* crítico para o flex funcionar em iOS/Android */
   overflow: hidden;
   display: flex;
   flex-direction: column;
