@@ -1,11 +1,24 @@
-// api/auth/index.js — v2.0 (AUDITORIA Junho/2026)
-// ALTERAÇÕES v2.0:
+// api/auth/index.js — v2.1 (FIX: perfis sem nome/telefone após signup)
+// ALTERAÇÕES v2.1:
+//  1. CORRIGIDO: o trabalho de gravar full_name/phone no perfil corria
+//     "em background" DEPOIS de res.json() já ter sido enviado. Em funções
+//     serverless da Vercel, o processo pode ser terminado a qualquer momento
+//     após a resposta ser enviada — esse código deixava de ter garantia de
+//     terminar, fazendo o perfil ficar permanentemente sem nome/telefone em
+//     execuções onde o runtime não esperou. Agora usa waitUntil() do
+//     @vercel/functions, que diz explicitamente ao runtime para manter a
+//     função viva até essa promise terminar, mesmo depois da resposta HTTP
+//     já ter sido enviada ao cliente.
+//
+// ALTERAÇÕES v2.0 (mantidas):
 //  1. Removido @supabase/supabase-js + require('ws') — usa api/_lib/supabaseAdmin.js
 //     para operações com service_role. SignIn/SignUp/Reset usam fetch directo ao
 //     endpoint GoTrue (/auth/v1/*) via anonAuthRequest().
 //  2. Validação de telefone corrigida de 8[4-7] para 8[2-7] — aceita M-Pesa,
 //     e-Mola e mKesh (auditoria 3.6).
 //  3. Lógica de negócio 100% preservada da v1.0.
+
+const { waitUntil } = require('@vercel/functions');
 
 const {
   getUserFromToken,
@@ -173,7 +186,11 @@ async function handleSignup(req, res) {
       if (affProfile) profilePayload.referred_by = affProfile.id;
     }
 
-    // Responder imediatamente — não bloquear na gravação do perfil
+    // CORRIGIDO: responder imediatamente ao cliente, mas usar waitUntil()
+    // para garantir que a gravação do perfil (nome/telefone) TERMINA mesmo
+    // depois da resposta HTTP já ter sido enviada — antes, este trabalho
+    // corria "à sorte" depois de res.json(), sem garantia de conclusão em
+    // ambiente serverless (processo podia ser terminado a qualquer momento).
     res.status(201).json({
       success: true,
       user:    { id: userId, phone: normalized, email: normalizedEmail },
@@ -181,52 +198,7 @@ async function handleSignup(req, res) {
       message: 'Conta criada! 1 crédito grátis atribuído (válido 1 mês).',
     });
 
-    // ── Gravar perfil em background ───────────────────────────────────────
-    // NOTA: o trigger handle_new_user já criou o perfil com full_name='' e
-    // phone='' (porque raw_user_meta_data pode não estar pronto no momento
-    // do trigger). Aqui fazemos UPDATE explícito para sobrepor esses valores.
-    if (!SERVICE_KEY) {
-      console.warn(`[auth/signup] Sem service role — perfil não actualizado para ${userId.slice(0,8)}***`);
-      return;
-    }
-
-    await new Promise(r => setTimeout(r, 800)); // dar tempo ao trigger para terminar
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        // Primeiro tentar UPDATE (o trigger já criou a linha)
-        await restRequest(`profiles?id=eq.${userId}`, {
-          method: 'PATCH',
-          body: {
-            phone:     normalized,
-            email:     normalizedEmail,
-            full_name: normalizedName,
-            updated_at: new Date().toISOString(),
-          },
-          prefer: 'return=minimal',
-        });
-        console.log(`[auth/signup] Perfil actualizado com nome/telefone (tentativa ${attempt + 1})`);
-        return;
-      } catch (err) {
-        console.warn(`[auth/signup] PATCH tentativa ${attempt + 1}/3:`, err.message);
-        if (attempt === 0) {
-          // Fallback: tentar upsert se o PATCH falhar (perfil pode não existir ainda)
-          try {
-            await restRequest('profiles', {
-              method: 'POST',
-              body:   profilePayload,
-              prefer: 'resolution=merge-duplicates,return=minimal',
-            });
-            console.log(`[auth/signup] Perfil inserido via upsert`);
-            return;
-          } catch (upsertErr) {
-            console.warn(`[auth/signup] upsert fallback:`, upsertErr.message);
-          }
-        }
-        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
-      }
-    }
-    console.error(`[auth/signup] Perfil NÃO actualizado após 3 tentativas para ${userId.slice(0,8)}***`);
+    waitUntil(_persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload }));
 
   } catch (err) {
     console.error('[auth/signup]', err.message);
@@ -234,6 +206,60 @@ async function handleSignup(req, res) {
       return res.status(500).json({ error: err.message || 'Erro ao criar conta' });
     }
   }
+}
+
+// ── Gravar perfil em background (chamado via waitUntil em handleSignup) ──────
+// NOTA: o trigger handle_new_user já criou o perfil com full_name='' e
+// phone='' (porque raw_user_meta_data pode não estar pronto no momento
+// do trigger). Aqui fazemos UPDATE explícito para sobrepor esses valores.
+// CORRIGIDO: esta função antes corria solta depois de res.json() já ter
+// sido enviado, sem garantia de conclusão em ambiente serverless — agora é
+// passada a waitUntil(), que diz ao runtime da Vercel para manter a função
+// viva até esta promise terminar, eliminando a perda intermitente de
+// nome/telefone em contas novas.
+async function _persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload }) {
+  if (!SERVICE_KEY) {
+    console.warn(`[auth/signup] Sem service role — perfil não actualizado para ${userId.slice(0,8)}***`);
+    return;
+  }
+
+  await new Promise(r => setTimeout(r, 800)); // dar tempo ao trigger para terminar
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      // Primeiro tentar UPDATE (o trigger já criou a linha)
+      await restRequest(`profiles?id=eq.${userId}`, {
+        method: 'PATCH',
+        body: {
+          phone:     normalized,
+          email:     normalizedEmail,
+          full_name: normalizedName,
+          updated_at: new Date().toISOString(),
+        },
+        prefer: 'return=minimal',
+      });
+      console.log(`[auth/signup] Perfil actualizado com nome/telefone (tentativa ${attempt + 1})`);
+      return;
+    } catch (err) {
+      console.warn(`[auth/signup] PATCH tentativa ${attempt + 1}/3:`, err.message);
+      if (attempt === 0) {
+        // Fallback: tentar upsert se o PATCH falhar (perfil pode não existir ainda)
+        try {
+          await restRequest('profiles', {
+            method: 'POST',
+            body:   profilePayload,
+            prefer: 'resolution=merge-duplicates,return=minimal',
+          });
+          console.log(`[auth/signup] Perfil inserido via upsert`);
+          return;
+        } catch (upsertErr) {
+          console.warn(`[auth/signup] upsert fallback:`, upsertErr.message);
+        }
+      }
+      await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+    }
+  }
+  console.error(`[auth/signup] Perfil NÃO actualizado após 3 tentativas para ${userId.slice(0,8)}***`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
