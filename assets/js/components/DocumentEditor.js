@@ -2,7 +2,7 @@
 // Editor WYSIWYG estilo Word — preview A4 fiel + edição rich text com toolbar
 import { sanitizeHtml } from '../utils/Sanitizer.js';
 import { getFormatCSS } from './DocumentEditorStyles.js';
-import { getPageSimScript } from './pageSimulationScript.js';
+import { renderA4Pages, A4_PAGES_CONTAINER_CSS, scalePage, markdownToHtml as a4MarkdownToHtml } from '../utils/A4Renderer.js';
 
 export class DocumentEditor {
   constructor() {
@@ -132,12 +132,11 @@ export class DocumentEditor {
 
         <!-- BODY -->
         <div class="ed-body">
-          <!-- PREVIEW A4 -->
+          <!-- PREVIEW A4 — agora usa o MESMO motor renderA4Pages() do resultado/
+               TemplatePicker: folhas A4 reais separadas por página, tabelas
+               markdown "|" convertidas em <table> real (GFM), igual em toda a app. -->
           <div class="ed-preview-wrap" id="edPreviewWrap">
-            <div class="ed-a4-bg">
-              <div class="ed-a4-label">A4 · 210×297 mm</div>
-              <iframe id="edPreviewFrame" class="ed-a4-frame"></iframe>
-            </div>
+            <div class="a4-pages-outer" id="edA4Wrap"></div>
           </div>
 
           <!-- EDITOR WYSIWYG (estilo Word) -->
@@ -562,62 +561,58 @@ export class DocumentEditor {
   }
 
   // ── Escala A4 para mobile ──────────────────────────────────────
+  // ── Reescalar todas as folhas A4 do preview (motor partilhado A4Renderer) ──
   _updateA4Scale() {
-    const frame = this.modal.querySelector('.ed-a4-frame');
-    if (!frame) return;
-    const wrap  = this.modal.querySelector('.ed-preview-wrap');
-    if (!wrap)  return;
-    const availW     = wrap.clientWidth;
-    const a4Px       = 210 * 3.7795;  // 210mm em px (96dpi)
-    const a4HeightPx = 297 * 3.7795;
-    const scale      = Math.min(1, availW / a4Px);
-
-    // CORRIGIDO: antes usava transform-origin:top center e inline style.
-    // Problema: o iframe de 210mm a começar no centro transbordava para a
-    // direita em viewports < 210mm*2 — causando scroll horizontal e layout
-    // partido (imagem 3). Solução: usar transform-origin:top left e centrar
-    // via margin-left calculado, exposto como CSS var para o media query do CSS.
-    const marginLeft = (availW - a4Px * scale) / 2;
-
-    // Definir a variável CSS para que o media query do editor.css a use
-    frame.closest('.ed-a4-bg')?.style.setProperty('--a4-scale', scale.toString());
-    // Aplicar directamente no JS para desktop (onde o CSS var não é usado)
-    if (scale < 1) {
-      frame.style.transform       = `scale(${scale})`;
-      frame.style.transformOrigin = 'top left';
-      frame.style.marginLeft      = `${marginLeft}px`;
-      frame.style.marginBottom    = `${(a4HeightPx * scale) - a4HeightPx}px`;
-    } else {
-      frame.style.transform    = '';
-      frame.style.marginLeft   = '';
-      frame.style.marginBottom = '';
-    }
+    const outer = this.modal.querySelector('#edA4Wrap');
+    if (!outer) return;
+    outer.querySelectorAll('.a4-page').forEach(pageEl => {
+      const iframe = pageEl.querySelector('iframe');
+      if (iframe) scalePage(outer, pageEl, iframe);
+    });
   }
 
-  // ── Preview A4 no iframe ───────────────────────────────────────
+  // ── Preview A4 — MESMO motor renderA4Pages() usado no resultado/TemplatePicker ──
+  // Folhas A4 reais separadas por página (---PAGE_BREAK---), tabelas markdown
+  // "|" convertidas em <table> real (GFM). Substitui o antigo iframe único
+  // com script de simulação de páginas, que não reflectia a paginação real.
   _renderPreview(format) {
-    const frame = this.modal.querySelector('#edPreviewFrame');
-    if (!frame) return;
+    const outer = this.modal.querySelector('#edA4Wrap');
+    if (!outer) return;
     console.log('[DocumentEditor] _renderPreview — content length:', this.content?.length, 'format:', format);
     if (!this.content || this.content.trim().length === 0) {
       console.error('[DocumentEditor] _renderPreview: this.content is empty!');
+      outer.innerHTML = '<p style="color:#fff;text-align:center;padding:40px 20px;">⚠️ Sem conteúdo para mostrar.</p>';
       return;
     }
-    const html = this._buildPreviewHTML(format);
-    // srcdoc: most reliable cross-browser approach
-    // - No contentDocument.write() (fails silently when iframe not yet painted)
-    // - No blob: URL (blocked by CSP in sandboxed iframes)
-    // - No scripts needed inside preview so 'unsafe-inline' not required
-    frame.srcdoc = html;
+
+    // Injectar CSS partilhado das folhas A4 uma única vez (idempotente)
+    if (!document.getElementById('a4PagesSharedStyle')) {
+      const styleEl = document.createElement('style');
+      styleEl.id = 'a4PagesSharedStyle';
+      styleEl.textContent = A4_PAGES_CONTAINER_CSS;
+      document.head.appendChild(styleEl);
+    }
+
+    try {
+      this._renderPreviewInner(outer, format);
+    } catch (err) {
+      console.error('[DocumentEditor] _renderPreview erro:', err);
+      outer.innerHTML = `
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px;margin:14px;color:#991b1b;font-size:13px;line-height:1.6;">
+          <strong>⚠️ Erro ao mostrar o preview</strong><br><br>
+          <code style="display:block;white-space:pre-wrap;word-break:break-word;background:#fff;border-radius:6px;padding:8px;margin-top:6px;font-size:11.5px;">${(err?.message || String(err)).replace(/</g,'&lt;')}</code>
+        </div>`;
+    }
   }
 
-  _buildPreviewHTML(format) {
+  _renderPreviewInner(outer, format) {
     // Prioridade 1: HTML estruturado do template (layout de 2 colunas, sidebar, etc.)
     // NÃO passar pelo sanitizeHtml — o templateHtml vem de TemplateLibrary.js (fonte interna
     // confiável) e o sanitizer removeria tags semânticas (section, aside, main, header, footer)
     // que são essenciais para o layout. Os dados do utilizador já foram limpos em _extractRealData.
     if (this._templateHtml && this._templateCss) {
-      return `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>${this._templateCss}</style></head><body>${this._templateHtml}</body></html>`;
+      renderA4Pages(outer, this._templateHtml, { css: this._templateCss, isRawHTML: true, showPageLabel: true });
+      return;
     }
 
     const isRawHTML = this.content && this.content.trimStart().startsWith('<');
@@ -625,96 +620,71 @@ export class DocumentEditor {
     if (isRawHTML) {
       // Conteúdo HTML estruturado (gerado via htmlTemplate da IA)
       const templateCss = this._templateCss || 'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;padding:18mm;}';
-      return `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><style>${templateCss}</style></head><body>${this.content}</body></html>`;
+      renderA4Pages(outer, this.content, { css: templateCss, isRawHTML: true, showPageLabel: true });
+      return;
     }
-
-    // Conteúdo markdown → converter para HTML
-    const body = sanitizeHtml(this._markdownToHTML(this.content));
 
     // CORRIGIDO: se há templateCss activo, aplicá-lo mesmo para conteúdo markdown.
     // Bug original: o templateCss só era usado para HTML raw — para markdown usava sempre
     // _getFormatCSS() genérico, fazendo o editor mostrar um layout completamente diferente
     // do preview do resultado após o utilizador escolher um template (imagem 4 vs imagem 3).
-    if (this._templateCss) {
-      return `<!DOCTYPE html>
-<html lang="pt">
-<head><meta charset="UTF-8"><style>*{box-sizing:border-box;}${this._templateCss}</style></head>
-<body>${body}</body>
-</html>`;
-    }
+    const css = this._templateCss
+      ? `*{box-sizing:border-box;}${this._templateCss}`
+      : this._getFormatCSS(format);
 
-    const css = this._getFormatCSS(format);
-    // Para PDF e Word: injectar script de simulacao de paginas (mostra divisores visuais)
-    // Para Excel: sem simulacao (layout continuo em tabela)
-    const pageSim = (format !== 'excel') ? this._pageSimJS() : '';
-    return `<!DOCTYPE html>
-<html lang="pt">
-<head><meta charset="UTF-8"><style>${css}</style></head>
-<body><div class="doc-page">${body}</div>${pageSim}</body>
-</html>`;
+    // Conteúdo markdown → renderA4Pages faz o split por ---PAGE_BREAK--- e a
+    // conversão markdown→HTML internamente (com tabelas GFM reais incluídas,
+    // corrigindo o bug do parser antigo _mdTableToHTML que perdia células vazias).
+    renderA4Pages(outer, this.content, { css, isRawHTML: false, showPageLabel: true });
   }
 
   _getFormatCSS(format) {
     return getFormatCSS(format);
   }
 
-  // Script injectado no iframe de preview para simular quebras de pagina visuais.
-  // Mede a altura real do .doc-page e insere divisores "--- Quebra de pagina ---"
-  // em cada multiplo de 297mm (area util: 297 - 25 topo - 20 base = 252mm de texto).
-  // O utilizador ve EXACTAMENTE o numero de paginas que o PDF vai ter.
-  _pageSimJS() {
-    return getPageSimScript();
-  }
-
-  _markdownToHTML(md) {
-    if (!md) return '<p><em>Sem conteúdo</em></p>';
-    if (this._previewFmt === 'excel') {
-      return `<div style="background:#E7E6E6;border-bottom:3px solid #4472C4;padding:6px 16px;font-weight:bold;display:inline-block;margin-bottom:8px;">📊 Folha 1</div>${this._mdToHTMLBasic(md)}`;
-    }
-    return this._mdToHTMLBasic(md);
-  }
-
-  _mdToHTMLBasic(md) {
-    // Normalizar variantes de "Nova Página" para o marcador canónico
-    const normalized = md
-      .replace(/^[ \t]*[—–-]{0,3}[ \t]*Nova P[aá]gina[ \t]*[—–-]{0,3}[ \t]*$/gim, '---PAGE_BREAK---')
-      .replace(/\*{1,2}Nova P[aá]gina\*{1,2}/gi, '---PAGE_BREAK---');
-    // Replace PAGE_BREAK FIRST (before HTML-escaping) so it doesn't get mangled
-    const PAGE_BREAK_PLACEHOLDER = '___PB___';
-    let html = normalized
-      .replace(/---PAGE_BREAK---/g, PAGE_BREAK_PLACEHOLDER)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(new RegExp(PAGE_BREAK_PLACEHOLDER,'g'),'<div style="page-break-after:always;height:0;margin:0"></div><div style="display:flex;align-items:center;gap:8px;margin:18px 0;"><div style="height:1px;flex:1;background:#d1d5db"></div><span style="font-size:10px;color:#9ca3af;letter-spacing:.5px">— Nova Página —</span><div style="height:1px;flex:1;background:#d1d5db"></div></div>')
-      .replace(/^######\s(.+)$/gm,'<h6>$1</h6>')
-      .replace(/^#####\s(.+)$/gm, '<h5>$1</h5>')
-      .replace(/^####\s(.+)$/gm,  '<h4>$1</h4>')
-      .replace(/^###\s(.+)$/gm,   '<h3>$1</h3>')
-      .replace(/^##\s(.+)$/gm,    '<h2>$1</h2>')
-      .replace(/^#\s(.+)$/gm,     '<h1>$1</h1>')
-      .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
-      .replace(/\*\*(.+?)\*\*/g,    '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g,        '<em>$1</em>')
-      .replace(/^---+$/gm,'<hr>')
-      .replace(/^- (.+)$/gm,'<li>$1</li>')
-      .replace(/^(\d+)\. (.+)$/gm,'<li>$2</li>')
-      .replace(/\n\n/g,'</p><p>')
-      .replace(/\n/g,'<br>');
-    html = html.replace(/(<li>.*?<\/li>)+/gs, m => `<ul>${m}</ul>`);
-    html = html.replace(/(\|.+\|\n?)+/g, m => this._mdTableToHTML(m));
-    return `<p>${html}</p>`;
-  }
 
   _mdTableToHTML(tableStr) {
-    const rows = tableStr.trim().split('\n').filter(r => !/^[\|\s\-:]+$/.test(r));
+    // CORRIGIDO: bug que desalinhava tabelas no editor (imagem reportada:
+    // colunas extra com "-" soltos, células deslocadas). Causa: .filter(Boolean)
+    // ao dividir células por "|" descartava células vazias LEGÍTIMAS (ex: uma
+    // célula em branco no meio da linha), fazendo cada linha da tabela ter um
+    // número de colunas diferente do cabeçalho. Agora preserva todas as células,
+    // mesmo vazias — igual ao parser GFM usado no resto da app (A4Renderer.js).
+    const allLines = tableStr.trim().split('\n');
+    // A linha separadora é "|---|:---:|---:|" — só "-", ":", "|" e espaços.
+    const isSepLine = (l) => /^[\s|:-]+$/.test(l) && l.includes('-');
+    const rows = allLines.filter(l => !isSepLine(l));
     if (!rows.length) return tableStr;
-    const headers = rows[0].split('|').map(c => c.trim()).filter(Boolean);
-    const body    = rows.slice(1);
-    const thead = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
-    const tbody = body.map(row => {
-      const cells = row.split('|').map(c => c.trim()).filter(Boolean);
-      return `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
+
+    const sepLine = allLines.find(isSepLine);
+    const splitCells = (l) => {
+      let t = l.trim();
+      if (t.startsWith('|')) t = t.slice(1);
+      if (t.endsWith('|'))   t = t.slice(0, -1);
+      return t.split('|').map(c => c.trim());
+    };
+
+    const aligns = sepLine ? splitCells(sepLine).map(c => {
+      const left  = c.startsWith(':');
+      const right = c.endsWith(':');
+      if (left && right) return 'center';
+      if (right) return 'right';
+      if (left) return 'left';
+      return '';
+    }) : [];
+
+    const headerCells = splitCells(rows[0]);
+    const bodyRows     = rows.slice(1).map(splitCells);
+
+    const cellsHtml = (cells, tag) => cells.map((c, i) => {
+      const al = aligns[i] ? ` style="text-align:${aligns[i]}"` : '';
+      return `<${tag}${al}>${c}</${tag}>`;
     }).join('');
-    return `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+
+    const thead = `<tr>${cellsHtml(headerCells, 'th')}</tr>`;
+    const tbody = bodyRows.map(cells => `<tr>${cellsHtml(cells, 'td')}</tr>`).join('');
+    return `<table style="width:100%;border-collapse:collapse;margin:8pt 0;">${
+      ''}<thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
   }
 
   // ── Downloads ─────────────────────────────────────────────────
@@ -862,7 +832,11 @@ export class DocumentEditor {
   }
 
   async _downloadExcel() {
-    const html = `<html><head><meta charset="UTF-8"></head><body>${this._mdToHTMLBasic(this.content)}</body></html>`;
+    // CORRIGIDO: usar o parser GFM do A4Renderer (a4MarkdownToHtml) em vez de
+    // _mdToHTMLBasic/_mdTableToHTML — este último perdia células vazias nas
+    // tabelas (.filter(Boolean) descartava "" legítimos), desalinhando colunas
+    // no ficheiro .xls exportado.
+    const html = `<html><head><meta charset="UTF-8"></head><body>${a4MarkdownToHtml(this.content)}</body></html>`;
     const blob = new Blob(['\ufeff', html], { type:'application/vnd.ms-excel' });
     const url  = URL.createObjectURL(blob);
     const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.xls` });
