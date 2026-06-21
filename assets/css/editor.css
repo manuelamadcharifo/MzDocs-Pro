@@ -478,40 +478,21 @@
   flex-direction: column;
 }
 
-/* Preview A4 */
+/* Preview A4 — MESMO motor renderA4Pages() do resultado/TemplatePicker.
+   .a4-pages-outer/.a4-page substituem o antigo iframe único (.ed-a4-bg/
+   .ed-a4-frame), que não reflectia a paginação real do documento. */
 .ed-preview-wrap {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   background: #d1d5db;
   display: flex;
-  align-items: flex-start;
   justify-content: center;
-  padding: 24px 16px;
+  padding: 0;
 }
 
-.ed-a4-bg {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.ed-a4-label {
-  font-size: 11px;
-  color: #6b7280;
-  background: #fff;
-  padding: 3px 12px;
-  border-radius: 20px;
-  font-weight: 600;
-}
-
-.ed-a4-frame {
-  width: 210mm;
-  min-height: 297mm;
-  border: none;
-  background: #fff;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
-  display: block;
+.ed-preview-wrap .a4-pages-outer {
+  width: 100%;
 }
 
 /* Edit textarea */
@@ -542,26 +523,9 @@
   .ed-shell { max-width: 100%; height: 100dvh; border-radius: 0; }
   #editorOverlay { padding: 0; }
 
-  /* CORRIGIDO: o preview A4 no mobile transbordava para a direita porque
-     transform-origin:top center ainda deixava o iframe de 210mm mais largo
-     que o viewport — causando scroll horizontal e layout partido (imagem 3).
-     Solução: usar transform-origin:top left e centrar com margin-left. */
   .ed-preview-wrap {
-    padding: 8px 0;
-    overflow: hidden;
-  }
-  .ed-a4-bg {
-    width: 100%;
-    overflow: hidden;
-    align-items: flex-start;
-  }
-  .ed-a4-frame {
-    width: 210mm;
-    min-height: 297mm;
-    transform-origin: top left;
-    transform: scale(var(--a4-scale, 0.42));
-    margin-bottom: calc((297mm * var(--a4-scale, 0.42)) - 297mm);
-    margin-left: calc((100vw - 210mm * var(--a4-scale, 0.42)) / 2);
+    padding: 0;
+    overflow: auto;
   }
 
   .ed-fmt-group { flex-wrap: wrap; }
