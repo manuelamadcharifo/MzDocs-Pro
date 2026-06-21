@@ -640,9 +640,6 @@
   flex: 1;
   overflow-y: auto;
   background: #e8ecf0;
-  padding: 20px;
-  display: flex;
-  justify-content: center;
 }
 .ed-word-page {
   width: 210mm;
