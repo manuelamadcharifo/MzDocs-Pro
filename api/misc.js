@@ -27,14 +27,28 @@ const {
 const SITE_URL = (process.env.SITE_URL || 'https://mzdocs.co.mz').replace(/\/$/, '');
 const ORIGIN   = SITE_URL;
 
-// Instância SDK mínima (SEM ws, SEM realtime) para operações que ainda
+// Instância SDK mínima (com transporte ws explícito) para operações que ainda
 // usam métodos do SDK como .rpc(), .auth.getUser() — apenas em funções
 // de afiliados e templates, enquanto não forem migradas para fetch puro.
+//
+// CORRIGIDO: a opção `realtime: { enabled: false }` NÃO é reconhecida pelo
+// @supabase/supabase-js (não existe tal propriedade) — é silenciosamente
+// ignorada, e o cliente cai no comportamento padrão de detecção automática
+// de WebSocket nativo, que falha em runtimes Node.js < 22 (sem WebSocket
+// global), lançando "Node.js 20 detected without native WebSocket support"
+// no PRÓPRIO MOMENTO de createClient(), antes de qualquer query. Isto
+// causava o erro visível ao registar parceiros/afiliados (handleAffiliate)
+// e ao gerir templates (handleTemplates). A opção correcta e documentada
+// pela Supabase para Node < 22 é `realtime: { transport: ws }` — confirmado
+// por reprodução directa: com `transport: ws` não há erro; com `enabled:
+// false` ou sem qualquer opção, o erro ocorre sempre que o WebSocket nativo
+// não existe no runtime.
 function makeSdkClient() {
   const { createClient } = require('@supabase/supabase-js');
+  const ws = require('ws');
   return createClient(SUPABASE_URL, SERVICE_KEY, {
     auth:     { autoRefreshToken: false, persistSession: false },
-    realtime: { enabled: false }, // desliga Realtime completamente — sem ws
+    realtime: { transport: ws },
   });
 }
 
@@ -433,7 +447,8 @@ async function handlePageView(req, res) {
     await rpc('increment_page_views', { p_slug: slug });
     return res.status(200).json({ ok: true });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error('[handlePageView] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível registar a visualização.' });
   }
 }
 
@@ -562,7 +577,8 @@ async function tplList(req, res) {
     }));
     return res.status(200).json({ success: true, templates });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error('[tplList] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível carregar os modelos. Tente novamente.' });
   }
 }
 
@@ -669,7 +685,12 @@ async function handleAffiliate(action, req, res) {
     }
   } catch (err) {
     console.error('[handleAffiliate] crash:', action, err.message);
-    return res.status(500).json({ error: 'Erro interno: ' + err.message });
+    // CORRIGIDO: o erro técnico cru (ex: detalhes internos do SDK Supabase)
+    // chegava directamente ao utilizador final no ecrã ("Quero ser Parceiro").
+    // Agora a mensagem amigável é a única coisa exposta na resposta da API —
+    // o detalhe técnico continua disponível nos logs do servidor (console.error
+    // acima) para diagnóstico, sem nunca aparecer na interface do utilizador.
+    return res.status(500).json({ error: 'Não foi possível concluir o registo. Por favor, tente novamente dentro de alguns instantes.' });
   }
 }
 
@@ -731,13 +752,15 @@ async function continueRegister(res, supabase, user, profile, extra = {}) {
     if (extra.mpesaPhone)   updates.aff_phone_mpesa   = extra.mpesaPhone;
     const { error: updateErr } = await supabase.from('profiles').update(updates).eq('id', user.id);
     if (updateErr) {
+      console.error('[affRegister] erro ao actualizar perfil:', updateErr.message, updateErr.code);
       if (updateErr.message.includes('column') || updateErr.code === '42703')
-        return res.status(500).json({ error: 'Colunas em falta. Execute o SQL de migração v14.', sql_needed: true });
-      return res.status(500).json({ error: 'Erro ao guardar código: ' + updateErr.message });
+        return res.status(500).json({ error: 'Não foi possível concluir o registo. A equipa já foi notificada.', sql_needed: true });
+      return res.status(500).json({ error: 'Não foi possível guardar o seu registo. Por favor, tente novamente.' });
     }
     return res.status(200).json({ success: true, ref_code: finalCode, is_affiliate: false, message: 'Candidatura enviada! Aguarde aprovação em 24-48h.' });
   } catch (err) {
-    return res.status(500).json({ error: 'Erro ao gerar código: ' + err.message });
+    console.error('[affRegister] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível concluir o registo. Por favor, tente novamente dentro de alguns instantes.' });
   }
 }
 
