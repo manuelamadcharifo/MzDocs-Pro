@@ -640,6 +640,11 @@
   flex: 1;
   overflow-y: auto;
   background: #e8ecf0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
 }
 .ed-word-page {
   width: 210mm;
@@ -653,6 +658,16 @@
   color: #000;
   outline: none;
   cursor: text;
+  flex-shrink: 0;
+}
+/* Separador entre páginas no modo Editar — igual ao .a4-page-sep-label do Preview */
+.ed-word-page-sep-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+  letter-spacing: .5px;
+  text-align: center;
+  flex-shrink: 0;
 }
 /* Quando o editor exibe HTML de template (padding 0 aplicado via JS),
    o conteúdo já inclui padding/layout próprio — não adicionar margem extra */
@@ -712,7 +727,7 @@
      (794px) e é escalada via JS (_updateA4Scale) para ~90% da largura
      disponível, exactamente como o Preview/TemplatePicker — mesma aparência
      em todos os previews da app, com ou sem zoom. */
-  .ed-word-page-wrap { padding: 8px; overflow: auto; }
+  .ed-word-page-wrap { padding: 8px; overflow: auto; gap: 14px; }
   .ed-word-page {
     width: 794px;
     min-height: 1123px;
