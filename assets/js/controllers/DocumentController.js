@@ -999,11 +999,17 @@ export class DocumentController {
 
     this._activeTemplateHtml = filled;
 
+    // CORRIGIDO: estava a passar this.docModel (sem .title) como segundo
+    // argumento de renderResult — devia ser o objecto svc (SERVICES[key]),
+    // que tem .title. Isto fazia "📄 undefined" aparecer no cabeçalho do
+    // preview ao aplicar um modelo (sem chegar a quebrar, mas incorrecto).
+    const svcForTpl = SERVICES[this.docModel.service] || {};
+
     // Actualizar preview principal com o HTML + CSS do template
     // templateCss é passado para _activeTemplateCss dentro de renderResult
     DocumentView.renderResult(
       filled,
-      this.docModel,
+      svcForTpl,
       this.creditModel.value,
       this.docModel.model,
       tpl.css || null
