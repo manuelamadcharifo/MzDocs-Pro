@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v17-20260621b'; // Editor de Documentos: Preview agora usa o mesmo motor A4Renderer (folhas reais); tabelas corrigidas no modo Editar
+const CACHE_VERSION = 'v18-20260621c'; // FIX: folha colada nas bordas (scalePage não subtraía padding do contentor); zoom do editor agora ~90% por padrão, igual aos outros previews
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
