@@ -716,9 +716,25 @@ export class DocumentController {
  const menu = document.createElement('div');
  menu.id = 'exportMenu';
  const rect = btn.getBoundingClientRect();
+
+ // CORRIGIDO: o menu abria sempre para baixo (top: rect.bottom + 8), o que
+ // o deixava cortado/invisível quando o botão Download está perto do fundo
+ // do ecrã (ex: sheet de resultado ocupando quase toda a tela em mobile).
+ // Agora calculamos o espaço disponível acima e abaixo do botão e escolhemos
+ // a direcção que cabe — exactamente como um menu nativo faria.
+ const menuHeight   = 3 * 44 + 16; // 3 opções (~44px cada) + padding
+ const viewportH    = window.innerHeight;
+ const spaceBelow   = viewportH - rect.bottom;
+ const spaceAbove   = rect.top;
+ const openUpwards  = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+
+ const topPos = openUpwards
+   ? Math.max(8, rect.top - menuHeight - 8)
+   : rect.bottom + 8;
+
  menu.style.cssText = [
   'position:fixed',
-  `top:${rect.bottom + 8}px`,
+  `top:${topPos}px`,
   `left:${Math.max(8, rect.left - 60)}px`,
   'background:#fff',
   'border:1.5px solid #e2e8f0',
@@ -727,6 +743,8 @@ export class DocumentController {
   'padding:8px',
   'z-index:99999',
   'min-width:180px',
+  `max-height:${Math.max(120, viewportH - 16)}px`,
+  'overflow-y:auto',
  ].join(';');
 
  const opts = [
@@ -746,6 +764,18 @@ export class DocumentController {
  });
 
  document.body.appendChild(menu);
+
+ // Re-verificar depois de inserido no DOM (altura real pode diferir da
+ // estimativa) — ajusta a posição se ainda ultrapassar os limites do ecrã.
+ requestAnimationFrame(() => {
+   const menuRect = menu.getBoundingClientRect();
+   if (menuRect.bottom > viewportH - 8) {
+     menu.style.top = Math.max(8, viewportH - menuRect.height - 8) + 'px';
+   }
+   if (menuRect.top < 8) {
+     menu.style.top = '8px';
+   }
+ });
 
  this._menuOutside = (e) => {
   if (!menu.contains(e.target) && e.target !== btn) this._removeExportMenu();
