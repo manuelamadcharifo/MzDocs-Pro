@@ -198,6 +198,27 @@ export const DocumentView = {
   // ---PAGE_BREAK---, não um único iframe cortado) e tabelas markdown "|"
   // convertidas em <table> real via markdownToHtml (GFM).
   renderResult(content, svc, credits, model, templateCss = null) {
+    try {
+      this._renderResultInner(content, svc, credits, model, templateCss);
+    } catch (err) {
+      // CORRIGIDO: diagnóstico visível sem precisar de consola/DevTools.
+      // Antes, qualquer excepção aqui deixava a área de preview completamente
+      // vazia (sem tabs, sem folha, sem explicação) — agora mostra o erro
+      // real directamente no ecrã, para sabermos exactamente o que falhou.
+      console.error('[DocumentView.renderResult] erro:', err);
+      const previewContainer = document.getElementById('resPreview');
+      if (previewContainer) {
+        previewContainer.innerHTML = `
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px;margin:14px;color:#991b1b;font-size:13px;line-height:1.6;">
+            <strong>⚠️ Erro ao mostrar o preview</strong><br><br>
+            <code style="display:block;white-space:pre-wrap;word-break:break-word;background:#fff;border-radius:6px;padding:8px;margin-top:6px;font-size:11.5px;">${(err?.message || String(err)).replace(/</g,'&lt;')}</code>
+            <br>O download continua disponível normalmente — pode tentar pelos botões abaixo.
+          </div>`;
+      }
+    }
+  },
+
+  _renderResultInner(content, svc, credits, model, templateCss = null) {
     document.getElementById('resModel').textContent = model || 'openrouter';
     // CORRIGIDO: guardar templateCss activo para usar no _renderResultFrame
     this._activeTemplateCss = templateCss || null;
@@ -210,10 +231,15 @@ export const DocumentView = {
     // ao abrir certos documentos "Do arquivo".
     const safeContent = (typeof content === 'string') ? content : (content == null ? '' : String(content));
 
+    // CORRIGIDO: svc pode vir nulo/sem .title em alguns fluxos (ex: aplicar
+    // template passava this.docModel em vez de svc) — usar fallback seguro
+    // em vez de deixar "svc.title" rebentar com TypeError.
+    const svcTitle = (svc && typeof svc === 'object' && svc.title) ? svc.title : (svc?.service || 'Documento');
+
     // CORRIGIDO: "null créditos restantes" — credits pode ser null quando vem do histórico
     const creditsLabel = (credits != null && credits !== '') ? `⚡ ${credits} créditos restantes &nbsp;|&nbsp; ` : '';
     document.getElementById('resMeta').innerHTML =
-      `📄 ${svc.title} &nbsp;|&nbsp; ${creditsLabel}🕐 ${new Date().toLocaleTimeString('pt')}`;
+      `📄 ${svcTitle} &nbsp;|&nbsp; ${creditsLabel}🕐 ${new Date().toLocaleTimeString('pt')}`;
 
     const previewContainer = document.getElementById('resPreview');
     if (!previewContainer) return;
@@ -285,6 +311,21 @@ export const DocumentView = {
     const outer = document.getElementById('resA4Wrap');
     if (!outer) return;
 
+    try {
+      this._renderResultFrameInner(outer, format, content);
+    } catch (err) {
+      // CORRIGIDO: mesmo diagnóstico visível do renderResult — evita folha
+      // em branco silenciosa quando chamado directamente (tabs, _applyTemplate).
+      console.error('[DocumentView._renderResultFrame] erro:', err);
+      outer.innerHTML = `
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px;margin:14px;color:#991b1b;font-size:13px;line-height:1.6;">
+          <strong>⚠️ Erro ao desenhar a folha</strong><br><br>
+          <code style="display:block;white-space:pre-wrap;word-break:break-word;background:#fff;border-radius:6px;padding:8px;margin-top:6px;font-size:11.5px;">${(err?.message || String(err)).replace(/</g,'&lt;')}</code>
+        </div>`;
+    }
+  },
+
+  _renderResultFrameInner(outer, format, content) {
     // CORRIGIDO: normalizar para string sempre — protege contra content
     // nulo/undefined/não-string vindo de chamadas directas (ex: DocumentController
     // chama _renderResultFrame('pdf', content) fora de renderResult()).
