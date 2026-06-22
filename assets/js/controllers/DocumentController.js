@@ -509,9 +509,35 @@ export class DocumentController {
  async _generateLong(key, svc, data, cost, btn) {
  this._generating  = true;
  this._longRunning = true;
+
+ // BUG 3 CORRIGIDO: _generateLong não mostrava loader nem feedback de progresso.
+ // O utilizador via apenas o botão desactivado sem qualquer indicação visual.
+ const LONG_STEPS = [
+   '📋 A planear estrutura do documento…',
+   '💳 A verificar créditos…',
+   '✍️ A gerar secções…',
+   '🔗 A montar documento final…',
+ ];
+ this._genIv = DocumentView.showLoader(LONG_STEPS);
+
+ // Actualizar texto do loader a cada fase do motor de cadeia
+ this.longEngine.onProgress(({ text }) => {
+   const activeStep = document.querySelector('.lstep.active span:last-child');
+   if (activeStep && text) activeStep.textContent = text;
+ });
+
  try {
-  const result = await this.longEngine.generate(key, data, svc, this.creditModel.value, cost);
-  // CORRIGIDO v2.5: mesma logica — nao chamar consume() apos applyServerDeduction()
+  // BUG 2 CORRIGIDO: chamada antiga passava (key, data, svc, this.creditModel.value, cost)
+  // mas a assinatura de generate() é (serviceType, formData, cost).
+  // svc e this.creditModel.value eram argumentos espúrios; cost era ignorado (ficava 1 por defeito).
+  const result = await this.longEngine.generate(key, data, cost);
+
+  DocumentView.hideLoader(this._genIv);
+
+  if (!result?.document) {
+   throw new Error('A geração não devolveu conteúdo. Tente novamente.');
+  }
+
   if (typeof result.creditsRemaining === 'number') {
    this.creditModel.applyServerDeduction(result.creditsRemaining);
   } else {
@@ -526,7 +552,20 @@ export class DocumentController {
   const longHistId = crypto.randomUUID();
   Analytics.trackDocumentGenerated(key, cost, longHistId);
 
-  // Rascunho já não é necessário — documento gerado com sucesso
+  // Guardar no histórico (estava em falta em _generateLong — presente em _generateNormal)
+  try {
+   const userId = window.authManager?.user?.id || Storage.getUserId();
+   await window.historyController?.saveDocument({
+    id:           longHistId,
+    user_id:      userId,
+    service_type: key,
+    title:        svc.title,
+    content:      result.document,
+    model_used:   result.model,
+    created_at:   new Date().toISOString(),
+   });
+  } catch (_) {}
+
   offlineDB.clearDraft(key).catch(() => {});
   document.getElementById('draftBanner')?.remove();
 
@@ -536,7 +575,6 @@ export class DocumentController {
   this._activeTemplate     = null;
   this._activeTemplateHtml = null;
   ModalView.close('formOverlay');
-  // CORRIGIDO: abrir o modal ANTES de renderResult() — ver explicação acima.
   ModalView.open('resultOverlay');
   DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
   this._bindEditBtn();
@@ -545,7 +583,12 @@ export class DocumentController {
   const remaining = this.creditModel.value;
   if (remaining > 0) this._maybeShowUpsell(remaining, key, cost);
  } catch (err) {
-  NotificationView.error('❌ ' + (err.message || 'Erro ao gerar documento longo.'));
+  DocumentView.hideLoader(this._genIv);
+  if (err.status === 402 || err.message === 'INSUFFICIENT_CREDITS') {
+   NotificationView.error('❌ Créditos insuficientes. Adquira mais créditos para continuar.');
+  } else {
+   NotificationView.error('❌ ' + (err.message || 'Erro ao gerar documento longo.'));
+  }
  } finally {
   this._generating  = false;
   this._longRunning = false;
