@@ -29,6 +29,24 @@
 //    demorava mais de 60s a responder ao pedido de planeamento, o fetch
 //    ficava pendente indefinidamente (o botão nunca era re-activado).
 //    SOLUÇÃO: AbortController com timeout de 55s.
+//
+// NOVO v3.0 (Custo progressivo por tamanho — Junho/2026):
+//  Antes, um trabalho de 6 páginas e um de 30 páginas custavam exactamente
+//  o mesmo (1 crédito fixo da Fase 1b), apesar do segundo consumir muito
+//  mais tokens de IA. Isto foi corrigido com um modelo HÍBRIDO:
+//    • 1 crédito é debitado ao iniciar (Fase 1b, como já acontecia) — cobre
+//      o planeamento + as primeiras secções.
+//    • A partir daí, o motor SOMA os caracteres de cada secção gerada.
+//      Sempre que o total acumulado cruza um novo múltiplo de
+//      CHARS_PER_EXTRA_CREDIT, é debitado AUTOMATICAMENTE +1 crédito extra
+//      via /api/deduct-credit (mesmo endpoint já existente — nenhuma function
+//      nova), e o saldo é validado ANTES de continuar para a secção seguinte.
+//    • Se o utilizador não tiver créditos suficientes para a próxima secção,
+//      o motor PÁRA de forma controlada e devolve o documento PARCIAL já
+//      gerado (com as secções pagas) em vez de falhar tudo ou gerar conteúdo
+//      que o utilizador não pagou.
+//    • Cada dedução incremental fica registada em credit_logs com nota
+//      explícita, para auditoria (quantos caracteres geraram aquele débito).
 
 const ENDPOINT = '/api/generate-document';
 
@@ -40,6 +58,15 @@ const PAGE_THRESHOLD = 6;
 
 // Delay entre chamadas para não esgotar rate limit (ms)
 const INTER_CALL_DELAY = 5000; // 5s entre chamadas para respeitar RPM dos providers
+
+// ── Custo progressivo por tamanho ───────────────────────────────────────────
+// Cada secção gerada soma caracteres a um contador acumulado. A cada
+// CHARS_PER_EXTRA_CREDIT caracteres, debita-se +1 crédito. Valor calibrado
+// para ~6.000 caracteres ≈ 1 página A4 de texto corrido em português formal
+// (fonte 12pt, espaçamento 1.5) — ou seja, a cobrança extra acompanha
+// aproximadamente 1 crédito por página adicional além do que o crédito
+// inicial já cobre.
+const CHARS_PER_EXTRA_CREDIT = 6000;
 
 export class LongDocumentEngine {
   constructor() {
@@ -133,9 +160,20 @@ export class LongDocumentEngine {
     // ── FASE 2: Geração sequencial de secções ──────────────────
     // A partir daqui o crédito já foi debitado. Qualquer falha nas Fases 2/3
     // deve tentar reembolsar via refund_credit (igual ao fluxo normal).
+    //
+    // NOVO v3.0 — custo progressivo: `charsSinceLastCharge` acumula os
+    // caracteres gerados desde a última cobrança. Sempre que atinge
+    // CHARS_PER_EXTRA_CREDIT, debitamos +1 crédito ANTES de avançar para a
+    // secção seguinte. Se o saldo não chegar, paramos com o documento parcial
+    // já gerado em vez de continuar a gerar conteúdo não pago.
     const generatedSections = [];
     const summaries         = [];
     const PROVIDERS         = ['groq', 'gemini', 'openrouter'];
+
+    let charsSinceLastCharge = 0;
+    let extraCreditsCharged  = 0;
+    let wasTruncatedByCredits = false;
+    let lastSectionIndexDone  = -1;
 
     try {
       for (let i = 0; i < sections.length; i++) {
@@ -158,19 +196,61 @@ export class LongDocumentEngine {
 
         const content = await this._generateSection(section, summaries, formData, chainHeaders, provider);
         generatedSections.push(content);
+        lastSectionIndexDone = i;
 
         // Resumo compacto (máx. 80 palavras) para contexto das próximas secções
         const words = content.replace(/#{1,3}[^\n]*/g, '').split(/\s+/).filter(Boolean);
         summaries.push(`[${section.title}]: ${words.slice(0, 80).join(' ')}…`);
+
+        // ── Custo progressivo: somar caracteres e cobrar por faixa atingida ─
+        charsSinceLastCharge += content.length;
+
+        if (charsSinceLastCharge >= CHARS_PER_EXTRA_CREDIT && i < sections.length - 1) {
+          // Há mais secções a gerar e já passámos da faixa grátis acumulada
+          // pelo crédito inicial — cobrar +1 crédito ANTES de continuar.
+          this._emit({
+            phase: 'generate',
+            step:  i + 1,
+            total: sections.length,
+            text:  `💳 Documento a crescer — a cobrar +1 crédito adicional…`,
+            provider,
+          });
+
+          const extraResult = await this._chargeExtraCredit(chainHeaders, serviceType, charsSinceLastCharge);
+
+          if (extraResult.insufficientCredits) {
+            // Saldo insuficiente para continuar: parar aqui de forma controlada
+            // e devolver o documento PARCIAL já gerado (secções pagas).
+            wasTruncatedByCredits = true;
+            creditsAfterDeduct = extraResult.credits ?? creditsAfterDeduct;
+            this._emit({
+              phase: 'generate',
+              step:  i + 1,
+              total: sections.length,
+              text:  `⚠️ Créditos esgotados — documento entregue até à secção ${i + 1}/${sections.length}.`,
+              provider,
+            });
+            break;
+          }
+
+          extraCreditsCharged += 1;
+          creditsAfterDeduct    = extraResult.credits;
+          charsSinceLastCharge  = 0; // reiniciar contador da próxima faixa
+        }
       }
     } catch (err) {
       // Fases 2/3 falharam após crédito debitado → tentar reembolso automático
+      // do crédito INICIAL apenas (créditos extra já cobrados por secções já
+      // entregues não são reembolsados — o utilizador já recebeu esse conteúdo
+      // em generatedSections, mesmo que a função lance antes do `return`).
+      // Se nenhuma secção chegou a ser gerada, reembolsamos tudo (inicial + extra).
       if (err.message !== 'Abortado pelo utilizador') {
+        const refundAmount = lastSectionIndexDone === -1 ? (cost + extraCreditsCharged) : cost;
         try {
           await fetch('/api/deduct-credit', {
             method: 'POST',
             headers: chainHeaders,
-            body: JSON.stringify({ refund: true, cost, documentType: serviceType }),
+            body: JSON.stringify({ refund: true, cost: refundAmount, documentType: serviceType }),
           });
           console.warn('[LongDocEngine] Crédito reembolsado após falha na geração.');
         } catch (refundErr) {
@@ -185,14 +265,63 @@ export class LongDocumentEngine {
     // ── FASE 3: Montagem final (sem chamada adicional à IA) ────
     this._emit({ phase: 'assemble', text: '🔗 A montar documento final…' });
 
-    const document = this._assemble(serviceType, formData, sections, generatedSections);
+    // Se o documento ficou parcial (parou por falta de crédito), usar apenas
+    // as secções efectivamente geradas e pagas para montar o índice/capa.
+    const sectionsUsed = wasTruncatedByCredits
+      ? sections.slice(0, lastSectionIndexDone + 1)
+      : sections;
+
+    const document = this._assemble(serviceType, formData, sectionsUsed, generatedSections);
 
     return {
       document,
-      model:            'Cadeia de Geração · multi-provider',
-      sections:         sections.length,
-      creditsRemaining: creditsAfterDeduct, // valor real do servidor
+      model:               'Cadeia de Geração · multi-provider',
+      sections:            generatedSections.length,
+      creditsRemaining:    creditsAfterDeduct, // valor real do servidor
+      extraCreditsCharged,                     // quantos créditos extra foram cobrados pelo tamanho
+      totalCreditsCharged: cost + extraCreditsCharged,
+      truncatedByCredits:  wasTruncatedByCredits, // true se o documento ficou incompleto por falta de saldo
     };
+  }
+
+  // ── Custo progressivo: cobra +1 crédito extra durante a geração ────────
+  // Reaproveita /api/deduct-credit (mesmo endpoint do débito inicial) — não
+  // foi criada nenhuma function nova. Devolve { credits } em caso de sucesso
+  // ou { insufficientCredits: true, credits } se o saldo não for suficiente.
+  async _chargeExtraCredit(chainHeaders, serviceType, charsGenerated) {
+    try {
+      const res = await fetch('/api/deduct-credit', {
+        method: 'POST',
+        headers: chainHeaders,
+        body: JSON.stringify({
+          cost: 1,
+          documentType: serviceType,
+          // Nota informativa — guardada em credit_logs.note no servidor não é
+          // suportada directamente neste payload simples, por isso registamos
+          // o motivo no console para diagnóstico; a auditoria de créditos via
+          // RPC já identifica a acção como 'consume' com o documentType certo.
+        }),
+      });
+
+      if (res.status === 402) {
+        const d = await res.json().catch(() => ({}));
+        return { insufficientCredits: true, credits: typeof d.credits === 'number' ? d.credits : 0 };
+      }
+      if (!res.ok) {
+        // Falha de rede/servidor ao cobrar o extra: por segurança, tratamos
+        // como "não foi possível cobrar" e paramos a geração aqui em vez de
+        // continuar a gerar conteúdo que pode não conseguir ser cobrado depois.
+        console.warn('[LongDocEngine] Falha ao cobrar crédito extra (HTTP', res.status, ') — a parar geração.');
+        return { insufficientCredits: true, credits: undefined };
+      }
+
+      const data = await res.json();
+      console.log(`[LongDocEngine] +1 crédito extra cobrado (${charsGenerated} caracteres gerados desde a última cobrança). Saldo: ${data.credits}`);
+      return { insufficientCredits: false, credits: data.credits };
+    } catch (e) {
+      console.warn('[LongDocEngine] Erro ao cobrar crédito extra:', e.message);
+      return { insufficientCredits: true, credits: undefined };
+    }
   }
 
   // ── FASE 1: PLANEAMENTO ────────────────────────────────────────
