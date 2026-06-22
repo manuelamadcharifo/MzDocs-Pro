@@ -19,6 +19,56 @@ export class OpenRouterService {
     return await this._callBackend(serviceType, prompt, credits, cost);
   }
 
+  // ── NOVO v2.1: amostra grátis ───────────────────────────────────────────
+  // Gera uma amostra curta do documento (cabeçalho + abertura) usando o MESMO
+  // prompt-builder do serviço, mas em _previewMode — sem dedução de crédito
+  // e sem exigir sessão. Permite ao utilizador avaliar a qualidade ANTES de
+  // decidir gastar um crédito. Reaproveita /api/generate-document (nenhuma
+  // function nova foi criada — o projecto já está no limite de 12 do Vercel
+  // Hobby).
+  async previewDocument(serviceType, formData, ocrText = null, templateData = null, pickerTemplate = null) {
+    const prompt = this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
+    const userId = localStorage.getItem('mz_uid') || 'anon';
+
+    // Token é opcional em modo preview — se existir sessão, é enviado (ajuda
+    // nos logs/analytics), mas a ausência de sessão nunca bloqueia o preview.
+    let authToken = null;
+    try {
+      const { authManager } = await import('../auth/AuthManager.js');
+      await authManager.ready();
+      authToken = await authManager.getValidToken();
+    } catch { /* visitante sem sessão — preview continua disponível */ }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(this.endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        serviceType,
+        prompt,
+        userId,
+        _previewMode: true,
+      }),
+    });
+
+    if (res.status === 429) {
+      const d = await res.json().catch(() => ({}));
+      const e = new Error(d.error || 'Muitas amostras seguidas. Aguarde um pouco.');
+      e.status = 429;
+      throw e;
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const e = new Error(data.error || `HTTP ${res.status}`);
+      e.status = res.status;
+      throw e;
+    }
+
+    return await res.json(); // { document, model, preview: true }
+  }
+
 
   // skipDeduct=true quando o chamador (DocumentController.handleReedit) já debitou
   // o crédito no servidor antes de chamar esta função — evita dupla dedução.
