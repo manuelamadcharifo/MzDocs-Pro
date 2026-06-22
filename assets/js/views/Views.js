@@ -71,7 +71,14 @@ export const DocumentView = {
     if (svc.hasAI) {
       const cost = svc.cost || 1;
       const costLabel = cost === 1 ? '1 crédito' : `${cost} créditos`;
+      // NOVO v2.1: botão "Ver amostra grátis" — chama /api/generate-document em
+      // _previewMode (sem dedução de crédito) para o utilizador avaliar a
+      // qualidade antes de decidir gastar o crédito. Fica visível só ANTES da
+      // geração completa; some quando o documento real é gerado.
       formFootEl.innerHTML = `
+        <button id="btnPreview" class="btn-preview" type="button">
+          <span>👀 Ver amostra grátis</span>
+        </button>
         <button id="btnGen" class="btn-primary btn-gen" type="button">
           <span>✨ Gerar com IA</span>
           <small>${costLabel}</small>
@@ -190,6 +197,59 @@ export const DocumentView = {
     const btn = document.getElementById('btnGen');
     if (lw) lw.classList.remove('show');
     if (btn) { btn.style.display = ''; btn.disabled = false; }
+  },
+
+  // ── NOVO v2.1: painel de amostra grátis (preview) ─────────────────────────
+  // Renderizado dentro do próprio formulário (formBody), acima do rodapé com
+  // os botões. Não usa o overlay de resultado (resultOverlay) porque essa
+  // área é reservada ao documento PAGO/completo, com export, templates, etc.
+  // A amostra é só texto simples, claramente identificada como tal.
+  showPreviewLoading() {
+    const formBody = document.getElementById('formBody');
+    if (!formBody) return;
+    this.removePreviewPanel();
+    const panel = document.createElement('div');
+    panel.id = 'mzPreviewPanel';
+    panel.className = 'mz-preview-panel';
+    panel.innerHTML = `<div class="mz-preview-label"><span>👀 A gerar amostra grátis…</span></div><span style="color:var(--muted)">Isto não consome créditos.</span>`;
+    formBody.insertAdjacentElement('afterend', panel);
+  },
+
+  showPreviewPanel(text) {
+    const formBody = document.getElementById('formBody');
+    if (!formBody) return;
+    this.removePreviewPanel();
+    const panel = document.createElement('div');
+    panel.id = 'mzPreviewPanel';
+    panel.className = 'mz-preview-panel mz-preview-fade';
+    const safe = (text || '').replace(/</g, '&lt;');
+    panel.innerHTML = `
+      <div class="mz-preview-label">
+        <span>👀 Amostra grátis — início do documento</span>
+        <button class="mz-preview-close" type="button" aria-label="Fechar amostra">✕</button>
+      </div>
+      ${safe}…
+    `;
+    formBody.insertAdjacentElement('afterend', panel);
+    panel.querySelector('.mz-preview-close')?.addEventListener('click', () => this.removePreviewPanel());
+  },
+
+  showPreviewError(message) {
+    const formBody = document.getElementById('formBody');
+    if (!formBody) return;
+    this.removePreviewPanel();
+    const panel = document.createElement('div');
+    panel.id = 'mzPreviewPanel';
+    panel.className = 'mz-preview-panel';
+    panel.style.borderColor = '#fca5a5';
+    panel.style.background = '#fef2f2';
+    panel.style.color = '#991b1b';
+    panel.innerHTML = `<div class="mz-preview-label" style="color:#991b1b">⚠️ Não foi possível gerar a amostra</div>${(message || '').replace(/</g, '&lt;')}`;
+    formBody.insertAdjacentElement('afterend', panel);
+  },
+
+  removePreviewPanel() {
+    document.getElementById('mzPreviewPanel')?.remove();
   },
 
   // ── Preview do resultado final — MESMO motor A4Renderer do TemplatePicker ──
