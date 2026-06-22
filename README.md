@@ -1,6 +1,12 @@
-# MzDocs Pro — v12
+# MzDocs Pro — v16
 
-Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e M-Pesa.
+Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
+
+> 📌 **Nota de versão:** este documento foi actualizado para reflectir o estado real do código até à
+> migração `migration_v16_fix_signup_name_phone.sql` (Junho/2026). A secção
+> [🛠️ Alterações — Auditoria Junho 2026 (v12)](#️-alterações--auditoria-junho-2026-v12) abaixo é mantida
+> como registo histórico dessa ronda específica; as alterações posteriores (v13–v16) estão descritas em
+> [🛠️ Alterações — v13 a v16](#️-alterações--v13-a-v16-pós-auditoria).
 
 > ⚠️ **Acção urgente — plano Vercel:** este projecto processa pagamentos (`api/process-payment.js`,
 > tabela `transactions`). Os Termos de Serviço da Vercel definem **qualquer fluxo de cobrança a
@@ -27,11 +33,13 @@ Plataforma moçambicana de geração, edição e exportação de documentos prof
 | **Extracção de Template por Imagem** | IA de visão extrai estrutura de qualquer imagem de documento |
 | **OCR** | Extracção de texto de imagens, PDF (pdf.js) e Word (mammoth.js) |
 | **Histórico Offline** | Documentos guardados em IndexedDB, sincronizados quando online |
-| **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola ou mKesh via WhatsApp — confirmação manual em até 24h (ver secção [💳 Pagamentos](#-pagamentos)) |
+| **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola ou mKesh — upload do comprovativo com **verificação automática por IA visão** (aprovação imediata se confiança ≥ 85%) e fallback para WhatsApp/revisão manual em até 24h (ver secção [💳 Pagamentos](#-pagamentos)) |
 | **Reembolso Automático de Créditos** | Se a geração de IA falhar após o débito do crédito, o crédito é devolvido automaticamente (RPC `refund_credit`) |
-| **Sistema de Afiliados** | Comissões automáticas, levantamento via carteira móvel |
+| **Marketplace de Templates da Comunidade** | Utilizadores submetem, avaliam (1–5★) e descarregam templates de outros utilizadores, com aprovação pelo admin (ver [🏪 Template Marketplace](#-template-marketplace-api)) |
+| **Sistema de Afiliados Pro** | Comissões automáticas por pacote, segmentação (papelaria/cyber/universidade/explicação/digitador), níveis (bronze→diamante), metas mensais e detecção de fraude |
 | **Rede de Parceiros** | Papelarias/cyber cafés parceiros listados perto do utilizador (`parceiros.html`) |
 | **Blog / SEO** | CMS de artigos com geração assistida por IA (`blog_posts`, `blog_categories`) |
+| **Publicação Automática de Páginas SEO** | O admin pode publicar uma página estática directamente no repositório GitHub via API (commit automático em `pages/<slug>/index.html`) |
 | **Painel Admin** | Analytics em tempo real, feedback, utilizadores, pagamentos, parceiros |
 | **PWA** | Instalável em Android e iOS, funciona offline |
 
@@ -43,9 +51,12 @@ Plataforma moçambicana de geração, edição e exportação de documentos prof
 MzDocs-Pro/
 ├── api/                               # 12 Serverless Functions (Vercel Hobby — limite 12, sem margem)
 │   ├── _lib/
-│   │   └── supabaseAdmin.js           # NOVO (v12): cliente Supabase via fetch puro (REST + Auth API),
-│   │                                  #   sem @supabase/supabase-js nem 'ws'. Não conta como function
-│   │                                  #   (prefixo "_"). Todas as funções abaixo devem usar este módulo.
+│   │   ├── supabaseAdmin.js           # Cliente Supabase via fetch puro (REST + Auth API),
+│   │   │                              #   sem @supabase/supabase-js nem 'ws'. Não conta como function
+│   │   │                              #   (prefixo "_"). A maioria das functions usa este módulo
+│   │   │                              #   (ver estado real da migração em "Áreas não cobertas").
+│   │   └── visionAI.js                # NOVO: helper de IA visão (Gemini → OpenRouter fallback),
+│   │                                  #   partilhado entre extract-template.js e misc.js (verify-receipt)
 │   ├── admin/
 │   │   └── index.js                   # Dashboard, analytics, feedback, pagamentos,
 │   │                                  #   blog/páginas estáticas + gerador de artigos com IA
@@ -62,7 +73,7 @@ MzDocs-Pro/
 │   ├── delete-temp-account.js         # Limpeza de contas temporárias
 │   ├── cleanup-temp-accounts.js       # Cron diário: limpeza automática
 │   └── misc.js                        # Router auxiliar:
-│                                      #   /api/config · /api/ocr-analyze
+│                                      #   /api/config · /api/ocr-analyze · /api/verify-receipt
 │                                      #   /api/page-view · sitemap.xml
 │                                      #   /api/affiliate/* · /api/templates/*
 │                                      #   /api/admin/stats · /api/admin/pages
@@ -73,7 +84,8 @@ MzDocs-Pro/
 │   │   │   ├── AcademicEngine.js      # APA 7: citações, bibliography, TOC, PDF/URL
 │   │   │   └── AcademicUI.js          # Painel de referências + upload PDF/URL
 │   │   ├── marketplace/
-│   │   │   ├── TemplateLibrary.js     # 15 serviços × 5 templates = 70 templates
+│   │   │   ├── TemplateLibrary.js     # Agrega os templates de 14 serviços (5 cada = 70) a partir de ./templates/*.js
+│   │   │   ├── templates/             # 1 ficheiro por categoria (cv.js, carta.js, acta.js, ...) + index.js agregador
 │   │   │   └── TemplatePicker.js      # Modal de escolha com preview em tempo real
 │   │   ├── partners/
 │   │   │   └── NearbyPartners.js      # Lista/mapa de parceiros próximos do utilizador
@@ -98,7 +110,8 @@ MzDocs-Pro/
 │   │   │   └── PaymentController.js   # Fluxo de pagamento manual multi-carteira
 │   │   ├── models/
 │   │   ├── services/
-│   │   │   ├── ServiceDefinitions.js  # Definições dos 15 serviços
+│   │   │   ├── ServiceDefinitions.js  # Definições dos 17 serviços (14 com templates visuais + 3 sem
+│   │   │   │                         #   templates/IA — impressao, foto, conversao — usam WhatsApp)
 │   │   │   └── PaymentService.js      # Pacotes, validação de telefone, WhatsApp
 │   │   ├── utils/
 │   │   │   ├── Sanitizer.js           # Sanitização HTML (inclui tags semânticas HTML5)
@@ -122,7 +135,13 @@ MzDocs-Pro/
 │   ├── migration_v10_online_userid.sql
 │   ├── migration_v11_marketplace.sql
 │   ├── supabase-partners-setup.sql    # Tabela `partners` (Rede de Parceiros)
-│   └── migration_v12_refund_credit.sql # NOVO (v12): RPC refund_credit + índice em credit_logs
+│   ├── migration_v12_refund_credit.sql       # RPC refund_credit + tabela/índice credit_logs
+│   │                                          #   ⚠️ RECONSTRUÍDO nesta ronda — ver nota no topo do ficheiro
+│   ├── migration_v12_community_templates.sql # Marketplace comunitário (template_type, featured, share_token...)
+│   ├── migration_v13_fix_signup_credits.sql  # Corrige bónus de registo: 1 crédito (não 3), válido 30 dias
+│   ├── migration_v14_affiliates_pro.sql      # Afiliados Pro: segmentação, níveis, metas, anti-fraude
+│   ├── migration_v15_receipt_verification.sql # Colunas de verificação automática em `transactions`
+│   └── migration_v16_fix_signup_name_phone.sql # Corrige perfis criados sem nome/telefone
 │
 ├── afiliado.html                      # Painel de afiliados
 ├── admin.html                         # Painel administrativo
@@ -143,24 +162,51 @@ MzDocs-Pro/
 ### 1. Pré-requisitos
 - Conta Vercel Hobby
 - Projecto Supabase
-- Conta OpenRouter (API key) — modelos gratuitos disponíveis
-- Conta Google AI Studio (Gemini API key) — opcional, usado como primário
-- Conta M-Pesa API (para pagamentos em Moçambique)
+- Pelo menos uma conta de IA (quanto mais, maior a disponibilidade — ver [Geração com IA](#-funcionalidades-principais)):
+  Groq, Google AI Studio (Gemini), OpenRouter, Cerebras e/ou NVIDIA NIM — todas têm tier gratuito
+- ~~Conta M-Pesa API~~ — **não é necessária.** Não existe integração automática com a API M-Pesa (ver
+  secção [💳 Pagamentos](#-pagamentos)); os pagamentos são confirmados manualmente ou por upload de
+  comprovativo com verificação por IA. `MPESA_API_KEY`/`MPESA_SERVICE_CODE` são opcionais e servem apenas
+  para a interface mostrar "modo sandbox" quando ausentes.
+- Opcional: conta CloudConvert (conversão de ficheiros), Upstash Redis (rate-limit persistente),
+  Personal Access Token do GitHub (publicação automática de páginas SEO)
 
 ### 2. Variáveis de Ambiente (Vercel)
 
 ```
+# Obrigatórias
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
-OPENROUTER_API_KEY=sk-or-...
+
+# IA — pelo menos 1 chave é obrigatória; quantas mais, maior a disponibilidade
+# (os 5 providers correm em paralelo, ver "Geração com IA" acima)
+GROQ_API_KEY=gsk_...
 GEMINI_API_KEY=AIza...
-MPESA_API_KEY=...
-MPESA_PUBLIC_KEY=...
-MPESA_SERVICE_PROVIDER_CODE=...
+OPENROUTER_API_KEY=sk-or-...
+CEREBRAS_API_KEY=csk-...
+NVIDIA_API_KEY=nvapi-...
+
 SITE_URL=https://mzdocs.co.mz
-ADMIN_EMAILS=email@exemplo.com
+
+# Opcionais
+MPESA_API_KEY=...                  # usado apenas para detectar modo sandbox/produção (ver secção Pagamentos)
+MPESA_SERVICE_CODE=...             # ⚠️ nome real usado no código — não "MPESA_SERVICE_PROVIDER_CODE"
+WA_SUPPORT_NUMBER=258858695506     # número de WhatsApp do fallback de suporte (tem este valor por defeito)
+CLOUDCONVERT_API_KEY=...           # necessário para api/convert.js (conversão de ficheiros) em modo cloud
+LIBREOFFICE=false                  # true apenas em VPS própria com LibreOffice instalado (não aplicável no Vercel)
+CRON_SECRET=...                    # protege /api/cleanup-temp-accounts contra invocação externa
+UPSTASH_REDIS_REST_URL=...         # rate-limit persistente entre instâncias (sem isto, cai num Map local por instância)
+UPSTASH_REDIS_REST_TOKEN=...
+GITHUB_OWNER=...                   # publicação automática de páginas SEO — ver secção dedicada abaixo
+GITHUB_REPO=...
+GITHUB_TOKEN=...
 ```
+
+> ⚠️ **Variáveis desactualizadas removidas desta lista:** `ADMIN_EMAILS` e `MPESA_PUBLIC_KEY` apareciam
+> aqui em versões anteriores deste README mas **não são lidas em nenhum ficheiro do código** — não têm
+> efeito nenhum se definidas. O estado de administrador é controlado pela coluna `profiles.is_admin`
+> (ver `supabase/EXECUTAR_promote_admin.sql`), não por uma lista de emails em variável de ambiente.
 
 ### 3. Migrações Supabase
 Execute por ordem no SQL Editor do Supabase:
@@ -191,8 +237,24 @@ migration_v11_marketplace.sql
 -- 8. Rede de Parceiros
 supabase-partners-setup.sql
 
--- 9. Reembolso automático de créditos (NOVO v12 — auditoria Junho/2026)
+-- 9. Reembolso automático de créditos + tabela credit_logs
+--    (⚠️ ficheiro reconstruído nesta ronda — não existia no repositório, ver nota no topo do ficheiro)
 migration_v12_refund_credit.sql
+
+-- 10. Marketplace comunitário de templates (submissão, avaliação, destaque, partilha)
+migration_v12_community_templates.sql
+
+-- 11. Corrige bónus de registo para 1 crédito / 30 dias (substitui qualquer versão anterior do trigger)
+migration_v13_fix_signup_credits.sql
+
+-- 12. Sistema de Afiliados Pro (segmentação, níveis, metas, anti-fraude)
+migration_v14_affiliates_pro.sql
+
+-- 13. Verificação automática de comprovativos (colunas novas em `transactions`)
+migration_v15_receipt_verification.sql
+
+-- 14. Corrige perfis criados sem nome/telefone (substitui o trigger da migração 11)
+migration_v16_fix_signup_name_phone.sql
 ```
 
 > ⚠️ **Nota (auditoria v12):** esta lista não está garantidamente completa nem na ordem 100% correcta —
@@ -232,32 +294,42 @@ Seleccionar Serviço → Preencher Formulário → Gerar com IA
 | Pedido de Licença | `licenca` | comercial, construção, evento, transporte, ambiental |
 | Acta de Reunião | `acta` | formal, associação, empresarial, condomínio, escolar |
 
-**Total: 70 templates integrados + marketplace extensível**
+**Total: 70 templates integrados (14 serviços × 5) + marketplace extensível.**
+
+> Existem **17 serviços** ao todo — os 14 acima têm templates visuais e geração por IA; mais 3
+> (`impressao`, `foto`, `conversao`) não geram documento por IA nem têm template — são pedidos
+> encaminhados directamente por WhatsApp (ver `ServiceDefinitions.js`).
+>
+> Desde a reorganização do código, cada categoria vive no seu próprio ficheiro em
+> `assets/js/marketplace/templates/<categoria>.js` (ex.: `cv.js`, `carta.js`), agregados por
+> `templates/index.js`. `TemplateLibrary.js` apenas reexporta esse agregado — nenhum template foi
+> alterado na reorganização.
 
 ### Adicionar novo template:
 ```js
-// Em assets/js/marketplace/TemplateLibrary.js
-// Adicionar ao array do serviço pretendido:
-TEMPLATE_LIBRARY.cv.push({
-  id: 'cv-novo',
-  name: 'Meu Template',
-  description: 'Descrição curta',
-  preview: {
-    accent: '#3B82F6', bg: '#fff',
-    font: 'sans-serif', headerBg: '#3B82F6', headerColor: '#fff'
+// Em assets/js/marketplace/templates/cv.js
+// Adicionar ao array TEMPLATES exportado por esse ficheiro
+// (NÃO editar TEMPLATE_LIBRARY directamente em TemplateLibrary.js — esse
+// ficheiro hoje apenas reexporta o agregado de templates/index.js):
+export const TEMPLATES = [
+  // ...templates existentes...
+  {
+    id: 'cv-novo',
+    name: 'Meu Template',
+    description: 'Descrição curta',
+    preview: {
+      accent: '#3B82F6', bg: '#fff',
+      font: 'sans-serif', headerBg: '#3B82F6', headerColor: '#fff'
+    },
+    // Opcional: layout HTML estruturado para 2 colunas, sidebar, etc.
+    htmlTemplate: `
+      <div class="cv-page cv-two-col">
+        <aside class="cv-sidebar">...</aside>
+        <main class="cv-main">...</main>
+      </div>
+    `,
   },
-  css: `
-    .cv-page { font-family: Arial; ... }
-    .cv-sidebar { background: #1E3A5F; color: #fff; }
-  `,
-  // Opcional: layout HTML estruturado para 2 colunas, sidebar, etc.
-  htmlTemplate: `
-    <div class="cv-page cv-two-col">
-      <aside class="cv-sidebar">...</aside>
-      <main class="cv-main">...</main>
-    </div>
-  `,
-});
+];
 ```
 
 ---
@@ -358,6 +430,15 @@ Admin aprova       → status: "approved" + is_public: true → aparece no picke
 Admin rejeita      → status: "rejected" + nota de rejeição
 ```
 
+> ⚠️ **Schema à frente do código:** `migration_v12_community_templates.sql` acrescenta colunas
+> (`template_type`, `is_featured`, `credit_cost`, `share_token`, `tags`, `use_count`, `version`...) e
+> a tabela `template_uses` a `templates_custom`, mas **nenhum ficheiro em `api/` ou `assets/js/` lê ou
+> escreve estas colunas ainda** — a API e a UI de marketplace continuam a usar apenas os campos da
+> migração v11 (`status`, `is_public`, `downloads`, `likes`, `rating_sum`, `rating_count`). Em termos
+> práticos, isto significa que executar a migração v12 é seguro (não quebra nada), mas não activa
+> sozinha nenhuma funcionalidade nova visível — falta o trabalho de API/frontend para expor
+> templates premium/destacados/partilháveis por link.
+
 ---
 
 ## 📊 Analytics em Tempo Real
@@ -366,6 +447,34 @@ Admin rejeita      → status: "rejected" + nota de rejeição
 - **Visitas**: POST automático a cada carregamento + heartbeat a cada 90s
 - **Session ID**: `localStorage` para persistência entre recargas
 - **Fallback**: Polling a cada 20s se WebSocket falhar
+
+---
+
+## 📰 Blog / CMS + Publicação Automática de Páginas SEO
+
+O admin (`admin.html`) tem um CMS de artigos (tabela `blog_pages`) com geração de conteúdo assistida
+por IA. Esta secção documenta uma funcionalidade que **não tinha nenhuma menção neste README**:
+
+Quando uma página de `blog_pages` é criada/actualizada com `published: true`, `api/admin/index.js`
+(função `_generateStaticPage`) **gera um HTML estático e publica-o directamente no repositório
+GitHub** via GitHub Contents API:
+
+1. Gera `pages/<slug>/index.html` com `title`, `meta_description` e `content_html` da página.
+2. Faz `PUT /repos/<owner>/<repo>/contents/pages/<slug>/index.html` — cria o ficheiro se não existir,
+   ou actualiza-o (lê o `sha` actual primeiro) se já existir. **É um commit directo no branch
+   por omissão do repositório — não passa por pull request.**
+3. O push para o GitHub despoleta automaticamente um novo deploy no Vercel.
+
+Isto explica a existência de páginas como `pages/como-fazer-um-cv-de-um-licenciado-em-mocambique/index.html`
+no repositório — não foram escritas à mão, foram publicadas pelo admin através deste mecanismo.
+
+**Requer** as variáveis de ambiente `GITHUB_OWNER`, `GITHUB_REPO` e `GITHUB_TOKEN` (Personal Access
+Token com permissão de escrita no repositório). Sem elas, a função regista um aviso e não faz nada —
+a publicação no `blog_pages` continua a funcionar normalmente, só não gera o HTML estático.
+
+> ⚠️ Por ser um commit directo (sem revisão), trate o `GITHUB_TOKEN` com o mesmo cuidado que a
+> `SUPABASE_SERVICE_ROLE_KEY` — qualquer conta admin com acesso ao painel pode, na prática, escrever
+> ficheiros no repositório.
 
 ---
 
@@ -379,7 +488,23 @@ Admin rejeita      → status: "rejected" + nota de rejeição
 | `POST /api/affiliate/withdraw` | Pedir levantamento M-Pesa |
 | `GET /api/affiliate/check?ref=` | Validar link publicamente |
 
-**Comissões**: Avulso 10% · Starter 15% · Pro / Empresa 20%
+**Comissões por pacote** (configurável em `system_settings`, chave `aff_rate_<pacote>`):
+Avulso 10% · Starter 15% · Básico 15% · Pro 20% · Empresa 20%.
+
+### Afiliados Pro (v14)
+
+Acrescenta segmentação e gamificação ao sistema base de afiliados — totalmente implementado em
+`api/misc.js` (namespace `affiliate`), `api/admin/index.js` e `assets/js/admin/AdminApp.js`:
+
+- **Segmentos** (`aff_segment`): `papelaria` · `cyber` · `universidade` · `explicacao` · `digitador` ·
+  `individual` — alguns segmentos têm um bónus de comissão extra configurável
+  (`aff_bonus_papelaria` = +5%, `aff_bonus_cyber` = +3%, `aff_bonus_universidade` = +5%).
+- **Níveis** (`aff_tier`): 🥉 bronze → 🥈 prata (5+ conversões) → 🥇 ouro (20+) → 💎 diamante (50+),
+  calculados pela função `update_affiliate_tier()`. O nível diamante reduz o levantamento mínimo
+  para metade (mínimo absoluto de 50 MZN).
+- **Anti-fraude**: tabela `affiliate_fraud_flags` regista eventos (`self_referral`, `ip_burst`,
+  `fake_clicks`, `suspicious_conversion`) com severidade, revistos no painel admin.
+- **Metas mensais e bloqueio de conta** (`aff_is_blocked`, `aff_block_reason`) geridos pelo admin.
 
 ---
 
@@ -395,8 +520,9 @@ Admin rejeita      → status: "rejected" + nota de rejeição
 | Serverless Functions | 12 | **12** ✅ (sem margem — `api/_lib/` não conta, prefixo `_`) |
 | `generate-document.js` | 60s | — |
 | `extract-template.js` | 60s | — |
+| `convert.js` | 60s | — |
 | `process-payment.js` | 30s | — |
-| Restantes | 10–30s | — |
+| Restantes (auth, admin, misc, verify-credits, deduct-credit, delete-temp-account, cleanup-temp-accounts, partners) | 10–30s | — |
 | Bandwidth | 100 GB/mês | — |
 
 > **Regra:** Toda nova lógica de API deve ser adicionada a `api/misc.js` ou a functions existentes. Não criar novos ficheiros `.js` em `api/` sem verificar o limite de 12. Helpers partilhados (sem `module.exports = async function handler`) devem ir em `api/_lib/`.
@@ -426,28 +552,54 @@ Admin rejeita      → status: "rejected" + nota de rejeição
 
 ## 💳 Pagamentos
 
-O pagamento de pacotes de créditos é **sempre processado manualmente**, via WhatsApp:
+### Pacotes de créditos
 
-1. O utilizador escolhe um pacote e introduz **qualquer número de telemóvel moçambicano válido**
-   (M-Pesa/Vodacom, e-Mola/Movitel ou mKesh/mCel — prefixos `82–87`).
-2. `api/process-payment.js` regista o pedido em `transactions` (status `pending`) e gera uma
-   referência única (`MZ-...`).
-3. O utilizador é encaminhado para o WhatsApp com uma mensagem pré-formatada (inclui a referência,
-   o pacote, o valor e a carteira detectada pelo prefixo do número) e envia o comprovativo.
-4. Um administrador confirma manualmente no painel `admin.html`, normalmente em até 24h.
+| Pacote | Créditos | Preço | MZN/crédito | Notas |
+|--------|----------|-------|--------------|-------|
+| Avulso | 3 | 50 MZN | 16.67 | Conta temporária, válida 7 dias, sem registo permanente |
+| Starter | 10 | 120 MZN | 12.00 | — |
+| Básico | 25 | 280 MZN | 11.20 | Pacote mais popular |
+| Pro | 60 | 600 MZN | 10.00 | — |
+| Empresa | 150 | 1500 MZN | 10.00 | Multi-utilizador |
 
-> Não existe (ainda) integração automática com a API M-Pesa. A interface deixa isto explícito
-> ("Pagamento processado manualmente") para não criar a expectativa de um pedido push automático
-> no telemóvel — ver changelog v12 abaixo.
+> Não existe (e nunca existiu) integração automática com a API de cobrança M-Pesa — não há pedido
+> push automático no telemóvel do utilizador. `MPESA_API_KEY`/`MPESA_SERVICE_CODE` (se definidas)
+> apenas alteram a etiqueta "sandbox"/"produção" mostrada na interface.
 
-### Reembolso automático de créditos (v12)
+### Fluxo de confirmação — duas vias
 
-Antes da v12, se `/api/deduct-credit` debitasse um crédito e a geração de IA falhasse
-completamente a seguir (todos os 5 providers indisponíveis), **o crédito era perdido sem
-qualquer compensação** — o pior cenário possível para um novo utilizador a usar o seu único
-crédito grátis.
+Desde a introdução da verificação automática de comprovativos (`migration_v15_receipt_verification.sql`),
+existem **duas formas** de um pagamento ser confirmado — a app tenta sempre a primeira, com a segunda
+como rede de segurança:
 
-Agora:
+**1. Verificação automática por IA visão (caminho principal)**
+1. O utilizador escolhe um pacote, introduz **qualquer número de telemóvel moçambicano válido**
+   (M-Pesa/Vodacom, e-Mola/Movitel ou mKesh/mCel — prefixos `82–87`) e `api/process-payment.js`
+   regista o pedido em `transactions` (status `pending`) com referência única.
+2. Em vez do botão "Enviar por WhatsApp", o utilizador faz **upload do screenshot do comprovativo**
+   (drag & drop ou ficheiro), que é enviado para `POST /api/verify-receipt`.
+3. `api/_lib/visionAI.js` (Gemini → OpenRouter fallback) analisa a imagem e extrai valor, referência,
+   estado e uma pontuação de confiança (0.0–1.0).
+4. **Aprovação automática** se: confiança ≥ **0.85** *e* valor bate certo com o pacote (±1 MZN) *e*
+   data da transacção ≤ 60 min *e* status reconhecido como sucesso *e* referência/hash do comprovativo
+   ainda não usados noutra transacção (anti-fraude/anti-reutilização). Os créditos são adicionados
+   na hora via RPC `add_credits` e a transacção fica `confirmed`.
+5. Se qualquer verificação falhar ou a confiança for `< 0.85`, a transacção fica `review_needed` para
+   um admin confirmar manualmente no painel `admin.html` — normalmente em poucos minutos, anunciado
+   como "até 15 min" na interface.
+6. Anti-abuso: máximo 3 uploads de comprovativo por IP por minuto.
+
+**2. Fallback manual via WhatsApp (sempre disponível)**
+- Um link de WhatsApp pré-formatado (referência, pacote, valor, carteira detectada pelo prefixo do
+  número) fica sempre visível abaixo da área de upload, para quem preferir confirmar por essa via
+  ou caso o upload falhe.
+- Um administrador confirma manualmente no painel `admin.html`, normalmente em até 24h.
+
+### Reembolso automático de créditos
+
+Se `/api/deduct-credit` debitar um crédito e a geração de IA falhar completamente a seguir (todos os
+5 providers indisponíveis), **o crédito é devolvido automaticamente**:
+
 1. `api/generate-document.js` chama a RPC `refund_credit(p_user_id, p_amount)` automaticamente
    quando `Promise.any` rejeita (todos os providers falharam).
 2. A RPC incrementa `profiles.credits` e regista a operação em `credit_logs` com
@@ -455,10 +607,14 @@ Agora:
 3. O cliente recebe `{ refunded: true, creditsRemaining }` e mostra uma notificação clara:
    *"O crédito foi devolvido automaticamente — tente novamente."*
 4. `api/deduct-credit.js` também aceita `{ refund: true, cost, documentType }` como modo de
-   reembolso de reserva (caso a RPC não exista ainda — fallback manual).
+   reembolso de reserva (caso a RPC falhe — fallback manual não-atómico).
 
-**Acção necessária:** executar `supabase/migration_v12_refund_credit.sql` no SQL Editor do
-Supabase para criar a função `refund_credit`.
+> ⚠️ **Acção necessária:** `supabase/migration_v12_refund_credit.sql` — incluindo a própria tabela
+> `credit_logs` — **não existia no repositório** até esta ronda de correcções (a função `refund_credit`
+> era chamada pelo código mas nunca tinha sido definida em nenhum ficheiro `.sql` versionado). O
+> ficheiro foi reconstruído a partir do uso real no código — reveja-o antes de executar em produção,
+> especialmente se já tiver uma tabela `credit_logs` criada manualmente. Ver nota no topo do próprio
+> ficheiro.
 
 ---
 
@@ -479,32 +635,77 @@ Supabase para criar a função `refund_credit`.
 
 ---
 
-## ⚠️ Áreas Não Cobertas por Esta Auditoria
+## 🛠️ Alterações — v13 a v16 (pós-auditoria)
 
-Esta ronda focou-se no fluxo crítico **crédito → geração de documento → pagamento**. As áreas
-abaixo **não foram revistas** e podem precisar de atenção numa próxima ronda:
+Mudanças aplicadas em rondas posteriores à auditoria v12, nunca antes resumidas neste README:
 
-- **Outras 8 funções de API ainda usam `@supabase/supabase-js` + `require('ws')`**
-  (`api/admin/index.js`, `api/auth/index.js`, `api/verify-credits.js`, `api/misc.js`,
-  `api/partners.js`, `api/delete-temp-account.js`, `api/cleanup-temp-accounts.js`,
-  `api/convert.js`/`api/extract-template.js`). Recomenda-se migrar gradualmente cada uma para
-  `api/_lib/supabaseAdmin.js`, seguindo o padrão usado em `deduct-credit.js` e
-  `process-payment.js`.
+| Migração / Ficheiro | Alteração |
+|---|---|
+| `migration_v12_community_templates.sql` | Estende `templates_custom` para suportar templates `official`/`community`/`premium`/`private`, destaque pelo admin, partilha por link e contagem de uso (`template_uses`). **Schema apenas — sem ligação à API/UI ainda**, ver [🏪 Template Marketplace](#-template-marketplace-api). |
+| `migration_v13_fix_signup_credits.sql` | **Corrige bug de produção:** o trigger `handle_new_user()` tinha sido redefinido em 5 ficheiros diferentes ao longo do tempo, todos atribuindo **3 créditos** a novas contas, apesar do código da app dizer "1 crédito grátis". Esta migração redefine o trigger de forma definitiva com `credits = 1` e `credits_expires_at = NOW() + 30 dias`. **É a mesma inconsistência corrigida em `legal.html` nesta auditoria de texto.** |
+| `migration_v14_affiliates_pro.sql` | Sistema de Afiliados Pro completo: segmentação, níveis (bronze→diamante), metas mensais, tabela `affiliate_fraud_flags`. Ver secção [🤝 Sistema de Afiliados](#-sistema-de-afiliados). |
+| `migration_v15_receipt_verification.sql` | Novas colunas em `transactions` (`receipt_hash`, `receipt_verified`, `receipt_confidence`, `verification_method`, `review_reason`) + status `review_needed`. Suporta a verificação automática de comprovativos por IA — ver [💳 Pagamentos](#-pagamentos). |
+| `migration_v16_fix_signup_name_phone.sql` | **Corrige bug de produção:** novos utilizadores ficavam sem `full_name`/`phone` porque o trigger usava `ON CONFLICT DO NOTHING`, impedindo o PATCH posterior de `api/auth/index.js` de preencher esses campos. Trigger passou a usar `DO UPDATE SET`. |
+| `api/misc.js` → v3.0 | Nova rota `POST /api/verify-receipt`; rate-limit de 3 uploads/IP/min; hash SHA-256 anti-reutilização de comprovativos. |
+| `api/process-payment.js` → v5.0 | Chama `verifyReceiptInternal()` directamente quando o pedido já inclui o comprovativo (upload único, sem 2º pedido do cliente). |
+| `api/_lib/visionAI.js` | **Novo.** Helper de IA visão partilhado entre `extract-template.js` e `misc.js` (verify-receipt). |
+| `assets/js/marketplace/templates/*.js` | `TemplateLibrary.js` (~1600 linhas, todos os templates inline) foi dividido em 14 ficheiros por categoria + `templates/index.js` agregador. Nenhum template foi alterado no processo. |
+| `api/admin/index.js` — `_generateStaticPage()` | **Não documentado até esta ronda:** publica páginas de `blog_pages` directamente no GitHub via API quando marcadas como publicadas. Ver [📰 Blog / CMS](#-blog--cms--publicação-automática-de-páginas-seo). |
+
+### Correcções desta auditoria de consistência (texto e documentação)
+
+| Ficheiro | Problema | Correcção |
+|---|---|---|
+| `legal.html` | Secção "Sistema de Créditos" dizia **3 créditos de boas-vindas, válidos por 60 dias** — desactualizado desde a `migration_v13`, que corrigiu o valor real para 1 crédito / 30 dias em todo o código (`api/auth/index.js`, `AuthUI.js`, `homeController.js` já diziam "1 crédito" correctamente). | Texto corrigido para **1 crédito de boas-vindas, válido por 30 dias**, alinhado com o resto da aplicação. |
+| `supabase/migration_v12_refund_credit.sql` | Ficheiro referenciado pelo README e chamado pelo código (`rpc('refund_credit', ...)`) **não existia no repositório** — nem a tabela `credit_logs` tinha `CREATE TABLE` em lado nenhum. | Ficheiro reconstruído a partir do uso real no código — reveja antes de aplicar em produção. |
+| `README.md` — variáveis de ambiente | Faltavam `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `NVIDIA_API_KEY` (3 dos 5 providers de IA), `CLOUDCONVERT_API_KEY`, `CRON_SECRET`, `UPSTASH_REDIS_REST_*`, `WA_SUPPORT_NUMBER`, `GITHUB_OWNER/REPO/TOKEN`. `MPESA_SERVICE_PROVIDER_CODE` tinha o nome errado (código usa `MPESA_SERVICE_CODE`). `ADMIN_EMAILS` e `MPESA_PUBLIC_KEY` estavam documentadas mas não são lidas em nenhum ficheiro. | Lista de variáveis actualizada para reflectir exactamente o que o código lê. |
+| `README.md` — contagem de serviços | "15 serviços" (3 ocorrências) — contagem real é **17** (14 com templates × 5 + 3 sem templates/IA: `impressao`, `foto`, `conversao`, usados apenas via WhatsApp). | Corrigido nas 3 ocorrências. |
+| `README.md` — migrações | Lista de migrações parava em `migration_v12_refund_credit.sql`; não mencionava `migration_v12_community_templates.sql` nem v13–v16. | Lista actualizada com as 5 migrações em falta. |
+| `README.md` — estado de migração SDK | Dizia "8 funções ainda usam o SDK antigo"; na realidade 6 dessas 8 já tinham sido migradas em rondas posteriores (só `admin/index.js` não migrou; `misc.js` está parcialmente migrado). | Lista corrigida por ficheiro com o estado real. |
+| `README.md` — pagamentos | Não mencionava a verificação automática de comprovativos por IA (`/api/verify-receipt`, v15) — descrevia apenas o fluxo manual por WhatsApp, que hoje é o *fallback*, não o caminho principal. | Secção reescrita para descrever as duas vias (automática + manual). |
+
+---
+
+## ⚠️ Áreas Não Cobertas / Pontos em Aberto
+
+A auditoria original (v12) focou-se no fluxo crítico **crédito → geração de documento → pagamento**.
+Esta lista foi actualizada (Junho/2026) para reflectir o estado real do código — várias das funções
+listadas como "por migrar" na ronda v12 já foram migradas entretanto:
+
+- **Migração para `api/_lib/supabaseAdmin.js` (estado actual):**
+  - ✅ Já migradas (sem `@supabase/supabase-js` nem `require('ws')`): `deduct-credit.js`,
+    `process-payment.js`, `generate-document.js`, `auth/index.js`, `verify-credits.js`,
+    `partners.js`, `delete-temp-account.js`, `cleanup-temp-accounts.js`.
+  - ✅ Nunca precisaram do SDK: `extract-template.js` e `convert.js` (não acedem ao Supabase
+    directamente / usam apenas `api/_lib/visionAI.js` ou ferramentas externas de conversão).
+  - 🟡 **Parcialmente migrado:** `misc.js` usa `supabaseAdmin.js` na maior parte das rotas, mas mantém
+    um `makeSdkClient()` interno (SDK + `ws`) só para as rotas de **afiliados e templates**
+    (`handleAffiliate`, `handleTemplates`) — ver comentário no próprio ficheiro para o motivo
+    (opção `realtime.transport: ws` necessária no Node 20).
+  - ❌ **Ainda não migrado:** `api/admin/index.js` — continua a usar `@supabase/supabase-js` +
+    `require('ws')` integralmente. É o maior ficheiro de API do projecto (75 KB); migrar precisa de
+    mais cuidado e testes.
 - **Rede de Parceiros** (`api/partners.js`, `parceiros.html`, `admin-parceiros.html`,
   `assets/js/partners/NearbyPartners.js`, `supabase/supabase-partners-setup.sql`) — fluxo de
   cadastro/aprovação de parceiros, geolocalização e exibição no mapa não foram testados.
-- **Blog / CMS** (`api/admin/pages.js`, tabelas `blog_pages`, `blog_posts`, `blog_categories`) —
-  geração de artigos por IA, SEO score e fluxo de publicação não foram revistos.
+- **Blog / CMS** (rotas dentro de `api/admin/index.js`, tabela `blog_pages`) — geração de artigos
+  por IA, SEO score e fluxo de publicação automática para o GitHub (ver
+  [📰 Blog / CMS](#-blog--cms--publicação-automática-de-páginas-seo)) não foram revistos a fundo.
 - **Painel Admin completo** (`admin.html`, `AdminApp.js`) — gestão de utilizadores, confirmação
   manual de pagamentos, analytics (`analytics_metrics`, `page_views`, `online_sessions`),
   feedback (`user_feedback`) e logs (`admin_logs`).
 - **Sistema de Afiliados** (`afiliado.html`, `affiliate_clicks`, `affiliate_commissions`,
-  `affiliate_withdrawals`) — apenas a integridade da dedução/reembolso de créditos foi
-  verificada; o cálculo de comissões e levantamentos não foi auditado.
-- **Consolidação do schema SQL** — a pasta `supabase/` tem 21 ficheiros (`EMERGENCIA_*`,
-  `EXECUTAR_AGORA_*`, `migration_fix_*`, `migration_add_*`, etc.). Recomenda-se gerar um
-  `schema_v12_CURRENT.sql` a partir do estado real da base de dados (Dashboard → Database →
-  Schema) e arquivar os ficheiros antigos.
+  `affiliate_withdrawals`, `affiliate_fraud_flags`) — apenas a integridade da dedução/reembolso de
+  créditos foi verificada; o cálculo de comissões, níveis e levantamentos não foi auditado.
+- **Marketplace comunitário de templates (v12)** — o schema (`template_type`, `credit_cost`,
+  `share_token`, `is_featured`, tabela `template_uses`) está criado mas **não está ligado a nenhum
+  endpoint nem à UI** ainda — ver nota na secção [🏪 Template Marketplace](#-template-marketplace-api).
+- **Consolidação do schema SQL** — a pasta `supabase/` tem **26 ficheiros** (`EMERGENCIA_*`,
+  `EXECUTAR_AGORA_*`, `migration_fix_*`, `migration_add_*`, etc.), com pelo menos um caso confirmado
+  de migração referenciada no código mas ausente do repositório (`migration_v12_refund_credit.sql`,
+  reconstruída nesta ronda — ver secção [💳 Pagamentos](#-pagamentos)). Recomenda-se gerar um
+  `schema_CURRENT.sql` a partir do estado real da base de dados (Dashboard → Database → Schema) e
+  arquivar os ficheiros antigos/sobrepostos.
 - **Sistema de templates personalizados** (`templates_custom`, `template_ratings`,
   `template_downloads`) e **contas temporárias/avulso** (`is_temp`, `temp_ref`,
   `temp_password`) — lógica de expiração e limpeza não foi revista nesta ronda.
@@ -513,16 +714,25 @@ abaixo **não foram revistas** e podem precisar de atenção numa próxima ronda
 
 ## 📦 Versões
 
-| Componente | Versão |
-|------------|--------|
-| `package.json` | `11.0.0` |
-| `sw.js` (CACHE_VERSION) | `v12-20260531` (auto-actualizado pelo build) |
-| `README.md` | `v12` |
-| `api/deduct-credit.js` | `v3.0` |
-| `api/generate-document.js` | `v2.0` |
-| `api/process-payment.js` | `v3.0` |
-| Migrações Supabase | até `v12_refund_credit` (+ migrações soltas, ver secção de áreas não cobertas) |
-| Templates | 70 (15 serviços × 5) |
+| Componente | Versão | Nota |
+|------------|--------|------|
+| `package.json` | `11.0.0` | — |
+| `sw.js` (CACHE_VERSION) | `v20-20260621e` | auto-actualizado pelo build |
+| `README.md` | `v16` (esta edição) | — |
+| `api/_lib/supabaseAdmin.js` | — | helper sem versão explícita |
+| `api/_lib/visionAI.js` | `v1.0` | — |
+| `api/auth/index.js` | `v2.1` | — |
+| `api/admin/index.js` | `v2.0` | — |
+| `api/misc.js` | `v3.0` | — |
+| `api/process-payment.js` | `v5.0` | — |
+| `api/deduct-credit.js` | `v3.0` | — |
+| `api/generate-document.js` | `v2.0` | — |
+| `api/verify-credits.js` | `v3.0` | — |
+| `api/extract-template.js` | `v2.0` | — |
+| `api/partners.js` | `v2.0` | — |
+| `api/convert.js` | sem versão | — |
+| Migrações Supabase | até `migration_v16_fix_signup_name_phone` | ver secção de deploy |
+| Templates integrados | 70 (14 serviços × 5) | 17 serviços no total; 3 sem templates visuais |
 
 ---
 
