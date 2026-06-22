@@ -210,6 +210,7 @@ export class DocumentController {
 
  document.getElementById('ocrZone').style.display = svc.hasAI ? 'block' : 'none';
  DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
+ DocumentView.removePreviewPanel();
 
  this.templateCtrl.reset();
  this.templateCtrl.bindEvents();
@@ -228,8 +229,10 @@ export class DocumentController {
  setTimeout(() => {
   const btnGen = document.getElementById('btnGen');
   const btnWa = document.getElementById('btnWaDirect');
+  const btnPreview = document.getElementById('btnPreview');
   if (btnGen) btnGen.onclick = () => this.generate();
   if (btnWa) btnWa.onclick = () => this.sendDirect();
+  if (btnPreview) btnPreview.onclick = () => this.previewDocument();
  }, 50);
 
  ModalView.open('formOverlay');
@@ -308,6 +311,7 @@ export class DocumentController {
  closeForm() {
  ModalView.close('formOverlay');
  DocumentView.hideLoader(this._genIv);
+ DocumentView.removePreviewPanel();
  // Limpar listener de auto-save (o rascunho fica guardado — será restaurado na próxima abertura)
  const formBody = document.getElementById('formBody');
  if (this._draftAutoSaveHandler && formBody) {
@@ -332,6 +336,51 @@ export class DocumentController {
  this._activeTemplateHtml = null;
  }
 
+ // ── NOVO v2.1: amostra grátis ────────────────────────────────────────────
+ // Mostra o início do documento gerado por IA SEM debitar crédito, para o
+ // utilizador decidir se vale a pena gerar o documento completo. Usa
+ // _previewMode no backend (api/generate-document.js) — mesmo endpoint da
+ // geração normal, sem necessitar de nenhuma function nova na Vercel.
+ async previewDocument() {
+  const key = this.docModel.service;
+  const svc = SERVICES[key];
+  if (!svc) return;
+
+  const data = DocumentView.collectData(svc.fields);
+  const missing = Validator.required(svc.fields, data);
+  if (missing) { NotificationView.warn(`⚠️ Campo obrigatório: ${missing}`); return; }
+
+  const btnPreview = document.getElementById('btnPreview');
+  if (btnPreview) btnPreview.disabled = true;
+
+  DocumentView.showPreviewLoading();
+
+  try {
+   const result = await this.openRouter.previewDocument(
+     key, data, this.docModel.ocrText,
+     this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null,
+     null
+   );
+
+   if (!result?.document || result.document.trim().length < 10) {
+    throw new Error('A amostra ficou vazia. Tente novamente.');
+   }
+
+   DocumentView.showPreviewPanel(result.document.trim());
+   Analytics.trackPreviewGenerated(key);
+
+  } catch (err) {
+   if (err.status === 429) {
+    DocumentView.showPreviewError(err.message || 'Aguarde um pouco antes de pedir outra amostra.');
+   } else {
+    DocumentView.showPreviewError('Não foi possível gerar a amostra agora. Tente novamente em alguns segundos.');
+   }
+   console.error('[DocumentController] previewDocument error:', err);
+  } finally {
+   if (btnPreview) btnPreview.disabled = false;
+  }
+ }
+
  async generate() {
  if (this._generating) {
   console.warn('[DocumentController] generate() chamado enquanto geração em curso — ignorado');
@@ -354,6 +403,8 @@ export class DocumentController {
 
  // Analytics: utilizador iniciou geração
  Analytics.trackDocumentStart(key, cost);
+
+ DocumentView.removePreviewPanel();
 
  const btn = document.getElementById('btnGen');
  if (btn) btn.disabled = true;
