@@ -1,4 +1,4 @@
-// api/generate-document.js — v2.0 (AUDITORIA Junho/2026)
+// api/generate-document.js — v2.1 (AMOSTRA GRÁTIS + CUSTO PROGRESSIVO)
 // 5 providers em corrida paralela: Groq + Gemini + OpenRouter + Cerebras + NVIDIA NIM
 // Suporte a geração em cadeia (_planMode / _sectionMode) com rate-limit generoso
 //
@@ -10,8 +10,26 @@
 //     geração falhar por completo, este endpoint chama a RPC `refund_credit`
 //     para devolver o crédito ao utilizador, evitando o cenário
 //     "consumiu crédito e não gerou documento".
+//
+// NOVO v2.1 (Amostra grátis + custo progressivo):
+//  3. _previewMode: true — gera uma AMOSTRA curta e gratuita do documento
+//     (sem autenticação obrigatória, sem dedução de crédito) para o
+//     utilizador decidir se vale a pena gastar o crédito. Tem rate-limit
+//     próprio e mais restrito (ver checkRateLimit) e um maxTokens baixo
+//     fixo no servidor (PREVIEW_MAX_TOKENS) — o cliente não pode pedir
+//     mais do que isto, mesmo que tente.
+//  4. Endpoint reaproveitado (não foi criado nenhum novo ficheiro em /api,
+//     pois o projecto já está no limite de 12 functions do Vercel Hobby).
+//     O custo progressivo por tamanho gerado (ver LongDocumentEngine.js)
+//     também usa apenas os endpoints já existentes (/api/generate-document
+//     e /api/deduct-credit) — nenhuma function nova foi necessária.
 
 const { getUserFromToken, rpc } = require('./_lib/supabaseAdmin');
+
+// Tokens máximos absolutos para uma amostra grátis — aplicado no servidor,
+// independentemente do que o cliente envie, para que o preview nunca possa
+// ser usado como substituto gratuito da geração completa.
+const PREVIEW_MAX_TOKENS = 420;
 
 const SYSTEM_PROMPT = `Você é o MzDocs Pro, motor de geração de documentos para Moçambique.
 Gere documentos COMPLETOS e prontos para uso em português (variante moçambicana, formal).
@@ -69,12 +87,17 @@ const NVIDIA_MODELS = [
 // Se UPSTASH_REDIS_REST_URL não estiver configurado, cai no Map local (sem persistência)
 // Setup: vercel.com/integrations/upstash → cria DB grátis → cola as env vars no Vercel
 
-async function checkRateLimit(req, isChainCall) {
+async function checkRateLimit(req, isChainCall, isPreview) {
     const auth = req.headers['authorization'];
     const ip   = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
-    const key  = 'rl:' + (auth ? `u:${auth.slice(-16)}` : `i:${ip}`) + (isChainCall ? ':c' : '');
-    const limit = isChainCall ? (auth ? 60 : 20) : (auth ? 20 : 8);
-    const windowSec = isChainCall ? 10 : 60;
+    const mode = isPreview ? ':p' : (isChainCall ? ':c' : '');
+    const key  = 'rl:' + (auth ? `u:${auth.slice(-16)}` : `i:${ip}`) + mode;
+
+    // Preview: limite curto e por IP/utilizador, pensado para impedir abuso
+    // (gerar "amostras" em loop como substituto da geração paga), mas generoso
+    // o suficiente para um utilizador real testar 2-3 serviços antes de decidir.
+    const limit     = isPreview ? 4 : (isChainCall ? (auth ? 60 : 20) : (auth ? 20 : 8));
+    const windowSec = isPreview ? 60 : (isChainCall ? 10 : 60);
 
     // ── Upstash Redis (persistente entre instâncias) ──────────────────────────
     const redisUrl   = process.env.UPSTASH_REDIS_REST_URL;
@@ -133,20 +156,25 @@ module.exports = async function handler(req, res) {
         _preferProvider,
         _planMode,    // planeamento (retorna JSON de secções)
         _sectionMode, // geração de uma secção individual
+        _previewMode, // NOVO v2.1: amostra grátis, sem dedução de crédito
         // creditsRemaining enviado pelo cliente após /api/deduct-credit ter debitado com sucesso
         creditsRemaining: preDeductedCredits,
         // cost: créditos já debitados para este pedido (usado para reembolso automático em caso de falha)
         cost: deductedCost,
     } = body;
 
-    // Chamadas de cadeia (_planMode ou _sectionMode) têm rate-limit próprio
-    const isChainCall = !!(_planMode || _sectionMode);
+    // Chamadas de cadeia (_planMode ou _sectionMode) têm rate-limit próprio.
+    // _previewMode é mutuamente exclusivo com isso — uma amostra nunca encadeia.
+    const isPreview   = !!_previewMode && !_planMode && !_sectionMode;
+    const isChainCall = !isPreview && !!(_planMode || _sectionMode);
 
-    if (!await checkRateLimit(req, isChainCall)) {
-        const retryAfter = isChainCall ? 10 : 60;
+    if (!await checkRateLimit(req, isChainCall, isPreview)) {
+        const retryAfter = isPreview ? 60 : (isChainCall ? 10 : 60);
         res.setHeader('Retry-After', String(retryAfter));
         return res.status(429).json({
-            error: 'Muitos pedidos. Aguarde alguns segundos.',
+            error: isPreview
+                ? 'Já gerou várias amostras grátis. Aguarde um pouco ou gere o documento completo.'
+                : 'Muitos pedidos. Aguarde alguns segundos.',
             code: 'RATE_LIMIT',
             retryAfter,
         });
@@ -169,6 +197,14 @@ module.exports = async function handler(req, res) {
 
     if (!finalPrompt) return res.status(400).json({ error: 'prompt obrigatório' });
 
+    // NOVO v2.1: em modo preview, instrui o modelo a escrever apenas a abertura
+    // do documento (cabeçalho + primeiro parágrafo/secção) e a parar de forma
+    // limpa — isto além do corte rígido de maxTokens (PREVIEW_MAX_TOKENS) que
+    // já impede uma resposta longa mesmo que o modelo ignore a instrução.
+    if (isPreview) {
+        finalPrompt = `${finalPrompt}\n\n---\nIMPORTANTE: Esta é apenas uma AMOSTRA GRÁTIS para o utilizador avaliar a qualidade antes de gerar o documento completo. Escreva APENAS o cabeçalho/título e a abertura do documento (primeiro parágrafo ou primeira secção, no máximo). Pare num ponto natural — não tente preencher o documento todo. Não escreva "[continua]" nem comentários meta.`;
+    }
+
     // CORRIGIDO (auditoria A-3): limite de tamanho do prompt — sem isto um
     // pedido malicioso com 100.000+ caracteres consome tokens de todos os 5
     // providers, pode causar timeout dos 60s da Vercel e ainda debitar crédito.
@@ -180,12 +216,16 @@ module.exports = async function handler(req, res) {
         });
     }
 
-    // ── Autenticação obrigatória para chamadas normais (não-chain) ───────────
+    // ── Autenticação ───────────────────────────────────────────────────────
     // A DEDUÇÃO DE CRÉDITOS é feita ANTES desta chamada pelo cliente via /api/deduct-credit.
     // Este endpoint apenas verifica o JWT (para logging) e gera o documento.
     // Chamadas de cadeia interna (_planMode / _sectionMode) não requerem token.
+    // NOVO v2.1: chamadas de preview (_previewMode) também não exigem token —
+    // a amostra grátis deve funcionar mesmo para visitantes não autenticados,
+    // que é precisamente o público que precisa de ver qualidade antes de criar
+    // conta/comprar créditos. Não há dedução de crédito neste modo.
     let verifiedUserId = userId;
-    if (!isChainCall) {
+    if (!isChainCall && !isPreview) {
         const authHeader = req.headers['authorization'] || '';
         const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
         if (!token) {
@@ -207,12 +247,28 @@ module.exports = async function handler(req, res) {
             console.error('[generate-document] Erro ao verificar JWT:', e.message);
             return res.status(401).json({ error: 'Erro ao verificar sessão.' });
         }
+    } else if (isPreview) {
+        // Best-effort: se o visitante já tiver sessão, identificamo-lo nos logs,
+        // mas a ausência/invalidade do token NUNCA bloqueia o preview.
+        const authHeader = req.headers['authorization'] || '';
+        const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+        if (token) {
+            try {
+                const { user: jwtUser } = await getUserFromToken(token);
+                if (jwtUser) verifiedUserId = jwtUser.id;
+            } catch (_) { /* ignorar — preview continua anónimo */ }
+        }
     }
 
     // creditsAfterDeduction: valor já debitado pelo /api/deduct-credit — apenas reenviado ao cliente
-    const creditsAfterDeduction = typeof preDeductedCredits === 'number' ? preDeductedCredits : null;
+    // Em modo preview isto é sempre null (nenhum crédito foi tocado).
+    const creditsAfterDeduction = isPreview
+        ? null
+        : (typeof preDeductedCredits === 'number' ? preDeductedCredits : null);
 
-    const maxTokens = _sectionMode ? 8192 : (_planMode ? 1024 : 8192);
+    const maxTokens = isPreview
+        ? PREVIEW_MAX_TOKENS
+        : (_sectionMode ? 8192 : (_planMode ? 1024 : 8192));
 
     try {
         const result = await raceAllProviders(finalPrompt, {
@@ -221,7 +277,7 @@ module.exports = async function handler(req, res) {
 
         if (!isChainCall) {
             console.log(JSON.stringify({
-                event: 'doc_generated', serviceType,
+                event: isPreview ? 'doc_preview_generated' : 'doc_generated', serviceType,
                 provider: result.provider, model: result.model,
                 ms: result.ms,
                 userId: verifiedUserId ? verifiedUserId.slice(0, 8) + '***' : 'anon',
@@ -233,20 +289,23 @@ module.exports = async function handler(req, res) {
             document: result.content,
             model: `${result.provider} · ${result.model}`,
             // creditsRemaining vem sempre do servidor — nunca calculado no cliente
+            // Em preview é sempre null: nenhum crédito foi tocado.
             creditsRemaining: creditsAfterDeduction,
             usage: result.usage,
+            preview: isPreview || undefined,
         });
 
     } catch (err) {
         console.error('[generate-document] Todos os providers falharam:', err?.message);
 
         // NOVO v2.0: tentar reembolsar automaticamente o crédito já debitado.
-        // Só aplicável a chamadas normais (não-chain), com utilizador autenticado
-        // e um custo válido informado pelo cliente.
+        // Só aplicável a chamadas normais (não-chain, não-preview), com utilizador
+        // autenticado e um custo válido informado pelo cliente. Em modo preview
+        // nunca há nada para reembolsar (nenhum crédito foi debitado).
         let refunded = false;
         let creditsAfterRefund = creditsAfterDeduction;
 
-        if (!isChainCall && verifiedUserId && (deductedCost === 1 || deductedCost === 2)) {
+        if (!isChainCall && !isPreview && verifiedUserId && (deductedCost === 1 || deductedCost === 2)) {
             try {
                 const newCredits = await rpc('refund_credit', { p_user_id: verifiedUserId, p_amount: deductedCost });
                 if (newCredits !== undefined && newCredits !== null) {
@@ -261,7 +320,9 @@ module.exports = async function handler(req, res) {
         return res.status(503).json({
             error: refunded
                 ? 'Serviço de IA temporariamente indisponível. O crédito foi devolvido automaticamente — tente novamente.'
-                : 'Serviço de IA temporariamente indisponível. Tente novamente.',
+                : (isPreview
+                    ? 'Não foi possível gerar a amostra agora. Tente novamente em alguns segundos.'
+                    : 'Serviço de IA temporariamente indisponível. Tente novamente.'),
             code: 'SERVICE_UNAVAILABLE',
             refunded,
             creditsRemaining: creditsAfterRefund,
