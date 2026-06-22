@@ -49,6 +49,17 @@ export const Analytics = {
     } catch (_) {}
   },
 
+  // NOVO v2.1: amostra grátis (_previewMode) — evento separado de
+  // trackDocumentGenerated porque NÃO é uma conversão/compra (sem custo de
+  // crédito), apenas um sinal de interesse/funil. Útil para medir taxa de
+  // conversão preview → geração paga.
+  trackPreviewGenerated(serviceKey) {
+    this._gtag('event', 'view_item', {
+      service_type: serviceKey,
+      preview:      true,
+    });
+  },
+
   // ── Eventos de Pagamento ──────────────────────────────────────────────────
 
   trackCreditPurchase(amount, paymentId = '') {
