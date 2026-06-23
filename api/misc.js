@@ -52,21 +52,31 @@ function makeSdkClient() {
   });
 }
 
+// ATENÇÃO: ao adicionar novas páginas estáticas em /pages/, acrescentar aqui também.
+// Páginas geradas pelo admin (blog_pages) são lidas automaticamente da BD — não precisam
+// de estar nesta lista.
 const STATIC_PAGES = [
-  { loc: '/',                                            priority: '1.0', changefreq: 'weekly'  },
-  { loc: '/pages/',                                      priority: '0.7', changefreq: 'weekly'  },
-  { loc: '/pages/como-fazer-cv-mocambique.html',         priority: '0.8', changefreq: 'monthly' },
-  { loc: '/pages/carta-formal-mocambique.html',          priority: '0.8', changefreq: 'monthly' },
-  { loc: '/pages/carta-recomendacao-mocambique.html',    priority: '0.8', changefreq: 'monthly' },
-  { loc: '/pages/contrato-arrendamento-mocambique.html', priority: '0.8', changefreq: 'monthly' },
-  { loc: '/pages/declaracao-residencia-mocambique.html', priority: '0.8', changefreq: 'monthly' },
-  { loc: '/pages/plano-negocios-mocambique.html',        priority: '0.8', changefreq: 'monthly' },
-  { loc: '/pages/procuracao-mocambique.html',            priority: '0.8', changefreq: 'monthly' },
-  { loc: '/pages/recibo-pagamento-mocambique.html',      priority: '0.8', changefreq: 'monthly' },
-  { loc: '/pages/requerimento-emprego-mocambique.html',  priority: '0.8', changefreq: 'monthly' },
-  { loc: '/pages/trabalho-escolar-mocambique.html',      priority: '0.8', changefreq: 'monthly' },
-  { loc: '/parceiros.html',                              priority: '0.6', changefreq: 'monthly' },
-  { loc: '/legal.html',                                  priority: '0.3', changefreq: 'monthly' },
+  { loc: '/',                                                                    priority: '1.0', changefreq: 'weekly'  },
+  { loc: '/pages/',                                                              priority: '0.7', changefreq: 'weekly'  },
+  // Páginas SEO estáticas — ficheiros físicos em /pages/
+  { loc: '/pages/como-fazer-cv-mocambique.html',                                 priority: '0.9', changefreq: 'monthly' },
+  { loc: '/pages/cv-licenciado-mocambique.html',                                 priority: '0.9', changefreq: 'monthly' },
+  { loc: '/pages/cv-sem-experiencia-mocambique.html',                            priority: '0.9', changefreq: 'monthly' },
+  { loc: '/pages/como-fazer-um-cv-de-um-licenciado-em-mocambique/',              priority: '0.9', changefreq: 'monthly' },
+  { loc: '/pages/carta-candidatura-emprego-mocambique.html',                     priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/carta-formal-mocambique.html',                                  priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/carta-recomendacao-mocambique.html',                            priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/contrato-arrendamento-mocambique.html',                         priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/declaracao-residencia-mocambique.html',                         priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/declaracao-rendimentos-mocambique.html',                        priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/plano-negocios-mocambique.html',                                priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/procuracao-mocambique.html',                                    priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/recibo-pagamento-mocambique.html',                              priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/requerimento-emprego-mocambique.html',                          priority: '0.8', changefreq: 'monthly' },
+  { loc: '/pages/trabalho-escolar-mocambique.html',                              priority: '0.8', changefreq: 'monthly' },
+  // Outras páginas públicas
+  { loc: '/parceiros.html',                                                      priority: '0.6', changefreq: 'monthly' },
+  { loc: '/legal.html',                                                          priority: '0.3', changefreq: 'monthly' },
 ];
 
 function parseBody(req) {
@@ -459,21 +469,63 @@ async function handleSitemap(req, res) {
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
 
+  // Páginas dinâmicas criadas pelo admin (blog_pages publicadas na BD).
+  //
+  // FORMATO DA URL:
+  //   - O admin publica via GitHub commit em pages/<slug>/index.html
+  //     (ver handleGeneratePage em api/admin/index.js).
+  //   - Logo a URL pública é /pages/<slug>/ (cleanUrls no vercel.json),
+  //     NÃO /pages/<slug>.html como estava antes (bug anterior).
+  //
+  // DEDUPLICAÇÃO:
+  //   - Se uma página dinâmica tiver o mesmo slug de uma estática já listada
+  //     em STATIC_PAGES (ex: como-fazer-cv-mocambique), a entrada estática
+  //     tem prioridade. Isto evita duplicados no sitemap quando uma página
+  //     estática foi posteriormente republicada pelo admin.
   let dynamicPages = [];
   try {
-    const data = await restRequest('blog_pages?published=eq.true&select=slug,updated_at&order=updated_at.desc');
-    dynamicPages = (Array.isArray(data) ? data : []).map(p => ({
-      loc:        `/pages/${p.slug}.html`,
-      priority:   '0.8',
-      changefreq: 'monthly',
-      lastmod:    p.updated_at ? p.updated_at.slice(0, 10) : undefined,
-    }));
-  } catch (_) {}
+    const data = await restRequest(
+      'blog_pages?published=eq.true&select=slug,updated_at,title&order=updated_at.desc&limit=500'
+    );
+
+    // Conjunto de slugs já cobertos pelas páginas estáticas
+    const staticSlugs = new Set(
+      STATIC_PAGES
+        .map(p => {
+          // Extrai o slug do loc: /pages/foo.html → foo | /pages/foo/ → foo
+          const m = p.loc.match(/\/pages\/([^/]+?)(?:\.html|\/?$)/);
+          return m ? m[1] : null;
+        })
+        .filter(Boolean)
+    );
+
+    dynamicPages = (Array.isArray(data) ? data : [])
+      .filter(p => p.slug && !staticSlugs.has(p.slug))
+      .map(p => ({
+        loc:        `/pages/${p.slug}/`,   // cleanUrls → index.html servido em /slug/
+        priority:   '0.8',
+        changefreq: 'monthly',
+        lastmod:    p.updated_at ? p.updated_at.slice(0, 10) : undefined,
+      }));
+  } catch (_) {
+    // Falha silenciosa: o sitemap serve as páginas estáticas mesmo sem BD
+  }
 
   const allPages = [...STATIC_PAGES, ...dynamicPages];
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${allPages.map(p =>
-    `  <url>\n    <loc>${SITE_URL}${p.loc}</loc>\n    ${p.lastmod ? `<lastmod>${p.lastmod}</lastmod>\n    ` : ''}<changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>`
-  ).join('\n')}\n</urlset>`;
+
+  const urlEntries = allPages.map(p => {
+    const lines = [
+      `  <url>`,
+      `    <loc>${SITE_URL}${p.loc}</loc>`,
+      p.lastmod ? `    <lastmod>${p.lastmod}</lastmod>` : null,
+      `    <changefreq>${p.changefreq}</changefreq>`,
+      `    <priority>${p.priority}</priority>`,
+      `  </url>`,
+    ].filter(Boolean);
+    return lines.join('\n');
+  }).join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`;
 
   return res.status(200).send(xml);
 }
