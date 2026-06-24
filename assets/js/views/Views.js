@@ -329,7 +329,19 @@ export const DocumentView = {
       document.head.appendChild(styleEl);
     }
 
+    // Aviso de revisão jurídica: mostrado apenas para serviços da categoria
+    // 'juridico' (arrendamento, requerimento, procuração, residência, acta).
+    // Não altera nenhum fluxo de geração/download — é só uma faixa informativa
+    // acima do preview. Ver docs/legal/VERIFICACAO-LEGAL.md para o que já foi
+    // verificado e o que ainda está pendente de confirmação.
+    const legalNotice = (svc && svc.category === 'juridico')
+      ? `<div style="background:#fffbeb;border-bottom:1px solid #fde68a;padding:8px 14px;font-size:11.5px;line-height:1.5;color:#92400e;">
+          ⚖️ Esta minuta cita legislação moçambicana. Confirme os artigos e diplomas junto de um advogado ou notário antes de uso formal — a IA pode cometer erros em referências legais.
+        </div>`
+      : '';
+
     previewContainer.innerHTML = `
+      ${legalNotice}
       <div class="res-preview-header">
         <div class="res-preview-tabs" id="resPreviewTabs">
           <button class="res-tab active" data-rfmt="pdf">📄 PDF</button>
