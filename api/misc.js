@@ -12,6 +12,7 @@
 
 const crypto  = require('crypto');
 const { analyzeImage, parseJSON: parseVisionJSON } = require('./_lib/visionAI');
+const { buscarArtigosRelevantes } = require('./_lib/legalSearch');
 
 const {
   restRequest,
@@ -112,6 +113,7 @@ module.exports = async function handler(req, res) {
   if (action === 'page-view')                           return handlePageView(req, res);
   if (action === 'sitemap.xml' || action === 'sitemap') return handleSitemap(req, res);
   if (action === 'ocr-analyze')                         return handleOcrAnalyze(req, res);
+  if (action === 'legal-search')                        return handleLegalSearch(req, res);
   if (action === 'config' || action === 'misc')         return handleConfig(req, res);
   if (action === 'verify-receipt')                      return handleVerifyReceipt(req, res);
 
@@ -1095,4 +1097,83 @@ async function handleOcrAnalyze(req, res) {
 
 function _safeJSON(raw) {
   try { return JSON.parse(raw.replace(/```json|```/g, '').trim()); } catch (_) { return null; }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LEGAL-SEARCH — busca semântica de artigos de lei (Fase 2: Motor Jurídico)
+// POST /api/legal-search
+//
+// Substitui as citações estáticas (hard-coded) nos prompts de
+// assets/js/services/prompts/{arrendamento,requerimento,residencia,
+// procuracao,acta}.js por artigos REAIS recuperados da base vectorial —
+// ver docs/legal/VERIFICACAO-LEGAL.md para o histórico de erros que esta
+// mudança visa evitar (citações de leis inexistentes, artigos trocados).
+//
+// O frontend chama isto ANTES de montar o prompt final para
+// generate-document.js, e injecta o resultado na secção "BASE LEGAL" —
+// ver assets/js/services/LegalContext.js.
+// ════════════════════════════════════════════════════════════════════════════
+
+const _legalSearchRateMap = new Map(); // IP → { count, reset }
+
+function checkLegalSearchRateLimit(ip) {
+  const key    = `rl:legal-search:${ip}`;
+  const limit  = 20;         // max 20 buscas por IP por minuto — generoso para uso normal
+  const window = 60 * 1000;
+  const now    = Date.now();
+  const entry  = _legalSearchRateMap.get(key) || { count: 0, reset: now + window };
+  if (now > entry.reset) { entry.count = 0; entry.reset = now + window; }
+  entry.count++;
+  _legalSearchRateMap.set(key, entry);
+  return entry.count <= limit;
+}
+
+// Mapeia cada serviço jurídico aos diplomas relevantes — restringir a
+// busca evita que, por exemplo, uma procuração receba por engano um
+// artigo do Código Penal sobre crimes fiscais só porque a frase tem
+// alguma semelhança semântica incidental. Quando um serviço não está
+// aqui, a busca corre sobre TODOS os diplomas confirmados.
+const DIPLOMAS_POR_SERVICO = {
+  arrendamento: ['codigo-civil'],
+  procuracao:   ['codigo-civil', 'codigo-notariado', 'estatuto-oam'],
+  requerimento: ['lei-proteccao-social', 'lei-orgaos-locais', 'lei-estrangeiros', 'lei-sistema-tributario'],
+  residencia:   ['codigo-civil', 'codigo-penal'],
+  acta:         ['codigo-civil', 'lei-actividades-comerciais', 'lei-associacoes'],
+};
+
+async function handleLegalSearch(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', ORIGIN);
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST')   return res.status(405).json({ error: 'POST only' });
+
+  const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+  if (ip && !checkLegalSearchRateLimit(ip)) {
+    return res.status(429).json({ error: 'Demasiados pedidos. Tente novamente dentro de 1 minuto.' });
+  }
+
+  const body = parseBody(req);
+  const { query = '', serviceType = '' } = body;
+
+  if (!query.trim()) {
+    return res.status(400).json({ error: 'query é obrigatório (descrição do que se procura, ex: "procuração para venda de imóvel").' });
+  }
+  if (query.length > 500) {
+    return res.status(400).json({ error: 'query demasiado longa (máx. 500 caracteres).' });
+  }
+
+  const diplomaSlugs = DIPLOMAS_POR_SERVICO[serviceType] || null;
+
+  try {
+    const { resultados, avisoQualidade } = await buscarArtigosRelevantes(query, { diplomaSlugs });
+    return res.status(200).json({ resultados, avisoQualidade, encontrado: resultados.length > 0 });
+  } catch (err) {
+    console.error('[legal-search] erro:', err.message);
+    // Falhar de forma graciosa: o frontend trata "encontrado: false" como
+    // "sem base legal recuperada" e cai no texto genérico de fallback
+    // (ver LegalContext.js) — nunca bloqueia a geração do documento por
+    // a busca jurídica ter falhado.
+    return res.status(200).json({ resultados: [], avisoQualidade: false, encontrado: false, erro: 'busca_indisponivel' });
+  }
 }
