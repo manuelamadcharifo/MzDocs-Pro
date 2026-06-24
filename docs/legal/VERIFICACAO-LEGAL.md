@@ -1,237 +1,94 @@
-// assets/js/services/prompts/arrendamento.js
-// Extraido de Services.js (OpenRouterService._buildPrompt / _buildDataBlock)
-// Comportamento 100% preservado: apenas o texto do prompt foi movido para
-// este modulo. Nenhuma string interna foi alterada.
+# Verificação legal das citações em `assets/js/services/prompts/`
 
-export function buildPrompt(data, ocrBlock) {
-        const _numPorExtenso2 = (val) => {
-          const n = parseInt(val || 0);
-          if (n === 0) return 'zero';
-          const u = ['','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezasseis','dezassete','dezoito','dezanove'];
-          const d = ['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
-          const c = ['','cem','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
-          if (n < 20) return u[n];
-          if (n < 100) return d[Math.floor(n/10)] + (n%10 ? ' e ' + u[n%10] : '');
-          if (n < 1000) return (n===100?'cem':c[Math.floor(n/100)]) + (n%100 ? ' e ' + _numPorExtenso2(n%100) : '');
-          if (n < 1000000) { const m=Math.floor(n/1000); const r=n%1000; return (m===1?'mil':_numPorExtenso2(m)+' mil')+(r?' e '+_numPorExtenso2(r):''); }
-          return n.toLocaleString('pt-MZ') + ' (por extenso)';
-        };
-        const isComercial = data.tipoImovel?.includes('Comercial') || data.tipoImovel?.includes('Escritório') || data.tipoImovel?.includes('Loja');
-        const avisoPrazo = data.duracao === '6 meses' ? '30 (trinta)' : '60 (sessenta)';
-        const districtName = data.local?.includes('Maputo') ? 'KaMpfumo' : data.local?.includes('Matola') ? 'Matola' : (data.local?.split(',')[0] || 'Maputo');
-        return `Você é advogado especialista em direito imobiliário moçambicano. Redija um CONTRATO DE ARRENDAMENTO juridicamente válido e completo.
+Este documento regista, diploma a diploma, o resultado da verificação feita em
+Junho/2026 contra textos legais oficiais (Boletim da República) e fontes
+académicas/doutrinárias, para as citações de lei usadas nos prompts de IA dos
+serviços jurídicos do MzDocs Pro.
 
-BASE LEGAL (verificada contra fontes oficiais e doutrina especializada em Junho/2026 — ver /docs/legal/VERIFICACAO-LEGAL.md):
-- AVISO: o regime jurídico do arrendamento urbano em Moçambique é uma área de incerteza doutrinária reconhecida — o diploma historicamente aplicado pelos tribunais (Tribunal Supremo, 1992) é a Lei n.º 8/79, de 3 de Julho, que revogou o antigo Decreto n.º 43.525, de 7 de Março de 1961 ("Lei do Inquilinato"). Não existe uma "Lei n.º 19/2013" de arrendamento urbano — essa referência não foi confirmada em nenhuma fonte oficial.
-- Código Civil de Moçambique (Decreto-Lei n.º 47.344, de 25 de Novembro de 1966, posto em vigor pela Portaria n.º 22.869/1967, com alterações), artigos 1022.º a 1062.º (Locação/Arrendamento)
-- Lei n.º 7/2015, de 6 de Outubro (Lei da Mediação, Conciliação e Arbitragem)
-- Obrigações fiscais sobre rendimentos prediais: Lei n.º 32/2007, de 31 de Dezembro (Código do IVA) e Código do IRPS, conforme aplicável
+**Objectivo:** nenhuma citação de lei/artigo enviada à IA ou mostrada ao
+utilizador final deve ser inventada. Quando não foi possível confirmar um
+diploma com uma fonte primária, a citação foi removida do prompt em vez de
+mantida "por precaução" — citar uma lei errada é pior do que não citar nenhuma.
 
-DADOS:
-- Tipo de imóvel: ${data.tipoImovel}
-- Finalidade: ${isComercial ? 'comercial/profissional' : 'habitacional'}
-- Senhorio: ${data.proprietario} | BI: ${data.biProprietario}
-- Inquilino: ${data.locatario} | BI: ${data.biLocatario}
-- Localização: ${data.local}
-- Renda: ${parseInt(data.valor || 0).toLocaleString('pt-MZ')} MZN/mês (${_numPorExtenso2(data.valor)} meticais)
-- Método de pagamento: ${data.metodoPagamento || 'a acordar'}
-- Duração: ${data.duracao}
-- Caução: ${data.caucao}
-- Água e electricidade: ${data.quemPagaServicos || 'a acordar'}
-- Condições especiais: ${data.condicoes || 'Nenhuma'}${ocrBlock}
-
-REGRAS DE QUALIDADE:
-1. NUNCA deixar campos obrigatórios em branco — use os dados fornecidos
-2. Valor da renda SEMPRE por extenso E em algarismos
-3. Data de início OBRIGATÓRIA — use "[DATA DE INÍCIO: ____/____/______]" se não fornecida
-4. Multa de mora: valor livremente acordado entre as partes (sugestão: até 3% ao mês), nos termos da liberdade contratual prevista no Código Civil — NÃO citar uma "Lei n.º 19/2013" inexistente
-5. Aviso prévio de rescisão: ${avisoPrazo} dias, nos termos do art. 34.º
-6. Incluir cláusula específica sobre método de pagamento: ${data.metodoPagamento || 'a definir'}
-7. Incluir cláusula clara sobre quem paga água e electricidade: ${data.quemPagaServicos}
-8. ${isComercial ? 'Contrato COMERCIAL: incluir cláusula sobre horário de funcionamento, uso exclusivamente comercial, e obrigação de licença comercial pelo Inquilino' : 'Contrato HABITACIONAL: incluir cláusula sobre uso exclusivamente habitacional e proibição de subarrendamento'}
-9. Obrigações fiscais: Senhorio obrigado a declarar rendas ao IRPS (imposto sobre rendimentos prediais)
-
-ESTRUTURA OBRIGATÓRIA:
+**Isto não substitui aconselhamento jurídico.** É um registo de due diligence
+de engenharia, não um parecer jurídico. Diplomas marcados como "não
+verificado" continuam a precisar de confirmação por um jurista antes de
+poderem voltar a ser citados no produto.
 
 ---
 
-# CONTRATO DE ARRENDAMENTO ${data.tipoImovel.toUpperCase()}
-
-**ENTRE:**
-
-**SENHORIO:** ${data.proprietario}, portador(a) do Bilhete de Identidade n.º **${data.biProprietario}**, residente em ________________________________, doravante designado(a) **"Senhorio"**;
-
-**E**
-
-**INQUILINO:** ${data.locatario}, portador(a) do Bilhete de Identidade n.º **${data.biLocatario}**, residente em ________________________________, doravante designado(a) **"Inquilino"**;
-
-Celebram, de mútuo acordo e boa-fé, o presente Contrato de Arrendamento, regido pelo Código Civil de Moçambique (artigos 1022.º e seguintes — Locação):
-
----
-
-## **CLÁUSULA 1.ª — OBJECTO**
-
-1.1 O Senhorio cede ao Inquilino, para uso exclusivo como ${data.tipoImovel}, o imóvel sito em **${data.local}**, composto por ________________________________ (descrever: n.º de divisões, características).
-
-1.2 O imóvel destina-se exclusivamente a fins **${isComercial ? 'comerciais/profissionais' : 'habitacionais'}**, sendo expressamente proibida a sublocação ou alteração de finalidade sem autorização escrita do Senhorio, nos termos do Código Civil de Moçambique (artigo 1038.º — obrigações do locatário).
-
----
-
-## **CLÁUSULA 2.ª — PRAZO**
-
-2.1 O presente contrato tem início em **[DATA DE INÍCIO: ____/____/______]** e vigorará pelo período de **${data.duracao}**, findando em **[DATA DE TÉRMINO: ____/____/______]**.
-
-2.2 Findo o prazo, o contrato renovar-se-á automaticamente por iguais períodos, salvo comunicação escrita de não renovação com antecedência mínima de **${avisoPrazo} dias** (prazo livremente acordado entre as partes, nos termos da liberdade contratual do Código Civil).
-
----
-
-## **CLÁUSULA 3.ª — RENDA E CONDIÇÕES DE PAGAMENTO**
-
-3.1 A renda mensal é fixada em **${parseInt(data.valor || 0).toLocaleString('pt-MZ')} MZN (${_numPorExtenso2(data.valor)} meticais)**, devida até ao dia **5 (cinco)** de cada mês.
-
-3.2 O pagamento será efectuado por **${data.metodoPagamento || '________________________________'}**${data.metodoPagamento === 'M-Pesa' ? ' para o número: ________________________________' : data.metodoPagamento === 'Transferência Bancária' || data.metodoPagamento === 'Depósito Bancário' ? ' para a conta n.º ________________________________, Banco ________________________________' : ''}.
-
-3.3 Em caso de mora no pagamento, o Inquilino pagará ao Senhorio uma multa de **3% (três por cento)** sobre o valor em dívida por cada mês de atraso, valor livremente acordado entre as partes nos termos do Código Civil, sem prejuízo de juros legais.
-
-3.4 A renda poderá ser actualizada anualmente de acordo com o índice de inflação oficial publicado pelo INE — Instituto Nacional de Estatística de Moçambique, com pré-aviso de 30 dias, a partir do segundo ano de vigência do contrato.
-
----
-
-## **CLÁUSULA 4.ª — CAUÇÃO**
-
-4.1 O Inquilino entrega ao Senhorio, a título de caução, o montante de **${data.caucao}**, no acto da assinatura deste contrato.
-
-4.2 A caução destina-se a garantir o cumprimento das obrigações contratuais, incluindo reparação de danos causados ao imóvel além do desgaste normal.
-
-4.3 A caução será devolvida no prazo máximo de **30 (trinta) dias** após a entrega das chaves e verificação do estado do imóvel, deduzidos eventuais danos, rendas em atraso ou despesas de recuperação (prazo livremente acordado entre as partes).
-
----
-
-## **CLÁUSULA 5.ª — ENCARGOS (ÁGUA, ELECTRICIDADE E SERVIÇOS)**
-
-5.1 **${data.quemPagaServicos === 'Incluídas na renda' ? 'As despesas de água e electricidade estão INCLUÍDAS no valor da renda mensal acordada.' : data.quemPagaServicos === 'Proprietário' ? 'As despesas de água e electricidade são da responsabilidade do SENHORIO.' : data.quemPagaServicos === 'Inquilino (separado da renda)' ? 'As despesas de água e electricidade são da responsabilidade EXCLUSIVA do INQUILINO, a pagar directamente às entidades fornecedoras (FIPAG / EDM), não estando incluídas no valor da renda.' : 'As despesas de água e electricidade serão acordadas separadamente entre as partes.'}**
-
-5.2 Outras despesas de condomínio, lixo, segurança ou manutenção de espaços comuns: ________________________________.
-
----
-
-## **CLÁUSULA 6.ª — OBRIGAÇÕES DO SENHORIO**
-
-O Senhorio obriga-se a:
-
-a) Entregar o imóvel em boas condições de habitabilidade e com todos os equipamentos em funcionamento;
-b) Assegurar o gozo pacífico do imóvel pelo Inquilino durante o período contratual;
-c) Realizar as obras de conservação estrutural necessárias para manter o imóvel em boas condições;
-d) Não proceder a vistoria do imóvel sem aviso prévio de 48 horas, salvo em caso de emergência;
-e) Cumprir as obrigações fiscais relativas às rendas recebidas (IRPS — rendimentos prediais), nos termos da legislação tributária moçambicana.
-
----
-
-## **CLÁUSULA 7.ª — OBRIGAÇÕES DO INQUILINO**
-
-O Inquilino obriga-se a:
-
-a) Pagar a renda no prazo e pelo método acordados na Cláusula 3.ª;
-b) Usar o imóvel exclusivamente para o fim estipulado na Cláusula 1.ª;
-c) Conservar o imóvel, efectuando as reparações de pequena conservação a seu cargo;
-d) Não realizar obras de transformação sem autorização escrita do Senhorio;
-e) Não sublocar, ceder ou transferir, no todo ou em parte, o uso do imóvel sem autorização;
-f) Permitir ao Senhorio a realização de obras urgentes, mediante pré-aviso;
-g) Entregar o imóvel nas mesmas condições em que o recebeu, salvo desgaste normal de uso.
-
-**Condições especiais acordadas:** ${data.condicoes || 'Nenhuma condição especial além das estabelecidas por lei.'}
-
-${isComercial ? `---
-
-## **CLÁUSULA 8.ª — DISPOSIÇÕES ESPECIAIS (ARRENDAMENTO COMERCIAL)**
-
-8.1 O Inquilino obriga-se a obter e manter válidas todas as licenças e autorizações administrativas necessárias ao exercício da sua actividade, não podendo imputar ao Senhorio qualquer responsabilidade por atrasos ou recusas.
-
-8.2 O Inquilino pode adaptar o imóvel às suas necessidades comerciais, desde que autorizado por escrito pelo Senhorio e revertendo as obras ao estado original no final do contrato, salvo acordo em contrário.` : ''}
-
----
-
-## **CLÁUSULA ${isComercial ? '9' : '8'}.ª — RESCISÃO**
-
-${isComercial ? '9' : '8'}.1 **Por iniciativa do Inquilino:** Mediante comunicação escrita ao Senhorio com antecedência mínima de **${avisoPrazo} dias** (prazo livremente acordado entre as partes).
-
-${isComercial ? '9' : '8'}.2 **Por iniciativa do Senhorio:** Nos casos previstos neste contrato e nos princípios gerais de incumprimento do Código Civil de Moçambique, nomeadamente: falta de pagamento de renda por período superior a 60 dias; uso indevido do imóvel; realização de obras não autorizadas; subarrendamento não autorizado.
-
-${isComercial ? '9' : '8'}.3 Em caso de rescisão com justa causa imputável ao Inquilino, este perderá o direito à devolução da caução, sem prejuízo de indemnização por danos adicionais.
-
----
-
-## **CLÁUSULA ${isComercial ? '10' : '9'}.ª — RESOLUÇÃO DE CONFLITOS E FORO**
-
-${isComercial ? '10' : '9'}.1 As partes comprometem-se a resolver amigavelmente quaisquer litígios emergentes do presente contrato.
-
-${isComercial ? '10' : '9'}.2 Não sendo possível a resolução amigável, as partes poderão recorrer à mediação nos termos da Lei n.º 7/2015, de 6 de Outubro.
-
-${isComercial ? '10' : '9'}.3 Para os litígios que não possam ser resolvidos por mediação, fica eleito o **Tribunal Judicial de Distrito de ${districtName}**, com renúncia expressa de qualquer outro.
-
----
-
-## **CLÁUSULA ${isComercial ? '11' : '10'}.ª — DISPOSIÇÕES FINAIS**
-
-${isComercial ? '11' : '10'}.1 O presente contrato é celebrado em dois exemplares de igual valor, ficando um na posse de cada parte.
-
-${isComercial ? '11' : '10'}.2 Tudo o que não estiver expressamente previsto neste contrato reger-se-á pelo Código Civil de Moçambique e demais legislação aplicável.
-
-${isComercial ? '11' : '10'}.3 A nulidade de qualquer cláusula não afecta a validade das restantes, que subsistirão em pleno vigor.
-
----
-
-**${data.local?.split(',').pop()?.trim() || 'Maputo'}, ______ de __________________ de ________**
-
-| | |
-|---|---|
-| **O SENHORIO** | **O INQUILINO** |
-| ${data.proprietario} | ${data.locatario} |
-| BI: ${data.biProprietario} | BI: ${data.biLocatario} |
-| ___________________________ | ___________________________ |
-| *(Assinatura)* | *(Assinatura)* |
-
-**TESTEMUNHAS:**
-
-| Testemunha 1 | Testemunha 2 |
-|---|---|
-| Nome: _____________________ | Nome: _____________________ |
-| BI: _______________________ | BI: _______________________ |
-| ___________________________ | ___________________________ |
-| *(Assinatura)* | *(Assinatura)* |
-
----
-*Reconhecimento de assinaturas recomendado para contratos com renda superior a 50.000 MZN/mês ou duração superior a 12 meses.*
-*Nota fiscal: o Senhorio é obrigado a declarar as rendas recebidas ao IRPS (rendimentos prediais) junto da Autoridade Tributária de Moçambique.*`;
-}
-
-export function buildDataBlock(data) {
-  const num = (v) => parseInt(v || 0).toLocaleString('pt-MZ');
-  return `- Tipo: ${data.tipoImovel || ''}
-- Senhorio: ${data.proprietario || ''}  |  BI: ${data.biProprietario || ''}
-- Inquilino: ${data.locatario || ''}  |  BI: ${data.biLocatario || ''}
-- Local: ${data.local || ''}
-- Renda: ${num(data.valor)} MZN/mês  |  Duração: ${data.duracao || ''}
-- Caução: ${data.caucao || ''}  |  Pagamento: ${data.metodoPagamento || ''}
-- Serviços incluídos: ${data.quemPagaServicos || ''}
-
-MAPEAMENTO DE PLACEHOLDERS:
-{{SENHORIO_NOME}} = ${data.proprietario || ''}
-{{SENHORIO_BI}} = ${data.biProprietario || ''}
-{{INQUILINO_NOME}} = ${data.locatario || ''}
-{{INQUILINO_BI}} = ${data.biLocatario || ''}
-{{IMOVEL_LOCAL}} = ${data.local || ''}
-{{TIPO_IMOVEL}} = ${data.tipoImovel || ''}
-{{RENDA_VALOR}} = ${num(data.valor)} MZN/mês
-{{RENDA_EXTENSO}} = [escreva o valor por extenso em português]
-{{DURACAO}} = ${data.duracao || ''}
-{{CAUCAO}} = ${data.caucao || ''}
-{{DATA}} = data de hoje por extenso
-{{LOCAL_DATA}} = ${data.local || 'Maputo'}, hoje
-{{CLAUSULAS}} = gere cláusulas completas numeradas (Cláusula 1ª a 12ª) cobrindo:
-  objecto do contrato, identificação do imóvel, prazo (${data.duracao || ''}), renda (${num(data.valor)} MZN),
-  caução (${data.caucao || ''}), forma de pagamento (${data.metodoPagamento || ''}),
-  serviços e encargos (${data.quemPagaServicos || ''}), obrigações do senhorio, obrigações do inquilino,
-  conservação e reparações, rescisão antecipada, foro competente (Tribunal de ${data.local || 'Maputo'})
-  Cada cláusula: <p><strong>Cláusula N.ª — TÍTULO</strong></p><p>texto...</p>`;
-}
+## 1. Erros confirmados e corrigidos
+
+| Ficheiro | Antes | Depois | Evidência |
+|---|---|---|---|
+| `residencia.js` | "artigo 347.º da Lei n.º 35/2014 (Código Penal)" para falsas declarações | "artigo 271.º do Código Penal" (Falso testemunho em inquirição não contenciosa; falsas declarações perante a autoridade) | Texto extraído de `codigo_penal.pdf` — o artigo 347.º não existe nesse diploma (vai até ao art. 448.º, e o crime de falsas declarações está nos arts. 267.º–271.º e 354.º). O 271.º é o aplicável a declarações administrativas como esta. |
+| `requerimento.js` | "Lei n.º 7/2009, de 11 de Março (Regime Jurídico da Segurança Social Obrigatória)" | "Lei n.º 4/2007, de 7 de Fevereiro (Lei da Protecção Social)" | O Boletim da República de 11 de Março de 2009 mostra que a Lei n.º 7/2009 dessa data é o Estatuto dos Magistrados Judiciais, não segurança social. A Lei n.º 4/2007, de 7/2, confirmada por múltiplas fontes (incluindo o PDF dedicado `Lei-4-2007-de-7-de-Fevereiro-Lei-da-Proteccao-Social.pdf`) e pela jurisprudência académica, é a base correcta da Protecção Social/INSS. |
+| `arrendamento.js` | "Lei n.º 19/2013, de 23 de Setembro (Lei do Arrendamento Urbano)", citada com 6 artigos específicos (14.º, 22.º, 25.º, 34.º, 35.º, 36.º) | Removida por completo. Base passa a ser o Código Civil (arts. 1022.º–1062.º, Locação) + nota de que o regime do arrendamento urbano em Moçambique é uma área de incerteza doutrinária reconhecida (diploma historicamente aplicado: Lei n.º 8/79, de 3 de Julho) | Nenhuma fonte (oficial, jornalística ou académica) confirma a existência de uma "Lei n.º 19/2013" de arrendamento urbano. Um artigo académico da Universidade de Macau sobre o regime de arrendamento moçambicano confirma que o Tribunal Supremo (1992) considerou a Lei n.º 8/79 como tendo revogado o antigo Decreto n.º 43.525/1961. Os 6 artigos citados (incluindo prazos e multa de 3%) foram, portanto, inventados na íntegra. |
+| `procuracao.js` | "art. 80.º do Código do Notariado" para reconhecimento notarial de procurações | "art. 120.º do Código do Notariado (Procurações e substabelecimentos)" | Texto extraído do Decreto-Lei n.º 4/2006, de 23 de Agosto (que altera/republica o Código do Notariado): o art. 80.º é "Petição" (processo de reclamação contra recusa do notário); o art. 120.º é especificamente sobre procurações. |
+| `procuracao.js` | "Lei n.º 19/2013, de 23 de Setembro (negócios imobiliários); Lei de Terras n.º 19/1997" para procurações de venda de imóvel | Removida; substituída por referência genérica ao Código Civil + nota de não citar a Lei 19/2013 | Mesma lei inexistente do ponto anterior, reaparecendo noutro contexto. |
+| `procuracao.js` | "Lei n.º 4/2013, de 22 de Fevereiro (Lei do Notariado — reconhecimento de assinaturas)" | Removida; reconhecimento passa a referenciar o art. 120.º do Código do Notariado | Não foi possível confirmar com nenhuma fonte que a Lei n.º 4/2013 trata de reconhecimento de assinaturas. |
+| `prestacao.js` | "Lei n.º 4/2004 (Trabalho por Conta Própria e Protecção Social Independente)" | Removida | Sem fonte que confirme este diploma. |
+| `licenca.js` | 8 decretos regulamentares específicos (Decreto n.º 43/2004, 28/1994, 23/2008, 66/2010, 26/2011, 54/2015; Diploma Ministerial 64/2007; Lei n.º 7/2017, Lei n.º 5/2017) | Todos removidos, substituídos por linguagem genérica "regulamentação aplicável" | Nenhum destes diplomas foi confirmado contra fonte primária. |
+
+| `requerimento.js`, `residencia.js` | "Lei n.º 8/2004, de 21 de Julho (Lei dos Registos e Identificação Civil)" + "Decreto n.º 10/2006, de 12 de Abril" | "Lei n.º 12/2004, de 8 de Dezembro (Código do Registo Civil)" | **Encontrado durante a Fase 2 (ingestão para RAG), Junho/2026.** O PDF usado para confirmar este diploma na primeira ronda de auditoria era, na realidade, o Boletim da República que aprova a **Lei das Telecomunicações** — o próprio sumário do Boletim diz "Lei n.º 8/2004: Aprova a lei das Telecomunicações, e revoga a Lei n.º 14/99, de 1 de Novembro". A confusão só foi detectada ao processar o texto completo para gerar embeddings (o conteúdo do artigo 6.º, sobre "serviços de telecomunicações", não correspondia ao esperado). A lei correcta do Código do Registo Civil é a Lei n.º 12/2004, de 8/12, confirmada por fonte académica (civil.registos.gov.mz). O "Decreto n.º 10/2006" não foi confirmado e foi removido. A mesma citação errada existia em DOIS ficheiros (`requerimento.js` e `residencia.js`) — a correcção inicial só tinha coberto o primeiro. |
+
+| `acta.js` | "Lei n.º 8/2008, de 15 de Julho (Lei das Associações)" | "Lei n.º 8/91, de 18 de Julho (Lei das Associações)" | **Encontrado durante a Fase 2, Junho/2026, ao adicionar suporte de RAG a `acta.js` — este ficheiro nunca tinha sido coberto pela auditoria da Fase 1** (não tinha sido detectado como "categoria jurídico" na primeira passagem). "Lei n.º 8/2008" é, na realidade, a Lei da Organização Tutelar de Menores — confirmado por múltiplas fontes independentes (incluindo o Boletim da República de 15/7/2008) de que a Lei das Associações é a Lei n.º 8/91, de 18 de Julho. ✅ Texto integral obtido (joint.org.mz), limpo, 20 artigos, já ingerido no RAG (migration_v20, diploma `lei-associacoes`). |
+| `acta.js` | "Lei n.º 23/1992, de 31 de Dezembro (Lei das Cooperativas)" | "Lei n.º 23/2009, de 8 de Setembro (Lei Geral sobre as Cooperativas)" | Mesmo achado. Número e data confirmados por **múltiplas fontes independentes** (Tribunal Supremo de Moçambique, artigo académico sobre cooperativismo em Marracuene, reportagem do jornal O País sobre os 14 anos de vigência da lei) — não existe confirmação de uma "Lei n.º 23/1992". ⚠️ **Texto integral ainda NÃO obtido**: a única cópia encontrada (ampcm.coop) é um PDF escaneado sem OCR, e o domínio não está acessível pelas ferramentas desta sessão (fora da allowlist de rede; `web_fetch` só devolve a marca de água "Pandora Box Lda.", não o conteúdo da imagem). Diploma `lei-cooperativas` está em `legal_diplomas` marcado `nao_usar` — fica pendente até alguém com acesso normal à internet baixar o PDF e enviá-lo para processamento OCR. **Decisão (24/6/2026): deixado pendente deliberadamente — não bloqueia o resto da Fase 2.** O serviço `acta` continua a citar o número/data correctos no texto estático (sem RAG) enquanto isto não for resolvido.
+
+## 1.1 Nota sobre este próprio processo de verificação
+
+O erro acima é um recordatório importante: **mesmo citações que passaram por verificação anterior podem estar erradas** se a verificação não tiver ido até ao conteúdo completo do PDF — bastou confiar no título/número do diploma sem ler o articulado completo para este erro passar. A ingestão para RAG (que processa o texto integral, artigo a artigo) acabou por ser, ela própria, uma camada adicional de verificação. Isto reforça por que o sistema de citação final não deve depender só de revisão humana pontual — daí o valor do RAG: cada citação gerada passa a vir de texto efectivamente lido, não de memória ou de confirmação superficial.
+
+| Diploma | Onde é citado | Evidência |
+|---|---|---|
+| Código Civil de Moçambique — Decreto-Lei n.º 47.344, de 25/11/1966, posto em vigor pela Portaria n.º 22.869, de 4/9/1967 | `procuracao`, `arrendamento`, `prestacao`, `residencia`, `acta` | Confirmado com o texto genuíno moçambicano (distinto da versão portuguesa actualizada, que **não** deve ser usada — ver secção 3). Artigos verificados individualmente: 82.º (domicílio), 262.º–294.º (procuração), 1022.º–1062.º (locação), 1143.º (mútuo, com nota de alteração pelo DL 3/2006), 1154.º–1230.º (prestação de serviços/empreitada). |
+| Código Penal de Moçambique | `residencia.js`, `requerimento.js` | Confirmado contra `codigo_penal.pdf` (140 artigos, "Revisto e Renumerado"). |
+| Código do Notariado de Moçambique — Decreto-Lei n.º 4/2006, de 23 de Agosto | `procuracao.js` | Confirmado contra o Boletim da República de 23/8/2006 (213 artigos). |
+| Lei n.º 5/93, de 28 de Dezembro (regime jurídico do cidadão estrangeiro) | `requerimento.js` | Confirmado contra `MOZ_..._Lei-No-5-93...pdf`. |
+| Lei n.º 2/97, de 18 de Fevereiro (Órgãos Locais do Estado) | `requerimento.js` | Confirmado via OCR de `lei 02-97.pdf` (PDF escaneado sem texto nativo — OCR feito em Português). |
+| Lei n.º 20/97, de 1 de Outubro (Lei do Ambiente) | `licenca.js` | Confirmado via OCR — PDF disponível está incompleto (só Capítulo 1); o restante articulado não foi verificado. |
+| Lei n.º 3/93, de 24 de Junho (Actividades Comerciais) | `prestacao.js`, `licenca.js` | Confirmado contra `14_15_tb1_pt_lei_nr_03_93_24_de_junho.pdf`. |
+| Lei n.º 15/2002, de 26 de Junho (Bases do Sistema Tributário) | `requerimento.js`, `recibo.js` | Confirmado, versão consolidada com alteração pela Lei n.º 21/2022. |
+| Lei n.º 32/2007, de 31 de Dezembro (Código do IVA) — taxa actual 16% | `recibo.js` | Confirmado contra versão consolidada com alterações até 2025 (Lei n.º 22/2022 baixou a taxa de 17% para 16%). |
+| Lei n.º 19/2007, de 18 de Julho (Ordenamento do Território) | `licenca.js` | Confirmado contra `Lei_19_2007 (Ordenamento Territorio).pdf`. |
+| Estatuto da Ordem dos Advogados — Lei n.º 7/94, de 14 de Setembro | `procuracao.js` | Confirmado (corrigida a data de "Lei n.º 7/1994" sem dia para "14 de Setembro"). |
+
+## 3. Armadilha confirmada: fontes com nome moçambicano mas conteúdo de outro país
+
+Durante a verificação, dois ficheiros enviados como sendo legislação
+moçambicana revelaram-se, após inspecção do texto, ser de **outras
+jurisdições**:
+
+- Um PDF nomeado como Código Civil moçambicano de 1966 continha, na
+  realidade, o **Código Civil Português** na sua versão consolidada/alterada
+  até 2001 (referências a "Lei n.º 16/2001", "Actualizado em 2001-06-26",
+  zero ocorrências da palavra "Moçambique" em 309 páginas). **Não foi usado.**
+- Um ficheiro nomeado "Código do Notariado" continha o **Código do Notariado
+  de Macau** (Decreto-Lei n.º 62/99/M — a sigla "/M" identifica diplomas de
+  Macau; fonte: `bo.dsaj.gov.mo`, o Boletim Oficial de Macau). **Não foi
+  usado.**
+
+Isto confirma que o nome do ficheiro não é garantia de proveniência — qualquer
+ingestão futura para um sistema de RAG jurídico (Fase 2) precisa de validar o
+conteúdo, não só o nome do ficheiro.
+
+## 4. Diplomas ainda não verificados (pendentes de fonte)
+
+Os diplomas abaixo aparecem nos prompts mas não foi possível confirmá-los com
+nenhuma fonte disponível até agora. Não foram removidos do código por serem
+referências mais genéricas e de menor risco, mas devem ser tratados como
+**não confirmados**:
+
+- Lei n.º 7/2015, de 6 de Outubro (Mediação, Conciliação e Arbitragem) — `arrendamento.js`
+- Lei n.º 6/92 (Sistema Nacional de Educação) — `requerimento.js`
+- Lei n.º 14/2014 (Lei de Saúde) — `requerimento.js`
+- Diversos decretos regulamentares de licenciamento (construção, transporte, eventos, ambiente) — `licenca.js`, já neutralizados no texto do prompt (ver secção 1)
+- **Lei n.º 23/2009, de 8 de Setembro (Lei Geral sobre as Cooperativas)** — `acta.js`. Diferente dos restantes desta lista: o número/data **estão confirmados** (múltiplas fontes independentes), só falta o **texto integral** para ingestão no RAG. Diploma `lei-cooperativas` em `legal_diplomas` está `nao_usar`. Para resolver: obter o PDF de `ampcm.coop` (fora da allowlist de rede das ferramentas desta sessão) e processá-lo por OCR.
+
+## 5. Como manter isto actualizado
+
+Sempre que um novo diploma for confirmado (com PDF oficial ou fonte
+equivalente), actualizar este ficheiro antes de voltar a citá-lo num prompt.
+Sempre que um prompt jurídico for editado, verificar se a citação que está a
+ser adicionada já está nesta tabela — se não estiver, não adicionar a citação
+sem confirmação.
