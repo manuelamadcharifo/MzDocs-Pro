@@ -3,6 +3,19 @@ import { Validator } from '../utils/Formatter.js';
 import { Formatter } from '../utils/Formatter.js';
 import { PROMPT_BUILDERS, DATA_BLOCK_BUILDERS } from './prompts/index.js';
 
+// ── FASE 2 (Motor Jurídico/RAG) ───────────────────────────────────────────
+// Para cada serviço jurídico, gera a query em linguagem natural usada para
+// buscar artigos de lei relevantes em /api/legal-search (ver LegalContext.js).
+// Serviços que NÃO aparecem aqui simplesmente não disparam a busca —
+// comportamento idêntico ao que existia antes da Fase 2.
+const LEGAL_QUERY_BUILDERS = {
+  arrendamento: (data) => `contrato de arrendamento de imóvel ${data.tipoImovel?.includes('Comercial') ? 'comercial' : 'habitacional'}, locação, obrigações do senhorio e do inquilino`,
+  procuracao:   (data) => `procuração, representação voluntária${data.finalidade ? ', ' + data.finalidade : ''}, reconhecimento notarial`,
+  requerimento: (data) => `requerimento dirigido a ${data.entidade || 'entidade pública'} em Moçambique, ${data.assunto || 'pedido administrativo'}, base legal e competência`,
+  residencia:   (data) => `declaração de residência, domicílio, falsas declarações perante autoridade`,
+  acta:         (data) => `acta de reunião, assembleia, deliberação social`,
+};
+
 export class OpenRouterService {
   constructor() {
     this.endpoint = '/api/generate-document';
@@ -15,7 +28,7 @@ export class OpenRouterService {
   }
 
   async generate(serviceType, formData, ocrText = null, credits = null, cost = 1, templateData = null, pickerTemplate = null) {
-    const prompt = this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
+    const prompt = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
     return await this._callBackend(serviceType, prompt, credits, cost);
   }
 
@@ -27,7 +40,7 @@ export class OpenRouterService {
   // function nova foi criada — o projecto já está no limite de 12 do Vercel
   // Hobby).
   async previewDocument(serviceType, formData, ocrText = null, templateData = null, pickerTemplate = null) {
-    const prompt = this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
+    const prompt = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
     const userId = localStorage.getItem('mz_uid') || 'anon';
 
     // Token é opcional em modo preview — se existir sessão, é enviado (ajuda
@@ -221,7 +234,7 @@ export class OpenRouterService {
     return result;
   }
 
-  _buildPrompt(type, data, ocr, templateData = null, pickerTemplate = null) {
+  async _buildPrompt(type, data, ocr, templateData = null, pickerTemplate = null) {
     // ── Bloco de template próprio (se o utilizador carregou um modelo) ─────
     // CORRIGIDO: tratamento separado para imagem vs texto extraído (PDF/Word).
     // Antes, quando o utilizador carregava uma IMAGEM, templateData.text era vazio
@@ -303,7 +316,28 @@ INSTRUCAO CRITICA: Preencha o modelo acima com os dados reais. NAO gere um docum
     // Agora: registo importado de ./prompts/index.js — mesma forma, mesmo
     // comportamento (builders[type] || builders.trabalho), apenas relocado.
     const builder = PROMPT_BUILDERS[type] || PROMPT_BUILDERS.trabalho;
-    const basePrompt = builder(data, ocrBlock);
+
+    // ── FASE 2 (Motor Jurídico/RAG) ─────────────────────────────────────
+    // Para os 5 serviços jurídicos, tentar obter artigos de lei REAIS da
+    // base vectorial antes de montar o prompt — ver
+    // assets/js/services/LegalContext.js e docs/legal/VERIFICACAO-LEGAL.md.
+    // Builders não-jurídicos não são afectados: LEGAL_QUERY_BUILDERS não
+    // os contém, então legalContext fica null e o 3º argumento do builder
+    // continua a ser ignorado exactamente como antes desta mudança.
+    let legalContext = null;
+    const queryBuilder = LEGAL_QUERY_BUILDERS[type];
+    if (queryBuilder) {
+      try {
+        const { buscarContextoJuridico } = await import('./LegalContext.js');
+        legalContext = await buscarContextoJuridico(queryBuilder(data), type);
+      } catch (_) {
+        // Falha ao importar/chamar o módulo de contexto jurídico — seguir
+        // sem ele. O builder usa o seu texto estático de fallback (já
+        // corrigido na Fase 1) quando legalContext é null.
+      }
+    }
+
+    const basePrompt = builder(data, ocrBlock, legalContext);
     // Injectar bloco de template no início do prompt (antes das instruções)
     return templateBlock ? templateBlock + '\n\n' + basePrompt : basePrompt;
   }
