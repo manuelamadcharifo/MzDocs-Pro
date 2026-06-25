@@ -952,13 +952,15 @@ async function handleDeleteDocument(req, res) {
     if (error) throw error;
 
     // Registar no audit log
-    await supabase.from('audit_log').insert({
-      admin_id:    auth.user.id,
-      action:      'delete_document',
-      target_id:   docId,
-      details:     { deleted_by: auth.user.email || auth.user.id },
-      created_at:  new Date().toISOString(),
-    }).catch(() => {});
+    try {
+      await supabase.from('audit_log').insert({
+        admin_id:    auth.user.id,
+        action:      'delete_document',
+        target_id:   docId,
+        details:     { deleted_by: auth.user.email || auth.user.id },
+        created_at:  new Date().toISOString(),
+      });
+    } catch (_) { /* log é best-effort */ }
 
     return res.status(200).json({ success: true });
   } catch (err) {
@@ -1215,11 +1217,13 @@ async function handleAffiliates(req, res) {
         if (error) throw error;
         // Notificação ao afiliado
         if (action === 'approve') {
-          await supabase.from('affiliate_notifications').insert({
-            affiliate_id: user_id, type: 'commission',
-            title: '🎉 Candidatura Aprovada!',
-            body: 'A sua conta de afiliado MzDocs Pro foi aprovada. Comece a partilhar o seu link e ganhe comissões!',
-          }).catch(() => {});
+          try {
+            await supabase.from('affiliate_notifications').insert({
+              affiliate_id: user_id, type: 'commission',
+              title: '🎉 Candidatura Aprovada!',
+              body: 'A sua conta de afiliado MzDocs Pro foi aprovada. Comece a partilhar o seu link e ganhe comissões!',
+            });
+          } catch (_) { /* notificação é best-effort — não deve bloquear a aprovação */ }
         }
         return res.status(200).json({ success: true, message: action === 'approve' ? 'Afiliado aprovado.' : 'Aprovação revogada.' });
       }
@@ -1254,13 +1258,15 @@ async function handleAffiliates(req, res) {
           await supabase.from('profiles').update({ aff_balance: (prof?.aff_balance || 0) + wd.amount }).eq('id', wd.affiliate_id);
         }
         // Notificação ao afiliado
-        await supabase.from('affiliate_notifications').insert({
-          affiliate_id: wd.affiliate_id, type: 'withdrawal',
-          title: newStatus === 'completed' ? '✅ Levantamento Pago!' : '❌ Levantamento Rejeitado',
-          body: newStatus === 'completed'
-            ? `O seu levantamento de ${wd.amount} MZN foi processado via M-Pesa.`
-            : `O seu pedido de ${wd.amount} MZN foi rejeitado. ${note ? 'Motivo: ' + note : 'Contacte o suporte.'}`,
-        }).catch(() => {});
+        try {
+          await supabase.from('affiliate_notifications').insert({
+            affiliate_id: wd.affiliate_id, type: 'withdrawal',
+            title: newStatus === 'completed' ? '✅ Levantamento Pago!' : '❌ Levantamento Rejeitado',
+            body: newStatus === 'completed'
+              ? `O seu levantamento de ${wd.amount} MZN foi processado via M-Pesa.`
+              : `O seu pedido de ${wd.amount} MZN foi rejeitado. ${note ? 'Motivo: ' + note : 'Contacte o suporte.'}`,
+          });
+        } catch (_) { /* notificação é best-effort */ }
         return res.status(200).json({ success: true, message: 'Levantamento actualizado.' });
       }
 
@@ -1433,11 +1439,13 @@ async function handleApproveReceipt(req, res) {
       }).eq('id', transactionId);
 
       // Log de auditoria
-      await supabase.from('admin_audit_log').insert({
-        admin_id: auth.user.id,
-        action:   'reject_receipt',
-        details:  { transactionId, reference_id: tx.reference_id, note: note || '' },
-      }).catch(() => {});
+      try {
+        await supabase.from('admin_audit_log').insert({
+          admin_id: auth.user.id,
+          action:   'reject_receipt',
+          details:  { transactionId, reference_id: tx.reference_id, note: note || '' },
+        });
+      } catch (_) { /* log é best-effort */ }
 
       return res.status(200).json({ success: true, approved: false, message: 'Comprovativo rejeitado.' });
     }
@@ -1477,11 +1485,13 @@ async function handleApproveReceipt(req, res) {
     }
 
     // 4. Log de auditoria
-    await supabase.from('admin_audit_log').insert({
-      admin_id: auth.user.id,
-      action:   'approve_receipt',
-      details:  { transactionId, reference_id: tx.reference_id, credits: creditsInt, user_id: tx.user_id },
-    }).catch(() => {});
+    try {
+      await supabase.from('admin_audit_log').insert({
+        admin_id: auth.user.id,
+        action:   'approve_receipt',
+        details:  { transactionId, reference_id: tx.reference_id, credits: creditsInt, user_id: tx.user_id },
+      });
+    } catch (_) { /* log é best-effort */ }
 
     console.log('[admin/approve-receipt] Aprovado:', transactionId, 'créditos:', creditsInt, 'user:', tx.user_id);
 
