@@ -46,13 +46,9 @@ async function checkPaymentRateLimit(req) {
 
 
 
-const PACKAGES = {
-  avulso:  { credits: 3,   price: 50,   name: 'Avulso'  },
-  starter: { credits: 10,  price: 120,  name: 'Starter' },
-  basico:  { credits: 25,  price: 280,  name: 'Básico'  },
-  pro:     { credits: 60,  price: 600,  name: 'Pro'     },
-  empresa: { credits: 150, price: 1500, name: 'Empresa' },
-};
+// Preços/créditos dos pacotes: única fonte de verdade em _lib/packages.js
+// (ver esse ficheiro para o porquê — corrige duplicação em 5 locais).
+const { loadPackagesFromSettings } = require('./_lib/packages');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -126,6 +122,8 @@ module.exports = async function handler(req, res) {
   }
   const normalizedPhone = `+258${cleanPhone}`;
   const wallet = detectWallet(cleanPhone);
+
+  const PACKAGES = await loadPackagesFromSettings();
 
   if (!packageId || !PACKAGES[packageId]) {
     return res.status(400).json({
