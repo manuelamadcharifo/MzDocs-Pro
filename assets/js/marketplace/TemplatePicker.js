@@ -164,6 +164,13 @@ const PICKER_CSS = `
 .tpl-upload-zone.active .tpl-upload-badge{display:block}
 .tpl-upload-zone.active .tpl-upload-sub{color:#059669}
 
+.tpl-gallery-link{
+  flex-shrink:0;margin:6px 12px 0;text-align:center;
+  font-size:11px;color:#64748b;text-decoration:none;
+  display:block;padding:4px 0;
+}
+.tpl-gallery-link:hover{color:#3B82F6;text-decoration:underline}
+
 /* ── Footer com botões ── */
 .tpl-footer{
   flex-shrink:0;padding:10px 12px;
@@ -294,6 +301,7 @@ export class TemplatePicker {
           <div class="tpl-upload-badge" id="tplUploadBadge">✅ Activo</div>
           <input type="file" id="tplUploadInput" accept="image/*,.pdf,.doc,.docx" style="display:none">
         </div>
+        <a href="/templates.html" target="_blank" rel="noopener" class="tpl-gallery-link">🌐 Ver mais modelos na Galeria Comunitária</a>
 
         <div class="tpl-preview-outer" id="tplPreviewOuter">
           <div class="tpl-loading"><div class="tpl-spinner"></div>A carregar…</div>
