@@ -11,7 +11,8 @@ import { Storage } from './utils/Storage.js';
 import { initHome } from './homeController.js';
 import { CreditModel, DocumentModel } from './models/Models.js';
 import { DocumentController } from './controllers/DocumentController.js';
-import { PaymentController } from './controllers/PaymentController.js';
+import { PaymentController, syncPackagesV8FromConfig } from './controllers/PaymentController.js';
+import { updatePackagesFromConfig } from './services/PaymentService.js';
 import { OCRController } from './controllers/OCRController.js';
 import { HistoryController } from './controllers/HistoryController.js';
 import { authManager } from './auth/AuthManager.js';
@@ -44,6 +45,18 @@ import { Analytics } from './analytics/Analytics.js';
 
 async function bootstrap() {
   await authManager.ready();
+
+  // CORRIGIDO: carregar /api/config (incluindo preços/créditos reais dos
+  // pacotes) ANTES de instanciar o PaymentController — eliminava-se assim
+  // a janela em que o utilizador podia abrir o checkout com os valores
+  // hard-coded antigos, antes da config real chegar.
+  let _config = {};
+  try {
+    _config = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  } catch { }
+  window._mzConfig = _config;
+  updatePackagesFromConfig(_config.packages);
+  syncPackagesV8FromConfig(_config.packages);
 
   const creditModel = new CreditModel();
   await creditModel.init();
@@ -112,14 +125,6 @@ async function bootstrap() {
   // Sandbox bar sempre oculta (pagamentos em produção)
   const sandboxBar = document.getElementById('sandboxBar');
   if (sandboxBar) sandboxBar.style.display = 'none';
-
-  let _config = {};
-  try {
-    _config = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
-  } catch { }
-
-  // Expor config globalmente para homeController e outros módulos
-  window._mzConfig = _config;
 
   // ── Contador público de documentos gerados ──────────────────────────────
   if (_config.docsGenerated != null) {
