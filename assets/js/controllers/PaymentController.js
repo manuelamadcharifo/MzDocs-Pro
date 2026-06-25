@@ -49,6 +49,29 @@ const PACKAGES_V8 = {
   },
 };
 
+// CORRIGIDO (Junho/2026): PACKAGES_V8 tinha price/credits hard-coded,
+// verificados ANTES do fallback this.payment.getPackages() em 3 pontos
+// deste ficheiro — ou seja, mesmo depois de PaymentService.js passar a
+// reflectir o preço real, esta cópia local continuava a ganhar. Esta
+// função sincroniza price/credits/name a partir de /api/config (a mesma
+// fonte usada por updatePackagesFromConfig em PaymentService.js),
+// preservando os campos só-visuais (description, features, colorClass,
+// pricePerCredit) que não vêm do backend. Chamada em app.js, no mesmo
+// ponto em que updatePackagesFromConfig é chamado.
+export function syncPackagesV8FromConfig(packagesFromApi) {
+  if (!packagesFromApi || typeof packagesFromApi !== 'object') return;
+  for (const [id, data] of Object.entries(packagesFromApi)) {
+    if (!PACKAGES_V8[id] || !data) continue;
+    if (Number.isFinite(data.price) && data.price > 0)     PACKAGES_V8[id].price   = data.price;
+    if (Number.isFinite(data.credits) && data.credits > 0) PACKAGES_V8[id].credits = data.credits;
+    if (data.name) PACKAGES_V8[id].name = data.name;
+    // Recalcular pricePerCredit para manter consistência visual nos cards
+    if (PACKAGES_V8[id].credits > 0) {
+      PACKAGES_V8[id].pricePerCredit = Math.round((PACKAGES_V8[id].price / PACKAGES_V8[id].credits) * 100) / 100;
+    }
+  }
+}
+
 export class PaymentController {
   constructor(creditModel) {
     this.creditModel       = creditModel;
