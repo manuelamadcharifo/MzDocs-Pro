@@ -77,6 +77,7 @@ const STATIC_PAGES = [
   { loc: '/pages/trabalho-escolar-mocambique.html',                              priority: '0.8', changefreq: 'monthly' },
   // Outras páginas públicas
   { loc: '/parceiros.html',                                                      priority: '0.6', changefreq: 'monthly' },
+  { loc: '/templates.html',                                                      priority: '0.6', changefreq: 'weekly'  },
   { loc: '/legal.html',                                                          priority: '0.3', changefreq: 'monthly' },
 ];
 
@@ -607,13 +608,28 @@ async function handleTemplates(action, req, res) {
 
   const supabase = makeSdkClient();
   switch (action) {
-    case 'submit':   return tplSubmit(req, res, supabase);
-    case 'rate':     return tplRate(req, res, supabase);
-    case 'download': return tplDownload(req, res, supabase);
-    case 'approve':  return tplApprove(req, res, supabase);
-    case 'reject':   return tplReject(req, res, supabase);
-    case 'pending':  return tplPending(req, res, supabase);
-    default:         return res.status(404).json({ error: 'Acção de template não encontrada' });
+    case 'submit':      return tplSubmit(req, res, supabase);
+    case 'rate':        return tplRate(req, res, supabase);
+    case 'download':    return tplDownload(req, res, supabase);
+    case 'approve':     return tplApprove(req, res, supabase);
+    case 'reject':      return tplReject(req, res, supabase);
+    case 'pending':     return tplPending(req, res, supabase);
+    // ── Acções que faltavam (rotas já existiam no vercel.json e o
+    // frontend templates.html já as chamava — só a implementação aqui
+    // estava em falta). Usam REST puro (rpc/restRequest), sem o SDK
+    // antigo, seguindo a função match_legal_chunks e tplList como
+    // referência de estilo. Dependem das funções/views criadas na
+    // migration_v12_community_templates.sql.
+    case 'gallery':     return tplGallery(req, res);
+    case 'mine':        return tplMine(req, res);
+    case 'saved':       return tplSaved(req, res);
+    case 'save':        return tplSave(req, res);
+    case 'use':         return tplUse(req, res);
+    case 'report':      return tplReport(req, res);
+    case 'share-token': return tplShareToken(req, res);
+    case 'by-token':    return tplByToken(req, res);
+    case 'delete':      return tplDelete(req, res);
+    default:            return res.status(404).json({ error: 'Acção de template não encontrada' });
   }
 }
 
@@ -715,6 +731,217 @@ async function tplPending(req, res, supabase) {
     .select('id,service_type,template_name,description,thumbnail_url,status,created_at,user_id')
     .eq('status', 'pending').order('created_at', { ascending: true });
   return res.status(200).json({ success: true, templates: data || [] });
+}
+
+// ── Auxiliar: extrair utilizador autenticado a partir do header
+// Authorization, via REST puro (sem o SDK antigo) — usado pelas 9 funções
+// abaixo, todas adicionadas para completar o que templates.html (página
+// de marketplace comunitário) já chamava mas api/misc.js ainda não tinha
+// implementado. Devolve null em vez de lançar erro — cada função decide
+// se autenticação é obrigatória ou opcional (ex: 'use' regista a sessão
+// mesmo sem login, via session_id).
+async function getAuthUser(req) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  if (!token) return null;
+  const { user } = await getUserFromToken(token);
+  return user;
+}
+
+// GET /api/templates/gallery?sort=&limit=&offset=&type=
+// Usa a view v_templates_gallery (migration_v12) — já calcula avg_rating
+// e popularity_score, e já filtra status='approved' AND is_public=true.
+async function tplGallery(req, res) {
+  const limit  = Math.min(parseInt(req.query?.limit || 24), 50);
+  const offset = Math.max(parseInt(req.query?.offset || 0), 0);
+  const sort   = req.query?.sort || 'popular';
+  const type   = req.query?.type || null;
+
+  const sortColumn = {
+    popular: 'popularity_score',
+    recent:  'created_at',
+    rating:  'avg_rating',
+    downloads: 'downloads',
+  }[sort] || 'popularity_score';
+
+  let path = `v_templates_gallery?order=${sortColumn}.desc.nullslast&limit=${limit}&offset=${offset}`;
+  if (type) path += `&template_type=eq.${encodeURIComponent(type)}`;
+
+  try {
+    const templates = await restRequest(path);
+    return res.status(200).json({ success: true, templates: Array.isArray(templates) ? templates : [] });
+  } catch (err) {
+    console.error('[tplGallery] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível carregar a galeria. Tente novamente.' });
+  }
+}
+
+// GET /api/templates/mine — templates submetidos pelo utilizador autenticado.
+// Usa a view v_my_templates (já filtra por auth.uid() no lado do Postgres,
+// mas como chamamos com a service_role key — que ignora RLS — filtramos
+// explicitamente por user_id aqui em vez de confiar em auth.uid()).
+async function tplMine(req, res) {
+  const user = await getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  try {
+    const templates = await restRequest(
+      `templates_custom?user_id=eq.${user.id}&order=created_at.desc&select=id,service_type,template_name,description,thumbnail_url,status,rejection_note,use_count,downloads,is_featured,created_at,share_token`
+    );
+    return res.status(200).json({ success: true, templates: Array.isArray(templates) ? templates : [] });
+  } catch (err) {
+    console.error('[tplMine] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível carregar os seus templates.' });
+  }
+}
+
+// GET /api/templates/saved — templates guardados pelo utilizador na sua
+// colecção pessoal (tabela template_saves, join com templates_custom).
+async function tplSaved(req, res) {
+  const user = await getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  try {
+    const saves = await restRequest(
+      `template_saves?user_id=eq.${user.id}&select=template_id,templates_custom(id,service_type,template_name,description,thumbnail_url,downloads,use_count,likes,rating_count,template_type,created_at)`
+    );
+    const templates = (Array.isArray(saves) ? saves : [])
+      .map(s => s.templates_custom)
+      .filter(Boolean);
+    return res.status(200).json({ success: true, templates });
+  } catch (err) {
+    console.error('[tplSaved] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível carregar os templates guardados.' });
+  }
+}
+
+// POST /api/templates/save  { template_id }
+// Alterna guardar/remover da colecção pessoal — usa toggle_save_template
+// (migration_v12), que já trata o INSERT/DELETE atomicamente.
+async function tplSave(req, res) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const user = await getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { template_id } = parseBody(req);
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+  try {
+    const result = await rpc('toggle_save_template', { p_template_id: template_id, p_user_id: user.id });
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('[tplSave] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível guardar o template.' });
+  }
+}
+
+// POST /api/templates/use  { template_id, service_key }
+// Regista que o template foi efectivamente aplicado a um documento
+// (diferente de 'download' — ver comentário em template_uses na
+// migration_v12). Login não é exigido aqui pelo frontend (templates.html
+// já valida currentUser antes de chamar, mas mantemos tolerante a
+// session_id para não bloquear o fluxo de geração caso a sessão expire).
+async function tplUse(req, res) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const user = await getAuthUser(req);
+  const { template_id, service_key, session_id } = parseBody(req);
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+  try {
+    const result = await rpc('use_template', {
+      p_template_id: template_id,
+      p_user_id: user?.id || null,
+      p_session_id: session_id || null,
+      p_service_key: service_key || '',
+    });
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('[tplUse] erro:', err.message);
+    // Não bloquear o fluxo de aplicação do template por falha no registo
+    // de uso — o utilizador já está a navegar para a página de geração
+    // quando isto é chamado (ver templates.html → useTemplate()).
+    return res.status(200).json({ success: false });
+  }
+}
+
+// POST /api/templates/report  { template_id, reason, detail? }
+// reason deve ser um dos valores aceites pelo CHECK de template_reports:
+// 'spam' | 'inappropriate' | 'copyright' | 'poor_quality' | 'other'
+async function tplReport(req, res) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const user = await getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { template_id, reason, detail } = parseBody(req);
+  const motivosValidos = ['spam', 'inappropriate', 'copyright', 'poor_quality', 'other'];
+  if (!template_id || !motivosValidos.includes(reason)) {
+    return res.status(400).json({ error: 'template_id e reason (spam|inappropriate|copyright|poor_quality|other) são obrigatórios' });
+  }
+  try {
+    await insert('template_reports', {
+      template_id,
+      reporter_id: user.id,
+      reason,
+      detail: (detail || '').slice(0, 500),
+    });
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[tplReport] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível enviar o relatório.' });
+  }
+}
+
+// POST /api/templates/share-token  { template_id }
+// Gera (ou regenera) o token de partilha de um template privado — só o
+// dono pode fazê-lo (verificado dentro de regenerate_share_token, SQL).
+async function tplShareToken(req, res) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const user = await getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { template_id } = parseBody(req);
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+  try {
+    const result = await rpc('regenerate_share_token', { p_template_id: template_id, p_user_id: user.id });
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('[tplShareToken] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível gerar o link de partilha.' });
+  }
+}
+
+// GET /api/templates/by-token?token=...
+// Acesso público a um template privado partilhado por link directo —
+// não exige autenticação (o token É a autorização).
+async function tplByToken(req, res) {
+  const token = req.query?.token || '';
+  if (!token) return res.status(400).json({ error: 'token obrigatório' });
+  try {
+    const rows = await restRequest(
+      `templates_custom?share_token=eq.${encodeURIComponent(token)}&select=id,service_type,template_name,description,template_html,template_css,thumbnail_url,downloads,use_count&limit=1`
+    );
+    const template = Array.isArray(rows) ? rows[0] : null;
+    if (!template) return res.status(404).json({ error: 'Link inválido ou expirado' });
+    return res.status(200).json({ success: true, template });
+  } catch (err) {
+    console.error('[tplByToken] erro:', err.message);
+    return res.status(500).json({ error: 'Não foi possível carregar o template.' });
+  }
+}
+
+// POST /api/templates/delete  { template_id }
+// Só o dono pode apagar o seu próprio template — verificado explicitamente
+// aqui (não delegado a uma função RPC) porque é uma operação destrutiva e
+// simples o suficiente para validar directamente.
+async function tplDelete(req, res) {
+  if (req.method !== 'POST') return res.status(405).end();
+  const user = await getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const { template_id } = parseBody(req);
+  if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
+  try {
+    const rows = await restRequest(`templates_custom?id=eq.${template_id}&select=user_id`);
+    const tpl = Array.isArray(rows) ? rows[0] : null;
+    if (!tpl) return res.status(404).json({ success: false, error: 'Template não encontrado' });
+    if (tpl.user_id !== user.id) return res.status(403).json({ success: false, error: 'Não autorizado' });
+    await restRequest(`templates_custom?id=eq.${template_id}`, { method: 'DELETE' });
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[tplDelete] erro:', err.message);
+    return res.status(500).json({ success: false, error: 'Não foi possível apagar o template.' });
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
