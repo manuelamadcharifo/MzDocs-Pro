@@ -140,13 +140,11 @@ function checkReceiptRateLimit(ip) {
   return entry.count <= limit;
 }
 
-const PACKAGES = {
-  avulso:  { credits: 3,   price: 50   },
-  starter: { credits: 10,  price: 120  },
-  basico:  { credits: 25,  price: 280  },
-  pro:     { credits: 60,  price: 600  },
-  empresa: { credits: 150, price: 1500 },
-};
+// Preços/créditos dos pacotes: única fonte de verdade em _lib/packages.js
+// (ver esse ficheiro para o porquê — corrige duplicação em 5 locais e o
+// bug de a verificação automática de comprovativos nunca reflectir
+// alterações de preço feitas no painel de admin).
+const { loadPackagesFromSettings } = require('./_lib/packages');
 
 const RECEIPT_PROMPT = (wallet) =>
   `És um verificador de comprovativos de transferência bancária moçambicana (M-Pesa, e-Mola, mKesh). ` +
@@ -249,7 +247,11 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
     };
   }
   // ── 4. Validações de negócio ───────────────────────────────────────────
-  const pkg = PACKAGES[packageId];
+  // CORRIGIDO: PACKAGES[packageId] hard-coded fazia a verificação automática
+  // de comprovativos comparar sempre contra o preço antigo, mesmo depois de
+  // o admin alterar o preço em Configurações — ver api/_lib/packages.js.
+  const currentPackages = await loadPackagesFromSettings();
+  const pkg = currentPackages[packageId];
 
   // 4a. Verificar se referência já confirmada noutras transacções
   let alreadyConfirmed = false;
@@ -423,9 +425,10 @@ async function handleVerifyReceipt(req, res) {
   }
 
   try {
+    const fallbackPackages = await loadPackagesFromSettings();
     const result = await verifyReceiptInternal({
       imageBase64, mimeType, reference, phone,
-      amount: Number(amount) || (PACKAGES[packageId]?.price || 0),
+      amount: Number(amount) || (fallbackPackages[packageId]?.price || 0),
       wallet: wallet || 'móvel',
       userId, transactionId, packageId,
     });
@@ -578,6 +581,12 @@ async function handleConfig(req, res) {
     }
   } catch (_) {}
 
+  // Pacotes (preços/créditos) — única fonte de verdade em system_settings,
+  // via _lib/packages.js. Antes desta correcção, o frontend usava valores
+  // hard-coded em PaymentService.js/PaymentController.js que nunca
+  // reflectiam alterações feitas no painel de admin.
+  const packages = await loadPackagesFromSettings();
+
   // SEGURANÇA (C-1): Não expor supabaseAnonKey.
   // O frontend (AuthManager.js) deve receber a chave via variável de ambiente
   // injectada no build (scripts/inject-version.js) ou via import directo de
@@ -590,6 +599,7 @@ async function handleConfig(req, res) {
     docsGenerated,
     supabaseUrl,
     supabaseAnonKey,
+    packages,
   });
 }
 
