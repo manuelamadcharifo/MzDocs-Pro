@@ -10,6 +10,13 @@
 
 const WA_NUMBER = '258858695506'; // ← ALTERE PARA O TEU NÚMERO
 
+// CORRIGIDO (Junho/2026): estes valores eram a única fonte usada pelo
+// checkout — alterar o preço no painel de admin (system_settings) nunca
+// se reflectia aqui. Agora servem só como FALLBACK inicial (para o
+// checkout funcionar mesmo antes de /api/config responder, ou se falhar);
+// updatePackagesFromConfig() é chamado em app.js logo após o fetch a
+// /api/config, e substitui estes valores pelos reais. Ver
+// api/_lib/packages.js para a mesma lógica espelhada no backend.
 const PACKAGES = {
   avulso:  { credits: 3,   price: 50,   name: 'Avulso',  popular: false, desc: '3 documentos, sem conta permanente' },
   starter: { credits: 10,  price: 120,  name: 'Starter',  popular: false },
@@ -17,6 +24,20 @@ const PACKAGES = {
   pro:     { credits: 60,  price: 600,  name: 'Pro',      popular: false },
   empresa: { credits: 150, price: 1500, name: 'Empresa',  popular: false },
 };
+
+// Actualiza PACKAGES in-place a partir de { avulso: {price, credits, name}, ... }
+// vindo de /api/config. Mantém popular/desc (não vêm do backend) e só
+// substitui price/credits/name quando presentes e válidos — nunca apaga
+// um pacote inteiro por uma resposta incompleta.
+export function updatePackagesFromConfig(packagesFromApi) {
+  if (!packagesFromApi || typeof packagesFromApi !== 'object') return;
+  for (const [id, data] of Object.entries(packagesFromApi)) {
+    if (!PACKAGES[id] || !data) continue;
+    if (Number.isFinite(data.price) && data.price > 0)     PACKAGES[id].price   = data.price;
+    if (Number.isFinite(data.credits) && data.credits > 0) PACKAGES[id].credits = data.credits;
+    if (data.name) PACKAGES[id].name = data.name;
+  }
+}
 
 export class PaymentService {
   constructor() {
