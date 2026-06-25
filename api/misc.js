@@ -694,8 +694,12 @@ async function tplDownload(req, res, supabase) {
   if (req.method !== 'POST') return res.status(405).end();
   const { template_id, session_id } = parseBody(req);
   if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
-  await supabase.rpc('increment_template_downloads', { p_template_id: template_id }).catch(() => {});
-  await supabase.from('template_downloads').insert({ template_id, session_id: session_id || null }).catch(() => {});
+  try {
+    await supabase.rpc('increment_template_downloads', { p_template_id: template_id });
+  } catch (_) { /* contador é best-effort */ }
+  try {
+    await supabase.from('template_downloads').insert({ template_id, session_id: session_id || null });
+  } catch (_) { /* registo de download é best-effort */ }
   return res.status(200).json({ ok: true });
 }
 
@@ -1143,10 +1147,12 @@ async function affClick(req, res, supabase) {
     // Burst detectado — registar fraude mas retornar ok silenciosamente
     const { data: aff } = await supabase.from('profiles').select('id').eq('ref_code', refCode).maybeSingle();
     if (aff) {
-      await supabase.from('affiliate_fraud_flags').insert({
-        affiliate_id: aff.id, flag_type: 'ip_burst',
-        description: 'IP com ' + (clickCount+1) + ' cliques na última hora', severity: 'critical',
-      }).catch(() => {});
+      try {
+        await supabase.from('affiliate_fraud_flags').insert({
+          affiliate_id: aff.id, flag_type: 'ip_burst',
+          description: 'IP com ' + (clickCount+1) + ' cliques na última hora', severity: 'critical',
+        });
+      } catch (_) { /* registo de fraude é best-effort — não deve bloquear a resposta ao clique */ }
     }
     return res.status(200).json({ ok: true });
   }
@@ -1184,11 +1190,13 @@ async function affWithdraw(req, res, supabase) {
   if (error) return res.status(500).json({ error: error.message });
   await supabase.from('profiles').update({ aff_balance: (profile.aff_balance || 0) - amount }).eq('id', user.id);
   // Notificação
-  await supabase.from('affiliate_notifications').insert({
-    affiliate_id: user.id, type: 'withdrawal',
-    title: '💸 Pedido de Levantamento',
-    body: `Pedido de ${amount} MZN submetido. Processado em até 48h via M-Pesa.`,
-  }).catch(() => {});
+  try {
+    await supabase.from('affiliate_notifications').insert({
+      affiliate_id: user.id, type: 'withdrawal',
+      title: '💸 Pedido de Levantamento',
+      body: `Pedido de ${amount} MZN submetido. Processado em até 48h via M-Pesa.`,
+    });
+  } catch (_) { /* notificação é best-effort */ }
   return res.status(200).json({ success: true, message: `Pedido de ${amount} MZN submetido. Processado em até 48 horas via M-Pesa.` });
 }
 
