@@ -104,6 +104,25 @@ async function validateAdmin(supabase, token) {
     app_metadata: { ...user.app_metadata, is_admin: true },
   }).catch(e => console.warn('[validateAdmin] Falha ao sincronizar app_metadata:', e.message));
 
+  // CORRIGIDO: garantir que o admin tem uma linha em admin_users.
+  // admin_users.id é FK para auth.users(id), e várias tabelas de log/config
+  // (system_settings.updated_by, admin_logs.admin_id, etc.) são FK para
+  // admin_users.id, não para auth.users(id) directamente. Um utilizador
+  // podia tornar-se admin só por profiles.is_admin=true (como acima) e
+  // nunca ter sido inserido em admin_users — qualquer escrita que
+  // referencie essa FK falhava com "violates foreign key constraint",
+  // mesmo com permissões de admin correctas. Isto garante a linha sem
+  // bloquear o pedido se a escrita falhar (ex: admin_users ainda sem
+  // RLS configurada para a service role, ou coluna obrigatória em falta).
+  try {
+    await supabase.from('admin_users').upsert(
+      { id: user.id, email: user.email || `${user.id}@sem-email.local`, full_name: user.user_metadata?.full_name || user.email || '', role: 'admin', is_active: true, last_login_at: new Date().toISOString() },
+      { onConflict: 'id', ignoreDuplicates: false }
+    );
+  } catch (e) {
+    console.warn('[validateAdmin] Falha ao sincronizar admin_users:', e.message);
+  }
+
   return { user };
 }
 
@@ -953,9 +972,14 @@ async function handleDeleteDocument(req, res) {
 
     // Registar no audit log
     try {
-      await supabase.from('audit_log').insert({
+      // CORRIGIDO: 'audit_log' não existe na base de dados (confirmado —
+      // só 'admin_logs' existe, criada na migration_v8_2). Esta chamada
+      // falhava sempre, silenciosamente (try/catch best-effort já cobria
+      // o erro, mas o registo nunca era de facto guardado).
+      await supabase.from('admin_logs').insert({
         admin_id:    auth.user.id,
         action:      'delete_document',
+        target_type: 'document',
         target_id:   docId,
         details:     { deleted_by: auth.user.email || auth.user.id },
         created_at:  new Date().toISOString(),
@@ -1440,10 +1464,14 @@ async function handleApproveReceipt(req, res) {
 
       // Log de auditoria
       try {
-        await supabase.from('admin_audit_log').insert({
-          admin_id: auth.user.id,
-          action:   'reject_receipt',
-          details:  { transactionId, reference_id: tx.reference_id, note: note || '' },
+        // CORRIGIDO: 'admin_audit_log' não existe na base de dados —
+        // redireccionado para 'admin_logs' (a única tabela de log real).
+        await supabase.from('admin_logs').insert({
+          admin_id:    auth.user.id,
+          action:      'reject_receipt',
+          target_type: 'transaction',
+          target_id:   String(transactionId),
+          details:     { reference_id: tx.reference_id, note: note || '' },
         });
       } catch (_) { /* log é best-effort */ }
 
@@ -1486,10 +1514,14 @@ async function handleApproveReceipt(req, res) {
 
     // 4. Log de auditoria
     try {
-      await supabase.from('admin_audit_log').insert({
-        admin_id: auth.user.id,
-        action:   'approve_receipt',
-        details:  { transactionId, reference_id: tx.reference_id, credits: creditsInt, user_id: tx.user_id },
+      // CORRIGIDO: 'admin_audit_log' não existe na base de dados —
+      // redireccionado para 'admin_logs' (a única tabela de log real).
+      await supabase.from('admin_logs').insert({
+        admin_id:    auth.user.id,
+        action:      'approve_receipt',
+        target_type: 'transaction',
+        target_id:   String(transactionId),
+        details:     { reference_id: tx.reference_id, credits: creditsInt, user_id: tx.user_id },
       });
     } catch (_) { /* log é best-effort */ }
 
