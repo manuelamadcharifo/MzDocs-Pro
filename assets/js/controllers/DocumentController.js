@@ -40,7 +40,21 @@ export const documentState = {
 if (typeof window !== 'undefined') window.documentState = documentState;
 
 
-const WA_NUMBER = '258858695506';
+// CORRIGIDO (Junho/2026): hard-coded, desligado de whatsapp_support em
+// system_settings. WA_NUMBER() é uma função (não uma constante) para
+// poder ler window._mzConfig em cada chamada, já actualizado por app.js
+// a partir de /api/config — evita depender da ordem de carregamento dos
+// módulos (este ficheiro pode executar antes ou depois de app.js definir
+// window._mzConfig, dependendo de quando o utilizador interage).
+function WA_NUMBER() {
+  const raw = window._mzConfig?.whatsappSupport;
+  if (raw) {
+    const digits = String(raw).replace(/\D/g, '');
+    if (digits.length === 9) return `258${digits}`;
+    if (digits.length >= 11) return digits;
+  }
+  return '258858695506'; // fallback — antes da config carregar ou se ausente
+}
 
 export class DocumentController {
  constructor(creditModel) {
@@ -1041,7 +1055,7 @@ export class DocumentController {
  const svc = SERVICES[this.docModel.service];
  const preview = this.docModel.content.slice(0, 1000).replace(/#{1,3} /g, '*');
  const msg = `📄 *${svc?.title || 'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`;
- window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
+ window.open(`https://wa.me/${WA_NUMBER()}?text=${encodeURIComponent(msg)}`, '_blank');
  }
 
  sendDirect() {
@@ -1056,7 +1070,7 @@ export class DocumentController {
   msg = `📋 *Novo pedido — ${svc?.title || 'Documento'}*\n\n👤 Nome: ${nome}\n\n_Via MzDocs Pro_`;
  }
  // Se há parceira seleccionada pelo utilizador, usar o número dela
- const targetWA = window._mzSelectedPartnerWA || WA_NUMBER;
+ const targetWA = window._mzSelectedPartnerWA || WA_NUMBER();
  window.open(`https://wa.me/${targetWA}?text=${encodeURIComponent(msg)}`, '_blank');
  window._mzSelectedPartnerWA = null; // reset
  }
