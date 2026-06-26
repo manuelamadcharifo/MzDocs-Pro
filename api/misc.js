@@ -543,7 +543,14 @@ async function handleConfig(req, res) {
   res.setHeader('Access-Control-Allow-Origin', ORIGIN);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+  // CORRIGIDO: 60s + stale-while-revalidate=300s fazia alterações de preço
+  // feitas no painel de admin (system_settings → packages, devolvido aqui)
+  // demorarem até vários minutos a propagar para o utilizador, mesmo após
+  // limpar a cache do browser — a CDN da Vercel podia continuar a servir
+  // a resposta antiga em cache durante esse período. supabaseUrl/anonKey
+  // não mudam, mas packages/docsGenerated mudam com frequência suficiente
+  // (controlados por admin) para justificarem um cache bem mais curto.
+  res.setHeader('Cache-Control', 'public, s-maxage=10, stale-while-revalidate=30');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const supabaseUrl     = process.env.SUPABASE_URL      || '';
@@ -587,6 +594,32 @@ async function handleConfig(req, res) {
   // reflectiam alterações feitas no painel de admin.
   const packages = await loadPackagesFromSettings();
 
+  // CORRIGIDO: mesmo problema dos pacotes, mas para os campos de
+  // "Configurações do Sistema" (Nome do Site, Créditos Grátis, WhatsApp
+  // Suporte) — o admin altera-os em /admin.html, mas o número de WhatsApp
+  // estava hard-coded em 4 ficheiros do frontend
+  // (DocumentController.js, DocumentEditor.js, PaymentService.js,
+  // Models.js), e os créditos grátis hard-coded numa função SQL
+  // (handle_new_user, migration_v13_fix_signup_credits.sql) — nenhum dos
+  // dois lia esta tabela. Expor aqui é o primeiro passo para os 4 locais
+  // do frontend passarem a usar o valor real; a função SQL precisa de
+  // ser corrigida separadamente (não pode ler isto via HTTP).
+  let whatsappSupport = null, freeCreditsNormal = null, freeCreditsExpiryDays = null;
+  try {
+    const settingsRows = await restRequest(
+      `system_settings?key=in.(whatsapp_support,free_credits_normal,free_credits_expiry_days)&select=key,value`
+    );
+    if (Array.isArray(settingsRows)) {
+      const sMap = {};
+      settingsRows.forEach(r => { sMap[r.key] = r.value; });
+      if (sMap.whatsapp_support) whatsappSupport = sMap.whatsapp_support;
+      if (Number.isFinite(Number(sMap.free_credits_normal)))      freeCreditsNormal     = Number(sMap.free_credits_normal);
+      if (Number.isFinite(Number(sMap.free_credits_expiry_days))) freeCreditsExpiryDays = Number(sMap.free_credits_expiry_days);
+    }
+  } catch (e) {
+    console.warn('[handleConfig] Falha ao carregar settings extra:', e.message);
+  }
+
   // SEGURANÇA (C-1): Não expor supabaseAnonKey.
   // O frontend (AuthManager.js) deve receber a chave via variável de ambiente
   // injectada no build (scripts/inject-version.js) ou via import directo de
@@ -600,6 +633,9 @@ async function handleConfig(req, res) {
     supabaseUrl,
     supabaseAnonKey,
     packages,
+    whatsappSupport,
+    freeCreditsNormal,
+    freeCreditsExpiryDays,
   });
 }
 
