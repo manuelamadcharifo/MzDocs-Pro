@@ -999,7 +999,17 @@ export class DocumentEditor {
 
   _sendWA() {
     const preview = this.content.slice(0,800).replace(/#{1,3} /g,'*');
-    window.open(`https://wa.me/258858695506?text=${encodeURIComponent(`📄 *${this.serviceType||'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`)}`, '_blank');
+    // CORRIGIDO (Junho/2026): número hard-coded, desligado de
+    // whatsapp_support em system_settings — ver app.js/PaymentService.js
+    // para o mesmo padrão de correcção nos outros 3 locais.
+    const raw = window._mzConfig?.whatsappSupport;
+    let waNumber = '258858695506';
+    if (raw) {
+      const digits = String(raw).replace(/\D/g, '');
+      if (digits.length === 9) waNumber = `258${digits}`;
+      else if (digits.length >= 11) waNumber = digits;
+    }
+    window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(`📄 *${this.serviceType||'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`)}`, '_blank');
   }
 
   _reedit() {
