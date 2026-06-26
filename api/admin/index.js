@@ -111,17 +111,22 @@ async function validateAdmin(supabase, token) {
   // podia tornar-se admin só por profiles.is_admin=true (como acima) e
   // nunca ter sido inserido em admin_users — qualquer escrita que
   // referencie essa FK falhava com "violates foreign key constraint",
-  // mesmo com permissões de admin correctas. Isto garante a linha sem
-  // bloquear o pedido se a escrita falhar (ex: admin_users ainda sem
-  // RLS configurada para a service role, ou coluna obrigatória em falta).
-  try {
-    await supabase.from('admin_users').upsert(
-      { id: user.id, email: user.email || `${user.id}@sem-email.local`, full_name: user.user_metadata?.full_name || user.email || '', role: 'admin', is_active: true, last_login_at: new Date().toISOString() },
-      { onConflict: 'id', ignoreDuplicates: false }
-    );
-  } catch (e) {
-    console.warn('[validateAdmin] Falha ao sincronizar admin_users:', e.message);
+  // mesmo com permissões de admin correctas.
+  //
+  // CORRIGIDO (2ª ronda): a 1ª versão desta correcção usava try/catch à
+  // volta do upsert — mas o SDK do Supabase v2 NÃO lança excepção em
+  // erros do PostgREST (RLS, CHECK, etc.); devolve sempre {data, error}
+  // normalmente. O try/catch nunca via o erro real, e o upsert continuava
+  // a falhar silenciosamente (confirmado: admin_users ficou vazia mesmo
+  // depois desta "correcção"). Agora o resultado é verificado explicitamente.
+  const { error: adminUpsertError } = await supabase.from('admin_users').upsert(
+    { id: user.id, email: user.email || `${user.id}@sem-email.local`, full_name: user.user_metadata?.full_name || user.email || '', role: 'admin', is_active: true, last_login_at: new Date().toISOString() },
+    { onConflict: 'id', ignoreDuplicates: false }
+  );
+  if (adminUpsertError) {
+    console.error('[validateAdmin] Falha ao sincronizar admin_users:', adminUpsertError.message, adminUpsertError.details || '');
   }
+
 
   return { user };
 }
