@@ -11,8 +11,8 @@ import { Storage } from './utils/Storage.js';
 import { initHome } from './homeController.js';
 import { CreditModel, DocumentModel } from './models/Models.js';
 import { DocumentController } from './controllers/DocumentController.js';
-import { PaymentController, syncPackagesV8FromConfig } from './controllers/PaymentController.js';
-import { updatePackagesFromConfig } from './services/PaymentService.js';
+import { PaymentController, syncPackagesV8FromConfig, renderPackageCards } from './controllers/PaymentController.js';
+import { updatePackagesFromConfig, updateWhatsAppFromConfig } from './services/PaymentService.js';
 import { OCRController } from './controllers/OCRController.js';
 import { HistoryController } from './controllers/HistoryController.js';
 import { authManager } from './auth/AuthManager.js';
@@ -57,6 +57,8 @@ async function bootstrap() {
   window._mzConfig = _config;
   updatePackagesFromConfig(_config.packages);
   syncPackagesV8FromConfig(_config.packages);
+  renderPackageCards();
+  updateWhatsAppFromConfig(_config.whatsappSupport);
 
   const creditModel = new CreditModel();
   await creditModel.init();
@@ -119,6 +121,7 @@ async function bootstrap() {
 
   const { UserModel } = await import('./models/Models.js');
   const userModel = new UserModel();
+  userModel.updateWhatsAppSupportFromConfig(_config.whatsappSupport);
   const fab = document.getElementById('fabWa');
   if (fab) fab.href = `https://wa.me/${userModel.WA_SUPPORT}`;
 
