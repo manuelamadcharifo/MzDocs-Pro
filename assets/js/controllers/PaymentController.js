@@ -72,6 +72,33 @@ export function syncPackagesV8FromConfig(packagesFromApi) {
   }
 }
 
+// CORRIGIDO: syncPackagesV8FromConfig só actualizava o objecto PACKAGES_V8
+// em memória — os cards visíveis em index.html tinham o preço/créditos
+// escritos directamente no HTML (ex: "MZN 120"), e nunca eram tocados.
+// Resultado: o admin alterava o preço, o objecto JS ficava certo (e o
+// resumo "Pacote Starter → MZN 122" já reflectia isso correctamente, por
+// vir de PACKAGES_V8 no momento da selecção), mas o card visível antes da
+// selecção continuava a mostrar o valor antigo escrito no HTML.
+// Chamar isto a seguir a syncPackagesV8FromConfig em app.js corrige isso,
+// escrevendo nos elementos com id="pkgPrice<Id>"/"pkgCr<Id>"/"pkgPer<Id>".
+export function renderPackageCards() {
+  for (const [id, pkg] of Object.entries(PACKAGES_V8)) {
+    const cap = id.charAt(0).toUpperCase() + id.slice(1);
+
+    const priceEl = document.getElementById(`pkgPrice${cap}`);
+    if (priceEl) priceEl.textContent = `MZN ${pkg.price}`;
+
+    const crEl = document.getElementById(`pkgCr${cap}`);
+    if (crEl) crEl.textContent = `${pkg.credits} créditos`;
+
+    const perEl = document.getElementById(`pkgPer${cap}`);
+    if (perEl && pkg.credits > 0) {
+      const per = pkg.price / pkg.credits;
+      perEl.textContent = `MZN ${Number.isInteger(per) ? per : per.toFixed(1)}/doc`;
+    }
+  }
+}
+
 export class PaymentController {
   constructor(creditModel) {
     this.creditModel       = creditModel;
