@@ -324,7 +324,7 @@
         <div style="font-size:13px;font-weight:700;color:#1D4ED8;margin-bottom:4px;">🚀 Acesso Avulso — Sem Conta</div>
         <div style="font-size:13px;color:#1e40af;line-height:1.5;">3 documentos gerados por IA · válido 7 dias · sem conta permanente</div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
-          <span style="font-size:20px;font-weight:800;color:#1D4ED8;">MZN 50</span>
+          <span style="font-size:20px;font-weight:800;color:#1D4ED8;" id="pkgPriceAvulso">MZN 50</span>
           <button class="pkg-avulso-btn" data-pkg="avulso"
             style="padding:8px 18px;background:#1D4ED8;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
             Pagar agora
@@ -337,32 +337,36 @@
         <div style="flex:1;height:1px;background:#e5e7eb;"></div>
       </div>
     </div>
-    <!-- PACOTES (preços v8.0) -->
+    <!-- PACOTES (preços carregados dinamicamente de system_settings via
+         /api/config — ver pkg-price/pkg-cr/pkg-per com IDs abaixo e
+         assets/js/app.js → syncPackagesV8FromConfig/renderPackageCards.
+         Os valores aqui escritos (MZN 120, etc.) são só o que aparece
+         antes da config carregar — nunca devem ser a fonte de verdade) -->
     <div class="pkg-grid">
       <div class="pkg" data-pkg="starter">
         <div class="pkg-name">Starter</div>
-        <div class="pkg-price">MZN 120</div>
-        <div class="pkg-cr">10 créditos</div>
-        <div class="pkg-per">MZN 12/doc</div>
+        <div class="pkg-price" id="pkgPriceStarter">MZN 120</div>
+        <div class="pkg-cr" id="pkgCrStarter">10 créditos</div>
+        <div class="pkg-per" id="pkgPerStarter">MZN 12/doc</div>
       </div>
       <div class="pkg popular" data-pkg="basico">
         <div class="pkg-badge">Popular</div>
         <div class="pkg-name">Básico</div>
-        <div class="pkg-price">MZN 280</div>
-        <div class="pkg-cr">25 créditos</div>
-        <div class="pkg-per">MZN 11.2/doc</div>
+        <div class="pkg-price" id="pkgPriceBasico">MZN 280</div>
+        <div class="pkg-cr" id="pkgCrBasico">25 créditos</div>
+        <div class="pkg-per" id="pkgPerBasico">MZN 11.2/doc</div>
       </div>
       <div class="pkg" data-pkg="pro">
         <div class="pkg-name">Pro</div>
-        <div class="pkg-price">MZN 600</div>
-        <div class="pkg-cr">60 créditos</div>
-        <div class="pkg-per">MZN 10/doc</div>
+        <div class="pkg-price" id="pkgPricePro">MZN 600</div>
+        <div class="pkg-cr" id="pkgCrPro">60 créditos</div>
+        <div class="pkg-per" id="pkgPerPro">MZN 10/doc</div>
       </div>
       <div class="pkg" data-pkg="empresa">
         <div class="pkg-name">Empresa</div>
-        <div class="pkg-price">MZN 1500</div>
-        <div class="pkg-cr">150 créditos</div>
-        <div class="pkg-per">MZN 10/doc</div>
+        <div class="pkg-price" id="pkgPriceEmpresa">MZN 1500</div>
+        <div class="pkg-cr" id="pkgCrEmpresa">150 créditos</div>
+        <div class="pkg-per" id="pkgPerEmpresa">MZN 10/doc</div>
       </div>
     </div>
     <div id="mpesaSection" style="display:none">
