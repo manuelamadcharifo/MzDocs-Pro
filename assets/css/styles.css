@@ -150,7 +150,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .sc:hover .arr{transform:translateX(3px);color:var(--ink)}
 
 /* OVERLAY & SHEET */
-.overlay{display:none;position:fixed;inset:0;background:rgba(7,16,31,.65);backdrop-filter:blur(8px);z-index:100;align-items:flex-end;justify-content:center}
+.overlay{display:none;position:fixed;inset:0;background:rgba(7,16,31,.65);backdrop-filter:blur(8px);z-index:100;align-items:flex-end;justify-content:center;overscroll-behavior:contain;touch-action:pan-y;}
 .overlay.open{display:flex;animation:fadeIn .18s ease}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .sheet{background:var(--white);border-radius:24px 24px 0 0;width:100%;max-width:560px;max-height:92svh;overflow-y:auto;animation:slideUp .3s cubic-bezier(.34,1.1,.64,1);padding-bottom:max(24px,env(safe-area-inset-bottom))}
@@ -365,8 +365,8 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 /* 3. Preview cresce e faz scroll internamente */
 .res-sheet #resPreview {
   flex: 1 1 0;
-  min-height: 70vh;        /* crítico para o flex funcionar em iOS/Android */
-  overflow: hidden;
+  min-height: 0;           /* permite ao flex calcular espaço real disponível */
+  overflow: hidden;        /* o scroll fica no #resA4Wrap filho */
   display: flex;
   flex-direction: column;
 }
@@ -384,8 +384,11 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .res-a4-wrap {
   flex: 1 1 0;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
 }
 
 /* Header das tabs: não encolhe */
