@@ -8,7 +8,22 @@
 // utilizador apenas envia um comprovativo por WhatsApp — não é exigido um
 // número M-Pesa especificamente.
 
-const WA_NUMBER = '258858695506'; // ← ALTERE PARA O TEU NÚMERO
+// CORRIGIDO (Junho/2026): hard-coded, desligado de whatsapp_support em
+// system_settings — o admin alterava o número em Configurações e o
+// utilizador nunca via a mudança aqui. updateWhatsAppFromConfig() é
+// chamado em app.js, no mesmo ponto em que os preços são sincronizados.
+let WA_NUMBER = '258858695506'; // fallback — só usado antes da config carregar
+
+export function updateWhatsAppFromConfig(whatsappSupport) {
+  if (!whatsappSupport) return;
+  // Aceita tanto "+258858695506" como "258858695506" como "858695506"
+  // (formato livre no campo de admin) — normaliza para o formato sem "+"
+  // que wa.me espera, assumindo Moçambique (258) quando o número vier
+  // sem código de país.
+  const digits = String(whatsappSupport).replace(/\D/g, '');
+  if (digits.length === 9)  WA_NUMBER = `258${digits}`;
+  else if (digits.length >= 11) WA_NUMBER = digits;
+}
 
 // CORRIGIDO (Junho/2026): estes valores eram a única fonte usada pelo
 // checkout — alterar o preço no painel de admin (system_settings) nunca
