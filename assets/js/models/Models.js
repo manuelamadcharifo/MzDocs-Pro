@@ -266,7 +266,16 @@ export class DocumentModel {
 export class UserModel {
     constructor() {
         this.userId = Storage.getUserId();
-        this.WA_SUPPORT = '258858695506'; // ← ALTERE PARA O NÚMERO DE SUPORTE
+        // CORRIGIDO (Junho/2026): hard-coded, desligado de whatsapp_support
+        // em system_settings. updateWhatsAppSupportFromConfig() é chamado
+        // em app.js, no mesmo ponto em que os preços são sincronizados.
+        this.WA_SUPPORT = '258858695506'; // fallback — só usado antes da config carregar
+    }
+    updateWhatsAppSupportFromConfig(whatsappSupport) {
+        if (!whatsappSupport) return;
+        const digits = String(whatsappSupport).replace(/\D/g, '');
+        if (digits.length === 9) this.WA_SUPPORT = `258${digits}`;
+        else if (digits.length >= 11) this.WA_SUPPORT = digits;
     }
     openSupport(context = '') {
         const msg = `[MzDocs Pro Suporte]\nID: ${this.userId.slice(0, 12)}\n${context}`.trim();
