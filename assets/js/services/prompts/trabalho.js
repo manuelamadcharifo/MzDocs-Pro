@@ -39,7 +39,7 @@ DADOS DO TRABALHO:
 - Disciplina: ${data.disciplina}
 - Nível: ${data.nivel}
 - Extensão: ${pags} folhas A4 = MÍNIMO ${palavras} palavras de conteúdo real
-- Requisitos do docente: ${data.requisitos || 'seguir normas académicas padrão APA'}
+- Requisitos do docente: ${data.requisitos || 'seguir normas académicas padrão APA'}${ocrBlock || ''}
 
 REGRAS ABSOLUTAS DE CONTEÚDO:
 1. O marcador ---PAGE_BREAK--- separa cada folha A4 — use-o exactamente como indicado. NUNCA escreva "Nova Página" ou "— Nova Página —" — use SEMPRE ---PAGE_BREAK---
