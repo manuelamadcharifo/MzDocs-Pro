@@ -307,14 +307,23 @@ export class SmartOCRService {
         { id:'assunto',          label:'Assunto',              type:'text' },
         { id:'pontos',           label:'O que pretende comunicar', type:'textarea' },
       ],
+      // CORRIGIDO: ids alinhados com ServiceDefinitions.js → residencia.fields
+      // (requerente/bairro/rua/cidade/tempoCasas/chefeBairro), que são os ids
+      // realmente presentes no DOM do formulário. Antes este schema usava
+      // declarante/nascimento/naturalidade/endereco — ids que NUNCA existiram
+      // no formulário — por isso applyToForm() não encontrava os elementos
+      // (document.querySelector(`#declarante`) etc. retornava null) e só os
+      // 3 campos coincidentes por acaso (bi/finalidade/local) eram preenchidos.
       residencia:  [
-        { id:'declarante', label:'Nome do Declarante',  type:'text' },
-        { id:'bi',         label:'Nº do BI',            type:'text' },
-        { id:'nascimento', label:'Data de Nascimento',  type:'text' },
-        { id:'naturalidade',label:'Naturalidade',       type:'text' },
-        { id:'endereco',   label:'Endereço Completo',   type:'textarea' },
-        { id:'finalidade', label:'Finalidade',          type:'text' },
-        { id:'local',      label:'Local e Data',        type:'text' },
+        { id:'requerente',  label:'Nome do Requerente',                       type:'text' },
+        { id:'bi',          label:'Nº do BI',                                 type:'text' },
+        { id:'bairro',      label:'Nome do Bairro',                           type:'text' },
+        { id:'rua',         label:'Rua / Avenida',                            type:'text' },
+        { id:'cidade',      label:'Cidade / Distrito',                        type:'text' },
+        { id:'tempoCasas',  label:'Há quanto tempo reside no local',          type:'select' },
+        { id:'finalidade',  label:'Finalidade da Declaração',                 type:'text' },
+        { id:'chefeBairro', label:'Nome do Chefe de Quarteirão / Secretário', type:'text' },
+        { id:'local',       label:'Local e Data',                             type:'text' },
       ],
       arrendamento:[
         { id:'proprietario',    label:'Nome do Proprietário',  type:'text' },
