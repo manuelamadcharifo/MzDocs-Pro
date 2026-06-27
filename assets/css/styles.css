@@ -352,7 +352,8 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .res-sheet {
   display: flex !important;
   flex-direction: column !important;
-  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
   max-height: 96svh !important;
 }
 
