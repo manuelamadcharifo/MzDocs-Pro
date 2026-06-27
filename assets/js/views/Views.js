@@ -340,6 +340,16 @@ export const DocumentView = {
         </div>`
       : '';
 
+    // CORRIGIDO: o botão "📚 APA" (referências bibliográficas APA 7) só faz
+    // sentido para documentos académicos — antes aparecia fixo para TODOS
+    // os tipos de documento (ex.: Recibo/Factura), por estar definido direto
+    // no index.html sem nenhuma condição. Agora é mostrado/escondido aqui,
+    // a cada renderização do resultado, conforme a categoria do serviço.
+    const btnAcademicEl = document.getElementById('btnAcademic');
+    if (btnAcademicEl) {
+      btnAcademicEl.style.display = (svc && svc.category === 'academico') ? '' : 'none';
+    }
+
     previewContainer.innerHTML = `
       ${legalNotice}
       <div class="res-preview-header">
