@@ -165,11 +165,16 @@ const PICKER_CSS = `
 .tpl-upload-zone.active .tpl-upload-sub{color:#059669}
 
 .tpl-gallery-link{
-  flex-shrink:0;margin:6px 12px 0;text-align:center;
-  font-size:11px;color:#64748b;text-decoration:none;
-  display:block;padding:4px 0;
+  flex-shrink:0;margin:8px 12px 0;text-align:center;
+  font-size:12px;font-weight:700;color:#3B82F6;text-decoration:none;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:9px 14px;border-radius:10px;
+  background:#eff6ff;border:1.5px solid #bfdbfe;
+  transition:background .15s,border-color .15s;
 }
-.tpl-gallery-link:hover{color:#3B82F6;text-decoration:underline}
+.tpl-gallery-link:hover,.tpl-gallery-link:active{
+  background:#dbeafe;border-color:#93c5fd;text-decoration:none;color:#1d4ed8;
+}
 
 /* ── Footer com botões ── */
 .tpl-footer{
@@ -301,7 +306,7 @@ export class TemplatePicker {
           <div class="tpl-upload-badge" id="tplUploadBadge">✅ Activo</div>
           <input type="file" id="tplUploadInput" accept="image/*,.pdf,.doc,.docx" style="display:none">
         </div>
-        <a href="/templates.html" target="_blank" rel="noopener" class="tpl-gallery-link">🌐 Ver mais modelos na Galeria Comunitária</a>
+        <a href="/templates.html" target="_blank" rel="noopener" class="tpl-gallery-link">🌐 Ver mais modelos na Galeria Comunitária →</a>
 
         <div class="tpl-preview-outer" id="tplPreviewOuter">
           <div class="tpl-loading"><div class="tpl-spinner"></div>A carregar…</div>
