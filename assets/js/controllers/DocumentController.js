@@ -19,6 +19,7 @@ import { offlineDB } from '../utils/IndexedDB.js';
 import { TemplateController } from './TemplateController.js';
 import { templatePicker } from '../marketplace/TemplatePicker.js';
 import { academicUI } from '../academic/AcademicUI.js';
+import { AcademicEngine } from '../academic/AcademicEngine.js';
 import { getTemplates } from '../marketplace/TemplateLibrary.js';
 import { authManager } from '../auth/AuthManager.js';
 import { Analytics } from '../analytics/Analytics.js';
@@ -142,6 +143,30 @@ export class DocumentController {
      });
    });
 
+   // CORRIGIDO: botão "📚 Referências Bibliográficas (APA 7)" no TOPO do
+   // formulário de Trabalho Escolar (antes de "ou preencha os dados
+   // directamente") — permite ao aluno adicionar as fontes que pretende
+   // citar ANTES de gerar o documento, para que entrem no prompt desde a
+   // primeira geração em vez de só poderem ser anexadas depois. Abre o
+   // mesmo painel académico (AcademicEngine._refs é estado partilhado),
+   // sem callback de inserção — aqui ainda não existe documento gerado,
+   // o aluno está apenas a preparar as referências.
+   document.getElementById('btnAcademicPre')?.addEventListener('click', () => {
+     academicUI.open(null);
+     // Painel é injectado de forma assíncrona/lazy pelo próprio academicUI
+     // na primeira abertura — por isso usa-se um polling leve (em vez de
+     // MutationObserver, que dependeria do elemento já existir no DOM)
+     // para actualizar o contador do formulário enquanto o painel estiver
+     // aberto, parando automaticamente quando ele é fechado.
+     const poll = setInterval(() => {
+       const panel = document.getElementById('academicPanel');
+       if (!panel || !panel.classList.contains('open')) {
+         clearInterval(poll);
+         this._refreshAcademicPreCount();
+       }
+     }, 400);
+   });
+
  document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
 
  document.addEventListener('editor:closed', (e) => {
@@ -175,6 +200,19 @@ export class DocumentController {
     DocumentView.renderResult(content, svc, this.creditModel.value, this.docModel.model);
   }
  });
+ }
+
+ // CORRIGIDO: actualiza o pequeno contador (badge) do botão "📚 Referências
+ // Bibliográficas (APA 7)" no topo do formulário de Trabalho Escolar, com
+ // o número de fontes já guardadas em AcademicEngine (estado partilhado
+ // com o painel académico). Chamado ao abrir o formulário e sempre que o
+ // painel de referências é fechado.
+ _refreshAcademicPreCount() {
+   const countEl = document.getElementById('academicPreCount');
+   if (!countEl) return;
+   const n = AcademicEngine.getReferences().length;
+   countEl.textContent = String(n);
+   countEl.style.display = n > 0 ? 'inline-block' : 'none';
  }
 
  open(key) {
@@ -223,6 +261,19 @@ export class DocumentController {
  }
 
  document.getElementById('ocrZone').style.display = svc.hasAI ? 'block' : 'none';
+
+ // CORRIGIDO: botão "📚 Referências Bibliográficas (APA 7)" no topo do
+ // formulário — visível apenas para o serviço académico (Trabalho Escolar),
+ // para o aluno poder adicionar/gerir fontes ANTES de gerar o documento.
+ // Usa o mesmo critério (svc.category === 'academico') já aplicado ao
+ // botão equivalente na tela de resultado, em Views.js.
+ const btnAcademicPreEl = document.getElementById('btnAcademicPre');
+ if (btnAcademicPreEl) {
+   const isAcademic = svc.category === 'academico';
+   btnAcademicPreEl.style.display = isAcademic ? 'flex' : 'none';
+   if (isAcademic) this._refreshAcademicPreCount();
+ }
+
  DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
  DocumentView.removePreviewPanel();
 
