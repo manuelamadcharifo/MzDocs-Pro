@@ -364,11 +364,12 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 
 /* 3. Preview cresce e faz scroll internamente */
 .res-sheet #resPreview {
-  flex: 1 1 0;
-  min-height: 0;           /* permite ao flex calcular espaço real disponível */
-  overflow: hidden;        /* o scroll fica no #resA4Wrap filho */
-  display: flex;
-  flex-direction: column;
+    flex: 1 1 0;
+    min-height: 60vh;
+    overflow-x: hidden;
+    Overflow-y: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 /* 4. Barra de botões: nunca encolhe, sempre visível */
