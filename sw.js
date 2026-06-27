@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v20-20260621e'; // Modo Editar agora usa múltiplas folhas A4 separadas (uma por página), igual ao Preview, em vez de um único contenteditable com separador inline
+const CACHE_VERSION = 'v21-20260627'; // C-1/C-2 fix: admin/index.js e misc.js migrados para REST puro; 33 ficheiros adicionados ao precache (M-1 fix)
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
@@ -64,6 +64,46 @@ workbox.precaching.precacheAndRoute([
     { url: '/assets/js/admin/AdminApp.js',                   revision: CACHE_VERSION },
     { url: '/assets/js/admin/AdminDashboard.js',             revision: CACHE_VERSION },
     { url: '/assets/js/admin/AdminTransactions.js',          revision: CACHE_VERSION },
+    // CORRIGIDO (auditoria 27/Jun/2026 — M-1): 33 ficheiros ausentes do precache
+    // causavam falha offline silenciosa ao tentar gerar documentos ou usar
+    // o marketplace de templates — os módulos não estavam no cache e a app
+    // falhava exactamente quando o utilizador não tinha ligação.
+    // Componentes UI em falta
+    { url: '/assets/js/components/DocumentEditorStyles.js',          revision: CACHE_VERSION },
+    { url: '/assets/js/components/pageSimulationScript.js',          revision: CACHE_VERSION },
+    // Templates do marketplace (14 templates)
+    { url: '/assets/js/marketplace/templates/index.js',              revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/acta.js',               revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/arrendamento.js',       revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/carta.js',              revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/cv.js',                 revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/licenca.js',            revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/orcamento.js',          revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/planonegocio.js',       revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/prestacao.js',          revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/procuracao.js',         revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/recibo.js',             revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/recomendacao.js',       revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/requerimento.js',       revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/residencia.js',         revision: CACHE_VERSION },
+    { url: '/assets/js/marketplace/templates/trabalho.js',           revision: CACHE_VERSION },
+    // Contexto legal e prompts de serviço (16 ficheiros)
+    { url: '/assets/js/services/LegalContext.js',                    revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/index.js',                   revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/acta.js',                    revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/arrendamento.js',            revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/carta.js',                   revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/cv.js',                      revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/licenca.js',                 revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/orcamento.js',               revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/planonegocio.js',            revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/prestacao.js',               revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/procuracao.js',              revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/recibo.js',                  revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/recomendacao.js',            revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/requerimento.js',            revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/residencia.js',              revision: CACHE_VERSION },
+    { url: '/assets/js/services/prompts/trabalho.js',                revision: CACHE_VERSION },
     // Ícones
     { url: '/assets/icons/icon.svg',            revision: CACHE_VERSION },
     { url: '/assets/icons/icon-192x192.png',    revision: CACHE_VERSION },
