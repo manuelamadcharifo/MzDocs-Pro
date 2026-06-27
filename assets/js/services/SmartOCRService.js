@@ -213,7 +213,11 @@ export class SmartOCRService {
     if (onProgress) onProgress(30, 'A ler páginas do PDF…');
     const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
     let fullText = '';
-    for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) {
+    // CORRIGIDO: limite era de 5 páginas — insuficiente para apontamentos/
+    // rascunhos de Trabalho Escolar mais extensos, que podiam ficar truncados
+    // antes mesmo de chegar ao conteúdo central. Aumentado para 15 páginas,
+    // mantendo um tecto razoável de tempo/memória para os demais serviços.
+    for (let i = 1; i <= Math.min(pdf.numPages, 15); i++) {
       const page = await pdf.getPage(i);
       const ct = await page.getTextContent();
       fullText += ct.items.map(s => s.str).join(' ') + '\n';
