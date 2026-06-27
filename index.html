@@ -247,6 +247,18 @@
       <button class="sh-x" id="formClose">✕</button>
     </div>
     <div id="ocrZone" style="display:none">
+      <!-- CORRIGIDO: botão de Referências Bibliográficas APA 7 — visível
+           apenas para o serviço "Trabalho Escolar" (controlado via JS em
+           DocumentController.js, svc.category === 'academico'). Fica no
+           topo do formulário, antes do upload de rascunho/imagem e antes
+           de "ou preencha os dados directamente", para o aluno poder
+           adicionar as fontes que pretende citar ANTES de gerar o trabalho
+           — a IA passa a usá-las desde a primeira geração, em vez de só
+           permitir anexar referências depois de o documento já existir. -->
+      <button id="btnAcademicPre" type="button" class="academic-pre-btn" style="display:none">
+        📚 <span>Referências Bibliográficas (APA 7)</span>
+        <span id="academicPreCount" class="academic-pre-count" style="display:none">0</span>
+      </button>
       <div class="ocr-card">
         <span>📷</span>
         <div><strong>Tem um rascunho escrito?</strong><p>Fotografe e o sistema transforma em documento digital</p></div>
