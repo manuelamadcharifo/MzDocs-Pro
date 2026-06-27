@@ -2,6 +2,7 @@
 import { Validator } from '../utils/Formatter.js';
 import { Formatter } from '../utils/Formatter.js';
 import { PROMPT_BUILDERS, DATA_BLOCK_BUILDERS } from './prompts/index.js';
+import { AcademicEngine } from '../academic/AcademicEngine.js';
 
 // ── FASE 2 (Motor Jurídico/RAG) ───────────────────────────────────────────
 // Para cada serviço jurídico, gera a query em linguagem natural usada para
@@ -303,7 +304,41 @@ INSTRUCAO CRITICA: Preencha o modelo acima com os dados reais. NAO gere um docum
       return n.toLocaleString('pt-MZ') + ' (por extenso)';
     };
 
-    const ocrBlock = ocr ? `\n\nRascunho OCR (use como base, corrija erros):\n${ocr}` : '';
+    // CORRIGIDO: para "Trabalho Escolar", o rascunho OCR (texto extraído de
+    // PDF/Word com pdf.js/mammoth, ou de imagem via IA visual — ver
+    // SmartOCRService._extractPdfText/_extractWordText) é tratado de forma
+    // diferente dos restantes serviços. Antes, qualquer conteúdo extraído
+    // recebia a mesma instrução genérica e fraca ("use como base, corrija
+    // erros"), o que deixava a IA livre para ignorá-lo e gerar um trabalho
+    // do zero mesmo quando o aluno já tinha enviado o apontamento/rascunho
+    // real. Agora, para 'trabalho', a instrução é explícita: extrair e
+    // reorganizar o conteúdo fornecido, citando-o como base real, e só
+    // recorrer à geração livre (IA pura) se o texto vier ilegível/vazio ou
+    // não tiver relação alguma com o tema indicado pelo aluno. Não substitui
+    // o prompt de trabalho.js — apenas o bloco de contexto OCR que ele já
+    // recebia como 2º parâmetro permanece intocado para os outros tipos.
+    //
+    // Adicionalmente, se o aluno já adicionou fontes bibliográficas reais no
+    // botão "📚 Referências (APA 7)" do formulário (antes de gerar — ver
+    // DocumentController.open/btnAcademicPre), essas fontes são incluídas
+    // aqui em formato APA 7 já calculado, para a IA citá-las directamente
+    // em vez de depender só da regra estática do prompt-base.
+    const academicRefsBlock = (() => {
+      if (type !== 'trabalho') return '';
+      const refs = AcademicEngine.getReferences();
+      if (!refs.length) return '';
+      const lista = refs.map((r, i) => `${i + 1}. ${r.apa}`).join('\n');
+      return `\n\nFONTES BIBLIOGRÁFICAS REAIS FORNECIDAS PELO ALUNO (use citações in-text APA 7 ao longo do texto, ex.: (Autor, Ano), e inclua TODAS estas na secção de Referências Bibliográficas — substituem, não complementam, a regra de "mínimo 2 referências" do prompt acima):\n${lista}`;
+    })();
+
+    const ocrBlock = (() => {
+      const academicSuffix = academicRefsBlock;
+      if (!ocr) return academicSuffix;
+      if (type === 'trabalho') {
+        return `\n\nMATERIAL ENVIADO PELO ALUNO (extraído do ficheiro/imagem carregado — apontamentos, rascunho ou enunciado):\n--- INÍCIO DO MATERIAL ---\n${ocr.slice(0, 9000)}\n--- FIM DO MATERIAL ---\n\nINSTRUÇÃO CRÍTICA SOBRE O MATERIAL ACIMA:\n1. Antes de escrever qualquer secção, leia e avalie o material: ele está legível (não é ruído/lixo de OCR) E tem relação directa com o tema "${data.tema || ''}"?\n2. SE SIM: utilize o conteúdo do material como BASE REAL do trabalho — extraia os factos, dados, argumentos, citações e estrutura que ele já contém, reorganize-os de forma académica e desenvolva-os com mais profundidade. NÃO ignore o material para escrever algo genérico diferente do que o aluno trouxe. O resultado deve reflectir o que está no material, apenas mais completo, melhor estruturado e com linguagem académica corrigida.\n3. SE NÃO (material ilegível, corrompido, vazio de conteúdo útil, ou claramente sobre outro tema sem nenhuma relação com "${data.tema || ''}"): ignore o material e gere o trabalho inteiramente a partir do tema, disciplina e nível indicados — sem mencionar que o material foi descartado.\n4. Nunca invente que o material disse algo que não está nele — se faltar informação para uma secção, desenvolva-a com conhecimento académico geral em vez de atribuir conteúdo inexistente ao material do aluno.${academicSuffix}`;
+      }
+      return `\n\nRascunho OCR (use como base, corrija erros):\n${ocr}`;
+    })();
 
     // ── Picker template: quando um template do marketplace com htmlTemplate está activo ──
     // O modelo tem um layout HTML estruturado (duas colunas, sidebar, etc.)
