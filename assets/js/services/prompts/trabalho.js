@@ -101,6 +101,37 @@ function _getProfile(nivel) {
   return NIVEL_PROFILES[nivel] || NIVEL_PROFILES['Licenciatura'];
 }
 
+// CORRIGIDO: o formulário agora coleta nome do aluno, turma/classe, docente
+// e instituição (ServiceDefinitions.js → trabalho.fields) — dados que a
+// capa do documento (PDFExporter.js "Estudante:"/"Docente:" e o template
+// "Académico Clássico" do marketplace, com {{AUTORES}}/{{INSTITUICAO}})
+// já esperava mas nunca recebia. Esta função monta, a partir dos campos
+// realmente preenchidos, o bloco de identificação a incluir no prompt —
+// tanto no contexto (para a IA saber quem é o autor) como na própria
+// estrutura do documento gerado, logo após o título. Campos vazios são
+// simplesmente omitidos, em vez de aparecerem como "undefined" ou
+// "[PREENCHER]".
+function _capaLinhas(data) {
+  const linhas = [];
+  if (data.aluno)       linhas.push(['Estudante', data.aluno]);
+  if (data.turma)       linhas.push(['Turma/Classe', data.turma]);
+  if (data.docente)     linhas.push(['Docente', data.docente]);
+  if (data.instituicao) linhas.push(['Instituição', data.instituicao]);
+  return linhas;
+}
+
+function _capaContextoPrompt(data) {
+  const linhas = _capaLinhas(data);
+  if (!linhas.length) return '';
+  return '\n' + linhas.map(([label, val]) => `- ${label}: ${val}`).join('\n');
+}
+
+function _capaDocumento(data) {
+  const linhas = _capaLinhas(data);
+  if (!linhas.length) return '';
+  return '\n' + linhas.map(([label, val]) => `**${label}:** ${val}  `).join('\n') + '\n';
+}
+
 // ── Builder para níveis académicos (Pré-Universitário, Licenciatura, Mestrado/Doutoramento) ──
 // Estrutura idêntica à que já existia antes desta alteração — apenas a
 // persona/linguagem/exigência de criticidade passam a vir do perfil em vez
@@ -144,7 +175,7 @@ DADOS DO TRABALHO:
 - Disciplina: ${data.disciplina}
 - Nível: ${data.nivel}
 - Extensão: ${pags} folhas A4 = MÍNIMO ${palavras} palavras de conteúdo real
-- Requisitos do docente: ${data.requisitos || 'seguir normas académicas padrão APA'}${ocrBlock || ''}
+- Requisitos do docente: ${data.requisitos || 'seguir normas académicas padrão APA'}${_capaContextoPrompt(data)}${ocrBlock || ''}
 
 REGISTO DE LINGUAGEM OBRIGATÓRIO PARA ESTE NÍVEL:
 ${profile.linguagem}
@@ -169,7 +200,7 @@ ESTRUTURA OBRIGATÓRIA (copie exactamente incluindo ---PAGE_BREAK---):
 
 ---PAGE_BREAK---
 # ${data.tema}
-
+${_capaDocumento(data)}
 ---PAGE_BREAK---
 ## Índice
 
@@ -233,7 +264,7 @@ DADOS DO TRABALHO:
 - Disciplina: ${data.disciplina}
 - Nível: ${data.nivel}
 - Extensão: aproximadamente ${pags} folhas A4 = cerca de ${palavras} palavras no total
-- Indicações do(a) professor(a): ${data.requisitos || 'nenhuma indicação adicional — siga a estrutura sugerida'}${ocrBlock || ''}
+- Indicações do(a) professor(a): ${data.requisitos || 'nenhuma indicação adicional — siga a estrutura sugerida'}${_capaContextoPrompt(data)}${ocrBlock || ''}
 
 REGISTO DE LINGUAGEM OBRIGATÓRIO PARA ESTE NÍVEL (a regra mais importante deste pedido):
 ${profile.linguagem}
@@ -256,7 +287,7 @@ ESTRUTURA OBRIGATÓRIA (siga exactamente esta ordem de secções):
 
 ---PAGE_BREAK---
 # ${data.tema}
-
+${_capaDocumento(data)}
 ${indiceBlock}${corpoSeccoes}
 `;
 }
@@ -270,7 +301,9 @@ export function buildPrompt(data, ocrBlock) {
 }
 
 export function buildDataBlock(data) {
+  const capa = _capaLinhas(data);
+  const capaTxt = capa.length ? '\n' + capa.map(([l, v]) => `- ${l}: ${v}`).join('\n') : '';
   return `- Tema: ${data.tema || ''}
 - Disciplina: ${data.disciplina || ''}  |  Nível: ${data.nivel || ''}
-- Páginas: ${data.paginas || 5}  |  Requisitos: ${data.requisitos || 'APA'}`;
+- Páginas: ${data.paginas || 5}  |  Requisitos: ${data.requisitos || 'APA'}${capaTxt}`;
 }
