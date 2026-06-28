@@ -971,7 +971,7 @@ export class DocumentController {
   ano: new Date().getFullYear(),
  };
  const extra = {
-  trabalho: { disciplina: data.disciplina, nivel: data.nivel, aluno: data.aluno || data.nome, docente: data.docente, subtitulo: data.tema },
+  trabalho: { disciplina: data.disciplina, nivel: data.nivel, aluno: data.aluno || data.nome, turma: data.turma, docente: data.docente, instituicao: data.instituicao, subtitulo: data.tema },
   planonegocio: { nomeNegocio: data.nomeNegocio, sector: data.sector, proprietario: data.proprietario, local: data.local, investimento: data.investimento, retorno: data.retorno },
   requerimento: { subtitulo: data.assunto },
   licenca: { subtitulo: data.tipoLicenca },
