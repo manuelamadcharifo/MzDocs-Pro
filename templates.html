@@ -52,7 +52,21 @@
     .tpl-card-thumb { width: 100%; aspect-ratio: 4/3; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 36px; position: relative; overflow: hidden; }
     .tpl-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
     .tpl-card-thumb .tpl-no-thumb { font-size: 32px; }
-    .tpl-card-preview-frame { width: 280%; height: 280%; border: none; transform: scale(0.357); transform-origin: top left; pointer-events: none; background: #fff; }
+    /* CORRIGIDO: a escala anterior (0.357 fixo) não correspondia à largura
+       real da página A4 renderizada (210mm = 793.7px a 96dpi, valor fixo
+       independentemente da tela, pois o iframe tem o seu próprio contexto
+       de unidades). O card mostrava maioritariamente espaço vazio do topo
+       da margem. Agora a largura do iframe é fixada em 793.7px e escalada
+       para a largura real do card via CSS puro (container query simulada
+       com %), garantindo que a largura do "papel" sempre encaixe
+       exactamente na largura do card, revelando o topo do documento. */
+    .tpl-card-preview-frame {
+      width: 793.7px; height: calc(793.7px * 4 / 3 * 1.15);
+      border: none; pointer-events: none; background: #fff;
+      transform: scale(var(--tpl-card-scale, 0.378));
+      transform-origin: top left;
+      position: absolute; top: 0; left: 0;
+    }
     .tpl-card-body { padding: 10px 11px 12px; }
     .tpl-card-name { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 3px; line-height: 1.3; }
     .tpl-card-sub  { font-size: 11.5px; color: var(--dim); line-height: 1.4; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -99,7 +113,16 @@
     .tpl-detail-preview { width: 100%; aspect-ratio: 16/9; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 48px; overflow: hidden; position: relative; }
     .tpl-detail-preview img { width: 100%; height: 100%; object-fit: cover; }
     /* Preview real do documento (HTML/CSS do template, escalado para caber na miniatura) */
-    .tpl-preview-frame { width: 250%; height: 250%; border: none; transform: scale(0.4); transform-origin: top left; pointer-events: none; background: #fff; }
+    /* CORRIGIDO: mesma lógica de _calibrateCardPreviewScale aplicada aqui —
+       largura real do papel (793.7px) escalada dinamicamente para a
+       largura real do painel de detalhe (ver renderTemplatePreview). */
+    .tpl-preview-frame {
+      width: 793.7px; height: calc(793.7px * 16 / 9 * 1.15);
+      border: none; pointer-events: none; background: #fff;
+      transform: scale(var(--tpl-preview-scale, 0.4));
+      transform-origin: top left;
+      position: absolute; top: 0; left: 0;
+    }
     .tpl-preview-maximize {
       position: absolute; bottom: 8px; right: 8px; z-index: 2;
       background: rgba(15,23,42,.82); color: #fff; border: none; border-radius: 8px;
@@ -509,9 +532,25 @@ async function loadGallery(reset = true) {
         toggleSave(card.dataset.id, card.querySelector('.tpl-save-btn'));
       });
     });
+    _calibrateCardPreviewScale(grid);
   } catch (err) {
     grid.innerHTML = `<div class="tpl-empty" style="grid-column:span 2"><div class="tpl-empty-ico">⚠️</div><h3>Erro ao carregar</h3><p>${err.message}</p></div>`;
   }
+}
+
+// CORRIGIDO: a escala do preview do card precisa de ser calculada a partir
+// da largura REAL de cada card no DOM (que varia com o tamanho de tela),
+// não de um valor fixo — a largura do "papel" dentro do iframe é sempre
+// 793.7px (210mm a 96dpi), independentemente do tamanho da tela do
+// utilizador, pois o iframe tem o seu próprio contexto de unidades.
+function _calibrateCardPreviewScale(container) {
+  const PAPER_WIDTH_PX = 793.7;
+  container.querySelectorAll('.tpl-card-preview-frame').forEach(frame => {
+    const thumbWidth = frame.parentElement?.getBoundingClientRect().width || 0;
+    if (thumbWidth > 0) {
+      frame.style.setProperty('--tpl-card-scale', String(thumbWidth / PAPER_WIDTH_PX));
+    }
+  });
 }
 
 function renderCard(t) {
@@ -577,8 +616,20 @@ function _previewFillPlaceholders(html) {
 function _previewIframeSrcdoc(t) {
   const html = _previewFillPlaceholders(t.template_html || `<div class="tpl-fallback-preview"><h1>{{TEMA}}</h1><p>${(t.description || '').replace(/</g,'&lt;')}</p></div>`);
   const css  = t.template_css || '';
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-    *{box-sizing:border-box} body{margin:0;padding:20px;background:#fff;font-family:Georgia,'Times New Roman',serif;color:#1f2937;transform-origin:top left}
+  // CORRIGIDO: faltava <meta name="viewport"> no documento do iframe — sem
+  // ele, navegadores mobile assumem uma largura "desktop" (~980px) e depois
+  // escalam a página inteira de forma desproporcional, fazendo o texto
+  // parecer gigante e quebrar palavra a palavra (efeito visto no preview em
+  // tela cheia). Agora o <body> (onde cada template já define a sua própria
+  // tipografia/padding via "body{...}" — ver assets/js/marketplace/
+  // templates/*.js) é tratado como a folha A4: largura fixa 210mm,
+  // centrada, com sombra, dentro de um documento com viewport correcto —
+  // sem envolver o conteúdo numa div extra, que quebraria esses selectores.
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    *{box-sizing:border-box}
+    html{background:#e2e8f0;display:flex;justify-content:center}
+    body{width:210mm;max-width:100%;margin:0;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.12);font-family:Georgia,'Times New Roman',serif;color:#1f2937}
     ${css}
   </style></head><body>${html}</body></html>`;
 }
@@ -594,6 +645,13 @@ function renderTemplatePreview(t) {
       <iframe class="tpl-preview-frame" sandbox="allow-same-origin" scrolling="no"
         srcdoc="${_previewIframeSrcdoc(t).replace(/"/g, '&quot;')}"></iframe>
       <button class="tpl-preview-maximize" id="btnPreviewMaximize" title="Ver em tela cheia">⛶ Maximizar</button>`;
+    const frame = prev.querySelector('.tpl-preview-frame');
+    const calibrate = () => {
+      const w = prev.getBoundingClientRect().width;
+      if (w > 0) frame.style.setProperty('--tpl-preview-scale', String(w / 793.7));
+    };
+    frame.addEventListener('load', calibrate);
+    calibrate();
     document.getElementById('btnPreviewMaximize').addEventListener('click', e => {
       e.stopPropagation();
       openPreviewFullscreen(t);
