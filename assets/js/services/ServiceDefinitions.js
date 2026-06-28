@@ -47,6 +47,18 @@ export const SERVICES = {
       { id:'nivel',      label:'Nível de Ensino', type:'select', required:true,
         opts:['Ensino Primário','Ensino Secundário (1º Ciclo)','Ensino Secundário (2º Ciclo)','Pré-Universitário','Licenciatura','Mestrado/Doutoramento'] },
       { id:'disciplina', label:'Disciplina', type:'text', required:true, ph:'Ex: História, Português, Biologia…' },
+      // CORRIGIDO: a capa do documento (exportador PDF/Word — ver
+      // PDFExporter.js "Estudante:"/"Docente:" — e o template "Académico
+      // Clássico" do marketplace, que já tem os placeholders {{AUTORES}},
+      // {{INSTITUICAO}}, {{CURSO}}, {{LOCAL_ANO}}) sempre esperou estes
+      // dados, mas o formulário nunca os coletava — ficavam sempre em
+      // branco ou inventados pela IA. Todos opcionais: um aluno pode gerar
+      // o trabalho sem preencher tudo, mas quem preencher vê os dados
+      // reais na capa em vez de marcadores de lugar.
+      { id:'aluno',      label:'Nome do Aluno/Estudante (opcional)', type:'text', ph:'Ex: Maria José Cossa' },
+      { id:'turma',      label:'Turma / Classe (opcional)', type:'text', ph:'Ex: 10ª Classe, Turma B' },
+      { id:'docente',    label:'Nome do Professor/Docente (opcional)', type:'text', ph:'Ex: Prof. João Sitoe' },
+      { id:'instituicao',label:'Escola / Instituição (opcional)', type:'text', ph:'Ex: Escola Secundária Josina Machel' },
       { id:'paginas',    label:'Páginas pretendidas', type:'number', val:'5', min:'2', max:'30' },
       { id:'requisitos', label:'Instruções do professor', type:'textarea', ph:'Cole o enunciado ou descreva o que o professor pediu…' },
     ],
