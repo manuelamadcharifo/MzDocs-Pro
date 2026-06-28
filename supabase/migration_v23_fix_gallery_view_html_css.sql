@@ -36,8 +36,6 @@ SELECT
   t.use_count,
   t.likes,
   t.rating_count,
-  t.template_html,
-  t.template_css,
   CASE
     WHEN t.rating_count > 0
     THEN ROUND(t.rating_sum::numeric / t.rating_count, 1)
@@ -46,7 +44,14 @@ SELECT
   (t.use_count * 3 + t.downloads * 2 + t.likes + COALESCE(t.rating_count, 0)) AS popularity_score,
   t.created_at,
   p.full_name AS author_name,
-  t.updated_at
+  t.updated_at,
+  -- CORRIGIDO: template_html e template_css têm de ficar DEPOIS de todas
+  -- as colunas já existentes na view — o Postgres rejeita
+  -- CREATE OR REPLACE VIEW se a posição relativa das colunas antigas
+  -- mudar (erro 42P16: "cannot change name of view column"), por
+  -- interpretar isso como tentativa de renomear uma coluna existente.
+  t.template_html,
+  t.template_css
 FROM templates_custom t
 LEFT JOIN profiles p ON p.id = t.user_id
 WHERE t.status = 'approved'
@@ -59,7 +64,7 @@ WHERE t.status = 'approved'
 -- mesma lista de colunas e o mesmo filtro de segurança (WHERE user_id =
 -- auth.uid(), que restringe esta view aos templates do próprio utilizador)
 -- da definição original em migration_v12 — apenas template_html e
--- template_css foram adicionados.
+-- template_css foram adicionados, sempre ao final.
 CREATE OR REPLACE VIEW v_my_templates AS
 SELECT
   t.id,
@@ -74,10 +79,10 @@ SELECT
   t.use_count,
   t.downloads,
   t.is_featured,
-  t.template_html,
-  t.template_css,
   t.created_at,
   t.updated_at,
-  t.user_id
+  t.user_id,
+  t.template_html,
+  t.template_css
 FROM templates_custom t
 WHERE t.user_id = auth.uid();
