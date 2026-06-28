@@ -290,9 +290,14 @@ export class SmartOCRService {
   // ── Schemas de campos por serviço ─────────────────────────────
   _getFieldSchema(serviceType) {
     const S = {
+      // CORRIGIDO: faltavam 'perfilCV' e 'exemplo' — existem no formulário
+      // mas nunca eram extraídos, mesmo sendo inferíveis do conteúdo do CV
+      // (ex.: perfil pode ser inferido pela quantidade de experiência
+      // listada; exemplo é frequentemente mencionado em CVs reais).
       cv:          [
         { id:'nome',        label:'Nome Completo',            type:'text' },
         { id:'cargo',       label:'Cargo / Vaga pretendida',  type:'text' },
+        { id:'perfilCV',    label:'Perfil do Candidato',      type:'select' },
         { id:'contacto',    label:'Telefone',                 type:'tel' },
         { id:'email',       label:'Email',                    type:'email' },
         { id:'nascimento',  label:'Data de Nascimento',       type:'text' },
@@ -301,15 +306,25 @@ export class SmartOCRService {
         { id:'experiencia', label:'Experiência Profissional', type:'textarea' },
         { id:'linguas',     label:'Línguas',                  type:'text' },
         { id:'habilidades', label:'Habilidades',              type:'textarea' },
+        { id:'exemplo',     label:'Realização ou Projecto que se destaca', type:'textarea' },
         { id:'objectivo',   label:'Objectivo Profissional',   type:'text' },
       ],
+      // CORRIGIDO: faltava 'tipo' (Tipo de Carta — select), e os campos
+      // condicionais 'refReclamacao', 'dataSaida' e 'avisoPrevio', que só
+      // aparecem no formulário dependendo do tipo escolhido mas podem
+      // estar presentes no documento original (ex.: uma carta de demissão
+      // já enviada antes costuma indicar a data de saída).
       carta:       [
+        { id:'tipo',             label:'Tipo de Carta',        type:'select' },
         { id:'remetenteNome',    label:'Nome do Remetente',    type:'text' },
         { id:'remetenteLocal',   label:'Localidade / Data',    type:'text' },
         { id:'destinatarioNome', label:'Nome do Destinatário', type:'text' },
         { id:'destinatarioEnti', label:'Entidade / Empresa',   type:'text' },
         { id:'assunto',          label:'Assunto',              type:'text' },
         { id:'pontos',           label:'O que pretende comunicar', type:'textarea' },
+        { id:'refReclamacao',    label:'N.º de referência / encomenda (se for reclamação)', type:'text' },
+        { id:'dataSaida',        label:'Data de saída pretendida (se for demissão)', type:'text' },
+        { id:'avisoPrevio',      label:'Aviso prévio cumprido? (se for demissão)', type:'select' },
       ],
       // CORRIGIDO: ids alinhados com ServiceDefinitions.js → residencia.fields
       // (requerente/bairro/rua/cidade/tempoCasas/chefeBairro), que são os ids
@@ -329,102 +344,190 @@ export class SmartOCRService {
         { id:'chefeBairro', label:'Nome do Chefe de Quarteirão / Secretário', type:'text' },
         { id:'local',       label:'Local e Data',                             type:'text' },
       ],
+      // CORRIGIDO: faltavam 'tipoImovel', 'metodoPagamento', 'duracao' e
+      // 'quemPagaServicos' — existem no formulário (todos select) mas
+      // nunca eram extraídos, mesmo sendo frequentemente mencionados num
+      // contrato de arrendamento já existente que o utilizador fotografe.
       arrendamento:[
+        { id:'tipoImovel',      label:'Tipo de Imóvel',        type:'select' },
         { id:'proprietario',    label:'Nome do Proprietário',  type:'text' },
         { id:'locatario',       label:'Nome do Locatário',     type:'text' },
         { id:'biProprietario',  label:'BI do Proprietário',    type:'text' },
         { id:'biLocatario',     label:'BI do Locatário',       type:'text' },
         { id:'local',           label:'Localização do Imóvel', type:'text' },
         { id:'valor',           label:'Valor Mensal (MZN)',    type:'number' },
+        { id:'metodoPagamento', label:'Método de Pagamento da Renda', type:'select' },
+        { id:'duracao',         label:'Duração do Contrato',   type:'select' },
         { id:'caucao',          label:'Caução / Depósito',     type:'text' },
+        { id:'quemPagaServicos',label:'Água e Electricidade pagas por', type:'select' },
         { id:'condicoes',       label:'Condições Especiais',   type:'textarea' },
       ],
+      // CORRIGIDO: faltavam 'tipoProc', 'tipoDocIdent', 'subMandato' e
+      // 'validade' — todos campos select que existem no formulário e são
+      // frequentemente explícitos no texto de uma procuração já existente.
       procuracao:  [
+        { id:'tipoProc',         label:'Tipo de Procuração',      type:'select' },
         { id:'outorgante',       label:'Nome do Outorgante',      type:'text' },
         { id:'biOutorgante',     label:'BI do Outorgante',        type:'text' },
         { id:'moradaOutorgante', label:'Morada do Outorgante',    type:'textarea' },
         { id:'procurador',       label:'Nome do Procurador',      type:'text' },
         { id:'biProcurador',     label:'BI do Procurador',        type:'text' },
         { id:'moradaProcurador', label:'Morada do Procurador',    type:'textarea' },
+        { id:'tipoDocIdent',     label:'Tipo de documento de identidade', type:'select' },
         { id:'acto',             label:'Acto / Finalidade',       type:'textarea' },
+        { id:'subMandato',       label:'Pode substabelecer?',     type:'select' },
+        { id:'validade',         label:'Validade',                type:'select' },
         { id:'local',            label:'Local e Data',            type:'text' },
       ],
+      // CORRIGIDO: id 'fundamento' não existia no formulário (o campo real
+      // chama-se 'justificacao' — ver ServiceDefinitions.js → requerimento.
+      // fields). Também faltavam 'tipo' e 'contacto', que existem no
+      // formulário mas nunca eram preenchidos pelo OCR.
       requerimento:[
-        { id:'requerente', label:'Nome do Requerente', type:'text' },
-        { id:'bi',         label:'BI do Requerente',   type:'text' },
-        { id:'entidade',   label:'Entidade',           type:'text' },
-        { id:'assunto',    label:'Assunto',            type:'text' },
-        { id:'fundamento', label:'Fundamentação',      type:'textarea' },
-        { id:'local',      label:'Local e Data',       type:'text' },
+        { id:'tipo',        label:'Tipo de Requerimento', type:'select' },
+        { id:'requerente',  label:'Nome do Requerente', type:'text' },
+        { id:'bi',          label:'BI do Requerente',   type:'text' },
+        { id:'entidade',    label:'Entidade',           type:'text' },
+        { id:'assunto',     label:'Assunto',            type:'text' },
+        { id:'justificacao',label:'Justificação / Motivo', type:'textarea' },
+        { id:'contacto',    label:'Contacto (telemóvel)', type:'tel' },
+        { id:'local',       label:'Local e Data',       type:'text' },
       ],
+      // CORRIGIDO: 'nuitPrestador', 'moradaPrestador' e 'localExecucao' não
+      // existiam no formulário (os campos reais são 'biPrest' e 'local' —
+      // não há campo de morada). Adicionados 'biCliente', 'pagamento',
+      // 'inicio' e 'penalidades', que existem no formulário mas nunca
+      // eram preenchidos.
       prestacao:   [
-        { id:'prestador',        label:'Nome do Prestador',     type:'text' },
-        { id:'nuitPrestador',    label:'NUIT do Prestador',     type:'text' },
-        { id:'moradaPrestador',  label:'Morada do Prestador',   type:'textarea' },
-        { id:'cliente',          label:'Nome do Cliente',       type:'text' },
-        { id:'servico',          label:'Serviço a Prestar',     type:'textarea' },
-        { id:'valor',            label:'Valor Total (MZN)',     type:'number' },
-        { id:'prazo',            label:'Prazo de Execução',     type:'text' },
-        { id:'localExecucao',    label:'Local de Execução',     type:'text' },
+        { id:'prestador',  label:'Nome do Prestador',     type:'text' },
+        { id:'biPrest',    label:'BI do Prestador',       type:'text' },
+        { id:'cliente',    label:'Nome do Cliente',       type:'text' },
+        { id:'biCliente',  label:'BI / NUIT do Cliente',  type:'text' },
+        { id:'servico',    label:'Descrição dos Serviços a Prestar', type:'textarea' },
+        { id:'valor',      label:'Valor Total (MZN)',     type:'number' },
+        { id:'pagamento',  label:'Forma de Pagamento',    type:'select' },
+        { id:'inicio',     label:'Data de Início',        type:'text' },
+        { id:'prazo',      label:'Prazo / Duração',       type:'text' },
+        { id:'penalidades',label:'Penalidades por incumprimento', type:'textarea' },
+        { id:'local',      label:'Local e Data',          type:'text' },
       ],
+      // CORRIGIDO: 'nuitEmitente', 'enderecoEmitente', 'valor' e 'data' não
+      // existiam no formulário (os campos reais são 'nuit', 'total' e
+      // 'local' — não há campo de endereço separado). Adicionados
+      // 'tipoDoc' e 'pagamento', que existem no formulário.
       recibo:      [
-        { id:'emitente',         label:'Emitente (quem recebe)',  type:'text' },
-        { id:'nuitEmitente',     label:'NUIT do Emitente',        type:'text' },
-        { id:'enderecoEmitente', label:'Endereço do Emitente',    type:'text' },
-        { id:'cliente',          label:'Nome do Cliente',         type:'text' },
-        { id:'descricao',        label:'Descrição do Serviço',    type:'textarea' },
-        { id:'valor',            label:'Valor (MZN)',             type:'number' },
-        { id:'data',             label:'Data',                    type:'text' },
+        { id:'tipoDoc',   label:'Tipo de Documento',       type:'select' },
+        { id:'emitente',  label:'Nome / Empresa Emitente', type:'text' },
+        { id:'nuit',      label:'NUIT (opcional)',         type:'text' },
+        { id:'cliente',   label:'Nome do Cliente',         type:'text' },
+        { id:'descricao', label:'Descrição dos Serviços / Produtos', type:'textarea' },
+        { id:'total',     label:'Valor Total (MZN)',       type:'number' },
+        { id:'pagamento', label:'Forma de Pagamento',      type:'select' },
+        { id:'local',     label:'Local e Data',            type:'text' },
       ],
+      // CORRIGIDO: este é o caso relatado pelo utilizador — só 'recomendador'
+      // e 'cargoRec' batiam com o formulário (por coincidência), por isso
+      // só esses preenchiam. 'entidadeRec', 'recomendado', 'qualidades' e
+      // 'exemploConcreto' não existem; os campos reais são 'candidato',
+      // 'relacao', 'periodo', 'pontos', 'finalidade', 'contactoRec' e 'local'.
       recomendacao:[
-        { id:'recomendador',   label:'Nome do Recomendador',   type:'text' },
-        { id:'cargoRec',       label:'Cargo do Recomendador',  type:'text' },
-        { id:'entidadeRec',    label:'Entidade/Empresa',       type:'text' },
-        { id:'recomendado',    label:'Nome do Recomendado',    type:'text' },
-        { id:'relacao',        label:'Relação profissional',   type:'textarea' },
-        { id:'qualidades',     label:'Qualidades destacadas',  type:'textarea' },
-        { id:'exemploConcreto',label:'Exemplo concreto',       type:'textarea' },
+        { id:'candidato',   label:'Nome do Candidato',        type:'text' },
+        { id:'recomendador',label:'Nome de quem recomenda',   type:'text' },
+        { id:'cargoRec',    label:'Cargo / Função (recomendador)', type:'text' },
+        { id:'relacao',     label:'Relação com o candidato',  type:'select' },
+        { id:'periodo',     label:'Período de convivência',   type:'text' },
+        { id:'pontos',      label:'Qualidades a destacar',    type:'textarea' },
+        { id:'finalidade',  label:'Finalidade da carta',      type:'text' },
+        { id:'contactoRec', label:'Contacto do recomendador',  type:'tel' },
+        { id:'local',       label:'Local e Data',             type:'text' },
       ],
+      // CORRIGIDO: quase todos os ids estavam errados — 'formaJuridica',
+      // 'sector' (era 'setor'), 'clientes' (era 'mercadoAlvo'),
+      // 'concorrencia' (era 'concorrentes'), 'local' e 'nTrabalhadores' não
+      // existem no formulário. Alinhado com os campos reais, incluindo
+      // 'modelo', 'previsaoRec', 'equipa' e 'finalidade' que nunca eram
+      // preenchidos.
       planonegocio:[
-        { id:'nomeNegocio',    label:'Nome do Negócio',          type:'text' },
-        { id:'formaJuridica',  label:'Forma Jurídica',           type:'text' },
-        { id:'sector',         label:'Sector de Actividade',     type:'text' },
-        { id:'investimento',   label:'Investimento inicial',     type:'number' },
-        { id:'clientes',       label:'Clientes-alvo',            type:'textarea' },
-        { id:'concorrencia',   label:'Concorrência',             type:'textarea' },
-        { id:'local',          label:'Localização',              type:'text' },
-        { id:'nTrabalhadores', label:'Nº de colaboradores',      type:'number' },
+        { id:'nomeNegocio', label:'Nome do Negócio / Empresa', type:'text' },
+        { id:'setor',       label:'Sector de Actividade',      type:'select' },
+        { id:'descricao',   label:'Descrição do Negócio',      type:'textarea' },
+        { id:'mercadoAlvo', label:'Mercado-Alvo / Clientes',   type:'textarea' },
+        { id:'concorrentes',label:'Principais Concorrentes',   type:'textarea' },
+        { id:'modelo',      label:'Como ganha dinheiro (modelo de receita)', type:'textarea' },
+        { id:'investimento',label:'Investimento Inicial (MZN)', type:'number' },
+        { id:'previsaoRec', label:'Previsão de Receita Mensal (MZN)', type:'number' },
+        { id:'equipa',      label:'Equipa / Promotores',       type:'textarea' },
+        { id:'finalidade',  label:'Finalidade do Plano',       type:'select' },
       ],
+      // CORRIGIDO: 'bi' não existe neste formulário (não há campo de BI em
+      // licenca — apenas NUIT), 'nomeNegocio' e 'assunto' também não
+      // existem (o tipo de licença é 'tipoLicenca', e não há nome de
+      // negócio dedicado). Alinhado com os campos reais, incluindo
+      // 'tipoEstabelec', 'areaM2', 'horario', 'nPostosTrabalho' e
+      // 'documentos' que nunca eram preenchidos.
       licenca:     [
-        { id:'requerente',    label:'Nome do Requerente',       type:'text' },
-        { id:'bi',            label:'BI',                       type:'text' },
-        { id:'nuit',          label:'NUIT',                     type:'text' },
-        { id:'nomeNegocio',   label:'Nome do Estabelecimento',  type:'text' },
-        { id:'tipoEstabelec', label:'Tipo de Estabelecimento',  type:'text' },
-        { id:'local',         label:'Localização',              type:'text' },
-        { id:'assunto',       label:'Tipo de Licença',          type:'text' },
+        { id:'tipoLicenca',    label:'Tipo de Licença',          type:'select' },
+        { id:'requerente',     label:'Nome do Requerente',       type:'text' },
+        { id:'nuit',           label:'NUIT',                     type:'text' },
+        { id:'contacto',       label:'Telefone',                 type:'tel' },
+        { id:'entidade',       label:'Entidade Destinatária',    type:'text' },
+        { id:'objecto',        label:'Objecto do Pedido',        type:'textarea' },
+        { id:'tipoEstabelec',  label:'Tipo de estabelecimento',  type:'select' },
+        { id:'areaM2',         label:'Área do estabelecimento (m²)', type:'number' },
+        { id:'horario',        label:'Horário de funcionamento', type:'text' },
+        { id:'nPostosTrabalho',label:'Nº de postos de trabalho previstos', type:'number' },
+        { id:'local',          label:'Local Exacto',             type:'textarea' },
+        { id:'documentos',     label:'Documentos Anexos',        type:'textarea' },
       ],
+      // CORRIGIDO: faltavam 'tipoReuniao' (select), 'hora' (campo separado
+      // de 'data' no formulário), 'totalMembros', 'quorumMinimo' e 'pauta'
+      // — todos presentes no formulário mas nunca extraídos, mesmo sendo
+      // dados típicos do cabeçalho de uma acta já redigida.
       acta:        [
         { id:'organizacao',  label:'Nome da Organização',  type:'text' },
+        { id:'tipoReuniao',  label:'Tipo de Reunião',      type:'select' },
+        { id:'data',         label:'Data',                 type:'text' },
+        { id:'hora',         label:'Hora',                 type:'text' },
         { id:'presidente',   label:'Presidente da Mesa',   type:'text' },
         { id:'secretario',   label:'Secretário',           type:'text' },
-        { id:'data',         label:'Data e Hora',          type:'text' },
+        { id:'totalMembros', label:'Total de membros da organização', type:'number' },
+        { id:'quorumMinimo', label:'Quórum mínimo estatutário (%)',   type:'number' },
         { id:'local',        label:'Local da Reunião',     type:'text' },
         { id:'presentes',    label:'Membros Presentes',    type:'textarea' },
+        { id:'pauta',        label:'Pontos da Pauta',      type:'textarea' },
         { id:'deliberacoes', label:'Deliberações/Assuntos',type:'textarea' },
       ],
+      // CORRIGIDO: faltavam 'nPisos', 'acabamento', 'fase', 'cobertura' e
+      // 'infraestrutura' — todos campos select que existem no formulário e
+      // são tipicamente especificados num orçamento de obra já redigido
+      // (ex.: "2 pisos", "acabamento de alto padrão", "laje de betão"...).
       orcamento:   [
-        { id:'tipoObra', label:'Tipo de Obra',        type:'text' },
-        { id:'area',     label:'Área (m²)',            type:'number' },
-        { id:'local',    label:'Localização',          type:'text' },
-        { id:'prazo',    label:'Prazo (dias)',          type:'number' },
-        { id:'extra',    label:'Detalhes adicionais',  type:'textarea' },
+        { id:'tipoObra',      label:'Tipo de Obra',             type:'text' },
+        { id:'area',          label:'Área (m²)',                type:'number' },
+        { id:'nPisos',        label:'Nº de Pisos',              type:'select' },
+        { id:'local',         label:'Localização',              type:'text' },
+        { id:'acabamento',    label:'Tipo de Acabamento',       type:'select' },
+        { id:'fase',          label:'Fase do Projecto',         type:'select' },
+        { id:'cobertura',     label:'Tipo de Cobertura',        type:'select' },
+        { id:'infraestrutura',label:'Infraestrutura disponível',type:'select' },
+        { id:'prazo',         label:'Prazo desejado (dias)',    type:'number' },
+        { id:'extra',         label:'Detalhes adicionais',      type:'textarea' },
       ],
+      // CORRIGIDO: faltavam 'nivel' (select), 'aluno', 'turma', 'docente' e
+      // 'instituicao' — adicionados ao formulário numa correcção anterior
+      // (perfis de linguagem por nível de ensino + capa do trabalho), mas
+      // nunca tinham sido ligados ao OCR. São dados frequentemente visíveis
+      // na capa de um enunciado ou trabalho já existente fotografado.
       trabalho:    [
-        { id:'tema',       label:'Tema / Título',            type:'text' },
-        { id:'disciplina', label:'Disciplina',               type:'text' },
-        { id:'paginas',    label:'Páginas pretendidas',      type:'number' },
-        { id:'requisitos', label:'Instruções do professor',  type:'textarea' },
+        { id:'tema',        label:'Tema / Título',            type:'text' },
+        { id:'nivel',       label:'Nível de Ensino',          type:'select' },
+        { id:'disciplina',  label:'Disciplina',               type:'text' },
+        { id:'aluno',       label:'Nome do Aluno/Estudante',  type:'text' },
+        { id:'turma',       label:'Turma / Classe',           type:'text' },
+        { id:'docente',     label:'Nome do Professor/Docente',type:'text' },
+        { id:'instituicao', label:'Escola / Instituição',     type:'text' },
+        { id:'paginas',     label:'Páginas pretendidas',      type:'number' },
+        { id:'requisitos',  label:'Instruções do professor',  type:'textarea' },
       ],
     };
     return S[serviceType] || [];
