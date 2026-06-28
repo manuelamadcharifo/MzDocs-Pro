@@ -60,13 +60,16 @@
        para a largura real do card via CSS puro (container query simulada
        com %), garantindo que a largura do "papel" sempre encaixe
        exactamente na largura do card, revelando o topo do documento. */
-    .tpl-card-preview-frame {
-      width: 793.7px; height: calc(793.7px * 4 / 3 * 1.15);
-      border: none; pointer-events: none; background: #fff;
-      transform: scale(var(--tpl-card-scale, 0.378));
-      transform-origin: top left;
-      position: absolute; top: 0; left: 0;
+    /* CORRIGIDO: substitui o <iframe srcdoc> construído à mão pelo motor
+       real renderA4Pages (ver _mountCardPreviews) — este mount point fica
+       posicionado de forma absoluta a cobrir todo o .tpl-card-thumb, com
+       overflow:hidden para recortar a altura e mostrar apenas o topo da
+       primeira página, como miniatura/capa do documento. */
+    .tpl-card-thumb-mount {
+      position: absolute; inset: 0; overflow: hidden; pointer-events: none;
     }
+    .tpl-card-thumb-mount .a4-pages-outer { padding: 0; background: transparent; gap: 0; }
+    .tpl-card-thumb-mount .a4-page { max-width: none; box-shadow: none; border-radius: 0; }
     .tpl-card-body { padding: 10px 11px 12px; }
     .tpl-card-name { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 3px; line-height: 1.3; }
     .tpl-card-sub  { font-size: 11.5px; color: var(--dim); line-height: 1.4; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -112,17 +115,14 @@
     .tpl-detail-drag  { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 16px; }
     .tpl-detail-preview { width: 100%; aspect-ratio: 16/9; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 48px; overflow: hidden; position: relative; }
     .tpl-detail-preview img { width: 100%; height: 100%; object-fit: cover; }
-    /* Preview real do documento (HTML/CSS do template, escalado para caber na miniatura) */
-    /* CORRIGIDO: mesma lógica de _calibrateCardPreviewScale aplicada aqui —
-       largura real do papel (793.7px) escalada dinamicamente para a
-       largura real do painel de detalhe (ver renderTemplatePreview). */
-    .tpl-preview-frame {
-      width: 793.7px; height: calc(793.7px * 16 / 9 * 1.15);
-      border: none; pointer-events: none; background: #fff;
-      transform: scale(var(--tpl-preview-scale, 0.4));
-      transform-origin: top left;
-      position: absolute; top: 0; left: 0;
-    }
+    /* CORRIGIDO: o preview real do documento agora usa renderA4Pages (mesmo
+       motor de TemplatePicker.js/Views.js) em vez de um <iframe srcdoc>
+       construído à mão — este mount point ocupa toda a área disponível,
+       com overflow:hidden para recortar a altura e mostrar apenas o topo
+       da primeira página. */
+    .tpl-detail-preview-mount { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    .tpl-detail-preview-mount .a4-pages-outer { padding: 0; background: transparent; gap: 0; }
+    .tpl-detail-preview-mount .a4-page { max-width: none; box-shadow: none; border-radius: 0; }
     .tpl-preview-maximize {
       position: absolute; bottom: 8px; right: 8px; z-index: 2;
       background: rgba(15,23,42,.82); color: #fff; border: none; border-radius: 8px;
@@ -130,12 +130,14 @@
       display: flex; align-items: center; gap: 4px; font-family: inherit;
     }
     .tpl-preview-maximize:hover { background: rgba(15,23,42,.95); }
-    /* Modal de pré-visualização em tela cheia */
+    /* Modal de pré-visualização em tela cheia — agora mostra a(s) página(s)
+       completa(s) e roláveis via renderA4Pages, em vez de um único iframe
+       de altura fixa. */
     .tpl-fullscreen-overlay { display: none; position: fixed; inset: 0; background: #0f172a; z-index: 9999; flex-direction: column; }
     .tpl-fullscreen-overlay.open { display: flex; }
     .tpl-fullscreen-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #1e293b; color: #fff; font-size: 14px; font-weight: 700; flex-shrink: 0; }
     .tpl-fullscreen-bar button { background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 4px 8px; }
-    .tpl-fullscreen-frame { flex: 1; width: 100%; border: none; background: #fff; }
+    .tpl-fullscreen-mount { flex: 1; width: 100%; overflow-y: auto; }
     .tpl-detail-body { padding: 16px 16px 0; }
     .tpl-detail-title { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
     .tpl-detail-desc  { font-size: 13px; color: var(--dim); line-height: 1.55; margin: 0 0 14px; }
@@ -457,6 +459,18 @@
 <div class="notif-stack" id="notifStack"></div>
 
 <script type="module">
+// CORRIGIDO: o preview da galeria usava um sistema de iframe construído do
+// zero (com bugs de viewport/escala já corrigidos numa iteração anterior),
+// em vez de reaproveitar o motor de renderização A4 já maduro e testado em
+// produção (TemplatePicker.js + A4Renderer.js — usado tanto no "Escolher
+// Modelo" como no preview do resultado final). Agora a galeria usa
+// exactamente o mesmo motor: renderA4Pages (folhas A4 separadas, escala
+// dinâmica via ResizeObserver, altura calculada a partir do conteúdo real)
+// e fillTemplate + dados de exemplo realistas por tipo de documento
+// (SampleData.js), em vez de mostrar apenas título+descrição.
+import { renderA4Pages, markdownToHtml, A4_PAGES_CONTAINER_CSS } from '/assets/js/utils/A4Renderer.js';
+import { SAMPLE_DATA, SAMPLE_MARKDOWN, fillTemplate, getSampleData } from '/assets/js/marketplace/SampleData.js';
+
 // ── Config ────────────────────────────────────────────────────────────────────
 const API    = '/api/templates';
 const SITE   = 'https://mzdocs.co.mz';
@@ -467,6 +481,15 @@ let   submitType  = 'community';
 let   galleryOffset = 0;
 let   activeType    = '';
 let   activeSort    = 'featured';
+
+// Injectar CSS partilhado das folhas A4 uma única vez (idempotente) — mesmo
+// padrão usado em Views.js, garante consistência visual com o resto da app.
+if (!document.getElementById('a4PagesSharedStyle')) {
+  const styleEl = document.createElement('style');
+  styleEl.id = 'a4PagesSharedStyle';
+  styleEl.textContent = A4_PAGES_CONTAINER_CSS;
+  document.head.appendChild(styleEl);
+}
 
 // ── Auth token helper ─────────────────────────────────────────────────────────
 function getToken() {
@@ -532,25 +555,49 @@ async function loadGallery(reset = true) {
         toggleSave(card.dataset.id, card.querySelector('.tpl-save-btn'));
       });
     });
-    _calibrateCardPreviewScale(grid);
+    _mountCardPreviews(grid, templates);
   } catch (err) {
     grid.innerHTML = `<div class="tpl-empty" style="grid-column:span 2"><div class="tpl-empty-ico">⚠️</div><h3>Erro ao carregar</h3><p>${err.message}</p></div>`;
   }
 }
 
-// CORRIGIDO: a escala do preview do card precisa de ser calculada a partir
-// da largura REAL de cada card no DOM (que varia com o tamanho de tela),
-// não de um valor fixo — a largura do "papel" dentro do iframe é sempre
-// 793.7px (210mm a 96dpi), independentemente do tamanho da tela do
-// utilizador, pois o iframe tem o seu próprio contexto de unidades.
-function _calibrateCardPreviewScale(container) {
-  const PAPER_WIDTH_PX = 793.7;
-  container.querySelectorAll('.tpl-card-preview-frame').forEach(frame => {
-    const thumbWidth = frame.parentElement?.getBoundingClientRect().width || 0;
-    if (thumbWidth > 0) {
-      frame.style.setProperty('--tpl-card-scale', String(thumbWidth / PAPER_WIDTH_PX));
-    }
+// CORRIGIDO: em vez de um <iframe srcdoc> construído à mão (que teve vários
+// problemas de viewport/escala), os cards sem thumbnail_url agora usam o
+// MESMO motor renderA4Pages já testado em TemplatePicker.js/Views.js —
+// preenchido com dados de exemplo realistas (SampleData.js) em vez de
+// título+descrição. Mostra-se apenas a primeira página, recortada pela
+// altura fixa do card (overflow:hidden), como miniatura da capa do
+// documento.
+function _mountCardPreviews(grid, templates) {
+  templates.forEach(t => {
+    if (t.thumbnail_url) return; // já tem <img>, nada a fazer
+    const mount = grid.querySelector(`.tpl-card-thumb-mount[data-id="${t.id}"]`);
+    if (!mount) return;
+    const sampleHtml = _buildSampleHtml(t);
+    if (!sampleHtml) return; // sem template_html nem template_css — fica o ícone 🎨
+    renderA4Pages(mount, [sampleHtml], {
+      css: t.template_css || '',
+      isRawHTML: true,
+      showPageLabel: false,
+    });
   });
+}
+
+// Constrói o HTML de uma única página preenchida com dados de exemplo —
+// usa fillTemplate (placeholders {{...}}) quando há template_html, ou o
+// conversor de markdown normal quando o template só tem CSS (ex.: alguns
+// modelos de Procuração, que nunca tiveram htmlTemplate mesmo no picker
+// original).
+function _buildSampleHtml(t) {
+  if (t.template_html) {
+    const data = getSampleData(t.service_type, t.template_name, t.description);
+    return fillTemplate(t.template_html, data);
+  }
+  if (t.template_css) {
+    const md = SAMPLE_MARKDOWN[t.service_type] || SAMPLE_MARKDOWN.generic;
+    return `<div style="padding:10mm">${markdownToHtml(md)}</div>`;
+  }
+  return '';
 }
 
 function renderCard(t) {
@@ -561,14 +608,15 @@ function renderCard(t) {
   const rating    = t.avg_rating ? `⭐ ${t.avg_rating}` : '';
   const creditTag = t.credit_cost > 0 ? `<span style="position:absolute;bottom:6px;left:6px;background:#F59E0B;color:#fff;border-radius:8px;padding:2px 7px;font-size:10px;font-weight:800">⭐ ${t.credit_cost} cr</span>` : '';
 
-  // CORRIGIDO: cards sem thumbnail_url mostravam só um ícone 🎨 — agora,
-  // se houver template_html/template_css, mostra-se uma amostra real do
-  // documento (mesma técnica usada no modal de detalhe, ver
-  // renderTemplatePreview), em vez de um placeholder genérico.
+  // CORRIGIDO: cards sem thumbnail_url mostravam só um ícone 🎨, ou (numa
+  // versão anterior) um iframe construído à mão. Agora deixa-se um
+  // "mount point" vazio aqui — o conteúdo real é inserido depois por
+  // _mountCardPreviews(), usando o motor renderA4Pages, pois esse motor
+  // precisa de o elemento já estar no DOM real para medir/escalar.
   const thumbHtml = t.thumbnail_url
     ? `<img src="${t.thumbnail_url}" alt="${t.template_name}" loading="lazy"/>`
     : (t.template_html || t.template_css)
-      ? `<iframe class="tpl-card-preview-frame" sandbox="allow-same-origin" scrolling="no" loading="lazy" srcdoc="${_previewIframeSrcdoc(t).replace(/"/g, '&quot;')}"></iframe>`
+      ? `<div class="tpl-card-thumb-mount" data-id="${t.id}"></div>`
       : `<span class="tpl-no-thumb">🎨</span>`;
 
   return `<div class="tpl-card" data-id="${t.id}">
@@ -593,65 +641,25 @@ function renderCard(t) {
 // ── Detalhe ───────────────────────────────────────────────────────────────────
 const tplCache = {};
 // ── Preview real do documento (substitui o ícone genérico quando não há thumbnail) ──
-// CORRIGIDO: antes, sem thumbnail_url, o card e o modal de detalhe só
-// mostravam um ícone 🎨 estático — mesmo quando o template já tinha
-// template_html + template_css reais prontos para mostrar. Esta função
-// substitui os placeholders {{...}} do HTML por texto de exemplo realista
-// e injecta o resultado num <iframe sandbox> isolado (sem scripts, sem
-// acesso ao documento principal — necessário porque o CSS/HTML vem de
-// templates da comunidade, não confiáveis por padrão).
-const PLACEHOLDER_EXEMPLOS = {
-  NOME: 'Maria José Cossa', CARGO: 'Técnica Administrativa', CONTACTO: '+258 84 123 4567',
-  EMAIL: 'exemplo@email.com', LOCALIZACAO: 'Maputo, Moçambique', OBJECTIVO: 'Profissional dedicada com experiência em gestão administrativa, à procura de novos desafios.',
-  TEMA: 'Título do Documento de Exemplo', AUTORES: 'Maria José Cossa', INSTITUICAO: 'Instituição de Exemplo',
-  CURSO: 'Curso / Disciplina de Exemplo', LOCAL_ANO: 'Maputo, 2026', DATA: '28 de Junho de 2026',
-  DESTINATARIO: 'Exmo(a). Senhor(a)', REMETENTE: 'Maria José Cossa', ASSUNTO: 'Assunto do documento',
-  EMPRESA: 'Empresa Exemplo, Lda', VALOR: '15.000,00 MZN', ENDERECO: 'Avenida Exemplo, n.º 123, Maputo',
-};
 
-function _previewFillPlaceholders(html) {
-  return (html || '').replace(/\{\{(\w+)\}\}/g, (_, key) => PLACEHOLDER_EXEMPLOS[key] || 'Texto de exemplo');
-}
-
-function _previewIframeSrcdoc(t) {
-  const html = _previewFillPlaceholders(t.template_html || `<div class="tpl-fallback-preview"><h1>{{TEMA}}</h1><p>${(t.description || '').replace(/</g,'&lt;')}</p></div>`);
-  const css  = t.template_css || '';
-  // CORRIGIDO: faltava <meta name="viewport"> no documento do iframe — sem
-  // ele, navegadores mobile assumem uma largura "desktop" (~980px) e depois
-  // escalam a página inteira de forma desproporcional, fazendo o texto
-  // parecer gigante e quebrar palavra a palavra (efeito visto no preview em
-  // tela cheia). Agora o <body> (onde cada template já define a sua própria
-  // tipografia/padding via "body{...}" — ver assets/js/marketplace/
-  // templates/*.js) é tratado como a folha A4: largura fixa 210mm,
-  // centrada, com sombra, dentro de um documento com viewport correcto —
-  // sem envolver o conteúdo numa div extra, que quebraria esses selectores.
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    *{box-sizing:border-box}
-    html{background:#e2e8f0;display:flex;justify-content:center}
-    body{width:210mm;max-width:100%;margin:0;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.12);font-family:Georgia,'Times New Roman',serif;color:#1f2937}
-    ${css}
-  </style></head><body>${html}</body></html>`;
-}
-
+// CORRIGIDO: removido o sistema de <iframe srcdoc> construído à mão para o
+// modal de detalhe e o fullscreen — substituído por renderA4Pages, o mesmo
+// motor já usado em TemplatePicker.js (Escolher Modelo) e Views.js
+// (preview do resultado), com dados de exemplo realistas (SampleData.js)
+// em vez de apenas título+descrição.
 function renderTemplatePreview(t) {
   const prev = document.getElementById('detailPreview');
   if (t.thumbnail_url) {
     prev.innerHTML = `<img src="${t.thumbnail_url}" alt="${t.template_name}"/>`;
     return;
   }
-  if (t.template_html || t.template_css) {
-    prev.innerHTML = `
-      <iframe class="tpl-preview-frame" sandbox="allow-same-origin" scrolling="no"
-        srcdoc="${_previewIframeSrcdoc(t).replace(/"/g, '&quot;')}"></iframe>
-      <button class="tpl-preview-maximize" id="btnPreviewMaximize" title="Ver em tela cheia">⛶ Maximizar</button>`;
-    const frame = prev.querySelector('.tpl-preview-frame');
-    const calibrate = () => {
-      const w = prev.getBoundingClientRect().width;
-      if (w > 0) frame.style.setProperty('--tpl-preview-scale', String(w / 793.7));
-    };
-    frame.addEventListener('load', calibrate);
-    calibrate();
+  const sampleHtml = _buildSampleHtml(t);
+  if (sampleHtml) {
+    prev.innerHTML = `<button class="tpl-preview-maximize" id="btnPreviewMaximize" title="Ver em tela cheia">⛶ Maximizar</button>`;
+    const mount = document.createElement('div');
+    mount.className = 'tpl-detail-preview-mount';
+    prev.appendChild(mount);
+    renderA4Pages(mount, [sampleHtml], { css: t.template_css || '', isRawHTML: true, showPageLabel: false });
     document.getElementById('btnPreviewMaximize').addEventListener('click', e => {
       e.stopPropagation();
       openPreviewFullscreen(t);
@@ -673,13 +681,15 @@ function openPreviewFullscreen(t) {
         <span id="previewFullscreenTitle"></span>
         <button id="btnPreviewFullscreenClose" title="Fechar">✕</button>
       </div>
-      <iframe id="previewFullscreenFrame" class="tpl-fullscreen-frame" sandbox="allow-same-origin"></iframe>`;
+      <div id="previewFullscreenMount" class="tpl-fullscreen-mount"></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#btnPreviewFullscreenClose').addEventListener('click', closePreviewFullscreen);
     overlay.addEventListener('click', e => { if (e.target === overlay) closePreviewFullscreen(); });
   }
   overlay.querySelector('#previewFullscreenTitle').textContent = t.template_name || 'Pré-visualização';
-  overlay.querySelector('#previewFullscreenFrame').srcdoc = _previewIframeSrcdoc(t);
+  const mount = overlay.querySelector('#previewFullscreenMount');
+  const sampleHtml = _buildSampleHtml(t);
+  renderA4Pages(mount, [sampleHtml || ''], { css: t.template_css || '', isRawHTML: true, showPageLabel: false });
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
 }
@@ -709,10 +719,10 @@ async function openDetail(id) {
 
   // CORRIGIDO: o preview mostrava só um ícone 🎨 genérico quando não havia
   // thumbnail_url — mesmo quando o template já tinha template_html +
-  // template_css reais (caso de todos os templates oficiais do seed). Agora,
-  // na ausência de thumbnail, renderiza-se uma amostra real do documento
-  // num <iframe> isolado (sandbox, sem scripts), com um botão para
-  // maximizar e ver o preview em tela cheia.
+  // template_css reais (caso de todos os templates oficiais do seed). Agora
+  // renderiza-se uma amostra real do documento usando o motor renderA4Pages
+  // (mesmo de TemplatePicker.js/Views.js) com dados de exemplo realistas,
+  // com um botão para maximizar e ver o preview em tela cheia.
   renderTemplatePreview(t);
 
   document.getElementById('detailTitle').textContent = t.template_name;
