@@ -52,6 +52,7 @@
     .tpl-card-thumb { width: 100%; aspect-ratio: 4/3; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 36px; position: relative; overflow: hidden; }
     .tpl-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
     .tpl-card-thumb .tpl-no-thumb { font-size: 32px; }
+    .tpl-card-preview-frame { width: 280%; height: 280%; border: none; transform: scale(0.357); transform-origin: top left; pointer-events: none; background: #fff; }
     .tpl-card-body { padding: 10px 11px 12px; }
     .tpl-card-name { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 3px; line-height: 1.3; }
     .tpl-card-sub  { font-size: 11.5px; color: var(--dim); line-height: 1.4; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -95,8 +96,23 @@
     .tpl-detail-overlay.open { display: flex; align-items: flex-end; }
     .tpl-detail-sheet { background: #fff; border-radius: 20px 20px 0 0; width: 100%; max-height: 92vh; overflow-y: auto; padding: 0 0 32px; }
     .tpl-detail-drag  { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 16px; }
-    .tpl-detail-preview { width: 100%; aspect-ratio: 16/9; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 48px; overflow: hidden; }
+    .tpl-detail-preview { width: 100%; aspect-ratio: 16/9; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 48px; overflow: hidden; position: relative; }
     .tpl-detail-preview img { width: 100%; height: 100%; object-fit: cover; }
+    /* Preview real do documento (HTML/CSS do template, escalado para caber na miniatura) */
+    .tpl-preview-frame { width: 250%; height: 250%; border: none; transform: scale(0.4); transform-origin: top left; pointer-events: none; background: #fff; }
+    .tpl-preview-maximize {
+      position: absolute; bottom: 8px; right: 8px; z-index: 2;
+      background: rgba(15,23,42,.82); color: #fff; border: none; border-radius: 8px;
+      font-size: 11.5px; font-weight: 700; padding: 6px 10px; cursor: pointer;
+      display: flex; align-items: center; gap: 4px; font-family: inherit;
+    }
+    .tpl-preview-maximize:hover { background: rgba(15,23,42,.95); }
+    /* Modal de pré-visualização em tela cheia */
+    .tpl-fullscreen-overlay { display: none; position: fixed; inset: 0; background: #0f172a; z-index: 9999; flex-direction: column; }
+    .tpl-fullscreen-overlay.open { display: flex; }
+    .tpl-fullscreen-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #1e293b; color: #fff; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+    .tpl-fullscreen-bar button { background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 4px 8px; }
+    .tpl-fullscreen-frame { flex: 1; width: 100%; border: none; background: #fff; }
     .tpl-detail-body { padding: 16px 16px 0; }
     .tpl-detail-title { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
     .tpl-detail-desc  { font-size: 13px; color: var(--dim); line-height: 1.55; margin: 0 0 14px; }
@@ -129,6 +145,19 @@
       outline: none; border-color: var(--blue);
     }
     .tpl-field textarea { resize: vertical; min-height: 80px; }
+    .tpl-photo-hint { font-size: 12px; color: var(--dim); line-height: 1.5; margin-bottom: 8px; }
+    .tpl-photo-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tpl-photo-btn {
+      border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 8px;
+      font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
+      background: var(--white); color: var(--ink); transition: var(--t);
+    }
+    .tpl-photo-btn:hover { border-color: var(--blue); background: #EFF6FF; }
+    .tpl-photo-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .tpl-photo-status { margin-top: 8px; font-size: 12.5px; font-weight: 600; padding: 8px 10px; border-radius: 8px; }
+    .tpl-photo-status.loading { background: #EFF6FF; color: #1d4ed8; }
+    .tpl-photo-status.success { background: #ECFDF5; color: #047857; }
+    .tpl-photo-status.error   { background: #FEF2F2; color: #B91C1C; }
     .tpl-type-radios { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .tpl-type-radio { border: 2px solid var(--border); border-radius: 10px; padding: 10px; cursor: pointer; text-align: center; transition: var(--t); }
     .tpl-type-radio.selected { border-color: var(--blue); background: #EFF6FF; }
@@ -348,6 +377,23 @@
         </select>
       </div>
 
+      <!-- CORRIGIDO: faltava aqui a opção de tirar foto de um modelo físico
+           para gerar o HTML/CSS automaticamente — já existia em "Escolher
+           Modelo" (TemplatePicker.js → /api/extract-template), mas nunca
+           tinha sido ligada ao formulário de submissão de templates da
+           galeria, que só aceitava CSS/HTML escritos manualmente. -->
+      <div class="tpl-field">
+        <label>Tem uma foto do modelo? (opcional)</label>
+        <div class="tpl-photo-hint">📷 Tire uma foto ou carregue uma imagem de um documento já formatado — a IA tenta recriar o layout em HTML/CSS automaticamente, preenchendo os campos abaixo.</div>
+        <div class="tpl-photo-buttons">
+          <button type="button" class="tpl-photo-btn" id="btnSfPhotoCamera">📸 Tirar Foto</button>
+          <button type="button" class="tpl-photo-btn" id="btnSfPhotoFile">📁 Escolher Ficheiro</button>
+        </div>
+        <input type="file" id="sfPhotoInputCamera" accept="image/*" capture="environment" style="display:none"/>
+        <input type="file" id="sfPhotoInputFile" accept="image/*" style="display:none"/>
+        <div id="sfPhotoStatus" class="tpl-photo-status" style="display:none"></div>
+      </div>
+
       <div class="tpl-field">
         <label>Nome do Template *</label>
         <input type="text" id="sfName" placeholder="Ex: CV Moderno Azul para TI" maxlength="100"/>
@@ -476,11 +522,19 @@ function renderCard(t) {
   const rating    = t.avg_rating ? `⭐ ${t.avg_rating}` : '';
   const creditTag = t.credit_cost > 0 ? `<span style="position:absolute;bottom:6px;left:6px;background:#F59E0B;color:#fff;border-radius:8px;padding:2px 7px;font-size:10px;font-weight:800">⭐ ${t.credit_cost} cr</span>` : '';
 
+  // CORRIGIDO: cards sem thumbnail_url mostravam só um ícone 🎨 — agora,
+  // se houver template_html/template_css, mostra-se uma amostra real do
+  // documento (mesma técnica usada no modal de detalhe, ver
+  // renderTemplatePreview), em vez de um placeholder genérico.
+  const thumbHtml = t.thumbnail_url
+    ? `<img src="${t.thumbnail_url}" alt="${t.template_name}" loading="lazy"/>`
+    : (t.template_html || t.template_css)
+      ? `<iframe class="tpl-card-preview-frame" sandbox="allow-same-origin" scrolling="no" loading="lazy" srcdoc="${_previewIframeSrcdoc(t).replace(/"/g, '&quot;')}"></iframe>`
+      : `<span class="tpl-no-thumb">🎨</span>`;
+
   return `<div class="tpl-card" data-id="${t.id}">
     <div class="tpl-card-thumb">
-      ${t.thumbnail_url
-        ? `<img src="${t.thumbnail_url}" alt="${t.template_name}" loading="lazy"/>`
-        : `<span class="tpl-no-thumb">🎨</span>`}
+      ${thumbHtml}
       <span class="tpl-badge ${typeCls[t.template_type] || ''}">${typeLabel[t.template_type] || ''}</span>
       ${t.is_featured ? '<span class="tpl-badge-featured">⭐ Destaque</span>' : ''}
       ${creditTag}
@@ -499,6 +553,84 @@ function renderCard(t) {
 
 // ── Detalhe ───────────────────────────────────────────────────────────────────
 const tplCache = {};
+// ── Preview real do documento (substitui o ícone genérico quando não há thumbnail) ──
+// CORRIGIDO: antes, sem thumbnail_url, o card e o modal de detalhe só
+// mostravam um ícone 🎨 estático — mesmo quando o template já tinha
+// template_html + template_css reais prontos para mostrar. Esta função
+// substitui os placeholders {{...}} do HTML por texto de exemplo realista
+// e injecta o resultado num <iframe sandbox> isolado (sem scripts, sem
+// acesso ao documento principal — necessário porque o CSS/HTML vem de
+// templates da comunidade, não confiáveis por padrão).
+const PLACEHOLDER_EXEMPLOS = {
+  NOME: 'Maria José Cossa', CARGO: 'Técnica Administrativa', CONTACTO: '+258 84 123 4567',
+  EMAIL: 'exemplo@email.com', LOCALIZACAO: 'Maputo, Moçambique', OBJECTIVO: 'Profissional dedicada com experiência em gestão administrativa, à procura de novos desafios.',
+  TEMA: 'Título do Documento de Exemplo', AUTORES: 'Maria José Cossa', INSTITUICAO: 'Instituição de Exemplo',
+  CURSO: 'Curso / Disciplina de Exemplo', LOCAL_ANO: 'Maputo, 2026', DATA: '28 de Junho de 2026',
+  DESTINATARIO: 'Exmo(a). Senhor(a)', REMETENTE: 'Maria José Cossa', ASSUNTO: 'Assunto do documento',
+  EMPRESA: 'Empresa Exemplo, Lda', VALOR: '15.000,00 MZN', ENDERECO: 'Avenida Exemplo, n.º 123, Maputo',
+};
+
+function _previewFillPlaceholders(html) {
+  return (html || '').replace(/\{\{(\w+)\}\}/g, (_, key) => PLACEHOLDER_EXEMPLOS[key] || 'Texto de exemplo');
+}
+
+function _previewIframeSrcdoc(t) {
+  const html = _previewFillPlaceholders(t.template_html || `<div class="tpl-fallback-preview"><h1>{{TEMA}}</h1><p>${(t.description || '').replace(/</g,'&lt;')}</p></div>`);
+  const css  = t.template_css || '';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    *{box-sizing:border-box} body{margin:0;padding:20px;background:#fff;font-family:Georgia,'Times New Roman',serif;color:#1f2937;transform-origin:top left}
+    ${css}
+  </style></head><body>${html}</body></html>`;
+}
+
+function renderTemplatePreview(t) {
+  const prev = document.getElementById('detailPreview');
+  if (t.thumbnail_url) {
+    prev.innerHTML = `<img src="${t.thumbnail_url}" alt="${t.template_name}"/>`;
+    return;
+  }
+  if (t.template_html || t.template_css) {
+    prev.innerHTML = `
+      <iframe class="tpl-preview-frame" sandbox="allow-same-origin" scrolling="no"
+        srcdoc="${_previewIframeSrcdoc(t).replace(/"/g, '&quot;')}"></iframe>
+      <button class="tpl-preview-maximize" id="btnPreviewMaximize" title="Ver em tela cheia">⛶ Maximizar</button>`;
+    document.getElementById('btnPreviewMaximize').addEventListener('click', e => {
+      e.stopPropagation();
+      openPreviewFullscreen(t);
+    });
+    return;
+  }
+  prev.innerHTML = `<span>🎨</span>`;
+}
+
+// ── Preview em tela cheia ────────────────────────────────────────────────
+function openPreviewFullscreen(t) {
+  let overlay = document.getElementById('previewFullscreenOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'previewFullscreenOverlay';
+    overlay.className = 'tpl-fullscreen-overlay';
+    overlay.innerHTML = `
+      <div class="tpl-fullscreen-bar">
+        <span id="previewFullscreenTitle"></span>
+        <button id="btnPreviewFullscreenClose" title="Fechar">✕</button>
+      </div>
+      <iframe id="previewFullscreenFrame" class="tpl-fullscreen-frame" sandbox="allow-same-origin"></iframe>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#btnPreviewFullscreenClose').addEventListener('click', closePreviewFullscreen);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closePreviewFullscreen(); });
+  }
+  overlay.querySelector('#previewFullscreenTitle').textContent = t.template_name || 'Pré-visualização';
+  overlay.querySelector('#previewFullscreenFrame').srcdoc = _previewIframeSrcdoc(t);
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePreviewFullscreen() {
+  document.getElementById('previewFullscreenOverlay')?.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
 async function openDetail(id) {
   const overlay = document.getElementById('detailOverlay');
   overlay.classList.add('open');
@@ -517,11 +649,13 @@ async function openDetail(id) {
   if (!t) { notify('Template não encontrado','error'); return; }
   currentTpl = t;
 
-  // Preview
-  const prev = document.getElementById('detailPreview');
-  prev.innerHTML = t.thumbnail_url
-    ? `<img src="${t.thumbnail_url}" alt="${t.template_name}"/>`
-    : `<span>🎨</span>`;
+  // CORRIGIDO: o preview mostrava só um ícone 🎨 genérico quando não havia
+  // thumbnail_url — mesmo quando o template já tinha template_html +
+  // template_css reais (caso de todos os templates oficiais do seed). Agora,
+  // na ausência de thumbnail, renderiza-se uma amostra real do documento
+  // num <iframe> isolado (sandbox, sem scripts), com um botão para
+  // maximizar e ver o preview em tela cheia.
+  renderTemplatePreview(t);
 
   document.getElementById('detailTitle').textContent = t.template_name;
   document.getElementById('detailDesc').textContent  = t.description || 'Sem descrição.';
@@ -563,11 +697,44 @@ function closeDetail() {
 }
 
 // ── Usar template ─────────────────────────────────────────────────────────────
+// CORRIGIDO: templates com credit_cost > 0 nunca debitavam créditos — o
+// endpoint /api/templates/use só regista estatísticas de uso (ver
+// comentário em api/misc.js: "A dedução real de créditos é feita pelo
+// deduct-credit.js existente"), mas esta página nunca chamava esse
+// endpoint. Agora, antes de aplicar um template premium, debita-se o
+// custo no servidor via /api/deduct-credit — mesmo endpoint e mesmo
+// padrão já usado em DocumentController.handleReedit — e só se prossegue
+// com sucesso confirmado. Templates gratuitos (credit_cost = 0) seguem
+// exactamente como antes, sem nenhuma dedução.
 async function useTemplate() {
   if (!currentTpl) return;
   if (!currentUser) { notify('Faça login para usar templates','warning'); return; }
 
   const token = getToken();
+  if (!token) { notify('Sessão expirada. Inicie sessão novamente.','error'); return; }
+
+  const cost = currentTpl.credit_cost || 0;
+  if (cost > 0) {
+    notify(`A debitar ${cost} crédito(s)…`, 'info');
+    try {
+      const deductRes = await fetch('/api/deduct-credit', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ cost, documentType: `template_${currentTpl.service_type || 'custom'}` }),
+      });
+      if (deductRes.status === 402) { notify('⚠️ Créditos insuficientes para este template premium.','warning'); return; }
+      if (deductRes.status === 401) { notify('Sessão expirada. Inicie sessão novamente.','error'); return; }
+      if (deductRes.status === 403) { notify('Conta bloqueada. Contacte o suporte.','error'); return; }
+      if (!deductRes.ok) { notify('Erro ao debitar créditos. Tente novamente.','error'); return; }
+      const deductData = await deductRes.json();
+      if (!deductData.success) { notify('Erro ao debitar créditos. Tente novamente.','error'); return; }
+      notify(`✓ ${cost} crédito(s) debitado(s). Restam ${deductData.credits}.`, 'success');
+    } catch (err) {
+      notify('Erro de rede ao debitar créditos: ' + err.message, 'error');
+      return;
+    }
+  }
+
   await fetch(`${API}/use`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -717,7 +884,85 @@ function openSubmit() {
 function closeSubmit() {
   document.getElementById('submitOverlay').classList.remove('open');
   document.body.style.overflow = '';
+  _setPhotoStatus('', null);
 }
+
+// ── Extrair template a partir de foto/imagem (igual a "Escolher Modelo") ──
+// CORRIGIDO: o formulário de submissão só aceitava CSS/HTML escritos à
+// mão, exigindo conhecimento de programação. Agora reaproveita-se o mesmo
+// endpoint /api/extract-template já usado em TemplatePicker.js — o
+// utilizador tira uma foto (ou carrega um ficheiro) de um documento já
+// formatado, e os campos Nome/Descrição/CSS/HTML são pré-preenchidos
+// automaticamente a partir do que a IA reconhecer na imagem.
+function _setPhotoStatus(msg, kind) {
+  const el = document.getElementById('sfPhotoStatus');
+  el.style.display = msg ? 'block' : 'none';
+  el.className = `tpl-photo-status${kind ? ' ' + kind : ''}`;
+  el.textContent = msg || '';
+}
+
+async function _extractTemplateFromPhoto(file) {
+  const serviceKey = document.getElementById('sfService').value;
+  if (!serviceKey) {
+    notify('Escolha primeiro o Tipo de Documento antes de enviar a foto.', 'warning');
+    return;
+  }
+  const btnCam = document.getElementById('btnSfPhotoCamera');
+  const btnFile = document.getElementById('btnSfPhotoFile');
+  btnCam.disabled = true; btnFile.disabled = true;
+  _setPhotoStatus('🤖 A analisar a imagem e a recriar o modelo… isto pode demorar alguns segundos.', 'loading');
+
+  try {
+    const base64 = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload  = () => res(reader.result.split(',')[1]);
+      reader.onerror = () => rej(new Error('Falha ao ler o ficheiro de imagem'));
+      reader.readAsDataURL(file);
+    });
+
+    const resp = await fetch('/api/extract-template', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: base64, mimeType: file.type || 'image/jpeg', serviceKey }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) throw new Error(data.error || `Erro do servidor: ${resp.status}`);
+
+    // Pré-preencher o formulário com o que a IA extraiu, sem sobrescrever
+    // texto que o utilizador já tenha escrito manualmente.
+    const nameEl = document.getElementById('sfName');
+    const descEl = document.getElementById('sfDesc');
+    if (!nameEl.value.trim()) nameEl.value = data.name || '';
+    if (!descEl.value.trim()) descEl.value = data.description || '';
+    document.getElementById('sfCss').value  = data.css || '';
+    document.getElementById('sfHtml').value = data.htmlTemplate || '';
+
+    _setPhotoStatus('✅ Modelo extraído com sucesso! Reveja os campos abaixo antes de submeter.', 'success');
+    notify('Modelo extraído da imagem ✓', 'success');
+  } catch (err) {
+    _setPhotoStatus('❌ Não foi possível extrair o modelo: ' + err.message + ' — pode preencher o CSS/HTML manualmente.', 'error');
+  } finally {
+    btnCam.disabled = false; btnFile.disabled = false;
+  }
+}
+
+document.getElementById('btnSfPhotoCamera')?.addEventListener('click', () => {
+  document.getElementById('sfPhotoInputCamera').click();
+});
+document.getElementById('btnSfPhotoFile')?.addEventListener('click', () => {
+  document.getElementById('sfPhotoInputFile').click();
+});
+document.getElementById('sfPhotoInputCamera')?.addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (file) _extractTemplateFromPhoto(file);
+  e.target.value = '';
+});
+document.getElementById('sfPhotoInputFile')?.addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (file) _extractTemplateFromPhoto(file);
+  e.target.value = '';
+});
+
 window.selectType = function(val, el) {
   submitType = val;
   document.querySelectorAll('.tpl-type-radio').forEach(r => r.classList.remove('selected'));
@@ -763,6 +1008,7 @@ async function submitTemplate() {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     document.getElementById('sfService').value = '';
+    _setPhotoStatus('', null);
     loadGallery(); loadMine();
   } catch (e) {
     notify(e.message, 'error');
