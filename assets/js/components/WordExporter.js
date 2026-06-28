@@ -158,6 +158,7 @@ export class WordExporter {
                     meta.disciplina && ['Disciplina', meta.disciplina],
                     meta.nivel && ['Nível', meta.nivel],
                     meta.aluno && ['Estudante', meta.aluno],
+                    meta.turma && ['Turma/Classe', meta.turma],
                     meta.numero && ['N.º de Estudante', meta.numero],
                     meta.docente && ['Docente', meta.docente],
                 ].filter(Boolean);
