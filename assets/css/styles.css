@@ -358,10 +358,11 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 
 /* 1. Sheet sem overflow próprio — o scroll fica dentro do preview */
 .res-sheet {
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-  max-height: 96svh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-x: hidden !important;
+    max-height: 96svh !important;
+    overflow-y: auto!important;
 }
 
 /* 2. Header e meta não encolhem */
