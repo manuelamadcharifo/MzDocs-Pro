@@ -24,7 +24,18 @@ const {
 } = require('./_lib/supabaseAdmin');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
-const VALID_COSTS    = [1, 2]; // custo máximo por operação
+// CORRIGIDO: limite fixo de [1, 2] impedia cobrar templates premium da
+// galeria comunitária com preço mais alto (ex.: um template muito
+// elaborado que o admin decida valer 5 créditos) — qualquer custo fora
+// dessa lista caía silenciosamente no fallback de 1 crédito (ver linha
+// "VALID_COSTS.includes(rawCost) ? rawCost : 1" abaixo), cobrando menos
+// do que o admin definiu. Passa a aceitar-se 1-10, faixa suficiente para
+// a variação de preço de templates (a validação em api/admin/index.js
+// → handleTemplates limita credit_cost a 0-50 na definição do preço, mas
+// o consumo normal de documentos/templates nunca deve exceder 10 créditos
+// numa única operação — isto continua a proteger contra valores anómalos
+// vindos de um cliente comprometido).
+const VALID_COSTS    = Array.from({ length: 10 }, (_, i) => i + 1); // 1 a 10 créditos por operação
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
