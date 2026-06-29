@@ -176,15 +176,27 @@ async function handleConfirmPayment(req, res) {
     if (!userId && tx.user_id) userId = tx.user_id;
     if (!userId) return res.status(400).json({ error: 'userId em falta e transação não tem user_id' });
 
-    // Actualizar transação
-    const { error: updateErr } = await supabase.from('transactions')
+    // Actualizar transação — CORRIGIDO (auditoria, ponto 6): o UPDATE
+    // anterior não tinha condição de status, criando uma janela de corrida
+    // entre o SELECT (linha acima) e este UPDATE: se duas confirmações
+    // chegassem quase simultaneamente, ambas passavam a verificação
+    // "status === 'pending'" antes de qualquer uma escrever, resultando em
+    // créditos duplicados. Agora o WHERE inclui "AND status = 'pending'",
+    // tornando a transição pending→completed atómica a nível de base de
+    // dados — só uma das chamadas concorrentes consegue actualizar 1 linha;
+    // a outra recebe count=0 e é rejeitada antes de creditar.
+    const { error: updateErr, count: updatedCount } = await supabase.from('transactions')
       .update({
         status:       'completed',
         confirmed_by: auth.user.id,
         confirmed_at: new Date().toISOString(),
-      })
-      .eq('id', transactionId);
+      }, { count: 'exact' })
+      .eq('id', transactionId)
+      .eq('status', 'pending');
     if (updateErr) throw updateErr;
+    if (!updatedCount) {
+      return res.status(409).json({ error: 'Transação já foi processada por outro pedido em paralelo.' });
+    }
 
     // Adicionar créditos ao utilizador
     const { data: newCredits, error: rpcErr } = await supabase
