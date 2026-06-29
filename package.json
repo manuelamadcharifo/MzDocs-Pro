@@ -8,8 +8,8 @@
     "dev": "vercel dev",
     "build": "node scripts/inject-version.js",
     "start": "vercel dev",
-    "test": "jest --coverage",
-    "test:watch": "jest --watch",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
+    "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
     "test:auth": "jest tests/auth.test.js",
     "lint": "echo 'Linting not configured yet'"
   },
