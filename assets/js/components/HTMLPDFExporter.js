@@ -83,6 +83,29 @@ const DEFAULT_CSS = `
 `;
 
 // ── Exportador ─────────────────────────────────────────────────────────
+// CORRIGIDO (auditoria): bloco de identificação (Disciplina/Nível/Estudante/
+// Turma/Docente) reutilizável entre HTMLPDFExporter e HTMLToDocxExporter —
+// mesmos campos que PDFExporter.js e WordExporter.js já mostram quando NÃO
+// há template visual activo. Estilo inline neutro (não depende de classes
+// CSS do template, que poderiam não as definir) e discreto, para não
+// conflituar visualmente com o design do template escolhido.
+function _buildMetaBlockHTML(meta) {
+  if (!meta) return '';
+  const rows = [
+    meta.disciplina  && ['Disciplina', meta.disciplina],
+    meta.nivel        && ['Nível', meta.nivel],
+    meta.aluno        && ['Estudante', meta.aluno],
+    meta.turma        && ['Turma/Classe', meta.turma],
+    meta.docente      && ['Docente', meta.docente],
+    meta.instituicao  && ['Instituição', meta.instituicao],
+  ].filter(Boolean);
+  if (!rows.length) return '';
+  const items = rows.map(([label, val]) =>
+    `<span style="margin-right:18px;display:inline-block"><strong>${label}:</strong> ${String(val).replace(/</g,'&lt;')}</span>`
+  ).join('');
+  return `<div class="no-print-meta" style="font-family:Arial,sans-serif;font-size:11px;color:#444;border-bottom:1px solid #ccc;padding:0 0 8px 0;margin:0 0 14px 0;">${items}</div>`;
+}
+
 export class HTMLPDFExporter {
 
   /**
@@ -94,7 +117,7 @@ export class HTMLPDFExporter {
    * @param {string} [options.title]
    */
   export(markdownContent, filename, options = {}) {
-    const { templateCss = null, title = 'MzDocs Pro' } = options;
+    const { templateCss = null, title = 'MzDocs Pro', meta = null } = options;
 
     // ── Detecção automática de HTML vs Markdown ────────────────────────────
     // Quando o documento foi gerado como HTML estruturado (templates com htmlTemplate),
@@ -103,6 +126,13 @@ export class HTMLPDFExporter {
     const isRawHTML = markdownContent && markdownContent.trimStart().startsWith('<');
     const bodyHTML = isRawHTML ? markdownContent : mdToHtml(markdownContent);
     const css = templateCss || DEFAULT_CSS;
+    // CORRIGIDO (auditoria): quando um template visual está activo (este
+    // exportador é usado em vez de PDFExporter.js), a capa de identificação
+    // (Estudante/Docente/Turma/Instituição — ver _buildExportMetadata em
+    // DocumentController.js) nunca aparecia, porque este exportador nunca
+    // recebia nem usava esses dados. Mesma lógica de _buildMetaBlock usada
+    // também em HTMLToDocxExporter.js, para os dois caminhos coincidirem.
+    const metaBlockHTML = _buildMetaBlockHTML(meta);
 
     const html = `<!DOCTYPE html>
 <html lang="pt">
@@ -151,7 +181,7 @@ ${css}
 </style>
 </head>
 <body>
-${bodyHTML}
+${metaBlockHTML}${bodyHTML}
 
 <!-- Botão apenas no ecrã — não imprime -->
 <div class="no-print" style="
