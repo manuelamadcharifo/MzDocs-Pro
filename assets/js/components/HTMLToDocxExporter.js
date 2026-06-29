@@ -110,9 +110,45 @@ function parsePadding(val, containerDxa = 11906) {
 
 // ── Classe principal ─────────────────────────────────────────────────────────
 
+// CORRIGIDO (auditoria): bloco de identificação reutilizável — mesmos
+// campos de PDFExporter.js/WordExporter.js. Usa TextRun simples (tamanho
+// pequeno, cinza) para não conflituar visualmente com o design do
+// template escolhido, e termina com um parágrafo vazio de espaçamento.
+function _buildMetaParagraphs(meta, Paragraph, TextRun, BorderStyle) {
+  if (!meta) return [];
+  const rows = [
+    meta.disciplina  && ['Disciplina', meta.disciplina],
+    meta.nivel        && ['Nível', meta.nivel],
+    meta.aluno        && ['Estudante', meta.aluno],
+    meta.turma        && ['Turma/Classe', meta.turma],
+    meta.docente      && ['Docente', meta.docente],
+    meta.instituicao  && ['Instituição', meta.instituicao],
+  ].filter(Boolean);
+  if (!rows.length) return [];
+
+  const runs = [];
+  rows.forEach(([label, val], i) => {
+    if (i > 0) runs.push(new TextRun({ text: '    ', size: 18 }));
+    runs.push(new TextRun({ text: `${label}: `, bold: true, size: 18, color: '444444' }));
+    runs.push(new TextRun({ text: String(val), size: 18, color: '444444' }));
+  });
+
+  return [
+    new Paragraph({
+      children: runs,
+      spacing: { after: 200 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC', space: 4 } },
+    }),
+  ];
+}
+
 export class HTMLToDocxExporter {
 
-  async export(templateHtml, templateCss, filename) {
+  // CORRIGIDO (auditoria): faltava o 4.º parâmetro 'meta' — quando um
+  // template visual está activo, este exportador é usado em vez de
+  // WordExporter.js, e a capa de identificação (Estudante/Docente/Turma/
+  // Instituição) nunca aparecia porque nunca era recebida nem desenhada.
+  async export(templateHtml, templateCss, filename, meta = null) {
     await loadDocxLib();
 
     const {
@@ -200,6 +236,12 @@ export class HTMLToDocxExporter {
       children = this._buildLinearContent(root, A4_W);
       if (!children.length) children = [new Paragraph({ children: [new TextRun('')] })];
     }
+
+    // Bloco de identificação (Disciplina/Nível/Estudante/Turma/Docente/
+    // Instituição) — mesmos campos já usados em WordExporter.js/
+    // PDFExporter.js, agora também aqui quando há template visual activo.
+    const metaParas = _buildMetaParagraphs(meta, Paragraph, TextRun, BorderStyle);
+    if (metaParas.length) children = [...metaParas, ...children];
 
     // Criar e descarregar documento
     const wordDoc = new Document({
