@@ -126,18 +126,18 @@ module.exports = async function handler(req, res) {
 // POST /api/verify-receipt
 // ════════════════════════════════════════════════════════════════════════════
 
-const _receiptRateMap = new Map(); // IP → { count, reset }
+// CORRIGIDO (auditoria, ponto 5): usava um Map em memória do processo —
+// não confiável em ambiente serverless, onde cada invocação pode rodar
+// numa instância diferente (um atacante pode contornar o limite acertando
+// instâncias distintas). Agora usa o mesmo mecanismo com persistência via
+// Redis já testado em generate-document.js (ver api/_lib/rateLimit.js),
+// com fallback gracioso para Map local apenas se Redis não estiver
+// configurado.
+const { checkRateLimit } = require('./_lib/rateLimit');
 
-function checkReceiptRateLimit(ip) {
-  const key     = `rl:receipt:${ip}`;
-  const limit   = 3;         // max 3 uploads por IP por minuto
-  const window  = 60 * 1000; // 1 minuto
-  const now     = Date.now();
-  const entry   = _receiptRateMap.get(key) || { count: 0, reset: now + window };
-  if (now > entry.reset) { entry.count = 0; entry.reset = now + window; }
-  entry.count++;
-  _receiptRateMap.set(key, entry);
-  return entry.count <= limit;
+async function checkReceiptRateLimit(ip) {
+  // max 3 uploads por IP por minuto
+  return checkRateLimit('receipt', ip, { limit: 3, windowSec: 60 });
 }
 
 // Preços/créditos dos pacotes: única fonte de verdade em _lib/packages.js
@@ -289,8 +289,17 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
       const credits = pkg ? pkg.credits : 0;
 
       // 5a. Atualizar transacção → confirmed
-      await restRequest(
-        `transactions?id=eq.${transactionId}`,
+      // CORRIGIDO (auditoria, ponto 6): mesma classe de race condition do
+      // handleConfirmPayment (admin/index.js) — o PATCH não tinha condição
+      // de status, então duas chamadas de verify-receipt quase simultâneas
+      // (ex.: o utilizador a clicar 2x no upload) podiam ambas passar pela
+      // checagem inicial antes de qualquer uma escrever, duplicando os
+      // créditos. Adicionado "&status=eq.pending" ao filtro — PostgREST
+      // só aplica o PATCH às linhas que ainda estiverem pending — e usa-se
+      // return=representation para detectar se 0 linhas foram afectadas
+      // (já confirmada por outra chamada) antes de prosseguir para creditar.
+      const updatedTx = await restRequest(
+        `transactions?id=eq.${transactionId}&status=eq.pending`,
         {
           method: 'PATCH',
           body: {
@@ -302,9 +311,22 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
             verification_method: 'auto',
             receipt_ref:         aiRef || null,
           },
-          prefer: 'return=minimal',
+          prefer: 'return=representation',
         }
       );
+
+      // Se 0 linhas vieram, outra chamada já confirmou esta transação
+      // entre a checagem inicial e este PATCH — abortar sem creditar de novo.
+      if (!Array.isArray(updatedTx) || updatedTx.length === 0) {
+        console.warn('[verify-receipt] Transação já confirmada por outra chamada concorrente:', transactionId);
+        return {
+          success:      true,
+          verified:     true,
+          autoApproved: false,
+          nextStep:     'already_confirmed',
+          message:      'Este pagamento já tinha sido confirmado.',
+        };
+      }
 
       // 5b. Adicionar créditos ao utilizador
       if (userId && credits > 0) {
@@ -401,7 +423,7 @@ async function handleVerifyReceipt(req, res) {
 
   // Rate limit: 3 uploads/IP/min
   const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-  if (!checkReceiptRateLimit(ip)) {
+  if (!await checkReceiptRateLimit(ip)) {
     return res.status(429).json({ error: 'Demasiados pedidos. Aguarde um minuto e tente de novo.', code: 'RATE_LIMITED' });
   }
 
@@ -1405,18 +1427,11 @@ function _safeJSON(raw) {
 // ver assets/js/services/LegalContext.js.
 // ════════════════════════════════════════════════════════════════════════════
 
-const _legalSearchRateMap = new Map(); // IP → { count, reset }
-
-function checkLegalSearchRateLimit(ip) {
-  const key    = `rl:legal-search:${ip}`;
-  const limit  = 20;         // max 20 buscas por IP por minuto — generoso para uso normal
-  const window = 60 * 1000;
-  const now    = Date.now();
-  const entry  = _legalSearchRateMap.get(key) || { count: 0, reset: now + window };
-  if (now > entry.reset) { entry.count = 0; entry.reset = now + window; }
-  entry.count++;
-  _legalSearchRateMap.set(key, entry);
-  return entry.count <= limit;
+// CORRIGIDO (auditoria, ponto 5): mesmo problema do checkReceiptRateLimit
+// — Map local não confiável em ambiente serverless. Ver api/_lib/rateLimit.js.
+async function checkLegalSearchRateLimit(ip) {
+  // max 20 buscas por IP por minuto — generoso para uso normal
+  return checkRateLimit('legal-search', ip, { limit: 20, windowSec: 60 });
 }
 
 // Mapeia cada serviço jurídico aos diplomas relevantes — restringir a
@@ -1440,7 +1455,7 @@ async function handleLegalSearch(req, res) {
   if (req.method !== 'POST')   return res.status(405).json({ error: 'POST only' });
 
   const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
-  if (ip && !checkLegalSearchRateLimit(ip)) {
+  if (ip && !await checkLegalSearchRateLimit(ip)) {
     return res.status(429).json({ error: 'Demasiados pedidos. Tente novamente dentro de 1 minuto.' });
   }
 
