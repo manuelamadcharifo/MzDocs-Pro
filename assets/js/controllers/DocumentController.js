@@ -997,9 +997,15 @@ export class DocumentController {
 
    if (activeHtml && activeCss) {
      const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
+     // CORRIGIDO (auditoria): faltava passar 'meta' aqui — com um template
+     // visual activo, a capa de identificação (Estudante/Docente/Turma/
+     // Instituição) nunca aparecia, mesmo quando o utilizador a preenchera
+     // no formulário. Mesmos dados que o caminho sem template já recebe
+     // via this._buildExportMetadata(svc), mais abaixo.
      new HTMLPDFExporter().export(activeHtml, filename, {
        templateCss: activeCss,
        title: svc?.title || 'Documento MzDocs Pro',
+       meta: this._buildExportMetadata(svc),
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
    } else if (activeCss) {
@@ -1008,6 +1014,7 @@ export class DocumentController {
      new HTMLPDFExporter().export(content, filename, {
        templateCss: activeCss,
        title: svc?.title || 'Documento MzDocs Pro',
+       meta: this._buildExportMetadata(svc),
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
    } else {
@@ -1032,7 +1039,10 @@ export class DocumentController {
          ? templatePicker._fillTemplate(tpl.htmlTemplate, templatePicker._extractRealData(rawContent, this.docModel.service))
          : rawContent;
      const { HTMLToDocxExporter } = await import('../components/HTMLToDocxExporter.js');
-     await new HTMLToDocxExporter().export(exportContent, tpl?.css || '', filename);
+     // CORRIGIDO (auditoria): faltava passar 'meta' aqui — mesmo problema
+     // do PDF: com um template visual activo, a capa de identificação
+     // nunca aparecia no Word exportado.
+     await new HTMLToDocxExporter().export(exportContent, tpl?.css || '', filename, this._buildExportMetadata(svc));
      NotificationView.success('✅ Word (.docx) descarregado!');
      return;
  }
