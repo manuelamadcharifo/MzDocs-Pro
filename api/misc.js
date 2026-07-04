@@ -1697,30 +1697,6 @@ async function _callAiText(prompt, { maxTokens = 3000, temperature = 0.5 } = {})
 // 12 funções do plano Hobby da Vercel não permite extrair para um módulo
 // importado sem cuidado de bundling — mantemos a duplicação pequena e
 // explícita, tal como já acontecia com outros helpers deste projecto).
-async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml, SITE_URL) {
-  const owner = process.env.GITHUB_OWNER;
-  const repo  = process.env.GITHUB_REPO;
-  const token = process.env.GITHUB_TOKEN;
-  if (!owner || !repo || !token) { console.warn('[blog-cron] GitHub env vars em falta — a saltar publicação estática'); return; }
-
-  const escHtml = (s = '') => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const trackingSnippet = `<script>(function(){try{var s=localStorage.getItem('mz_sid')||('anon_'+Math.random().toString(36).slice(2));localStorage.setItem('mz_sid',s);fetch('${SITE_URL}/api/admin?action=analytics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'/blog/${slug}',session:s})}).catch(function(){});}catch(e){}})();</script>`;
-  const html = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>${escHtml(title)} — MzDocs Pro</title><meta name="description" content="${escHtml(metaDescription || '')}"/><link rel="canonical" href="${SITE_URL}/pages/${slug}"/></head><body><h1>${escHtml(title)}</h1>${contentHtml}${trackingSnippet}</body></html>`;
-
-  const githubPath = `pages/${slug}/index.html`;
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${githubPath}`;
-  let sha;
-  try {
-    const ex = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
-    if (ex.ok) sha = (await ex.json()).sha;
-  } catch (_) {}
-
-  await fetch(apiUrl, {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: `Auto-publicar artigo do blog: ${slug}`, content: Buffer.from(html).toString('base64'), sha }),
-  });
-}
 
 async function _generateAndPublishArticle({ title, keywords, existingTitles, transactionNote }) {
   const avoidBlock = existingTitles.length
