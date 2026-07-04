@@ -141,6 +141,51 @@ async function adminDeleteUser(userId) {
   return res.ok;
 }
 
+/**
+ * NOVO (v1.1): Cria um utilizador directamente via Auth Admin API (REST
+ * pura, sem SDK/WebSocket — mesmo padrão de todo este ficheiro).
+ * Usado para criar contas "avulso" automaticamente assim que um
+ * comprovativo é aprovado pela IA, sem qualquer acção do administrador.
+ *
+ * @param {object} params
+ * @param {string} params.email
+ * @param {string} params.password
+ * @param {object} [params.userMetadata]
+ * @param {boolean} [params.emailConfirm=true]
+ * @returns {Promise<object>} utilizador criado ({ id, email, ... })
+ */
+async function adminCreateUser({ email, password, userMetadata = {}, emailConfirm = true }) {
+  assertConfigured();
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email,
+      password,
+      email_confirm: emailConfirm,
+      user_metadata: userMetadata,
+    }),
+  });
+
+  const text = await res.text();
+  let data = null;
+  if (text) {
+    try { data = JSON.parse(text); } catch { data = text; }
+  }
+
+  if (!res.ok) {
+    const message = (data && typeof data === 'object' && (data.msg || data.message)) || `Erro ao criar utilizador (HTTP ${res.status})`;
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
 module.exports = {
   SUPABASE_URL,
   SERVICE_KEY,
@@ -152,6 +197,7 @@ module.exports = {
   insert,
   rpc,
   adminDeleteUser,
+  adminCreateUser,
 };
 
 /**
