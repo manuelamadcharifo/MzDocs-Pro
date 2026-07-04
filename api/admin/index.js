@@ -11,6 +11,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
+const { ACTIVE_PROVIDERS, RESERVE_PROVIDERS, TIER_LABELS } = require('../_lib/aiProvidersCatalog');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
@@ -50,10 +51,11 @@ module.exports = async function handler(req, res) {
     case 'affiliates':        return handleAffiliates(req, res);
     case 'pending-receipts':  return handlePendingReceipts(req, res);
     case 'approve-receipt':   return handleApproveReceipt(req, res);
+    case 'ai-providers':      return handleAiProviders(req, res);
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
-        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt'],
+        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt','ai-providers'],
       });
   }
 };
@@ -1973,3 +1975,158 @@ async function handleApproveReceipt(req, res) {
     return res.status(500).json({ error: err.message || 'Erro interno' });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IA PROVIDERS — NOVO (painel de monitorização dos 5 providers de IA)
+// ─────────────────────────────────────────────────────────────────────────────
+// GET  /api/admin/ai-providers            → estado + consumo dos providers
+// POST /api/admin/ai-providers            → { toggleReserve: 'sambanova' }
+//                                             marca/desmarca um provider de
+//                                             reserva como "activado" (apenas
+//                                             anotação no painel — ligar de
+//                                             facto o provider ainda exige
+//                                             código novo em generate-document.js)
+async function handleAiProviders(req, res) {
+  const token = req.headers.authorization?.replace('Bearer ', '').trim();
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    if (req.method === 'POST' || req.method === 'PUT') {
+      const body = parseBody(req);
+      const toggleId = body?.toggleReserve;
+      if (!toggleId) return res.status(400).json({ error: 'toggleReserve é obrigatório' });
+
+      const { data: row } = await supabase
+        .from('system_settings').select('value').eq('key', 'ai_reserve_activated').maybeSingle();
+      let list = [];
+      try { list = JSON.parse(row?.value || '[]'); } catch { list = []; }
+      if (!Array.isArray(list)) list = [];
+
+      const idx = list.indexOf(toggleId);
+      if (idx >= 0) list.splice(idx, 1); else list.push(toggleId);
+
+      await supabase.from('system_settings').upsert({
+        key: 'ai_reserve_activated',
+        value: JSON.stringify(list),
+        updated_by: auth.user.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' });
+
+      await supabase.from('admin_logs').insert({
+        admin_id:    auth.user.id,
+        action:      'toggle_ai_reserve_provider',
+        target_type: 'ai_provider',
+        target_id:   toggleId,
+        details:     { activated: list.includes(toggleId) },
+        created_at:  new Date().toISOString(),
+      });
+
+      return res.status(200).json({ success: true, activated: list });
+    }
+
+    if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
+
+    // ── Consumo dos últimos 7 dias (histórico para gráfico) ──────────────
+    const today = new Date();
+    const sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const todayStr = today.toISOString().split('T')[0];
+    const sinceStr = sevenDaysAgo.toISOString().split('T')[0];
+
+    const { data: usageRows, error: usageErr } = await supabase
+      .from('ai_provider_daily_usage')
+      .select('day, provider, requests_ok, requests_fail, tokens_prompt, tokens_completion, last_model, last_success_at, last_error_at, last_error_message')
+      .gte('day', sinceStr)
+      .order('day', { ascending: true });
+
+    // Tabela pode ainda não existir se a migration v27 não foi corrida —
+    // não deixar o painel todo em erro por isso, apenas devolver vazio.
+    const rows = usageErr ? [] : (usageRows || []);
+    if (usageErr) console.warn('[admin/ai-providers] tabela indisponível (correr migration_v27?):', usageErr.message);
+
+    const { data: reserveRow } = await supabase
+      .from('system_settings').select('value').eq('key', 'ai_reserve_activated').maybeSingle();
+    let reserveActivated = [];
+    try { reserveActivated = JSON.parse(reserveRow?.value || '[]'); } catch { reserveActivated = []; }
+
+    // ── Construir resposta por provider activo ───────────────────────────
+    const providers = ACTIVE_PROVIDERS.map(meta => {
+      const todayRow = rows.find(r => r.day === todayStr && r.provider === meta.id) || null;
+      const history7d = rows.filter(r => r.provider === meta.id);
+
+      const tokensToday   = todayRow ? (Number(todayRow.tokens_prompt) + Number(todayRow.tokens_completion)) : 0;
+      const requestsToday = todayRow ? (todayRow.requests_ok + todayRow.requests_fail) : 0;
+      const tokens7d      = history7d.reduce((s, r) => s + Number(r.tokens_prompt) + Number(r.tokens_completion), 0);
+      const configured    = !!process.env[meta.envVar];
+
+      let status;
+      if (!configured) {
+        status = 'sem_chave';
+      } else if (!todayRow) {
+        status = 'sem_uso_hoje';
+      } else {
+        const lastSuccess = todayRow.last_success_at ? new Date(todayRow.last_success_at).getTime() : 0;
+        const lastError   = todayRow.last_error_at   ? new Date(todayRow.last_error_at).getTime()   : 0;
+        if (lastSuccess && lastSuccess >= lastError)      status = 'online';
+        else if (lastError && !lastSuccess)               status = 'offline';
+        else                                              status = 'degradado';
+      }
+
+      const dailyLimit = meta.dailyLimit || null;
+      const usedForPct = meta.limitType === 'tokens' ? tokensToday : requestsToday;
+      const usagePct   = dailyLimit ? Math.min(100, Math.round((usedForPct / dailyLimit) * 100)) : null;
+
+      return {
+        id: meta.id,
+        name: meta.name,
+        tier: meta.tier,
+        tierLabel: TIER_LABELS[meta.tier]?.label || meta.tier,
+        configured,
+        status, // online | degradado | offline | sem_uso_hoje | sem_chave
+        signupUrl: meta.signupUrl,
+        limitType: meta.limitType,
+        limitLabel: meta.limitLabel,
+        dailyLimit,
+        usagePct,
+        today: {
+          requestsOk:   todayRow?.requests_ok || 0,
+          requestsFail: todayRow?.requests_fail || 0,
+          tokensPrompt: todayRow ? Number(todayRow.tokens_prompt) : 0,
+          tokensCompletion: todayRow ? Number(todayRow.tokens_completion) : 0,
+          tokensTotal:  tokensToday,
+          lastModel:    todayRow?.last_model || null,
+          lastSuccessAt: todayRow?.last_success_at || null,
+          lastErrorAt:   todayRow?.last_error_at || null,
+          lastErrorMessage: todayRow?.last_error_message || null,
+        },
+        last7Days: {
+          tokensTotal: tokens7d,
+          byDay: history7d.map(r => ({
+            day: r.day,
+            tokens: Number(r.tokens_prompt) + Number(r.tokens_completion),
+            requestsOk: r.requests_ok,
+            requestsFail: r.requests_fail,
+          })),
+        },
+      };
+    });
+
+    const reserve = RESERVE_PROVIDERS.map(r => ({
+      ...r,
+      activated: reserveActivated.includes(r.id),
+    }));
+
+    const tiers = Object.entries(TIER_LABELS)
+      .sort((a, b) => a[1].order - b[1].order)
+      .map(([id, meta]) => ({ id, ...meta }));
+
+    return res.status(200).json({
+      success: true,
+      generatedAt: new Date().toISOString(),
+      tiers,
+      providers,
+      reserve,
+      migrationApplied: !usageErr,
+    });
+  } 
