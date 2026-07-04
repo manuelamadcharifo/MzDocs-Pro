@@ -5,6 +5,10 @@
     {
       "path": "/api/cleanup-temp-accounts",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/misc?action=blog-cron",
+      "schedule": "0 6 * * *"
     }
   ],
   "functions": {
