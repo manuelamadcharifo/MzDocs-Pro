@@ -252,6 +252,14 @@ module.exports = async function handler(req, res) {
         creditsAdded: verifyResult.creditsAdded || 0,
         nextStep:     verifyResult.nextStep     || 'awaiting_review',
         message:      verifyResult.message      || 'A processar pagamento.',
+        // NOVO v5.1: entrega automática de credenciais para contas avulso
+        // criadas sem intervenção do admin (ver api/misc.js verifyReceiptInternal).
+        ...(verifyResult.autoLogin ? {
+          tempEmail:  verifyResult.tempEmail,
+          tempPass:   verifyResult.tempPass,
+          tempUserId: verifyResult.tempUserId,
+          autoLogin:  true,
+        } : {}),
       });
     }
 
