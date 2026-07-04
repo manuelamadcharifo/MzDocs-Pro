@@ -1,4 +1,4 @@
-// api/generate-document.js — v2.1 (AMOSTRA GRÁTIS + CUSTO PROGRESSIVO)
+// api/generate-document.js — v2.2 (AMOSTRA GRÁTIS + CUSTO PROGRESSIVO + MONITORIZAÇÃO)
 // 5 providers em corrida paralela: Groq + Gemini + OpenRouter + Cerebras + NVIDIA NIM
 // Suporte a geração em cadeia (_planMode / _sectionMode) com rate-limit generoso
 //
@@ -23,8 +23,29 @@
 //     O custo progressivo por tamanho gerado (ver LongDocumentEngine.js)
 //     também usa apenas os endpoints já existentes (/api/generate-document
 //     e /api/deduct-credit) — nenhuma function nova foi necessária.
+//
+// NOVO v2.2 (Monitorização dos providers):
+//  5. Cada tentativa (sucesso ou falha real) de cada provider é registada
+//     de forma assíncrona (fire-and-forget, nunca bloqueia a resposta) na
+//     tabela ai_provider_daily_usage via RPC record_ai_provider_usage.
+//     Isto alimenta a nova aba "IA Providers" em /admin.html.
 
 const { getUserFromToken, rpc } = require('./_lib/supabaseAdmin');
+
+// NOVO v2.2: regista (fire-and-forget) o uso de cada provider na tabela
+// ai_provider_daily_usage — alimenta a aba "IA Providers" do painel admin
+// (tokens usados, pedidos ok/falha, online/offline). Nunca bloqueia nem
+// faz falhar a geração do documento: qualquer erro aqui é apenas logado.
+function logProviderUsageAsync(provider, success, result, err) {
+    rpc('record_ai_provider_usage', {
+        p_provider: provider,
+        p_success: success,
+        p_model: result?.model || null,
+        p_tokens_prompt: result?.usage?.prompt_tokens || result?.usage?.promptTokenCount || 0,
+        p_tokens_completion: result?.usage?.completion_tokens || result?.usage?.candidatesTokenCount || 0,
+        p_error_message: err ? String(err.message || err).slice(0, 300) : null,
+    }).catch(e => console.warn('[ai-usage-log]', provider, e.message));
+}
 
 // Tokens máximos absolutos para uma amostra grátis — aplicado no servidor,
 // independentemente do que o cliente envie, para que o preview nunca possa
@@ -335,14 +356,16 @@ async function raceAllProviders(prompt, keys, preferProvider, maxTokens) {
     const { GROQ_KEY, GEMINI_KEY, OR_KEY, CEREBRAS_KEY, NVIDIA_KEY } = keys;
     const winner = new AbortController();
 
-    const makeRacer = async (fn) => {
+    const makeRacer = async (name, fn) => {
         try {
             const t0     = Date.now();
             const result = await fn(prompt, winner.signal, maxTokens);
             winner.abort();
+            logProviderUsageAsync(name, true, result, null); // NOVO v2.2
             return { ...result, ms: Date.now() - t0 };
         } catch (err) {
             if (err.name === 'AbortError') throw new Error('cancelled');
+            logProviderUsageAsync(name, false, null, err); // NOVO v2.2
             throw err;
         }
     };
@@ -362,7 +385,7 @@ async function raceAllProviders(prompt, keys, preferProvider, maxTokens) {
         ? [preferProvider, ...Object.keys(avail).filter(k => k !== preferProvider)]
         : Object.keys(avail);
 
-    const racers = ordered.map(k => makeRacer(avail[k]));
+    const racers = ordered.map(k => makeRacer(k, avail[k]));
     return Promise.any(racers);
 }
 
