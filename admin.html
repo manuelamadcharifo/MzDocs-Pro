@@ -58,6 +58,10 @@
         <span class="nav-icon">🎨</span><span class="nav-label">Templates</span>
         <span class="nav-badge" id="navBadgeTemplates" style="background:#f59e0b">0</span>
       </a>
+      <a class="nav-item" data-section="ai-providers">
+        <span class="nav-icon">🤖</span><span class="nav-label">IA Providers</span>
+        <span class="nav-badge danger" id="navBadgeAiProviders" style="display:none">0</span>
+      </a>
       <a class="nav-item" data-section="settings">
         <span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span>
       </a>
@@ -656,6 +660,40 @@
       </div>
       <div id="templates-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
         <div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">A carregar templates…</div>
+      </div>
+    </section>
+
+    <section id="section-ai-providers" class="admin-section">
+      <div class="section-toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">🤖 Providers de IA</h2>
+          <p style="font-size:13px;color:#64748b">Consumo, estado e reservas grátis dos 5 providers usados na corrida paralela de geração de documentos</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="aiProvidersUpdatedAt" style="font-size:12px;color:#94a3b8"></span>
+          <button onclick="adminApp._loadAiProviders()" style="padding:8px 14px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔄 Actualizar</button>
+        </div>
+      </div>
+
+      <div id="aiMigrationWarning" style="display:none;background:#fef2f2;border:1.5px solid #fecaca;color:#991b1b;padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:16px">
+        ⚠️ A tabela <code>ai_provider_daily_usage</code> ainda não existe na base de dados. Corra <code>supabase/migration_v27_ai_provider_monitoring.sql</code> no SQL Editor do Supabase para activar a monitorização.
+      </div>
+
+      <div id="aiProvidersTiers"><div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">A carregar providers…</div></div>
+
+      <div class="settings-card" style="margin-top:20px">
+        <h3>📈 Tokens usados por dia (últimos 7 dias)</h3>
+        <canvas id="aiProvidersChart" height="90"></canvas>
+      </div>
+
+      <div class="settings-card" style="margin-top:20px">
+        <h3>🧰 Providers de reserva (grátis, prontos a ligar)</h3>
+        <p style="font-size:.85rem;color:#64748b;margin-bottom:12px">
+          Se um dos 5 providers activos esgotar a quota grátis de forma permanente, use esta lista para obter uma
+          nova chave grátis e substituí-lo em <code>api/generate-document.js</code>. Marcar aqui serve apenas de
+          lembrete para a equipa — não liga o provider automaticamente ao código.
+        </p>
+        <div id="aiReserveList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px"></div>
       </div>
     </section>
 
