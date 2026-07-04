@@ -45,13 +45,15 @@ module.exports = async function handler(req, res) {
     case 'templates':         return handleTemplates(req, res);
     case 'pages':             return handleBlogPages(req, res);
     case 'generate-page':     return handleGeneratePage(req, res);
+    case 'blog-queue':        return handleBlogQueue(req, res);
+    case 'blog-settings':     return handleBlogSettings(req, res);
     case 'affiliates':        return handleAffiliates(req, res);
     case 'pending-receipts':  return handlePendingReceipts(req, res);
     case 'approve-receipt':   return handleApproveReceipt(req, res);
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
-        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','affiliates','pending-receipts','approve-receipt'],
+        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt'],
       });
   }
 };
@@ -223,7 +225,7 @@ async function handleConfirmPayment(req, res) {
     });
 
     // Processar comissão de afiliado (fire-and-forget)
-    supabase.rpc('process_affiliate_commission', {
+    supabase.rpc('process_affiliate_commission_v2', {
       p_transaction_id: transactionId,
       p_user_id:        tx.user_id || userId,
       p_package_id:     tx.package_id,
@@ -491,20 +493,29 @@ async function handleStats(req, res) {
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('profiles').select('*', { count: 'exact', head: true })
         .gte('created_at', new Date(Date.now() - 86400000).toISOString()),
-      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true }),
-      supabase.from('credit_usage_log').select('*', { count: 'exact', head: true })
-        .gte('used_at', todayStart),
+      // CORRIGIDO (auditoria de dados, v27): "Documentos Gerados" e o
+      // gráfico "Documentos (7 dias)" liam de credit_usage_log, uma tabela
+      // que NUNCA é escrita pelo código actual (api/deduct-credit.js só
+      // chama as RPCs deduct_credits/deduct_credit/refund_credit, que
+      // gravam em credit_logs — não na função deduct_credit_atomic que
+      // seria a única a popular credit_usage_log). Resultado: estes
+      // contadores mostravam sempre 0, mesmo com documentos reais gerados.
+      // A fonte de verdade real é credit_logs com action='consume'.
+      supabase.from('credit_logs').select('*', { count: 'exact', head: true })
+        .eq('action', 'consume'),
+      supabase.from('credit_logs').select('*', { count: 'exact', head: true })
+        .eq('action', 'consume').gte('created_at', todayStart),
       supabase.from('transactions').select('*', { count: 'exact', head: true })
         .eq('status', 'pending'),
       supabase.from('blog_pages').select('*', { count: 'exact', head: true })
         .eq('published', true),
-      supabase.from('credit_usage_log').select('document_type')
-        .gte('used_at', monthStart),
+      supabase.from('credit_logs').select('document_type')
+        .eq('action', 'consume').gte('created_at', monthStart),
       supabase.from('transactions').select('amount, created_at')
         .eq('status', 'completed')
         .gte('created_at', weekStart.toISOString()),
-      supabase.from('credit_usage_log').select('used_at')
-        .gte('used_at', weekStart.toISOString()),
+      supabase.from('credit_logs').select('created_at')
+        .eq('action', 'consume').gte('created_at', weekStart.toISOString()),
     ]);
 
     // Calcular receita por dia em JS (evita múltiplas queries)
@@ -519,7 +530,7 @@ async function handleStats(req, res) {
           .reduce((s, r) => s + (r.amount || 0), 0)
       );
       chartDocs.push(
-        (docsRaw || []).filter(r => r.used_at?.startsWith(dayStr)).length
+        (docsRaw || []).filter(r => r.created_at?.startsWith(dayStr)).length
       );
     }
 
@@ -776,6 +787,17 @@ async function handleAnalytics(req, res) {
         }
       }
 
+      // NOVO (auditoria de analytics, v27): as páginas de blog nunca
+      // incrementavam blog_pages.views — a coluna existe e há uma RPC
+      // pronta (increment_page_views) desde a migration_v8_1, mas nunca
+      // era chamada porque as páginas estáticas do blog não tinham
+      // NENHUM script de tracking (ver _generateStaticPage, corrigido
+      // para incluir o snippet abaixo em todo artigo novo).
+      const blogSlugMatch = page.match(/^\/?blog\/([^/?#]+)/);
+      if (blogSlugMatch) {
+        supabase.rpc('increment_page_views', { p_slug: blogSlugMatch[1] }).catch(() => {});
+      }
+
       const sessionRow = { session_id: sid, page, updated_at: now };
       if (userId) sessionRow.user_id = userId;
       await supabase.from('online_sessions')
@@ -815,8 +837,14 @@ async function handleAnalytics(req, res) {
       .from('online_sessions').select('*', { count: 'exact', head: true }).gte('updated_at', fiveMinAgo);
 
     const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30);
+    // CORRIGIDO (auditoria de dados, v27): mesma tabela fantasma
+    // credit_usage_log — nunca escrita pelo código actual. A fonte real
+    // de consumo de créditos por tipo de documento é credit_logs
+    // (action='consume'), a mesma usada em handleStats.
     const { data: usageData } = await supabase
-      .from('credit_usage_log').select('document_type').gte('used_at', monthAgo.toISOString());
+      .from('credit_logs').select('document_type')
+      .eq('action', 'consume')
+      .gte('created_at', monthAgo.toISOString());
 
     const serviceCounts = {};
     (usageData || []).forEach(r => {
@@ -861,9 +889,112 @@ async function handleAnalytics(req, res) {
       service, avg: Math.round((v.total / v.count) * 10) / 10, count: v.count,
     })).sort((a, b) => b.count - a.count);
 
+    // ── NOVO (auditoria de analytics, v27): detalhe pedido — que páginas
+    // foram vistas (incluindo artigos do blog um a um), quantos clientes
+    // novos e de onde vieram, e cliques de afiliados por segmento
+    // (papelaria/cyber/universidade/etc). Antes só existia o total
+    // agregado por dia (byDay), sem qualquer discriminação por página.
+    const { data: pvBreakdownRaw } = await supabase
+      .from('page_views').select('page, views')
+      .gte('date', since.toISOString().split('T')[0]);
+
+    const byPage = {};
+    (pvBreakdownRaw || []).forEach(r => { byPage[r.page] = (byPage[r.page] || 0) + (r.views || 0); });
+
+    const { data: blogPagesRaw } = await supabase
+      .from('blog_pages').select('slug, title, views, published_at');
+    const blogBySlug = {};
+    (blogPagesRaw || []).forEach(p => { blogBySlug[p.slug] = p; });
+
+    const topPages = Object.entries(byPage)
+      .map(([page, views]) => {
+        const slug = page.replace(/^\/?blog\/?/, '').replace(/\/$/, '');
+        const blogMatch = blogBySlug[slug] || null;
+        return {
+          page, views,
+          type:  blogMatch ? 'blog' : (page === '/' ? 'home' : 'page'),
+          title: blogMatch?.title || null,
+        };
+      })
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 30);
+
+    // Blog: cada artigo publicado com as suas próprias visitas totais
+    // (coluna views em blog_pages, incrementada a cada leitura) + visitas
+    // no período seleccionado (via page_views, quando o slug bate certo).
+    const blogPerformance = (blogPagesRaw || [])
+      .map(p => ({
+        slug: p.slug, title: p.title,
+        views_total:  p.views || 0,
+        views_period: byPage['/blog/' + p.slug] || byPage[p.slug] || 0,
+        published_at: p.published_at,
+      }))
+      .sort((a, b) => b.views_total - a.views_total);
+
+    // Novos clientes no período + de onde vieram (afiliado vs orgânico),
+    // e por segmento do afiliado que os referiu (papelaria/cyber/etc).
+    const { data: newProfilesRaw } = await supabase
+      .from('profiles').select('id, created_at, referred_by, account_type')
+      .gte('created_at', since.toISOString());
+
+    const referrerIds = [...new Set((newProfilesRaw || []).map(p => p.referred_by).filter(Boolean))];
+    const referrerSegmentMap = {};
+    if (referrerIds.length) {
+      const { data: referrers } = await supabase
+        .from('profiles').select('id, aff_segment').in('id', referrerIds);
+      (referrers || []).forEach(r => { referrerSegmentMap[r.id] = r.aff_segment || 'individual'; });
+    }
+
+    let newClientsOrganic = 0, newClientsAvulso = 0;
+    const newClientsBySegment = {};
+    (newProfilesRaw || []).forEach(p => {
+      if (p.account_type === 'avulso') newClientsAvulso++;
+      if (p.referred_by) {
+        const seg = referrerSegmentMap[p.referred_by] || 'individual';
+        newClientsBySegment[seg] = (newClientsBySegment[seg] || 0) + 1;
+      } else {
+        newClientsOrganic++;
+      }
+    });
+
+    // Cliques de afiliados por segmento (papelaria/cyber/universidade/
+    // explicação/digitador/individual), com taxa de conversão.
+    const { data: clicksRaw } = await supabase
+      .from('affiliate_clicks').select('affiliate_id, converted, created_at')
+      .gte('created_at', since.toISOString());
+
+    const clickAffIds = [...new Set((clicksRaw || []).map(c => c.affiliate_id).filter(Boolean))];
+    const clickSegmentMap = { ...referrerSegmentMap };
+    const missingIds = clickAffIds.filter(id => !clickSegmentMap[id]);
+    if (missingIds.length) {
+      const { data: affs } = await supabase.from('profiles').select('id, aff_segment').in('id', missingIds);
+      (affs || []).forEach(a => { clickSegmentMap[a.id] = a.aff_segment || 'individual'; });
+    }
+
+    const segmentStats = {};
+    (clicksRaw || []).forEach(c => {
+      const seg = clickSegmentMap[c.affiliate_id] || 'individual';
+      if (!segmentStats[seg]) segmentStats[seg] = { clicks: 0, conversions: 0 };
+      segmentStats[seg].clicks += 1;
+      if (c.converted) segmentStats[seg].conversions += 1;
+    });
+    const affiliateClicksBySegment = Object.entries(segmentStats).map(([segment, v]) => ({
+      segment, clicks: v.clicks, conversions: v.conversions,
+      conversion_rate: v.clicks > 0 ? Math.round((v.conversions / v.clicks) * 1000) / 10 : 0,
+    })).sort((a, b) => b.clicks - a.clicks);
+
     return res.status(200).json({
       success: true, visitsByDay: byDay, onlineNow: onlineNow || 0,
       topServices, feedbackList, feedbackSummary,
+      // NOVO:
+      topPages, blogPerformance,
+      newClients: {
+        total:      (newProfilesRaw || []).length,
+        organic:    newClientsOrganic,
+        avulso:     newClientsAvulso,
+        bySegment:  newClientsBySegment,
+      },
+      affiliateClicksBySegment,
     });
   } catch (err) {
     console.error('[admin/analytics]', err);
@@ -1184,10 +1315,14 @@ async function handleGeneratePage(req, res) {
     const auth     = await validateAdmin(supabase, token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
-    const { title, keywords = '', tone = 'informativo', word_count = 600 } = req.body;
+    const { title, keywords = '', tone = 'informativo', word_count = 600, avoid_titles = [] } = req.body;
     if (!title) return res.status(400).json({ error: 'title é obrigatório' });
 
-    const prompt = `És um especialista em SEO e redacção de conteúdo para o mercado moçambicano.\n\nEscreve um artigo de blog completo sobre: "${title}"\nPalavras-chave a incluir naturalmente: ${keywords || 'documentos, Moçambique'}\nTom: ${tone}\nExtensão aproximada: ${word_count} palavras\n\nREGRAS OBRIGATÓRIAS:\n- Escreve em português europeu (não brasileiro)\n- Conteúdo específico para Moçambique (exemplos locais, instituições moçambicanas, M-Pesa, etc.)\n- Inclui H2 e H3, e uma secção FAQ com 3-4 perguntas no final\n- Menciona que o MzDocs Pro pode ajudar a criar estes documentos rapidamente com IA\n- NÃO incluis <html>, <head>, <body> ou <!DOCTYPE> — apenas conteúdo do artigo\n- Devolve APENAS HTML válido: <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>\n- Não uses Markdown, apenas HTML puro\n\nComeça directamente com o conteúdo HTML, sem preâmbulo.`;
+    const avoidBlock = Array.isArray(avoid_titles) && avoid_titles.length
+      ? `\n\nJÁ EXISTEM estes artigos — o teu deve abordar um ângulo/subtema DIFERENTE, sem repetir o que já foi coberto:\n${avoid_titles.slice(0, 60).map(t => `- ${t}`).join('\n')}`
+      : '';
+
+    const prompt = `És um especialista em SEO e redacção de conteúdo para o mercado moçambicano.\n\nEscreve um artigo de blog completo sobre: "${title}"\nPalavras-chave a incluir naturalmente: ${keywords || 'documentos, Moçambique'}\nTom: ${tone}\nExtensão aproximada: ${word_count} palavras${avoidBlock}\n\nREGRAS OBRIGATÓRIAS:\n- Escreve em português europeu (não brasileiro)\n- Conteúdo específico para Moçambique (exemplos locais, instituições moçambicanas, M-Pesa, etc.)\n- Inclui H2 e H3, e uma secção FAQ com 3-4 perguntas no final\n- Menciona que o MzDocs Pro pode ajudar a criar estes documentos rapidamente com IA\n- NÃO incluis <html>, <head>, <body> ou <!DOCTYPE> — apenas conteúdo do artigo\n- Devolve APENAS HTML válido: <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>\n- Não uses Markdown, apenas HTML puro\n\nComeça directamente com o conteúdo HTML, sem preâmbulo.`;
 
     let html = null, usedProvider = null;
 
@@ -1226,6 +1361,133 @@ async function handleGeneratePage(req, res) {
   } catch (err) {
     console.error('[admin/generate-page]', err);
     return res.status(500).json({ error: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOG SCHEDULE QUEUE — títulos agendados (manuais ou de IA) à espera de
+// serem publicados por /api/misc?action=blog-cron
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleBlogQueue(req, res) {
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ error: 'Token em falta' });
+
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    if (req.method === 'GET') {
+      const { data, error } = await supabase
+        .from('blog_schedule_queue')
+        .select('id, title, keywords, source, scheduled_at, status, blog_page_id, error_note, created_at')
+        .order('scheduled_at', { ascending: true });
+      if (error) throw error;
+      return res.status(200).json({ success: true, data: data || [] });
+    }
+
+    if (req.method === 'POST') {
+      // Body esperado: { items: [{ title, keywords? }], startDate: ISO, intervalDays: N }
+      // OU items com scheduled_at próprio já definido por linha.
+      const { items, startDate, intervalDays } = req.body || {};
+      if (!Array.isArray(items) || !items.length) {
+        return res.status(400).json({ error: 'items (array de títulos) é obrigatório' });
+      }
+      if (items.length > 200) {
+        return res.status(400).json({ error: 'Máximo de 200 títulos por importação' });
+      }
+
+      const base = startDate ? new Date(startDate) : new Date();
+      const step = Math.max(1, parseInt(intervalDays, 10) || 7);
+
+      const rows = items.map((it, i) => {
+        const title = typeof it === 'string' ? it.trim() : String(it.title || '').trim();
+        const keywords = typeof it === 'object' ? (it.keywords || null) : null;
+        let scheduledAt;
+        if (typeof it === 'object' && it.scheduled_at) {
+          scheduledAt = new Date(it.scheduled_at);
+        } else {
+          scheduledAt = new Date(base); scheduledAt.setDate(scheduledAt.getDate() + i * step);
+        }
+        return {
+          title, keywords, source: 'manual', scheduled_at: scheduledAt.toISOString(),
+          status: 'pending', created_by: auth.user.id,
+        };
+      }).filter(r => r.title.length > 0);
+
+      if (!rows.length) return res.status(400).json({ error: 'Nenhum título válido encontrado' });
+
+      const { data, error } = await supabase.from('blog_schedule_queue').insert(rows).select('id, title, scheduled_at');
+      if (error) throw error;
+
+      return res.status(200).json({ success: true, inserted: data.length, data });
+    }
+
+    if (req.method === 'DELETE') {
+      const { id } = req.body || req.query || {};
+      if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+      const { error } = await supabase.from('blog_schedule_queue').delete().eq('id', id).eq('status', 'pending');
+      if (error) throw error;
+      return res.status(200).json({ success: true });
+    }
+
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  } catch (err) {
+    console.error('[admin/blog-queue]', err.message);
+    return res.status(500).json({ error: err.message || 'Erro interno' });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOG AUTOGEN SETTINGS — activar/desactivar geração automática por IA e
+// definir o intervalo (dias). Lido/escrito pelo cron em api/misc.js.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleBlogSettings(req, res) {
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ error: 'Token em falta' });
+
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    if (req.method === 'GET') {
+      const { data, error } = await supabase
+        .from('system_settings').select('key, value')
+        .in('key', ['blog_autogen_enabled', 'blog_autogen_interval_days', 'blog_autogen_last_run']);
+      if (error) throw error;
+      const map = {};
+      (data || []).forEach(r => { map[r.key] = r.value; });
+      return res.status(200).json({
+        success: true,
+        enabled:      map.blog_autogen_enabled === 'true',
+        intervalDays: parseInt(map.blog_autogen_interval_days, 10) || 7,
+        lastRun:      map.blog_autogen_last_run || null,
+      });
+    }
+
+    if (req.method === 'POST') {
+      const { enabled, intervalDays } = req.body || {};
+      const updates = [];
+      if (typeof enabled === 'boolean') {
+        updates.push(supabase.from('system_settings')
+          .upsert({ key: 'blog_autogen_enabled', value: enabled ? 'true' : 'false' }, { onConflict: 'key' }));
+      }
+      if (intervalDays) {
+        const n = Math.max(1, parseInt(intervalDays, 10) || 7);
+        updates.push(supabase.from('system_settings')
+          .upsert({ key: 'blog_autogen_interval_days', value: String(n) }, { onConflict: 'key' }));
+      }
+      await Promise.all(updates);
+      return res.status(200).json({ success: true });
+    }
+
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  } catch (err) {
+    console.error('[admin/blog-settings]', err.message);
+    return res.status(500).json({ error: err.message || 'Erro interno' });
   }
 }
 
@@ -1449,7 +1711,15 @@ async function _generateStaticPage(page, SITE_URL) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  const html = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>${escHtml(page.title)} — MzDocs Pro</title><meta name="description" content="${escHtml(page.meta_description||'')}"/><link rel="canonical" href="${SITE_URL}/pages/${page.slug}"/></head><body><h1>${escHtml(page.title)}</h1>${page.content_html}</body></html>`;
+  // NOVO (auditoria de analytics, v27): as páginas estáticas do blog não
+  // tinham NENHUM script de analytics — por isso "Serviços Mais Usados",
+  // visitas por artigo, etc. apareciam sempre vazios para conteúdo de
+  // blog. Este snippet chama o mesmo endpoint público já usado pela app
+  // (/api/admin?action=analytics, POST, sem autenticação) para registar
+  // a visita em page_views e incrementar blog_pages.views.
+  const trackingSnippet = `<script>(function(){try{var s=localStorage.getItem('mz_sid')||('anon_'+Math.random().toString(36).slice(2));localStorage.setItem('mz_sid',s);fetch('${SITE_URL}/api/admin?action=analytics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'/blog/${page.slug}',session:s})}).catch(function(){});}catch(e){}})();</script>`;
+
+  const html = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>${escHtml(page.title)} — MzDocs Pro</title><meta name="description" content="${escHtml(page.meta_description||'')}"/><link rel="canonical" href="${SITE_URL}/pages/${page.slug}"/></head><body><h1>${escHtml(page.title)}</h1>${page.content_html}${trackingSnippet}</body></html>`;
   const githubPath = `pages/${page.slug}/index.html`;
   const apiUrl     = `https://api.github.com/repos/${owner}/${repo}/contents/${githubPath}`;
   let sha;
@@ -1542,7 +1812,7 @@ async function handleApproveReceipt(req, res) {
     // Buscar transacção
     const { data: tx, error: txErr } = await supabase
       .from('transactions')
-      .select('id,user_id,package_id,credits,status,reference_id,phone_number')
+      .select('id,user_id,package_id,credits,status,reference_id,phone_number,amount')
       .eq('id', transactionId)
       .in('status', ['review_needed', 'pending'])
       .single();
@@ -1654,6 +1924,20 @@ async function handleApproveReceipt(req, res) {
           review_reason: 'FALHA_CRIACAO_CONTA_AVULSO: ' + accErr.message,
         }).eq('id', transactionId);
       }
+    }
+
+    // CORRIGIDO (auditoria de pagamentos v3.2): esta rota também aprovava
+    // pagamentos sem nunca chamar process_affiliate_commission — só
+    // handleConfirmPayment o fazia. Qualquer venda aprovada aqui (revisão
+    // manual de comprovativo com confiança baixa) nunca gerava comissão.
+    const commissionUserId = tx.user_id || accountInfo?.tempUserId || null;
+    if (commissionUserId) {
+      supabase.rpc('process_affiliate_commission_v2', {
+        p_transaction_id: transactionId,
+        p_user_id:        commissionUserId,
+        p_package_id:     tx.package_id,
+        p_amount:         tx.amount,
+      }).catch(e => console.warn('[approve-receipt] process_affiliate_commission falhou:', e.message));
     }
 
     // 4. Log de auditoria
