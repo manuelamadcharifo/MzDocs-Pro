@@ -1542,7 +1542,7 @@ async function handleApproveReceipt(req, res) {
     // Buscar transacção
     const { data: tx, error: txErr } = await supabase
       .from('transactions')
-      .select('id,user_id,package_id,credits,status,reference_id')
+      .select('id,user_id,package_id,credits,status,reference_id,phone_number')
       .eq('id', transactionId)
       .in('status', ['review_needed', 'pending'])
       .single();
@@ -1584,8 +1584,11 @@ async function handleApproveReceipt(req, res) {
     }
 
     // 1. Atualizar transacção
+    // CORRIGIDO: estava a gravar status 'confirmed', que handleStats (e o
+    // badge da UI em AdminTransactions.js) não reconhece — só 'completed'
+    // conta como receita confirmada no dashboard. Ver migration_v25.
     await supabase.from('transactions').update({
-      status:              'confirmed',
+      status:              'completed',
       confirmed_by:        auth.user.id,
       confirmed_at:        new Date().toISOString(),
       receipt_verified:    true,
@@ -1593,8 +1596,13 @@ async function handleApproveReceipt(req, res) {
       review_reason:       note || null,
     }).eq('id', transactionId);
 
-    // 2. Adicionar créditos via RPC
-    let newCredits = creditsInt;
+    // 2. Adicionar créditos via RPC — ou, se for "avulso" sem conta ligada
+    // (CORRIGIDO: antes disto os créditos ficavam por atribuir a ninguém
+    // quando tx.user_id era null, exigindo que o admin criasse a conta à
+    // parte com o botão "🎫 Criar Conta"), criar a conta temporária aqui
+    // mesmo e devolver as credenciais na resposta.
+    let newCredits  = creditsInt;
+    let accountInfo = null;
     if (tx.user_id) {
       const { data: creditData } = await supabase
         .rpc('add_credits', { user_id: tx.user_id, amount: creditsInt });
@@ -1609,6 +1617,43 @@ async function handleApproveReceipt(req, res) {
         document_type:  null,
         note:           `Comprovativo aprovado manualmente pelo admin ${auth.user.id.slice(0, 8)} — pacote ${tx.package_id}${note ? ' | ' + note : ''}`,
       }).catch(e => console.warn('[approve-receipt] credit_logs:', e.message));
+
+    } else if (tx.package_id === 'avulso' && creditsInt > 0) {
+      try {
+        const ref        = tx.reference_id || ('AV' + Date.now());
+        const tempEmail  = `temp_${ref.toLowerCase()}@mzdocs.temp`;
+        const tempPass   = _genPassword();
+
+        const { data: newUser, error: createErr } = await supabase.auth.admin.createUser({
+          email: tempEmail, password: tempPass, email_confirm: true,
+          user_metadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: tx.phone_number || '' },
+        });
+        if (createErr) throw new Error('Erro ao criar conta temp: ' + createErr.message);
+
+        const tempUserId = newUser.user.id;
+        await supabase.from('profiles').update({
+          is_temp: true, temp_ref: ref, temp_password: tempPass,
+          credits: creditsInt, plan: 'free', account_type: 'avulso',
+          full_name: `Avulso ${ref}`, phone: tx.phone_number || null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', tempUserId);
+
+        await supabase.from('transactions').update({ user_id: tempUserId }).eq('id', transactionId);
+
+        await supabase.from('credit_logs').insert({
+          user_id: tempUserId, transaction_id: transactionId, action: 'purchase_confirmed',
+          credits: creditsInt,
+          note: `Conta avulso criada automaticamente ao aprovar comprovativo em revisão — admin ${auth.user.id.slice(0, 8)}`,
+        }).catch(e => console.warn('[approve-receipt] credit_logs:', e.message));
+
+        accountInfo = { tempEmail, tempPass, tempUserId };
+      } catch (accErr) {
+        console.error('[approve-receipt] Falha ao criar conta avulso:', accErr.message);
+        // Não bloquear a aprovação — o pagamento já foi marcado completed.
+        await supabase.from('transactions').update({
+          review_reason: 'FALHA_CRIACAO_CONTA_AVULSO: ' + accErr.message,
+        }).eq('id', transactionId);
+      }
     }
 
     // 4. Log de auditoria
@@ -1632,6 +1677,11 @@ async function handleApproveReceipt(req, res) {
       creditsAdded: creditsInt,
       newCredits,
       message:     `${creditsInt} créditos adicionados com sucesso.`,
+      ...(accountInfo ? {
+        tempEmail:  accountInfo.tempEmail,
+        tempPass:   accountInfo.tempPass,
+        tempUserId: accountInfo.tempUserId,
+      } : {}),
     });
 
   } catch (err) {
