@@ -118,6 +118,7 @@ module.exports = async function handler(req, res) {
   if (action === 'legal-search')                        return handleLegalSearch(req, res);
   if (action === 'config' || action === 'misc')         return handleConfig(req, res);
   if (action === 'verify-receipt')                      return handleVerifyReceipt(req, res);
+  if (action === 'blog-cron')                           return handleBlogCron(req, res);
 
   return res.status(404).json({ error: `Rota desconhecida: "${action}".` });
 };
@@ -404,9 +405,11 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
       // sem crédito nenhum atribuído a ninguém, porque userId era null e a
       // criação da conta só existia no botão manual "🎫 Criar Conta" do
       // admin, em handleConfirmAvulso).
-      let accountInfo = null;
+      let accountInfo   = null;
+      let creditedUser  = null;
       if (userId && credits > 0) {
         await rpc('add_credits', { user_id: userId, amount: credits });
+        creditedUser = userId;
 
         // 5c. Registar em credit_logs
         await insert('credit_logs', {
@@ -420,7 +423,8 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
 
       } else if (!userId && packageId === 'avulso' && credits > 0) {
         try {
-          accountInfo = await _createAvulsoAccount({ reference, phone, credits, transactionId });
+          accountInfo  = await _createAvulsoAccount({ reference, phone, credits, transactionId });
+          creditedUser = accountInfo.tempUserId;
 
           await insert('credit_logs', {
             user_id:        accountInfo.tempUserId,
@@ -443,6 +447,23 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
             prefer: 'return=minimal',
           }).catch(() => {});
         }
+      }
+
+      // 5d. CORRIGIDO (auditoria de pagamentos, v3.2): a comissão de
+      // afiliado só era processada em handleConfirmPayment (confirmação
+      // MANUAL do admin) — a aprovação automática por IA, que é hoje o
+      // caminho principal de qualquer pagamento (avulso ou com conta),
+      // nunca chamava process_affiliate_commission. Resultado: qualquer
+      // venda auto-aprovada pela IA não gerava comissão nenhuma para o
+      // afiliado que a referiu, de forma silenciosa. Chamamos aqui
+      // (fire-and-forget, não bloqueia a resposta ao cliente).
+      if (creditedUser) {
+        rpc('process_affiliate_commission_v2', {
+          p_transaction_id: transactionId,
+          p_user_id:        creditedUser,
+          p_package_id:     packageId,
+          p_amount:         amount,
+        }).catch(e => console.warn('[verify-receipt] process_affiliate_commission falhou:', e.message));
       }
 
       console.log('[verify-receipt] AUTO-APROVADO:', transactionId, 'créditos:', credits);
@@ -704,8 +725,11 @@ async function handleConfig(req, res) {
       docsGenerated = metrics[0].metric_value;
     } else {
       // Fallback: count directo (mais lento em tabelas grandes)
+      // CORRIGIDO (auditoria de dados, v27): credit_usage_log nunca é
+      // escrita pelo código actual — a tabela real é credit_logs
+      // (action='consume'). Ver mesma correcção em handleStats/handleAnalytics.
       const countRes = await fetch(
-        `${supabaseUrl}/rest/v1/credit_usage_log?select=id`,
+        `${supabaseUrl}/rest/v1/credit_logs?select=id&action=eq.consume`,
         {
           method: 'HEAD',
           headers: {
@@ -1591,5 +1615,268 @@ async function handleLegalSearch(req, res) {
     // (ver LegalContext.js) — nunca bloqueia a geração do documento por
     // a busca jurídica ter falhado.
     return res.status(200).json({ resultados: [], avisoQualidade: false, encontrado: false, erro: 'busca_indisponivel' });
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BLOG-CRON — publica a fila de agendamento e, se activado, gera um novo
+// artigo por IA quando chega a hora (auditoria de conteúdo, v27).
+// Chamado diariamente pelo cron nativo do Vercel (vercel.json) em
+// GET /api/misc?action=blog-cron, com o cabeçalho Authorization: Bearer
+// $CRON_SECRET (Vercel injecta isto automaticamente quando CRON_SECRET
+// está definido nas env vars). Também aceita POST com o cabeçalho
+// x-cron-secret, para permitir accionar manualmente ou via um serviço
+// externo (ex: cron-job.org), tal como o padrão já usado em
+// cleanup-temp-accounts.js.
+// ════════════════════════════════════════════════════════════════════════════
+
+function _blogSlugify(str) {
+  return String(str || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 90);
+}
+
+function _blogExtractHTML(text) {
+  return String(text || '')
+    .replace(/```html/gi, '').replace(/```/g, '')
+    .trim();
+}
+
+// Similaridade simples por sobreposição de palavras (Jaccard) — suficiente
+// para apanhar títulos praticamente repetidos sem precisar de embeddings.
+function _titleSimilarity(a, b) {
+  const norm = s => new Set(
+    String(s || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z0-9]+/).filter(w => w.length > 3)
+  );
+  const setA = norm(a), setB = norm(b);
+  if (!setA.size || !setB.size) return 0;
+  let inter = 0;
+  for (const w of setA) if (setB.has(w)) inter++;
+  return inter / new Set([...setA, ...setB]).size;
+}
+
+function _isTooSimilar(candidateTitle, existingTitles, threshold = 0.55) {
+  return existingTitles.some(t => _titleSimilarity(candidateTitle, t) >= threshold);
+}
+
+async function _callAiText(prompt, { maxTokens = 3000, temperature = 0.5 } = {}) {
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens, temperature }),
+      });
+      const d = await r.json();
+      const text = d.choices?.[0]?.message?.content;
+      if (text?.length > 50) return { text, provider: 'groq' };
+    } catch (e) { console.warn('[blog-cron] Groq falhou:', e.message); }
+  }
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      });
+      const d = await r.json();
+      const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text?.length > 50) return { text, provider: 'gemini' };
+    } catch (e) { console.warn('[blog-cron] Gemini falhou:', e.message); }
+  }
+  return null;
+}
+
+// Publica o HTML estático no GitHub — mesma lógica de
+// api/admin/index.js::_generateStaticPage, duplicada aqui porque as duas
+// funções vivem em ficheiros/serverless functions diferentes (limite de
+// 12 funções do plano Hobby da Vercel não permite extrair para um módulo
+// importado sem cuidado de bundling — mantemos a duplicação pequena e
+// explícita, tal como já acontecia com outros helpers deste projecto).
+async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml, SITE_URL) {
+  const owner = process.env.GITHUB_OWNER;
+  const repo  = process.env.GITHUB_REPO;
+  const token = process.env.GITHUB_TOKEN;
+  if (!owner || !repo || !token) { console.warn('[blog-cron] GitHub env vars em falta — a saltar publicação estática'); return; }
+
+  const escHtml = (s = '') => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const trackingSnippet = `<script>(function(){try{var s=localStorage.getItem('mz_sid')||('anon_'+Math.random().toString(36).slice(2));localStorage.setItem('mz_sid',s);fetch('${SITE_URL}/api/admin?action=analytics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'/blog/${slug}',session:s})}).catch(function(){});}catch(e){}})();</script>`;
+  const html = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>${escHtml(title)} — MzDocs Pro</title><meta name="description" content="${escHtml(metaDescription || '')}"/><link rel="canonical" href="${SITE_URL}/pages/${slug}"/></head><body><h1>${escHtml(title)}</h1>${contentHtml}${trackingSnippet}</body></html>`;
+
+  const githubPath = `pages/${slug}/index.html`;
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${githubPath}`;
+  let sha;
+  try {
+    const ex = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
+    if (ex.ok) sha = (await ex.json()).sha;
+  } catch (_) {}
+
+  await fetch(apiUrl, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: `Auto-publicar artigo do blog: ${slug}`, content: Buffer.from(html).toString('base64'), sha }),
+  });
+}
+
+async function _generateAndPublishArticle({ title, keywords, existingTitles, transactionNote }) {
+  const avoidBlock = existingTitles.length
+    ? `\n\nJÁ EXISTEM estes artigos no blog — o teu deve cobrir um ângulo/subtema DIFERENTE, sem repetir conteúdo:\n${existingTitles.slice(0, 80).map(t => `- ${t}`).join('\n')}`
+    : '';
+
+  const prompt = `És um especialista em SEO e redacção de conteúdo para o mercado moçambicano.\n\nEscreve um artigo de blog completo sobre: "${title}"\nPalavras-chave a incluir naturalmente: ${keywords || 'documentos, Moçambique'}\nTom: informativo\nExtensão aproximada: 700 palavras${avoidBlock}\n\nREGRAS OBRIGATÓRIAS:\n- Escreve em português europeu (não brasileiro)\n- Conteúdo específico para Moçambique (exemplos locais, instituições moçambicanas, M-Pesa, etc.)\n- Inclui H2 e H3, e uma secção FAQ com 3-4 perguntas no final\n- Menciona que o MzDocs Pro pode ajudar a criar estes documentos rapidamente com IA\n- NÃO incluis <html>, <head>, <body> ou <!DOCTYPE> — apenas conteúdo do artigo\n- Devolve APENAS HTML válido: <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>\n- Não uses Markdown, apenas HTML puro\n\nComeça directamente com o conteúdo HTML, sem preâmbulo.`;
+
+  const result = await _callAiText(prompt, { maxTokens: 3000, temperature: 0.5 });
+  if (!result) throw new Error('Nenhum provider de IA disponível para gerar o artigo.');
+
+  const html = _blogExtractHTML(result.text);
+  const plainText = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const metaDescription = plainText.slice(0, 155).trim() + (plainText.length > 155 ? '…' : '');
+  let slug = _blogSlugify(title);
+
+  // Garantir slug único (sufixo -2, -3... se já existir)
+  let suffix = 1;
+  let finalSlug = slug;
+  while (true) {
+    const existing = await restRequest(`blog_pages?slug=eq.${finalSlug}&select=id&limit=1`);
+    if (!Array.isArray(existing) || existing.length === 0) break;
+    suffix++; finalSlug = `${slug}-${suffix}`;
+    if (suffix > 20) { finalSlug = `${slug}-${Date.now()}`; break; }
+  }
+
+  const nowIso = new Date().toISOString();
+  const inserted = await insert('blog_pages', {
+    slug: finalSlug, title, meta_description: metaDescription, content_html: html,
+    published: true, ai_generated: true, published_at: nowIso, updated_at: nowIso,
+    topic_keywords: keywords || null,
+  });
+  const newPage = Array.isArray(inserted) ? inserted[0] : inserted;
+
+  const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
+  await _publishBlogStaticFile(finalSlug, title, metaDescription, html, SITE_URL)
+    .catch(e => console.warn('[blog-cron] publicação estática falhou:', e.message, transactionNote || ''));
+
+  return { slug: finalSlug, title, id: newPage?.id, provider: result.provider };
+}
+
+async function handleBlogCron(req, res) {
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  // Autenticação do cron: aceita tanto o header nativo que a Vercel injecta
+  // (Authorization: Bearer $CRON_SECRET) como um header custom, para
+  // permitir também accionar via serviço externo — mesmo padrão de
+  // api/cleanup-temp-accounts.js.
+  const bearerSecret = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  const customSecret  = req.headers['x-vercel-cron-secret'] || req.headers['x-cron-secret'] || '';
+  const providedSecret = bearerSecret || customSecret;
+  if (!process.env.CRON_SECRET || providedSecret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Não autorizado' });
+  }
+
+  const results = { published: [], failed: [], autogen: null };
+
+  try {
+    // 1. Processar a fila (títulos manuais/IA já agendados e vencidos).
+    //    Limitado a 2 por execução para não estourar o timeout da função.
+    const nowIso = new Date().toISOString();
+    const due = await restRequest(
+      `blog_schedule_queue?status=eq.pending&scheduled_at=lte.${encodeURIComponent(nowIso)}&order=scheduled_at.asc&limit=2`
+    );
+
+    if (Array.isArray(due) && due.length) {
+      const existingPages = await restRequest('blog_pages?select=title');
+      const existingTitles = (existingPages || []).map(p => p.title);
+
+      for (const item of due) {
+        try {
+          const article = await _generateAndPublishArticle({
+            title: item.title, keywords: item.keywords, existingTitles,
+            transactionNote: `fila:${item.id}`,
+          });
+          existingTitles.push(item.title);
+          await restRequest(`blog_schedule_queue?id=eq.${item.id}`, {
+            method: 'PATCH', body: { status: 'published', blog_page_id: article.id }, prefer: 'return=minimal',
+          });
+          results.published.push({ id: item.id, title: item.title, slug: article.slug });
+        } catch (itemErr) {
+          console.error('[blog-cron] falha ao publicar item da fila:', item.id, itemErr.message);
+          await restRequest(`blog_schedule_queue?id=eq.${item.id}`, {
+            method: 'PATCH', body: { status: 'failed', error_note: itemErr.message }, prefer: 'return=minimal',
+          }).catch(() => {});
+          results.failed.push({ id: item.id, title: item.title, error: itemErr.message });
+        }
+      }
+    }
+
+    // 2. Geração automática por IA (se activada) — só corre se NENHUM item
+    //    manual foi processado agora, para manter o ritmo previsível e não
+    //    duplicar o "orçamento" de chamadas de IA da mesma execução.
+    if (results.published.length === 0) {
+      const settingsRows = await restRequest(
+        `system_settings?key=in.(blog_autogen_enabled,blog_autogen_interval_days,blog_autogen_last_run)&select=key,value`
+      );
+      const settings = {};
+      (settingsRows || []).forEach(r => { settings[r.key] = r.value; });
+
+      const enabled      = settings.blog_autogen_enabled === 'true';
+      const intervalDays = parseInt(settings.blog_autogen_interval_days, 10) || 7;
+      const lastRun       = settings.blog_autogen_last_run ? new Date(settings.blog_autogen_last_run) : null;
+      const dueForAutogen = !lastRun || (Date.now() - lastRun.getTime()) >= intervalDays * 86400000;
+
+      if (enabled && dueForAutogen) {
+        const existingPages = await restRequest('blog_pages?select=title');
+        const pendingQueue  = await restRequest('blog_schedule_queue?status=eq.pending&select=title');
+        const existingTitles = [
+          ...(existingPages || []).map(p => p.title),
+          ...(pendingQueue  || []).map(p => p.title),
+        ];
+
+        try {
+          // Pedir à IA um título+subtema novo, derivado dos serviços do
+          // MzDocs Pro mas ainda não coberto pelos artigos existentes.
+          const ideaPrompt = `Sugere UM título de artigo de blog sobre documentos/burocracia em Moçambique (CVs, contratos, cartas, declarações, procurações, etc.), pensado para SEO.\n\nNÃO podes repetir nem parafrasear de perto nenhum destes títulos já publicados ou já agendados:\n${existingTitles.slice(0, 100).map(t => `- ${t}`).join('\n') || '(nenhum ainda)'}\n\nPode ser um subtema/ângulo derivado de um dos temas já existentes (ex: uma variante para outra profissão, outra província, outro tipo de documento relacionado), desde que seja claramente distinto.\n\nResponde APENAS em JSON válido, sem markdown: {"title":"...","keywords":"palavra1, palavra2, palavra3"}`;
+
+          const ideaResult = await _callAiText(ideaPrompt, { maxTokens: 200, temperature: 0.8 });
+          if (!ideaResult) throw new Error('IA indisponível para sugerir título.');
+
+          let idea;
+          try {
+            const jsonMatch = ideaResult.text.match(/\{[\s\S]*\}/);
+            idea = JSON.parse(jsonMatch ? jsonMatch[0] : ideaResult.text);
+          } catch (_) {
+            throw new Error('Resposta da IA não é JSON válido para o título sugerido.');
+          }
+
+          if (!idea?.title || _isTooSimilar(idea.title, existingTitles)) {
+            throw new Error('Título sugerido pela IA repete conteúdo já existente — a saltar esta execução.');
+          }
+
+          const article = await _generateAndPublishArticle({
+            title: idea.title, keywords: idea.keywords, existingTitles,
+            transactionNote: 'autogen',
+          });
+
+          await restRequest('system_settings?key=eq.blog_autogen_last_run', {
+            method: 'PATCH', body: { value: new Date().toISOString() }, prefer: 'return=minimal',
+          });
+
+          results.autogen = { title: idea.title, slug: article.slug };
+        } catch (autoErr) {
+          console.error('[blog-cron] geração automática falhou:', autoErr.message);
+          results.autogen = { error: autoErr.message };
+        }
+      }
+    }
+
+    console.log('[blog-cron] concluído:', JSON.stringify(results));
+    return res.status(200).json({ success: true, ...results });
+  } catch (err) {
+    console.error('[blog-cron] erro geral:', err.message);
+    return res.status(500).json({ error: err.message });
   }
 }
