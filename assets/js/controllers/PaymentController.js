@@ -505,9 +505,36 @@ export class PaymentController {
 
       if (data.autoApproved && data.verified) {
         // ✅ Aprovação automática
+        confirmBtn.textContent = '✅ Confirmado!';
+
+        // NOVO v9.1: se o backend criou automaticamente uma conta avulso
+        // (comprovativo confirmado pela IA sem o cliente ter sessão), fazer
+        // login automático de imediato — sem qualquer acção do admin.
+        if (data.autoLogin && data.tempEmail && data.tempPass) {
+          try {
+            await authManager.signIn(data.tempEmail, data.tempPass);
+            this._showReceiptStatus(statusDiv, 'success',
+              `✅ Pagamento confirmado! Conta criada automaticamente — <strong>${data.creditsAdded} créditos</strong> já disponíveis.`);
+            NotificationView.success(`✅ Conta criada! +${data.creditsAdded} créditos disponíveis.`);
+            this._sendPushNotification(`Conta criada e +${data.creditsAdded} créditos adicionados ao MzDocs Pro!`);
+            // Recarregar a app para reflectir o novo estado de sessão em toda a UI
+            // (cabeçalho, contador de créditos, geração de documentos, etc.)
+            setTimeout(() => window.location.reload(), 1800);
+            return;
+          } catch (loginErr) {
+            console.error('[PaymentController] auto-login falhou:', loginErr);
+            // Fallback: mostrar credenciais para o cliente entrar manualmente
+            this._showReceiptStatus(statusDiv, 'success',
+              `✅ Pagamento confirmado! Guarde estas credenciais para entrar:<br>` +
+              `Utilizador: <strong>${data.tempEmail}</strong><br>Password: <strong>${data.tempPass}</strong>`);
+            NotificationView.success(`✅ Conta criada! Use as credenciais mostradas para entrar.`);
+            setTimeout(() => this.close(), 8000);
+            return;
+          }
+        }
+
         this._showReceiptStatus(statusDiv, 'success',
           `✅ Pagamento confirmado! <strong>+${data.creditsAdded} créditos</strong> adicionados à sua conta.`);
-        confirmBtn.textContent = '✅ Confirmado!';
 
         await this.creditModel._syncFromServer().catch(() => {});
         NotificationView.success(`✅ +${data.creditsAdded} créditos adicionados!`);
