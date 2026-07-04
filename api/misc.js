@@ -21,6 +21,7 @@ const {
   selectOne,
   insert,
   update,
+  adminCreateUser,
   SUPABASE_URL,
   SERVICE_KEY,
 } = require('./_lib/supabaseAdmin');
@@ -159,6 +160,64 @@ const RECEIPT_PROMPT = (wallet) =>
   `"amount" é o valor em MZN como número. "reference" é o código de transacção. ` +
   `"rejection_reason" é vazio se válido, ou o motivo de rejeição se inválido.`;
 
+// ── Criação automática de conta avulso (NOVO v3.1) ──────────────────────────
+// Gera password temporária no mesmo formato usado pelo admin em
+// handleConfirmAvulso (api/admin/index.js), para manter consistência.
+function _genTempPassword() {
+  const chars  = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
+  const digits = '0123456789';
+  let pass = '';
+  for (let i = 0; i < 4; i++) pass += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 4; i++) pass += digits[Math.floor(Math.random() * digits.length)];
+  return pass;
+}
+
+/**
+ * Cria automaticamente uma conta temporária "avulso" e liga-a à transacção,
+ * sem qualquer intervenção do administrador. Espelha a lógica de
+ * handleConfirmAvulso (api/admin/index.js), mas usando REST pura
+ * (adminCreateUser) em vez do SDK, e é chamada a partir do fluxo de
+ * aprovação automática por IA em verifyReceiptInternal.
+ *
+ * @returns {Promise<{tempEmail:string, tempPass:string, tempUserId:string}>}
+ */
+async function _createAvulsoAccount({ reference, phone, credits, transactionId }) {
+  const ref       = reference || ('AV' + Date.now());
+  const tempEmail = `temp_${ref.toLowerCase()}@mzdocs.temp`;
+  const tempPass  = _genTempPassword();
+
+  const newUser = await adminCreateUser({
+    email:    tempEmail,
+    password: tempPass,
+    userMetadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: phone || '' },
+  });
+  const tempUserId = newUser.id;
+
+  await update('profiles', 'id', tempUserId, {
+    is_temp:       true,
+    temp_ref:      ref,
+    temp_password: tempPass,
+    credits,
+    plan:          'free',
+    account_type:  'avulso',
+    full_name:     `Avulso ${ref}`,
+    phone:         phone || null,
+    updated_at:    new Date().toISOString(),
+  });
+
+  // Ligar a transacção à nova conta (estava com user_id NULL, pois o
+  // pagamento avulso é iniciado sem sessão/registo prévio).
+  if (transactionId) {
+    await restRequest(`transactions?id=eq.${transactionId}`, {
+      method: 'PATCH',
+      body:   { user_id: tempUserId },
+      prefer: 'return=minimal',
+    }).catch(e => console.warn('[verify-receipt] falha ao ligar user_id à transacção:', e.message));
+  }
+
+  return { tempEmail, tempPass, tempUserId };
+}
+
 /**
  * verifyReceiptInternal — lógica de verificação reutilizável.
  * Chamado por handleVerifyReceipt e por process-payment.js directamente.
@@ -193,7 +252,7 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
   // Verificar se este hash já foi processado com sucesso
   try {
     const existing = await restRequest(
-      `transactions?receipt_hash=eq.${receiptHash}&status=eq.confirmed&select=reference_id&limit=1`
+      `transactions?receipt_hash=eq.${receiptHash}&status=eq.completed&select=reference_id&limit=1`
     );
     if (Array.isArray(existing) && existing.length > 0) {
       return {
@@ -258,7 +317,7 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
   if (aiRef) {
     try {
       const refs = await restRequest(
-        `transactions?receipt_ref=eq.${encodeURIComponent(aiRef)}&status=eq.confirmed&select=id&limit=1`
+        `transactions?receipt_ref=eq.${encodeURIComponent(aiRef)}&status=eq.completed&select=id&limit=1`
       );
       alreadyConfirmed = Array.isArray(refs) && refs.length > 0;
     } catch (_) {}
@@ -298,12 +357,20 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
       // só aplica o PATCH às linhas que ainda estiverem pending — e usa-se
       // return=representation para detectar se 0 linhas foram afectadas
       // (já confirmada por outra chamada) antes de prosseguir para creditar.
+      // CORRIGIDO v3.1: o status gravado aqui era 'confirmed', mas TODO o
+      // resto do sistema (handleStats do dashboard, o badge "✅ Confirmado"
+      // em AdminTransactions.js, handleConfirmPayment/handleConfirmAvulso)
+      // usa 'completed'. Resultado: pagamentos aprovados automaticamente
+      // pela IA ficavam com um status que a dashboard não reconhecia, e a
+      // "Receita Confirmada (30d)" nunca os contava (mostrava 0 MZN mesmo
+      // com pagamentos reais confirmados). Ver migration_v25 para corrigir
+      // também as linhas antigas já gravadas como 'confirmed'.
       const updatedTx = await restRequest(
         `transactions?id=eq.${transactionId}&status=eq.pending`,
         {
           method: 'PATCH',
           body: {
-            status:              'confirmed',
+            status:              'completed',
             confirmed_at:        new Date().toISOString(),
             receipt_hash:        receiptHash,
             receipt_verified:    true,
@@ -328,7 +395,16 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
         };
       }
 
-      // 5b. Adicionar créditos ao utilizador
+      // 5b. Adicionar créditos ao utilizador — ou, se for uma compra
+      // "avulso" sem sessão (cliente anónimo, o caso mais comum de
+      // pagamento avulso), criar a conta temporária automaticamente e
+      // devolver as credenciais para login imediato, SEM qualquer acção
+      // do administrador (CORRIGIDO v3.1 — antes disto, um pagamento
+      // avulso confirmado pela IA ficava "confirmado" na base de dados mas
+      // sem crédito nenhum atribuído a ninguém, porque userId era null e a
+      // criação da conta só existia no botão manual "🎫 Criar Conta" do
+      // admin, em handleConfirmAvulso).
+      let accountInfo = null;
       if (userId && credits > 0) {
         await rpc('add_credits', { user_id: userId, amount: credits });
 
@@ -341,6 +417,32 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
           document_type:  null,
           note:           `Pagamento auto-verificado — pacote ${packageId} (confidence: ${confidence.toFixed(2)})`,
         }).catch(e => console.warn('[verify-receipt] credit_logs insert:', e.message));
+
+      } else if (!userId && packageId === 'avulso' && credits > 0) {
+        try {
+          accountInfo = await _createAvulsoAccount({ reference, phone, credits, transactionId });
+
+          await insert('credit_logs', {
+            user_id:        accountInfo.tempUserId,
+            transaction_id: transactionId,
+            action:         'purchase_confirmed',
+            credits:        credits,
+            document_type:  null,
+            note:           `Conta avulso criada automaticamente após verificação IA (confidence: ${confidence.toFixed(2)})`,
+          }).catch(e => console.warn('[verify-receipt] credit_logs insert:', e.message));
+
+          console.log('[verify-receipt] Conta avulso criada automaticamente:', accountInfo.tempEmail, 'para transacção', transactionId);
+        } catch (accErr) {
+          // Pagamento já está confirmado (status completed) — não reverter.
+          // Marcar a transacção para follow-up manual do admin, para não
+          // perder o cliente que já pagou mas cuja conta falhou ao criar.
+          console.error('[verify-receipt] Falha ao criar conta avulso automática:', accErr.message);
+          await restRequest(`transactions?id=eq.${transactionId}`, {
+            method: 'PATCH',
+            body:   { review_reason: 'FALHA_CRIACAO_CONTA_AVULSO: ' + accErr.message },
+            prefer: 'return=minimal',
+          }).catch(() => {});
+        }
       }
 
       console.log('[verify-receipt] AUTO-APROVADO:', transactionId, 'créditos:', credits);
@@ -351,7 +453,15 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
         autoApproved: true,
         creditsAdded: credits,
         nextStep:     'completed',
-        message:      `Pagamento confirmado! ${credits} créditos adicionados à sua conta.`,
+        message:      accountInfo
+          ? `Pagamento confirmado! A sua conta foi criada automaticamente com ${credits} créditos.`
+          : `Pagamento confirmado! ${credits} créditos adicionados à sua conta.`,
+        ...(accountInfo ? {
+          tempEmail:  accountInfo.tempEmail,
+          tempPass:   accountInfo.tempPass,
+          tempUserId: accountInfo.tempUserId,
+          autoLogin:  true,
+        } : {}),
       };
 
     } catch (confirmErr) {
