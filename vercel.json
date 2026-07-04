@@ -207,6 +207,10 @@
       "destination": "/api/admin/index"
     },
     {
+      "source": "/api/admin/ai-providers",
+      "destination": "/api/admin/index"
+    },
+    {
       "source": "/(.*)",
       "destination": "/$1"
     }
