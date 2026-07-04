@@ -283,8 +283,32 @@
             <option value="published">Publicadas</option>
             <option value="draft">Rascunhos</option>
           </select>
+          <span id="blogTotalCount" style="font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;">0 artigos</span>
         </div>
-        <button class="btn-primary" onclick="adminApp.openPageEditor()">＋ Nova Página</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-ghost" onclick="adminApp.openBlogAutogenSettings()">🤖 Geração Automática</button>
+          <button class="btn-ghost" onclick="adminApp.openBlogBulkSchedule()">📅 Agendar em Massa</button>
+          <button class="btn-primary" onclick="adminApp.openPageEditor()">＋ Nova Página</button>
+        </div>
+      </div>
+
+      <!-- Fila de Publicação Agendada -->
+      <div style="margin:16px 0;">
+        <h3 style="font-size:.95rem;font-weight:700;color:#0F172A;margin-bottom:8px;">📅 Fila de Publicação (agendados)</h3>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Título</th>
+                <th>Origem</th>
+                <th>Agendado para</th>
+                <th>Estado</th>
+                <th>Acções</th>
+              </tr>
+            </thead>
+            <tbody id="blogQueueTable"><tr><td colspan="5" style="text-align:center;padding:16px;color:#94a3b8;">A carregar…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Lista de páginas -->
@@ -368,6 +392,29 @@
       <div class="chart-card" style="margin-top:12px;">
         <h3 class="chart-title">⭐ Avaliações por Serviço</h3>
         <div id="feedbackList" style="padding:.25rem 0;"></div>
+      </div>
+
+      <!-- NOVO (auditoria de analytics): detalhe de páginas, blog, novos clientes e afiliados -->
+      <div class="charts-row" style="margin-top:12px;">
+        <div class="chart-card">
+          <h3 class="chart-title">📄 Páginas Mais Vistas (7 dias)</h3>
+          <div id="topPagesList" style="padding:.25rem 0;"></div>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">📝 Desempenho do Blog (por artigo)</h3>
+          <div id="blogPerformanceList" style="padding:.25rem 0;"></div>
+        </div>
+      </div>
+
+      <div class="charts-row" style="margin-top:12px;">
+        <div class="chart-card">
+          <h3 class="chart-title">🆕 Novos Clientes — Origem (7 dias)</h3>
+          <div id="newClientsSummary" style="padding:.25rem 0;"></div>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">🤝 Cliques de Afiliados por Segmento (7 dias)</h3>
+          <div id="affiliateSegmentList" style="padding:.25rem 0;"></div>
+        </div>
       </div>
 
       <div style="margin-top:12px;text-align:right;">
