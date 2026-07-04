@@ -22,7 +22,7 @@
   "author": "MzDocs Pro",
   "license": "MIT",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
