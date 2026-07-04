@@ -1698,6 +1698,57 @@ async function _callAiText(prompt, { maxTokens = 3000, temperature = 0.5 } = {})
 // importado sem cuidado de bundling — mantemos a duplicação pequena e
 // explícita, tal como já acontecia com outros helpers deste projecto).
 
+// ─────────────────────────────────────────────────────────────────────────
+// SUBSTITUIR a função _publishBlogStaticFile inteira em api/misc.js por
+// esta versão. Localiza-a por "async function _publishBlogStaticFile(" e
+// apaga até ao "}" de fecho correspondente, colando isto no lugar.
+// ─────────────────────────────────────────────────────────────────────────
+
+async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml, SITE_URL) {
+  const owner = process.env.GITHUB_OWNER;
+  const repo  = process.env.GITHUB_REPO;
+  const token = process.env.GITHUB_TOKEN;
+  if (!owner || !repo || !token) { console.warn('[blog-cron] GitHub env vars em falta — a saltar publicação estática'); return; }
+
+  const escHtml = (s = '') => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const trackingSnippet = `<script>(function(){try{var s=localStorage.getItem('mz_sid')||('anon_'+Math.random().toString(36).slice(2));localStorage.setItem('mz_sid',s);fetch('${SITE_URL}/api/admin?action=analytics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'/blog/${slug}',session:s})}).catch(function(){});}catch(e){}})();</script>`;
+  const html = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>${escHtml(title)} — MzDocs Pro</title><meta name="description" content="${escHtml(metaDescription || '')}"/><link rel="canonical" href="${SITE_URL}/pages/${slug}"/></head><body><h1>${escHtml(title)}</h1>${contentHtml}${trackingSnippet}</body></html>`;
+
+  const githubPath = `pages/${slug}/index.html`;
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${githubPath}`;
+  let sha;
+  try {
+    const ex = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
+    if (ex.ok) {
+      sha = (await ex.json()).sha;
+    } else if (ex.status !== 404) {
+      // 404 é esperado (ficheiro ainda não existe, vamos criá-lo).
+      // Qualquer outro código (401, 403, etc.) indica um problema real
+      // de credenciais/permissões que precisamos de ver nos logs.
+      const body = await ex.text().catch(() => '');
+      console.warn('[blog-cron] GitHub GET falhou ao verificar ficheiro existente:', ex.status, body);
+    }
+  } catch (e) {
+    console.warn('[blog-cron] GitHub GET lançou excepção:', e.message);
+  }
+
+  const putRes = await fetch(apiUrl, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: `Auto-publicar artigo do blog: ${slug}`, content: Buffer.from(html).toString('base64'), sha }),
+  });
+
+  if (!putRes.ok) {
+    // fetch() NUNCA rejeita por causa de um código de erro HTTP — só por
+    // falha de rede. Sem esta verificação, um 401/403/422 do GitHub
+    // (token inválido, sem permissão de escrita, owner/repo errado, etc.)
+    // passava despercebido para sempre: nem commit, nem erro nos logs.
+    const errBody = await putRes.text().catch(() => '');
+    throw new Error(`GitHub PUT falhou (${putRes.status}): ${errBody.slice(0, 300)}`);
+  }
+}
+
+
 async function _generateAndPublishArticle({ title, keywords, existingTitles, transactionNote }) {
   const avoidBlock = existingTitles.length
     ? `\n\nJÁ EXISTEM estes artigos no blog — o teu deve cobrir um ângulo/subtema DIFERENTE, sem repetir conteúdo:\n${existingTitles.slice(0, 80).map(t => `- ${t}`).join('\n')}`
