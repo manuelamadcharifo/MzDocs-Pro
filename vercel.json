@@ -215,6 +215,18 @@
       "destination": "/$1"
     }
   ],
+  "redirects": [
+    {
+      "source": "/pages",
+      "destination": "/blog",
+      "permanent": true
+    },
+    {
+      "source": "/pages/",
+      "destination": "/blog",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
