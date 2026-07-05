@@ -1260,7 +1260,14 @@ async function handleBlogPages(req, res) {
       if (!slug || !title || !content_html) return res.status(400).json({ error: 'slug, title e content_html são obrigatórios' });
       const cleanSlug = _slugify(slug);
       const { data, error } = await supabase.from('blog_pages')
-        .insert({ slug: cleanSlug, title, meta_description, content_html, published, ai_generated, author_id: auth.user.id })
+        .insert({
+          slug: cleanSlug, title, meta_description, content_html, published, ai_generated, author_id: auth.user.id,
+          // Sem isto, published_at fica sempre NULL — e como a listagem
+          // pública (/blog) ordena por published_at, artigos publicados
+          // por aqui nunca apareciam como "recentes", por mais novos que
+          // fossem (ficavam sempre no fim, por causa do nullslast).
+          published_at: published ? new Date().toISOString() : null,
+        })
         .select().single();
       if (error) {
         if (error.code === '23505') return res.status(409).json({ error: 'Já existe uma página com este slug' });
@@ -1273,6 +1280,16 @@ async function handleBlogPages(req, res) {
     if (req.method === 'PUT') {
       const { id, slug, title, meta_description, content_html, published, ai_generated } = req.body;
       if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+
+      // Se a página vai passar a publicada, vemos primeiro se já tinha uma
+      // data de publicação real — só a definimos na PRIMEIRA vez que fica
+      // publicada, nunca sobrescrevendo a data original em edições depois.
+      let needsPublishedAt = false;
+      if (published === true) {
+        const { data: existing } = await supabase.from('blog_pages').select('published_at').eq('id', id).single();
+        needsPublishedAt = !existing?.published_at;
+      }
+
       const updates = {};
       if (slug !== undefined)             updates.slug             = _slugify(slug);
       if (title !== undefined)            updates.title            = title;
@@ -1280,6 +1297,8 @@ async function handleBlogPages(req, res) {
       if (content_html !== undefined)     updates.content_html     = content_html;
       if (published !== undefined)        updates.published        = published;
       if (ai_generated !== undefined)     updates.ai_generated     = ai_generated;
+      if (needsPublishedAt)                updates.published_at    = new Date().toISOString();
+
       const { data, error } = await supabase.from('blog_pages').update(updates).eq('id', id).select().single();
       if (error) throw error;
       if (data?.published) await _generateStaticPage(data, SITE_URL);
