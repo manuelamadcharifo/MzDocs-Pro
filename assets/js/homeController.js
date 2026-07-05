@@ -120,12 +120,30 @@ function _showWelcomeToast() {
   }, 5000);
 }
 
+// ─── Formatação compacta de números (31 → "31", 2000 → "2k", 2300 → "2.3k",
+//     1000000 → "1M") — aplicada sempre ao valor REAL vindo do servidor,
+//     nunca a um número inventado.
+function _formatCompact(n) {
+  if (n >= 1000000) {
+    const v = n / 1000000;
+    return (Number.isInteger(v) ? v : v.toFixed(1)) + 'M';
+  }
+  if (n >= 1000) {
+    const v = n / 1000;
+    return (Number.isInteger(v) ? v : v.toFixed(1)) + 'k';
+  }
+  return String(n);
+}
+
 // ─── Animação do contador social ─────────────────────────────────────────────
 // Lê o valor que já veio em /api/config (guardado em window._mzConfig por app.js)
-// e anima o elemento #heroDocCount.
+// e anima o elemento #heroDocCount. Antes havia um fallback que inventava
+// "1200" quando o valor real era 0 ou indisponível — substituído por
+// mensagens honestas que se ajustam à fase real de crescimento.
 function _animateSocialCounter() {
-  const el = document.getElementById('heroDocCount');
-  if (!el) return;
+  const wrap = document.getElementById('hspCounter');
+  const el   = document.getElementById('heroDocCount');
+  if (!wrap || !el) return;
 
   // Aguardar até _mzConfig estar disponível (app.js define-o)
   let attempts = 0;
@@ -134,23 +152,37 @@ function _animateSocialCounter() {
     const count = window._mzConfig?.docsGenerated;
     if (count != null || attempts > 30) {
       clearInterval(poll);
-      if (!count || count <= 0) {
-        // Usar valor mínimo credível para não mostrar "0"
-        _runCounter(el, 1200);
+
+      if (count == null) {
+        // Valor indisponível (erro de rede, etc.) — mensagem genérica em
+        // vez de "…" pendurado ou um número inventado.
+        wrap.innerHTML = '🇲🇿 Feito para Moçambique';
+        return;
+      }
+      if (count <= 0) {
+        wrap.innerHTML = '🆕 Novo — sê um dos primeiros a experimentar';
+        return;
+      }
+      if (count < 50) {
+        // Fase inicial: mostra o número real, mas sem o enquadrar como
+        // "muito volume" — só como sinal de crescimento genuíno.
+        wrap.innerHTML = `🚀 <strong id="heroDocCount">${count}</strong> documentos gerados — em crescimento`;
       } else {
-        _runCounter(el, count);
+        wrap.innerHTML = `📄 <strong id="heroDocCount">…</strong> documentos gerados em Moçambique 🇲🇿`;
+        _runCounter(document.getElementById('heroDocCount'), count, _formatCompact);
+        return;
       }
     }
   }, 200);
 }
 
-function _runCounter(el, target) {
+function _runCounter(el, target, formatFn) {
   const start = Math.max(0, target - Math.min(80, Math.floor(target * 0.06)));
   let current = start;
   const step  = Math.max(1, Math.ceil((target - start) / 45));
   const timer = setInterval(() => {
     current = Math.min(current + step, target);
-    el.textContent = current.toLocaleString('pt-MZ');
+    el.textContent = formatFn ? formatFn(current) : current.toLocaleString('pt-MZ');
     if (current >= target) clearInterval(timer);
   }, 28);
 }
