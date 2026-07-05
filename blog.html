@@ -270,6 +270,33 @@
   <div><a href="/">Início</a> · <a href="/templates.html">Templates</a> · <a href="/legal.html">Privacidade</a></div>
 </footer>
 <script>
+// Ícone representativo conforme o tema do título — o mesmo princípio dos
+// cartões curados (🎓 para CV de licenciado, ⚖️ para procuração, etc.),
+// aplicado automaticamente aos artigos gerados dinamicamente.
+var ICON_RULES = [
+  [/\bcv\b|curr[íi]culo|licenciado/i, '🎓'],
+  [/\bbi\b|bilhete de identidade|cart[ãa]o de eleitor/i, '🪪'],
+  [/passaporte|dire\b|visto/i, '🛂'],
+  [/carta/i, '✉️'],
+  [/procura[çc][ãa]o/i, '⚖️'],
+  [/contrato/i, '📝'],
+  [/certid[ãa]o/i, '📜'],
+  [/declara[çc][ãa]o/i, '📄'],
+  [/requerimento/i, '📋'],
+  [/nuit|imposto|irps|iva|fiscal/i, '💰'],
+  [/inss|reforma|seguro/i, '🛡️'],
+  [/recibo|pagamento|sal[áa]rio/i, '🧾'],
+  [/neg[óo]cio|empresa|empreendedor/i, '💼'],
+  [/escolar|acad[ée]mico|universidade|mestrado|tese/i, '📚'],
+  [/casamento|div[óo]rcio|fam[íi]lia|heran[çc]a|testamento/i, '💍'],
+  [/terreno|duat|imóvel|arrendamento|escritura/i, '🏠'],
+  [/associa[çc][ãa]o|cooperativa|ong/i, '🤝'],
+];
+function pickIcon(title){
+  for(var i=0;i<ICON_RULES.length;i++){ if(ICON_RULES[i][0].test(title)) return ICON_RULES[i][1]; }
+  return '📄';
+}
+
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function formatDate(iso){
   if(!iso) return '';
@@ -293,7 +320,7 @@ function buildCard(post, opts){
   var badge = opts.badge ? '<span class="ac-badge new">' + escHtml(opts.badge) + '</span>' : '';
   a.innerHTML =
     badge +
-    '<span class="ac-icon">📄</span>' +
+    '<span class="ac-icon">' + pickIcon(post.title) + '</span>' +
     '<span class="ac-title">' + escHtml(post.title) + '</span>' +
     '<span class="ac-desc">' + escHtml(post.description || formatDate(post.date)) + '</span>' +
     '<span class="ac-link">Ler artigo →</span>';
