@@ -119,6 +119,7 @@ module.exports = async function handler(req, res) {
   if (action === 'config' || action === 'misc')         return handleConfig(req, res);
   if (action === 'verify-receipt')                      return handleVerifyReceipt(req, res);
   if (action === 'blog-cron')                           return handleBlogCron(req, res);
+  if (action === 'github-diagnostic')                   return handleGithubDiagnostic(req, res);
 
   return res.status(404).json({ error: `Rota desconhecida: "${action}".` });
 };
@@ -1697,13 +1698,6 @@ async function _callAiText(prompt, { maxTokens = 3000, temperature = 0.5 } = {})
 // 12 funções do plano Hobby da Vercel não permite extrair para um módulo
 // importado sem cuidado de bundling — mantemos a duplicação pequena e
 // explícita, tal como já acontecia com outros helpers deste projecto).
-
-// ─────────────────────────────────────────────────────────────────────────
-// SUBSTITUIR a função _publishBlogStaticFile inteira em api/misc.js por
-// esta versão. Localiza-a por "async function _publishBlogStaticFile(" e
-// apaga até ao "}" de fecho correspondente, colando isto no lugar.
-// ─────────────────────────────────────────────────────────────────────────
-
 async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml, SITE_URL) {
   const owner = process.env.GITHUB_OWNER;
   const repo  = process.env.GITHUB_REPO;
@@ -1748,7 +1742,6 @@ async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml,
   }
 }
 
-
 async function _generateAndPublishArticle({ title, keywords, existingTitles, transactionNote }) {
   const avoidBlock = existingTitles.length
     ? `\n\nJÁ EXISTEM estes artigos no blog — o teu deve cobrir um ângulo/subtema DIFERENTE, sem repetir conteúdo:\n${existingTitles.slice(0, 80).map(t => `- ${t}`).join('\n')}`
@@ -1787,6 +1780,65 @@ async function _generateAndPublishArticle({ title, keywords, existingTitles, tra
     .catch(e => console.warn('[blog-cron] publicação estática falhou:', e.message, transactionNote || ''));
 
   return { slug: finalSlug, title, id: newPage?.id, provider: result.provider };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// GITHUB-DIAGNOSTIC — testa as credenciais do GitHub server-side, sem nunca
+// expor o valor do token. Usa-se uma vez para diagnosticar o problema do
+// "publicação estática falhou" e depois pode remover-se.
+// GET/POST /api/misc?action=github-diagnostic  (mesmo header que blog-cron)
+// ════════════════════════════════════════════════════════════════════════════
+async function handleGithubDiagnostic(req, res) {
+  const bearerSecret = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  const customSecret  = req.headers['x-vercel-cron-secret'] || req.headers['x-cron-secret'] || '';
+  const providedSecret = bearerSecret || customSecret;
+  if (!process.env.CRON_SECRET || providedSecret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Não autorizado' });
+  }
+
+  const owner = process.env.GITHUB_OWNER;
+  const repo  = process.env.GITHUB_REPO;
+  const token = process.env.GITHUB_TOKEN;
+
+  const report = {
+    envVarsPresentes: { GITHUB_OWNER: !!owner, GITHUB_REPO: !!repo, GITHUB_TOKEN: !!token },
+    ownerUsado: owner || null,
+    repoUsado: repo || null,
+  };
+
+  if (!owner || !repo || !token) {
+    report.conclusao = 'Falta pelo menos uma env var — vê envVarsPresentes acima.';
+    return res.status(200).json(report);
+  }
+
+  try {
+    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    });
+    const body = await r.json().catch(() => ({}));
+    report.status = r.status;
+
+    if (r.status === 401) {
+      report.conclusao = 'Token inválido ou expirado (Bad credentials). Gera um novo Personal Access Token no GitHub.';
+    } else if (r.status === 404) {
+      report.conclusao = `Repositório "${owner}/${repo}" não encontrado com este token — confirma se GITHUB_OWNER/GITHUB_REPO estão certos, ou se é um fine-grained token sem acesso a este repo.`;
+    } else if (r.status === 200) {
+      const podeEscrever = body?.permissions?.push === true;
+      report.repoEncontrado = true;
+      report.permissoes = body?.permissions || null;
+      report.conclusao = podeEscrever
+        ? 'Tudo certo: o token acede ao repositório e TEM permissão de escrita (push). O problema deve estar noutro sítio — verifica os logs do próximo blog-cron.'
+        : 'O token acede ao repositório mas NÃO tem permissão de escrita. Se for um PAT clássico, falta o scope "repo". Se for fine-grained, falta "Contents: Read and write".';
+    } else {
+      report.corpo = JSON.stringify(body).slice(0, 500);
+      report.conclusao = `Resposta inesperada do GitHub (${r.status}) — vê o corpo acima.`;
+    }
+    return res.status(200).json(report);
+  } catch (e) {
+    report.erro = e.message;
+    report.conclusao = 'Excepção de rede ao contactar a API do GitHub.';
+    return res.status(200).json(report);
+  }
 }
 
 async function handleBlogCron(req, res) {
