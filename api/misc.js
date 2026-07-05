@@ -1705,8 +1705,36 @@ async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml,
   if (!owner || !repo || !token) { console.warn('[blog-cron] GitHub env vars em falta — a saltar publicação estática'); return; }
 
   const escHtml = (s = '') => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const trackingSnippet = `<script>(function(){try{var s=localStorage.getItem('mz_sid')||('anon_'+Math.random().toString(36).slice(2));localStorage.setItem('mz_sid',s);fetch('${SITE_URL}/api/admin?action=analytics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'/blog/${slug}',session:s})}).catch(function(){});}catch(e){}})();</script>`;
-  const html = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>${escHtml(title)} — MzDocs Pro</title><meta name="description" content="${escHtml(metaDescription || '')}"/><link rel="canonical" href="${SITE_URL}/pages/${slug}"/></head><body><h1>${escHtml(title)}</h1>${contentHtml}${trackingSnippet}</body></html>`;
+  // Substituição literal (sem regex, sem padrões especiais de $), segura mesmo
+  // que contentHtml contenha caracteres como "$&" gerados pela IA.
+  const fill = (tpl, key, value) => tpl.split(key).join(value);
+
+  // Usa sempre o template real do site (o mesmo das páginas já existentes em
+  // /pages/), em vez de um HTML "cru" sem header/CSS/CTA. Vai buscá-lo por
+  // HTTP ao próprio site, já que é um ficheiro público servido normalmente.
+  let templateHtml;
+  try {
+    const tplRes = await fetch(`${SITE_URL}/pages/_template.html`);
+    if (!tplRes.ok) throw new Error(`HTTP ${tplRes.status}`);
+    templateHtml = await tplRes.text();
+  } catch (e) {
+    console.warn('[blog-cron] falha ao buscar pages/_template.html, a usar fallback simples:', e.message);
+    templateHtml = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>{{TITLE}} — MzDocs Pro</title><meta name="description" content="{{META_DESCRIPTION}}"/><link rel="canonical" href="{{CANONICAL_URL}}"/></head><body><h1>{{TITLE}}</h1>{{CONTENT_HTML}}</body></html>`;
+  }
+
+  const nowIso = new Date().toISOString();
+  const dateDisplay = new Date().toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
+  const canonicalUrl = `${SITE_URL}/pages/${slug}`;
+
+  let html = templateHtml;
+  html = fill(html, '{{TITLE}}', escHtml(title));
+  html = fill(html, '{{META_DESCRIPTION}}', escHtml(metaDescription || ''));
+  html = fill(html, '{{CANONICAL_URL}}', canonicalUrl);
+  html = fill(html, '{{DATE_PUBLISHED}}', nowIso);
+  html = fill(html, '{{DATE_MODIFIED}}', nowIso);
+  html = fill(html, '{{DATE_DISPLAY}}', dateDisplay);
+  html = fill(html, '{{SLUG}}', slug);
+  html = fill(html, '{{CONTENT_HTML}}', contentHtml);
 
   const githubPath = `pages/${slug}/index.html`;
   const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${githubPath}`;
