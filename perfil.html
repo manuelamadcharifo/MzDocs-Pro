@@ -10,6 +10,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+<!-- Folha de estilos partilhada (dá-nos .overlay/.sheet/.pkg/.notif prontos
+     a usar para os modais de Créditos e Arquivo, sem duplicar CSS).
+     As regras abaixo (no <style> desta página) mantêm-se depois no
+     documento, por isso continuam a ganhar em caso de conflito de nomes. -->
+<link rel="stylesheet" href="/assets/css/styles.css"/>
 <style>
   :root{
     --ink:#07101F;--ink2:#0F1E3B;--muted:#64748B;--border:#E2E8F0;
@@ -173,9 +178,9 @@
       <a href="/#howItWorks" class="action-card hot" id="actNewDoc">
         <div class="action-icon">🎁</div><div class="action-lbl">Criar Documento</div>
       </a>
-      <a href="/?topup=1" id="actTopup" class="action-card">
+      <button type="button" id="actTopup" class="action-card" style="border:1.5px solid var(--border);background:var(--white);font:inherit;cursor:pointer;width:100%">
         <div class="action-icon">⚡</div><div class="action-lbl">Comprar Créditos</div>
-      </a>
+      </button>
       <a href="/templates.html" class="action-card">
         <div class="action-icon">🎨</div><div class="action-lbl">Ver Modelos</div>
       </a>
@@ -238,7 +243,7 @@
       <div class="section-title">💳 Plano e Créditos</div>
       <div class="section-desc" id="planDesc">A carregar informação do plano…</div>
       <div class="form-row">
-        <a href="/?topup=1" class="btn btn-blue">⚡ Comprar mais créditos</a>
+        <button type="button" id="btnPlanoTopup" class="btn btn-blue">⚡ Comprar mais créditos</button>
         <a href="https://wa.me/258858695506?text=Ol%C3%A1%2C%20preciso%20de%20ajuda%20com%20o%20meu%20plano%20MzDocs%20Pro" target="_blank" class="btn btn-ghost">💬 Falar com Suporte</a>
       </div>
     </div>
@@ -249,7 +254,7 @@
       <div class="section-desc">Os últimos documentos que gerou na plataforma.</div>
       <div id="docsList"><div class="empty">A carregar…</div></div>
       <div class="form-row" style="margin-top:10px">
-        <a href="/?history=1" class="btn btn-ghost">📂 Ver arquivo completo</a>
+        <button type="button" id="btnOpenHistory" class="btn btn-ghost">📂 Ver arquivo completo</button>
       </div>
     </div>
 
@@ -276,8 +281,115 @@
   </div>
 </div>
 
+<!-- MODAL PAGAMENTO (idêntico ao da home — mesmos IDs, para que
+     PaymentController funcione sem alterações aqui na página de perfil) -->
+<div class="overlay" id="payOverlay">
+  <div class="sheet" id="paySheet">
+    <div class="pill"></div>
+    <div class="sheet-hdr">
+      <div><div class="sh-title" id="payTitle">Adquirir Créditos</div><div class="sh-sub" id="paySubtitle">Pagamento manual — M-Pesa, e-Mola ou mKesh via WhatsApp</div></div>
+      <button class="sh-x" id="payClose">✕</button>
+    </div>
+    <div id="avulsoSection" style="display:none;margin-bottom:16px;">
+      <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;">
+        <div style="font-size:13px;font-weight:700;color:#1D4ED8;margin-bottom:4px;">🚀 Acesso Avulso — Sem Conta</div>
+        <div style="font-size:13px;color:#1e40af;line-height:1.5;">3 documentos gerados por IA · válido 7 dias · sem conta permanente</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+          <span style="font-size:20px;font-weight:800;color:#1D4ED8;" id="pkgPriceAvulso">MZN 50</span>
+          <button class="pkg-avulso-btn" data-pkg="avulso"
+            style="padding:8px 18px;background:#1D4ED8;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
+            Pagar agora
+          </button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:14px 0 4px;">
+        <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+        <span style="font-size:12px;color:#94a3b8;font-weight:500;">ou crie conta e poupe mais</span>
+        <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+      </div>
+    </div>
+    <div class="pkg-grid">
+      <div class="pkg" data-pkg="starter">
+        <div class="pkg-name">Starter</div>
+        <div class="pkg-price" id="pkgPriceStarter">MZN 120</div>
+        <div class="pkg-cr" id="pkgCrStarter">10 créditos</div>
+        <div class="pkg-per" id="pkgPerStarter">MZN 12/doc</div>
+      </div>
+      <div class="pkg popular" data-pkg="basico">
+        <div class="pkg-badge">Popular</div>
+        <div class="pkg-name">Básico</div>
+        <div class="pkg-price" id="pkgPriceBasico">MZN 280</div>
+        <div class="pkg-cr" id="pkgCrBasico">25 créditos</div>
+        <div class="pkg-per" id="pkgPerBasico">MZN 11.2/doc</div>
+      </div>
+      <div class="pkg" data-pkg="pro">
+        <div class="pkg-name">Pro</div>
+        <div class="pkg-price" id="pkgPricePro">MZN 600</div>
+        <div class="pkg-cr" id="pkgCrPro">60 créditos</div>
+        <div class="pkg-per" id="pkgPerPro">MZN 10/doc</div>
+      </div>
+      <div class="pkg" data-pkg="empresa">
+        <div class="pkg-name">Empresa</div>
+        <div class="pkg-price" id="pkgPriceEmpresa">MZN 1500</div>
+        <div class="pkg-cr" id="pkgCrEmpresa">150 créditos</div>
+        <div class="pkg-per" id="pkgPerEmpresa">MZN 10/doc</div>
+      </div>
+    </div>
+    <div id="mpesaSection" style="display:none">
+      <div class="mp-hdr">
+        <div class="mp-logo">M</div>
+        <div><strong>Pagamento por Carteira Móvel</strong><p id="mpEnvLabel">Processado manualmente — M-Pesa, e-Mola ou mKesh</p></div>
+      </div>
+      <label class="field-lbl">Número de telemóvel (M-Pesa, e-Mola ou mKesh)</label>
+      <div class="phone-wrap">
+        <span>+258</span>
+        <input type="tel" id="phoneInput" placeholder="8X XXX XXXX" maxlength="9" inputmode="numeric"/>
+      </div>
+      <div class="pay-sum" id="paySummary"></div>
+      <button class="btn-pay" id="btnPay" disabled>Continuar</button>
+      <p class="mp-note" id="mpNote">⚠️ Pagamento processado manualmente: ao confirmar, será encaminhado para o WhatsApp para enviar o comprovativo.</p>
+      <div id="payReceiverInfo"></div>
+      <div class="pay-manual-info" id="payManualInfo" style="display:none;margin-top:12px;padding:12px 14px;background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:10px;font-size:13px;color:#92400E;line-height:1.6;">
+        ⚠️ <strong>Pagamento manual — não é automático:</strong><br/>
+        Após clicar, será redireccionado para o WhatsApp. Envie o comprovativo (M-Pesa, e-Mola ou mKesh, conforme o número usado) para o nosso número e os créditos serão activados em até <strong>24 horas</strong>.<br/>
+        <span style="margin-top:6px;display:block;">📌 Guarde o número de referência que receberá — é necessário para confirmar o pagamento.</span>
+        <span style="margin-top:8px;display:block;font-size:12px;">Consulte a nossa <a href="/legal.html#reembolso" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Política de Reembolso</a> · <a href="/legal.html#suporte" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Suporte</a></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HISTÓRICO (mesmos IDs que a home — HistoryController já tem um
+     visualizador "lite" próprio para quando não há editor A4 completo,
+     que é exactamente o caso desta página) -->
+<div class="overlay" id="historyOverlay">
+  <div class="sheet tall" id="historySheet">
+    <div class="pill"></div>
+    <div class="sheet-hdr">
+      <div>
+        <div class="sh-title">📁 Arquivo de Documentos</div>
+        <div class="sh-sub">Os seus documentos gerados nesta conta</div>
+      </div>
+      <button class="sh-x" id="historyClose">✕</button>
+    </div>
+    <div id="historyBody" style="padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;">
+      <div id="historyLoading" style="text-align:center;padding:40px;color:#64748b;">
+        <div style="font-size:32px;margin-bottom:8px;">⏳</div>
+        <div>A carregar documentos…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIFICAÇÕES (usadas por NotificationView, importado pelos controllers) -->
+<div class="notif-stack" id="notifStack"></div>
+
 <script type="module">
 import { authManager } from '/assets/js/auth/AuthManager.js';
+import { CreditModel } from '/assets/js/models/Models.js';
+import { PaymentController, syncPackagesV8FromConfig, renderPackageCards } from '/assets/js/controllers/PaymentController.js';
+import { updatePackagesFromConfig } from '/assets/js/services/PaymentService.js';
+import { HistoryController } from '/assets/js/controllers/HistoryController.js';
 
 let WA_SUPPORT = '258858695506';
 
@@ -287,7 +399,10 @@ function showMsg(id, text, ok) {
   el.textContent = text;
   el.className = 'msg-box ' + (ok ? 'msg-ok' : 'msg-err');
   el.style.display = 'block';
-  setTimeout(() => { el.style.display = 'none'; }, 6000);
+  // Sucesso desaparece sozinho; erro fica visível até à próxima acção —
+  // um erro que desaparece em 6s é fácil de perder e depois parece que
+  // "não aconteceu nada" quando na verdade falhou silenciosamente.
+  if (ok) setTimeout(() => { el.style.display = 'none'; }, 6000);
 }
 
 function initials(name) {
@@ -306,6 +421,11 @@ async function loadConfig() {
     document.querySelectorAll('a[href*="wa.me/258858695506"]').forEach(a => {
       a.href = a.href.replace('258858695506', WA_SUPPORT);
     });
+    // Preços/créditos reais dos pacotes (mesma fonte usada na home) —
+    // sem isto o modal de compra mostraria sempre os valores por defeito.
+    updatePackagesFromConfig(cfg.packages);
+    syncPackagesV8FromConfig(cfg.packages);
+    renderPackageCards();
   } catch (_) {}
 }
 
@@ -401,13 +521,34 @@ async function handleAvatarUpload(file) {
     document.getElementById('avatarImg').innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
     showMsg('avatarMsg', '✅ Foto de perfil actualizada com sucesso!', true);
   } catch (err) {
-    showMsg('avatarMsg', '❌ ' + (err.message || 'Erro ao carregar a foto.'), false);
+    // Log completo na consola — o texto do erro do Supabase Storage
+    // ("Bucket not found", políticas RLS, etc.) é a pista real do que
+    // falhou e não deve ficar só resumido no ecrã.
+    console.error('[Perfil] Falha ao carregar avatar:', err);
+    const raw = err?.message || 'Erro ao carregar a foto.';
+    const hint = /bucket/i.test(raw)
+      ? ' — o bucket de armazenamento "avatars" ainda não existe no Supabase. É preciso correr supabase/migration_v29_user_profile_page.sql no SQL Editor.'
+      : /row-level security|rls|policy/i.test(raw)
+      ? ' — falta a política de acesso (RLS) do bucket "avatars". Corra supabase/migration_v29_user_profile_page.sql no SQL Editor.'
+      : '';
+    showMsg('avatarMsg', '❌ ' + raw + hint, false);
   } finally {
     document.getElementById('btnAvatarEdit').textContent = '✏️';
   }
 }
 
 function bindForms() {
+  // ── Créditos e Arquivo — abrem modal NESTA página (não navegam para "/") ──
+  document.getElementById('actTopup')?.addEventListener('click', () => {
+    window.paymentController?.showPricing();
+  });
+  document.getElementById('btnPlanoTopup')?.addEventListener('click', () => {
+    window.paymentController?.showPricing();
+  });
+  document.getElementById('btnOpenHistory')?.addEventListener('click', () => {
+    window.historyController?.open();
+  });
+
   document.getElementById('btnAvatarEdit')?.addEventListener('click', () => {
     document.getElementById('avatarInput')?.click();
   });
@@ -490,6 +631,19 @@ async function init() {
   renderIdentity(user, authManager.profile);
   bindForms();
   await loadDocuments(user.id);
+
+  // ── Créditos e Arquivo funcionam directamente aqui em /perfil.html —
+  // mesmos controllers que a home usa, ligados aos mesmos IDs de modal
+  // que acabámos de incluir nesta página (payOverlay / historyOverlay).
+  window.authManager = authManager;
+  const creditModel = new CreditModel();
+  await creditModel.init();
+  window.paymentController = new PaymentController(creditModel);
+  window.historyController = new HistoryController();
+
+  // Se ficarmos sem window.docController (não existe nesta página), o
+  // HistoryController usa automaticamente o seu visualizador "lite" —
+  // não é preciso fazer mais nada aqui.
 
   // Se o perfil ainda não tiver chegado (corrida com _loadProfile), refrescar.
   if (!authManager.profile) {
