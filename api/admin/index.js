@@ -1704,36 +1704,17 @@ function _extractHTML(text) {
 }
 
 async function _generateStaticPage(page, SITE_URL) {
-  const owner = process.env.GITHUB_OWNER;
-  const repo  = process.env.GITHUB_REPO;
-  const token = process.env.GITHUB_TOKEN;
-  if (!owner || !repo || !token) { console.warn('[_generateStaticPage] GitHub env vars em falta'); return; }
-
-  function escHtml(s = '') {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  // NOVO (auditoria de analytics, v27): as páginas estáticas do blog não
-  // tinham NENHUM script de analytics — por isso "Serviços Mais Usados",
-  // visitas por artigo, etc. apareciam sempre vazios para conteúdo de
-  // blog. Este snippet chama o mesmo endpoint público já usado pela app
-  // (/api/admin?action=analytics, POST, sem autenticação) para registar
-  // a visita em page_views e incrementar blog_pages.views.
-  const trackingSnippet = `<script>(function(){try{var s=localStorage.getItem('mz_sid')||('anon_'+Math.random().toString(36).slice(2));localStorage.setItem('mz_sid',s);fetch('${SITE_URL}/api/admin?action=analytics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'/blog/${page.slug}',session:s})}).catch(function(){});}catch(e){}})();</script>`;
-
-  const html = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>${escHtml(page.title)} — MzDocs Pro</title><meta name="description" content="${escHtml(page.meta_description||'')}"/><link rel="canonical" href="${SITE_URL}/pages/${page.slug}"/></head><body><h1>${escHtml(page.title)}</h1>${page.content_html}${trackingSnippet}</body></html>`;
-  const githubPath = `pages/${page.slug}/index.html`;
-  const apiUrl     = `https://api.github.com/repos/${owner}/${repo}/contents/${githubPath}`;
-  let sha;
-  try {
-    const ex = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
-    if (ex.ok) sha = (await ex.json()).sha;
-  } catch (_) {}
-
-  await fetch(apiUrl, {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: `Gerar página: ${page.slug}`, content: Buffer.from(html).toString('base64'), sha }),
+  // Antes: construía HTML "cru" (só <h1>+conteúdo, sem header/CSS/CTA) e
+  // nunca verificava a resposta do PUT ao GitHub (falha silenciosa). Agora
+  // usa a mesma lib partilhada que o blog-cron (api/_lib/blogTemplate.js),
+  // com o template completo e erros que já não desaparecem sem aviso.
+  const { publishBlogPageToGithub } = require('../_lib/blogTemplate');
+  await publishBlogPageToGithub({
+    slug: page.slug,
+    title: page.title,
+    metaDescription: page.meta_description,
+    contentHtml: page.content_html,
+    SITE_URL,
   });
 }
 
