@@ -1698,6 +1698,223 @@ async function _callAiText(prompt, { maxTokens = 3000, temperature = 0.5 } = {})
 // 12 funções do plano Hobby da Vercel não permite extrair para um módulo
 // importado sem cuidado de bundling — mantemos a duplicação pequena e
 // explícita, tal como já acontecia com outros helpers deste projecto).
+const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{{TITLE}} — MzDocs Pro</title>
+  <meta name="description" content="{{META_DESCRIPTION}}"/>
+  <meta name="robots" content="index, follow"/>
+  <link rel="canonical" href="{{CANONICAL_URL}}"/>
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="article"/>
+  <meta property="og:title"       content="{{TITLE}} — MzDocs Pro"/>
+  <meta property="og:description" content="{{META_DESCRIPTION}}"/>
+  <meta property="og:url"         content="{{CANONICAL_URL}}"/>
+  <meta property="og:site_name"   content="MzDocs Pro"/>
+  <meta property="og:locale"      content="pt_MZ"/>
+
+  <!-- Schema.org Article -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "{{TITLE}}",
+    "description": "{{META_DESCRIPTION}}",
+    "url": "{{CANONICAL_URL}}",
+    "datePublished": "{{DATE_PUBLISHED}}",
+    "dateModified": "{{DATE_MODIFIED}}",
+    "publisher": {
+      "@type": "Organization",
+      "name": "MzDocs Pro",
+      "url": "https://mzdocs.co.mz"
+    },
+    "inLanguage": "pt-MZ"
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=Instrument+Serif:ital@0;1&display=swap"/>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink: #07101F; --muted: #64748B; --border: #E2E8F0; --surface: #F8FAFD;
+      --blue: #3B82F6; --blue-d: #1D4ED8; --green: #009A44;
+      --r: 14px; --max: 720px;
+    }
+    body {
+      font-family: 'Bricolage Grotesque', sans-serif;
+      background: var(--surface); color: var(--ink);
+      line-height: 1.7; font-size: 1rem;
+    }
+
+    /* ── Header ── */
+    .site-header {
+      background: var(--ink); padding: 0 20px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .site-logo {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; color: #fff;
+    }
+    .logo-badge {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--blue), var(--green));
+      display: flex; align-items: center; justify-content: center; font-size: 16px;
+    }
+    .logo-text { font-family: 'Instrument Serif', serif; font-size: 18px; }
+    .header-cta {
+      background: var(--blue); color: #fff; border: none; border-radius: 8px;
+      padding: 7px 14px; font-size: 13px; font-weight: 700;
+      cursor: pointer; text-decoration: none; white-space: nowrap;
+    }
+    .header-cta:hover { background: var(--blue-d); }
+
+    /* ── Breadcrumb ── */
+    .breadcrumb {
+      max-width: var(--max); margin: 0 auto;
+      padding: 14px 20px 0; font-size: 13px; color: var(--muted);
+    }
+    .breadcrumb a { color: var(--blue); text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb span { margin: 0 6px; }
+
+    /* ── Artigo ── */
+    article {
+      max-width: var(--max); margin: 0 auto;
+      padding: 24px 20px 60px;
+    }
+    .article-meta {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--muted); margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .article-meta .tag {
+      background: #EFF6FF; color: var(--blue-d); border-radius: 20px;
+      padding: 2px 10px; font-size: 12px; font-weight: 600;
+    }
+    h1 {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(26px, 5vw, 38px); line-height: 1.15;
+      margin-bottom: 16px; color: var(--ink);
+    }
+    .article-body h2 {
+      font-size: 1.35rem; font-weight: 800; margin: 2rem 0 .75rem;
+      color: var(--ink); border-left: 4px solid var(--blue);
+      padding-left: 12px;
+    }
+    .article-body h3 {
+      font-size: 1.1rem; font-weight: 700; margin: 1.5rem 0 .5rem; color: var(--ink);
+    }
+    .article-body p { margin-bottom: 1rem; color: #1e293b; }
+    .article-body ul, .article-body ol {
+      margin: .75rem 0 1rem 1.5rem;
+    }
+    .article-body li { margin-bottom: .4rem; }
+    .article-body strong { font-weight: 700; }
+    .article-body em { font-style: italic; }
+    .article-body blockquote {
+      border-left: 4px solid var(--green); margin: 1.5rem 0;
+      padding: .75rem 1rem; background: #ECFDF5; border-radius: 0 8px 8px 0;
+      color: #065f46; font-style: italic;
+    }
+
+    /* ── CTA box ── */
+    .cta-box {
+      background: linear-gradient(135deg, #EFF6FF, #DBEAFE);
+      border: 2px solid #BFDBFE; border-radius: var(--r);
+      padding: 24px; margin: 2.5rem 0; text-align: center;
+    }
+    .cta-box h3 { font-size: 1.2rem; margin-bottom: 8px; color: var(--blue-d); }
+    .cta-box p  { color: #1e40af; margin-bottom: 16px; font-size: .95rem; }
+    .cta-btn {
+      display: inline-block; background: var(--blue-d); color: #fff;
+      text-decoration: none; padding: 12px 28px; border-radius: 10px;
+      font-weight: 700; font-size: .95rem; transition: background .2s;
+    }
+    .cta-btn:hover { background: #1e3a8a; }
+
+    /* ── Footer ── */
+    .site-footer {
+      background: var(--ink); color: rgba(255,255,255,.5);
+      padding: 24px 20px; text-align: center; font-size: 13px; line-height: 2;
+    }
+    .site-footer a { color: rgba(255,255,255,.6); text-decoration: none; }
+    .site-footer a:hover { color: #fff; }
+
+    /* ── Responsive ── */
+    @media (max-width: 480px) {
+      article { padding: 16px 16px 48px; }
+      .header-cta { padding: 6px 10px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <a class="site-logo" href="/">
+    <div class="logo-badge">📄</div>
+    <span class="logo-text">MzDocs</span>
+  </a>
+  <a class="header-cta" href="/">Criar Documento Grátis →</a>
+</header>
+
+<div class="breadcrumb">
+  <a href="/">Início</a><span>›</span>
+  <a href="/pages/">Blog</a><span>›</span>
+  {{TITLE}}
+</div>
+
+<article>
+  <div class="article-meta">
+    <span class="tag">📚 Guia</span>
+    <span>{{DATE_DISPLAY}}</span>
+    <span>·</span>
+    <span>MzDocs Pro</span>
+  </div>
+
+  <h1>{{TITLE}}</h1>
+
+  <div class="article-body">
+    {{CONTENT_HTML}}
+  </div>
+
+  <!-- CTA integrado -->
+  <div class="cta-box">
+    <h3>📄 Crie o seu documento em segundos</h3>
+    <p>O MzDocs Pro usa IA para gerar documentos profissionais adaptados a Moçambique.<br/>CV, cartas, requerimentos e muito mais — sem complicação.</p>
+    <a class="cta-btn" href="/">Experimentar Grátis →</a>
+  </div>
+</article>
+
+<footer class="site-footer">
+  <div>
+    © 2026 MzDocs Pro · Moçambique 🇲🇿
+    &nbsp;|&nbsp;<a href="/legal.html">Termos e Privacidade</a>
+    &nbsp;|&nbsp;<a href="/">Início</a>
+  </div>
+</footer>
+
+<!-- Contador de visitas -->
+<script>
+  (function(){
+    try {
+      fetch('/api/page-view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: '{{SLUG}}' })
+      }).catch(function(){});
+    } catch(e) {}
+  })();
+</script>
+
+</body>
+</html>
+`;
+
 async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml, SITE_URL) {
   const owner = process.env.GITHUB_OWNER;
   const repo  = process.env.GITHUB_REPO;
@@ -1709,18 +1926,11 @@ async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml,
   // que contentHtml contenha caracteres como "$&" gerados pela IA.
   const fill = (tpl, key, value) => tpl.split(key).join(value);
 
-  // Usa sempre o template real do site (o mesmo das páginas já existentes em
-  // /pages/), em vez de um HTML "cru" sem header/CSS/CTA. Vai buscá-lo por
-  // HTTP ao próprio site, já que é um ficheiro público servido normalmente.
-  let templateHtml;
-  try {
-    const tplRes = await fetch(`${SITE_URL}/pages/_template.html`);
-    if (!tplRes.ok) throw new Error(`HTTP ${tplRes.status}`);
-    templateHtml = await tplRes.text();
-  } catch (e) {
-    console.warn('[blog-cron] falha ao buscar pages/_template.html, a usar fallback simples:', e.message);
-    templateHtml = `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/><title>{{TITLE}} — MzDocs Pro</title><meta name="description" content="{{META_DESCRIPTION}}"/><link rel="canonical" href="{{CANONICAL_URL}}"/></head><body><h1>{{TITLE}}</h1>{{CONTENT_HTML}}</body></html>`;
-  }
+  // O template vem embutido no código (BLOG_POST_TEMPLATE), em vez de ser
+  // buscado por HTTP ao próprio site em cada execução. Isto elimina uma
+  // dependência de rede desnecessária (auto-fetch ao próprio domínio) que
+  // podia falhar por vários motivos difíceis de diagnosticar remotamente.
+  const templateHtml = BLOG_POST_TEMPLATE;
 
   const nowIso = new Date().toISOString();
   const dateDisplay = new Date().toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -1742,6 +1952,7 @@ async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml,
   try {
     const ex = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
     if (ex.ok) {
+
       sha = (await ex.json()).sha;
     } else if (ex.status !== 404) {
       // 404 é esperado (ficheiro ainda não existe, vamos criá-lo).
@@ -1847,143 +2058,4 @@ async function handleGithubDiagnostic(req, res) {
     report.status = r.status;
 
     if (r.status === 401) {
-      report.conclusao = 'Token inválido ou expirado (Bad credentials). Gera um novo Personal Access Token no GitHub.';
-    } else if (r.status === 404) {
-      report.conclusao = `Repositório "${owner}/${repo}" não encontrado com este token — confirma se GITHUB_OWNER/GITHUB_REPO estão certos, ou se é um fine-grained token sem acesso a este repo.`;
-    } else if (r.status === 200) {
-      const podeEscrever = body?.permissions?.push === true;
-      report.repoEncontrado = true;
-      report.permissoes = body?.permissions || null;
-      report.conclusao = podeEscrever
-        ? 'Tudo certo: o token acede ao repositório e TEM permissão de escrita (push). O problema deve estar noutro sítio — verifica os logs do próximo blog-cron.'
-        : 'O token acede ao repositório mas NÃO tem permissão de escrita. Se for um PAT clássico, falta o scope "repo". Se for fine-grained, falta "Contents: Read and write".';
-    } else {
-      report.corpo = JSON.stringify(body).slice(0, 500);
-      report.conclusao = `Resposta inesperada do GitHub (${r.status}) — vê o corpo acima.`;
-    }
-    return res.status(200).json(report);
-  } catch (e) {
-    report.erro = e.message;
-    report.conclusao = 'Excepção de rede ao contactar a API do GitHub.';
-    return res.status(200).json(report);
-  }
-}
-
-async function handleBlogCron(req, res) {
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
-  // Autenticação do cron: aceita tanto o header nativo que a Vercel injecta
-  // (Authorization: Bearer $CRON_SECRET) como um header custom, para
-  // permitir também accionar via serviço externo — mesmo padrão de
-  // api/cleanup-temp-accounts.js.
-  const bearerSecret = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
-  const customSecret  = req.headers['x-vercel-cron-secret'] || req.headers['x-cron-secret'] || '';
-  const providedSecret = bearerSecret || customSecret;
-  if (!process.env.CRON_SECRET || providedSecret !== process.env.CRON_SECRET) {
-    return res.status(401).json({ error: 'Não autorizado' });
-  }
-
-  const results = { published: [], failed: [], autogen: null };
-
-  try {
-    // 1. Processar a fila (títulos manuais/IA já agendados e vencidos).
-    //    Limitado a 2 por execução para não estourar o timeout da função.
-    const nowIso = new Date().toISOString();
-    const due = await restRequest(
-      `blog_schedule_queue?status=eq.pending&scheduled_at=lte.${encodeURIComponent(nowIso)}&order=scheduled_at.asc&limit=2`
-    );
-
-    if (Array.isArray(due) && due.length) {
-      const existingPages = await restRequest('blog_pages?select=title');
-      const existingTitles = (existingPages || []).map(p => p.title);
-
-      for (const item of due) {
-        try {
-          const article = await _generateAndPublishArticle({
-            title: item.title, keywords: item.keywords, existingTitles,
-            transactionNote: `fila:${item.id}`,
-          });
-          existingTitles.push(item.title);
-          await restRequest(`blog_schedule_queue?id=eq.${item.id}`, {
-            method: 'PATCH', body: { status: 'published', blog_page_id: article.id }, prefer: 'return=minimal',
-          });
-          results.published.push({ id: item.id, title: item.title, slug: article.slug });
-        } catch (itemErr) {
-          console.error('[blog-cron] falha ao publicar item da fila:', item.id, itemErr.message);
-          await restRequest(`blog_schedule_queue?id=eq.${item.id}`, {
-            method: 'PATCH', body: { status: 'failed', error_note: itemErr.message }, prefer: 'return=minimal',
-          }).catch(() => {});
-          results.failed.push({ id: item.id, title: item.title, error: itemErr.message });
-        }
-      }
-    }
-
-    // 2. Geração automática por IA (se activada) — só corre se NENHUM item
-    //    manual foi processado agora, para manter o ritmo previsível e não
-    //    duplicar o "orçamento" de chamadas de IA da mesma execução.
-    if (results.published.length === 0) {
-      const settingsRows = await restRequest(
-        `system_settings?key=in.(blog_autogen_enabled,blog_autogen_interval_days,blog_autogen_last_run)&select=key,value`
-      );
-      const settings = {};
-      (settingsRows || []).forEach(r => { settings[r.key] = r.value; });
-
-      const enabled      = settings.blog_autogen_enabled === 'true';
-      const intervalDays = parseInt(settings.blog_autogen_interval_days, 10) || 7;
-      const lastRun       = settings.blog_autogen_last_run ? new Date(settings.blog_autogen_last_run) : null;
-      const dueForAutogen = !lastRun || (Date.now() - lastRun.getTime()) >= intervalDays * 86400000;
-
-      if (enabled && dueForAutogen) {
-        const existingPages = await restRequest('blog_pages?select=title');
-        const pendingQueue  = await restRequest('blog_schedule_queue?status=eq.pending&select=title');
-        const existingTitles = [
-          ...(existingPages || []).map(p => p.title),
-          ...(pendingQueue  || []).map(p => p.title),
-        ];
-
-        try {
-          // Pedir à IA um título+subtema novo, derivado dos serviços do
-          // MzDocs Pro mas ainda não coberto pelos artigos existentes.
-          const ideaPrompt = `Sugere UM título de artigo de blog sobre documentos/burocracia em Moçambique (CVs, contratos, cartas, declarações, procurações, etc.), pensado para SEO.\n\nNÃO podes repetir nem parafrasear de perto nenhum destes títulos já publicados ou já agendados:\n${existingTitles.slice(0, 100).map(t => `- ${t}`).join('\n') || '(nenhum ainda)'}\n\nPode ser um subtema/ângulo derivado de um dos temas já existentes (ex: uma variante para outra profissão, outra província, outro tipo de documento relacionado), desde que seja claramente distinto.\n\nResponde APENAS em JSON válido, sem markdown: {"title":"...","keywords":"palavra1, palavra2, palavra3"}`;
-
-          const ideaResult = await _callAiText(ideaPrompt, { maxTokens: 200, temperature: 0.8 });
-          if (!ideaResult) throw new Error('IA indisponível para sugerir título.');
-
-          let idea;
-          try {
-            const jsonMatch = ideaResult.text.match(/\{[\s\S]*\}/);
-            idea = JSON.parse(jsonMatch ? jsonMatch[0] : ideaResult.text);
-          } catch (_) {
-            throw new Error('Resposta da IA não é JSON válido para o título sugerido.');
-          }
-
-          if (!idea?.title || _isTooSimilar(idea.title, existingTitles)) {
-            throw new Error('Título sugerido pela IA repete conteúdo já existente — a saltar esta execução.');
-          }
-
-          const article = await _generateAndPublishArticle({
-            title: idea.title, keywords: idea.keywords, existingTitles,
-            transactionNote: 'autogen',
-          });
-
-          await restRequest('system_settings?key=eq.blog_autogen_last_run', {
-            method: 'PATCH', body: { value: new Date().toISOString() }, prefer: 'return=minimal',
-          });
-
-          results.autogen = { title: idea.title, slug: article.slug };
-        } catch (autoErr) {
-          console.error('[blog-cron] geração automática falhou:', autoErr.message);
-          results.autogen = { error: autoErr.message };
-        }
-      }
-    }
-
-    console.log('[blog-cron] concluído:', JSON.stringify(results));
-    return res.status(200).json({ success: true, ...results });
-  } catch (err) {
-    console.error('[blog-cron] erro geral:', err.message);
-    return res.status(500).json({ error: err.message });
-  }
-}
+      repor
