@@ -2058,4 +2058,143 @@ async function handleGithubDiagnostic(req, res) {
     report.status = r.status;
 
     if (r.status === 401) {
-      repor
+      report.conclusao = 'Token inválido ou expirado (Bad credentials). Gera um novo Personal Access Token no GitHub.';
+    } else if (r.status === 404) {
+      report.conclusao = `Repositório "${owner}/${repo}" não encontrado com este token — confirma se GITHUB_OWNER/GITHUB_REPO estão certos, ou se é um fine-grained token sem acesso a este repo.`;
+    } else if (r.status === 200) {
+      const podeEscrever = body?.permissions?.push === true;
+      report.repoEncontrado = true;
+      report.permissoes = body?.permissions || null;
+      report.conclusao = podeEscrever
+        ? 'Tudo certo: o token acede ao repositório e TEM permissão de escrita (push). O problema deve estar noutro sítio — verifica os logs do próximo blog-cron.'
+        : 'O token acede ao repositório mas NÃO tem permissão de escrita. Se for um PAT clássico, falta o scope "repo". Se for fine-grained, falta "Contents: Read and write".';
+    } else {
+      report.corpo = JSON.stringify(body).slice(0, 500);
+      report.conclusao = `Resposta inesperada do GitHub (${r.status}) — vê o corpo acima.`;
+    }
+    return res.status(200).json(report);
+  } catch (e) {
+    report.erro = e.message;
+    report.conclusao = 'Excepção de rede ao contactar a API do GitHub.';
+    return res.status(200).json(report);
+  }
+}
+
+async function handleBlogCron(req, res) {
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  // Autenticação do cron: aceita tanto o header nativo que a Vercel injecta
+  // (Authorization: Bearer $CRON_SECRET) como um header custom, para
+  // permitir também accionar via serviço externo — mesmo padrão de
+  // api/cleanup-temp-accounts.js.
+  const bearerSecret = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  const customSecret  = req.headers['x-vercel-cron-secret'] || req.headers['x-cron-secret'] || '';
+  const providedSecret = bearerSecret || customSecret;
+  if (!process.env.CRON_SECRET || providedSecret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Não autorizado' });
+  }
+
+  const results = { published: [], failed: [], autogen: null };
+
+  try {
+    // 1. Processar a fila (títulos manuais/IA já agendados e vencidos).
+    //    Limitado a 2 por execução para não estourar o timeout da função.
+    const nowIso = new Date().toISOString();
+    const due = await restRequest(
+      `blog_schedule_queue?status=eq.pending&scheduled_at=lte.${encodeURIComponent(nowIso)}&order=scheduled_at.asc&limit=2`
+    );
+
+    if (Array.isArray(due) && due.length) {
+      const existingPages = await restRequest('blog_pages?select=title');
+      const existingTitles = (existingPages || []).map(p => p.title);
+
+      for (const item of due) {
+        try {
+          const article = await _generateAndPublishArticle({
+            title: item.title, keywords: item.keywords, existingTitles,
+            transactionNote: `fila:${item.id}`,
+          });
+          existingTitles.push(item.title);
+          await restRequest(`blog_schedule_queue?id=eq.${item.id}`, {
+            method: 'PATCH', body: { status: 'published', blog_page_id: article.id }, prefer: 'return=minimal',
+          });
+          results.published.push({ id: item.id, title: item.title, slug: article.slug });
+        } catch (itemErr) {
+          console.error('[blog-cron] falha ao publicar item da fila:', item.id, itemErr.message);
+          await restRequest(`blog_schedule_queue?id=eq.${item.id}`, {
+            method: 'PATCH', body: { status: 'failed', error_note: itemErr.message }, prefer: 'return=minimal',
+          }).catch(() => {});
+          results.failed.push({ id: item.id, title: item.title, error: itemErr.message });
+        }
+      }
+    }
+
+    // 2. Geração automática por IA (se activada) — só corre se NENHUM item
+    //    manual foi processado agora, para manter o ritmo previsível e não
+    //    duplicar o "orçamento" de chamadas de IA da mesma execução.
+    if (results.published.length === 0) {
+      const settingsRows = await restRequest(
+        `system_settings?key=in.(blog_autogen_enabled,blog_autogen_interval_days,blog_autogen_last_run)&select=key,value`
+      );
+      const settings = {};
+      (settingsRows || []).forEach(r => { settings[r.key] = r.value; });
+
+      const enabled      = settings.blog_autogen_enabled === 'true';
+      const intervalDays = parseInt(settings.blog_autogen_interval_days, 10) || 7;
+      const lastRun       = settings.blog_autogen_last_run ? new Date(settings.blog_autogen_last_run) : null;
+      const dueForAutogen = !lastRun || (Date.now() - lastRun.getTime()) >= intervalDays * 86400000;
+
+      if (enabled && dueForAutogen) {
+        const existingPages = await restRequest('blog_pages?select=title');
+        const pendingQueue  = await restRequest('blog_schedule_queue?status=eq.pending&select=title');
+        const existingTitles = [
+          ...(existingPages || []).map(p => p.title),
+          ...(pendingQueue  || []).map(p => p.title),
+        ];
+
+        try {
+          // Pedir à IA um título+subtema novo, derivado dos serviços do
+          // MzDocs Pro mas ainda não coberto pelos artigos existentes.
+          const ideaPrompt = `Sugere UM título de artigo de blog sobre documentos/burocracia em Moçambique (CVs, contratos, cartas, declarações, procurações, etc.), pensado para SEO.\n\nNÃO podes repetir nem parafrasear de perto nenhum destes títulos já publicados ou já agendados:\n${existingTitles.slice(0, 100).map(t => `- ${t}`).join('\n') || '(nenhum ainda)'}\n\nPode ser um subtema/ângulo derivado de um dos temas já existentes (ex: uma variante para outra profissão, outra província, outro tipo de documento relacionado), desde que seja claramente distinto.\n\nResponde APENAS em JSON válido, sem markdown: {"title":"...","keywords":"palavra1, palavra2, palavra3"}`;
+
+          const ideaResult = await _callAiText(ideaPrompt, { maxTokens: 200, temperature: 0.8 });
+          if (!ideaResult) throw new Error('IA indisponível para sugerir título.');
+
+          let idea;
+          try {
+            const jsonMatch = ideaResult.text.match(/\{[\s\S]*\}/);
+            idea = JSON.parse(jsonMatch ? jsonMatch[0] : ideaResult.text);
+          } catch (_) {
+            throw new Error('Resposta da IA não é JSON válido para o título sugerido.');
+          }
+
+          if (!idea?.title || _isTooSimilar(idea.title, existingTitles)) {
+            throw new Error('Título sugerido pela IA repete conteúdo já existente — a saltar esta execução.');
+          }
+
+          const article = await _generateAndPublishArticle({
+            title: idea.title, keywords: idea.keywords, existingTitles,
+            transactionNote: 'autogen',
+          });
+
+          await restRequest('system_settings?key=eq.blog_autogen_last_run', {
+            method: 'PATCH', body: { value: new Date().toISOString() }, prefer: 'return=minimal',
+          });
+
+          results.autogen = { title: idea.title, slug: article.slug };
+        } catch (autoErr) {
+          console.error('[blog-cron] geração automática falhou:', autoErr.message);
+          results.autogen = { error: autoErr.message };
+        }
+      }
+    }
+
+    console.log('[blog-cron] concluído:', JSON.stringify(results));
+    return res.status(200).json({ success: true, ...results });
+  } catch (err) {
+    console.error('[blog-cron] erro geral:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+}
