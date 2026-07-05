@@ -525,12 +525,14 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
   transition: border-color .2s;
 }
 .usr-avatar-wrap:hover .usr-avatar { border-color: rgba(255,255,255,.6); }
+.usr-avatar { overflow: hidden; }
+.usr-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
 .usr-dropdown {
   display: none; flex-direction: column; gap: 4px;
   position: absolute; top: calc(100% + 10px); right: 0;
   background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
   box-shadow: 0 8px 32px rgba(7,16,31,.18);
-  padding: 14px 16px; min-width: 200px; z-index: 200;
+  padding: 14px 16px; min-width: 220px; z-index: 200;
   animation: ddIn .18s ease;
 }
 .usr-dropdown.open { display: flex; }
@@ -538,6 +540,12 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .usr-dd-name { font-size: 14px; font-weight: 700; color: #07101f; }
 .usr-dd-sub  { font-size: 11px; color: #94a3b8; word-break: break-all; }
 .usr-dd-sep  { border: none; border-top: 1px solid #f1f5f9; margin: 8px 0 4px; }
+.usr-dd-link {
+  display: block; background: transparent; border: none; border-radius: 8px;
+  color: #07101f; font-size: 13px; font-weight: 600; text-decoration: none;
+  padding: 8px 10px; cursor: pointer; text-align: left; transition: background .15s;
+}
+.usr-dd-link:hover { background: #EFF6FF; color: #1D4ED8; }
 .usr-dd-btn  {
   background: #FEF2F2; border: none; border-radius: 8px;
   color: #EF4444; font-size: 13px; font-weight: 600;
@@ -545,6 +553,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
   transition: background .15s;
 }
 .usr-dd-btn:hover { background: #FEE2E2; }
+#btnProfileQuick { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 
 /* ── HEADER RESPONSIVO ───────────────────────────────────────────────────── */
 
