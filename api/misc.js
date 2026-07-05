@@ -119,6 +119,7 @@ module.exports = async function handler(req, res) {
   if (action === 'config' || action === 'misc')         return handleConfig(req, res);
   if (action === 'verify-receipt')                      return handleVerifyReceipt(req, res);
   if (action === 'blog-cron')                           return handleBlogCron(req, res);
+  if (action === 'blog-list')                           return handleBlogList(req, res);
   if (action === 'github-diagnostic')                   return handleGithubDiagnostic(req, res);
 
   return res.status(404).json({ error: `Rota desconhecida: "${action}".` });
@@ -1800,6 +1801,52 @@ async function handleGithubDiagnostic(req, res) {
     report.erro = e.message;
     report.conclusao = 'Excepção de rede ao contactar a API do GitHub.';
     return res.status(200).json(report);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BLOG-LIST — endpoint público (sem autenticação) que lista artigos do blog
+// já publicados, mais recentes primeiro, com pesquisa opcional por título
+// ou descrição. Usado pela página /blog para listar e pesquisar artigos.
+// GET /api/misc?action=blog-list&q=termo&limit=60&offset=0
+// ════════════════════════════════════════════════════════════════════════════
+async function handleBlogList(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
+  try {
+    const q      = (req.query.q || '').toString().trim();
+    const limit  = Math.min(parseInt(req.query.limit, 10)  || 60, 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    // Mais recente primeiro: published_at (com nulls por último, para
+    // artigos antigos que possam não ter esse campo preenchido), e
+    // updated_at como critério de desempate/fallback.
+    let path = `blog_pages?published=eq.true&select=slug,title,meta_description,published_at,updated_at,views`
+             + `&order=published_at.desc.nullslast,updated_at.desc&limit=${limit}&offset=${offset}`;
+
+    if (q) {
+      // Remove caracteres que têm significado especial na sintaxe do
+      // PostgREST (vírgulas, parêntesis, %) para evitar quebrar a query.
+      const safe = q.replace(/[%,()]/g, ' ').trim();
+      if (safe) {
+        const pattern = encodeURIComponent(`*${safe}*`);
+        path += `&or=(title.ilike.${pattern},meta_description.ilike.${pattern})`;
+      }
+    }
+
+    const rows = await restRequest(path);
+    const posts = (Array.isArray(rows) ? rows : []).map(p => ({
+      slug: p.slug,
+      title: p.title,
+      description: p.meta_description || '',
+      date: p.published_at || p.updated_at,
+      views: p.views || 0,
+    }));
+
+    res.setHeader('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300');
+    return res.status(200).json({ posts, count: posts.length });
+  } catch (e) {
+    console.error('[blog-list] erro:', e.message);
+    return res.status(500).json({ error: 'Erro ao carregar artigos do blog.' });
   }
 }
 
