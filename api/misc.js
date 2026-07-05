@@ -1821,7 +1821,13 @@ async function handleBlogList(req, res) {
     // artigos antigos que possam não ter esse campo preenchido), e
     // updated_at como critério de desempate/fallback.
     let path = `blog_pages?published=eq.true&select=slug,title,meta_description,published_at,updated_at,views`
-             + `&order=published_at.desc.nullslast,updated_at.desc&limit=${limit}&offset=${offset}`;
+             // NOTA: não usar "updated_at" como critério de desempate — a
+             // tabela tem um trigger que actualiza updated_at em QUALQUER
+             // alteração da linha, incluindo o simples incremento de
+             // visitas (views = views + 1). Um artigo antigo muito visto
+             // ficaria sempre a parecer "recente". published_at é o único
+             // campo que reflecte o momento real da publicação.
+             + `&order=published_at.desc.nullslast&limit=${limit}&offset=${offset}`;
 
     if (q) {
       // Remove caracteres que têm significado especial na sintaxe do
