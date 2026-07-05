@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="pt-MZ">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="robots" content="noindex"/>
+<meta name="theme-color" content="#07101F"/>
+<title>O Meu Perfil — MzDocs Pro</title>
+<link rel="icon" href="/assets/icons/icon.svg" type="image/svg+xml"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --ink:#07101F;--ink2:#0F1E3B;--muted:#64748B;--border:#E2E8F0;
+    --surface:#F8FAFD;--white:#fff;
+    --blue:#3B82F6;--blue-d:#1D4ED8;--blue-s:#EFF6FF;
+    --green:#009A44;--green-d:#047857;--green-s:#ECFDF5;
+    --gold:#F59E0B;--gold-s:#FFFBEB;
+    --red:#EF4444;--red-s:#FEF2F2;
+    --purple:#7C3AED;--purple-s:#F5F3FF;
+    --r:14px;--sh:0 2px 12px rgba(7,16,31,.07);
+    --t:all .22s cubic-bezier(.4,0,.2,1);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);color:var(--ink);min-height:100svh}
+  ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+  /* HEADER */
+  .hdr{background:var(--ink);height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.07)}
+  .hdr-logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+  .hdr-badge{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--blue),var(--green));display:flex;align-items:center;justify-content:center;font-size:15px}
+  .hdr-name{font-size:16px;font-weight:800;color:#fff}
+  .hdr-back{color:rgba(255,255,255,.55);font-size:13px;text-decoration:none;transition:var(--t)}
+  .hdr-back:hover{color:#fff}
+
+  .wrap{max-width:720px;margin:0 auto;padding:20px 14px 90px}
+
+  /* LOADING / NOT AUTH */
+  .center-box{max-width:420px;margin:60px auto;text-align:center;padding:0 16px}
+  .spinner{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;margin:0 auto 14px;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .center-box p{color:var(--muted);font-size:14px}
+  .btn{border:none;border-radius:10px;padding:11px 18px;font-size:13.5px;font-weight:800;cursor:pointer;font-family:inherit;transition:var(--t);display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+  .btn-blue{background:linear-gradient(135deg,var(--blue),var(--blue-d));color:#fff}
+  .btn-blue:hover{opacity:.9}
+
+  /* HERO — cartão de identidade */
+  .id-card{background:linear-gradient(135deg,var(--ink) 0%,#0F2D4A 100%);border-radius:20px;padding:22px 20px;margin-bottom:16px;position:relative;overflow:hidden}
+  .id-card::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 60% at 100% 0%,rgba(0,154,68,.25),transparent 65%)}
+  .id-inner{position:relative;display:flex;gap:16px;align-items:center}
+  .avatar-wrap{position:relative;flex-shrink:0}
+  .avatar-img{width:76px;height:76px;border-radius:50%;object-fit:cover;background:linear-gradient(135deg,#3B82F6,#1D4ED8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:800;border:3px solid rgba(255,255,255,.25)}
+  .avatar-edit{position:absolute;bottom:-2px;right:-2px;width:26px;height:26px;border-radius:50%;background:var(--gold);border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer}
+  .id-info{min-width:0;flex:1}
+  .id-name{font-size:18px;font-weight:800;color:#fff;line-height:1.2;overflow-wrap:anywhere}
+  .id-sub{font-size:12px;color:rgba(255,255,255,.55);margin-top:3px;overflow-wrap:anywhere}
+  .id-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:10.5px;font-weight:800}
+  .badge-blue{background:rgba(59,130,246,.25);border:1px solid rgba(59,130,246,.45);color:#93C5FD}
+  .badge-gold{background:rgba(245,158,11,.25);border:1px solid rgba(245,158,11,.45);color:#FCD34D}
+  .badge-green{background:rgba(16,185,129,.22);border:1px solid rgba(16,185,129,.4);color:#6EE7B7}
+  .badge-purple{background:rgba(124,58,237,.25);border:1px solid rgba(124,58,237,.45);color:#C4B5FD}
+
+  /* KPI GRID — painel de controlo */
+  .kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+  @media(min-width:480px){.kpi-grid{grid-template-columns:repeat(4,1fr)}}
+  .kpi{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:13px;box-shadow:var(--sh)}
+  .kpi-val{font-size:19px;font-weight:800;color:var(--ink)}
+  .kpi-lbl{font-size:10.5px;color:var(--muted);margin-top:2px}
+
+  /* AÇÕES RÁPIDAS — grid de conversão */
+  .actions-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px}
+  @media(min-width:480px){.actions-grid{grid-template-columns:repeat(4,1fr)}}
+  .action-card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:14px 10px;text-align:center;text-decoration:none;color:var(--ink);box-shadow:var(--sh);transition:var(--t)}
+  .action-card:hover{border-color:var(--blue);transform:translateY(-2px)}
+  .action-icon{font-size:22px;margin-bottom:6px}
+  .action-lbl{font-size:11.5px;font-weight:700}
+  .action-card.hot{background:linear-gradient(135deg,var(--green),var(--green-d));border-color:transparent;color:#fff}
+  .action-card.hot .action-lbl{color:#fff}
+
+  /* SECÇÕES / TABS */
+  .section{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:14px;box-shadow:var(--sh);scroll-margin-top:70px}
+  .section-title{font-size:14px;font-weight:800;color:var(--ink);margin-bottom:4px;display:flex;align-items:center;gap:7px}
+  .section-desc{font-size:12px;color:var(--muted);margin-bottom:14px}
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+  .field label{font-size:12px;font-weight:700;color:var(--ink2)}
+  .inp{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;color:var(--ink);background:var(--white);outline:none;transition:var(--t)}
+  .inp:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+  .inp:disabled{background:var(--surface);color:var(--muted)}
+  .hint{font-size:11px;color:var(--muted)}
+  .form-row{display:flex;gap:10px;flex-wrap:wrap}
+  .form-row .btn{flex-shrink:0}
+  .msg-box{padding:11px 13px;border-radius:10px;font-size:12.5px;font-weight:600;display:none;margin-top:10px}
+  .msg-ok{background:var(--green-s);border:1.5px solid #6EE7B7;color:#065F46}
+  .msg-err{background:var(--red-s);border:1.5px solid #FCA5A5;color:#991B1B}
+
+  /* DOCUMENTOS */
+  .doc-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--surface)}
+  .doc-row:last-child{border-bottom:none}
+  .doc-icon{width:36px;height:36px;border-radius:9px;background:var(--blue-s);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+  .doc-title{font-size:13px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .doc-date{font-size:11px;color:var(--muted)}
+  .empty{text-align:center;color:var(--muted);font-size:13px;padding:20px 0}
+
+  /* DANGER ZONE */
+  .danger{border-color:#FCA5A5}
+  .danger .section-title{color:var(--red)}
+  .btn-ghost{background:var(--surface);color:var(--ink);border:1.5px solid var(--border)}
+  .btn-red-outline{background:var(--red-s);color:var(--red);border:1.5px solid #FECACA}
+
+  input[type="file"]{display:none}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <a href="/" class="hdr-logo">
+    <div class="hdr-badge">📄</div>
+    <span class="hdr-name">MzDocs Pro</span>
+  </a>
+  <a href="/" class="hdr-back">← Início</a>
+</header>
+
+<div class="wrap">
+
+  <!-- ESTADO: A CARREGAR -->
+  <div class="center-box" id="loadingState">
+    <div class="spinner"></div>
+    <p>A carregar o seu perfil…</p>
+  </div>
+
+  <!-- ESTADO: NÃO AUTENTICADO -->
+  <div class="center-box" id="notAuth" style="display:none">
+    <div style="font-size:40px;margin-bottom:10px">🔒</div>
+    <h2 style="font-size:18px;font-weight:800;margin-bottom:8px">Sessão necessária</h2>
+    <p style="margin-bottom:18px">Inicie sessão para aceder ao seu perfil e painel de controlo.</p>
+    <a href="/" class="btn btn-blue">Ir para o início e entrar</a>
+  </div>
+
+  <!-- PAINEL PRINCIPAL -->
+  <div id="panel" style="display:none">
+
+    <!-- CARTÃO DE IDENTIDADE -->
+    <div class="id-card">
+      <div class="id-inner">
+        <div class="avatar-wrap">
+          <div class="avatar-img" id="avatarImg">…</div>
+          <div class="avatar-edit" id="btnAvatarEdit" title="Alterar foto">✏️</div>
+          <input type="file" id="avatarInput" accept="image/*"/>
+        </div>
+        <div class="id-info">
+          <div class="id-name" id="idName">—</div>
+          <div class="id-sub" id="idSub">—</div>
+          <div class="id-badges" id="idBadges"></div>
+        </div>
+      </div>
+    </div>
+    <div class="msg-box" id="avatarMsg"></div>
+
+    <!-- PAINEL DE CONTROLO — KPIs -->
+    <div id="painel"></div>
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-val" id="kpiCredits">—</div><div class="kpi-lbl">⚡ Créditos disponíveis</div></div>
+      <div class="kpi"><div class="kpi-val" id="kpiDocs">—</div><div class="kpi-lbl">📄 Documentos criados</div></div>
+      <div class="kpi"><div class="kpi-val" id="kpiPlan">—</div><div class="kpi-lbl">💳 Tipo de conta</div></div>
+      <div class="kpi"><div class="kpi-val" id="kpiSince">—</div><div class="kpi-lbl">📅 Membro desde</div></div>
+    </div>
+
+    <!-- AÇÕES RÁPIDAS — posicionadas estrategicamente para conversão -->
+    <div class="actions-grid">
+      <a href="/#howItWorks" class="action-card hot" id="actNewDoc">
+        <div class="action-icon">🎁</div><div class="action-lbl">Criar Documento</div>
+      </a>
+      <a href="/" id="actTopup" class="action-card">
+        <div class="action-icon">⚡</div><div class="action-lbl">Comprar Créditos</div>
+      </a>
+      <a href="/templates.html" class="action-card">
+        <div class="action-icon">🎨</div><div class="action-lbl">Ver Modelos</div>
+      </a>
+      <a href="/afiliado.html" class="action-card" id="actAffiliate">
+        <div class="action-icon">💰</div><div class="action-lbl">Tornar-me Afiliado</div>
+      </a>
+    </div>
+
+    <!-- DADOS PESSOAIS -->
+    <div class="section" id="dados">
+      <div class="section-title">👤 Dados Pessoais</div>
+      <div class="section-desc">Estas informações aparecem no seu perfil e nos documentos que gerar.</div>
+      <div class="field">
+        <label for="inpName">Nome completo</label>
+        <input class="inp" id="inpName" placeholder="O seu nome completo" maxlength="120"/>
+      </div>
+      <div class="field">
+        <label for="inpPhone">Telemóvel</label>
+        <input class="inp" id="inpPhone" placeholder="84/85/86/87 XXX XXXX"/>
+        <span class="hint">Formato moçambicano — usado para recuperação de conta e M-Pesa.</span>
+      </div>
+      <div class="form-row">
+        <button class="btn btn-blue" id="btnSaveProfile">💾 Guardar alterações</button>
+      </div>
+      <div class="msg-box" id="profileMsg"></div>
+    </div>
+
+    <!-- SEGURANÇA -->
+    <div class="section" id="seguranca">
+      <div class="section-title">🔐 Segurança da Conta</div>
+      <div class="section-desc">Altere o seu e-mail ou palavra-passe. Precisará de confirmar alterações de e-mail na sua caixa de entrada.</div>
+
+      <div class="field">
+        <label for="inpEmail">E-mail</label>
+        <input class="inp" id="inpEmail" placeholder="seuemail@exemplo.com"/>
+      </div>
+      <div class="form-row">
+        <button class="btn btn-ghost" id="btnSaveEmail">✉️ Actualizar e-mail</button>
+      </div>
+      <div class="msg-box" id="emailMsg"></div>
+
+      <hr style="border:none;border-top:1px solid var(--surface);margin:18px 0"/>
+
+      <div class="field">
+        <label for="inpPass1">Nova palavra-passe</label>
+        <input class="inp" id="inpPass1" type="password" placeholder="Mínimo 6 caracteres"/>
+      </div>
+      <div class="field">
+        <label for="inpPass2">Confirmar nova palavra-passe</label>
+        <input class="inp" id="inpPass2" type="password" placeholder="Repita a palavra-passe"/>
+      </div>
+      <div class="form-row">
+        <button class="btn btn-ghost" id="btnSavePass">🔑 Alterar palavra-passe</button>
+      </div>
+      <div class="msg-box" id="passMsg"></div>
+    </div>
+
+    <!-- PLANO E CRÉDITOS -->
+    <div class="section" id="plano">
+      <div class="section-title">💳 Plano e Créditos</div>
+      <div class="section-desc" id="planDesc">A carregar informação do plano…</div>
+      <div class="form-row">
+        <a href="/" class="btn btn-blue">⚡ Comprar mais créditos</a>
+        <a href="https://wa.me/258858695506?text=Ol%C3%A1%2C%20preciso%20de%20ajuda%20com%20o%20meu%20plano%20MzDocs%20Pro" target="_blank" class="btn btn-ghost">💬 Falar com Suporte</a>
+      </div>
+    </div>
+
+    <!-- DOCUMENTOS RECENTES -->
+    <div class="section" id="documentos">
+      <div class="section-title">📁 Documentos Recentes</div>
+      <div class="section-desc">Os últimos documentos que gerou na plataforma.</div>
+      <div id="docsList"><div class="empty">A carregar…</div></div>
+      <div class="form-row" style="margin-top:10px">
+        <a href="/" class="btn btn-ghost">📂 Ver arquivo completo</a>
+      </div>
+    </div>
+
+    <!-- AFILIADOS -->
+    <div class="section" id="afiliados">
+      <div class="section-title">🤝 Programa de Afiliados</div>
+      <div class="section-desc" id="affDesc">Convide amigos e ganhe comissão em cada documento que eles comprarem.</div>
+      <div class="form-row">
+        <a href="/afiliado.html" class="btn btn-blue" id="affBtn">💰 Ver Painel de Afiliado</a>
+      </div>
+    </div>
+
+    <!-- ZONA DE PERIGO -->
+    <div class="section danger" id="perigo">
+      <div class="section-title">⚠️ Zona de Segurança</div>
+      <div class="section-desc">Ações irreversíveis ou de segurança avançada.</div>
+      <div class="form-row">
+        <button class="btn btn-ghost" id="btnLogoutAll">📵 Terminar sessão em todos os dispositivos</button>
+        <a href="https://wa.me/258858695506?text=Ol%C3%A1%2C%20quero%20eliminar%20a%20minha%20conta%20MzDocs%20Pro" target="_blank" class="btn btn-red-outline">🗑️ Pedir eliminação da conta</a>
+      </div>
+      <div class="msg-box" id="dangerMsg"></div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { authManager } from '/assets/js/auth/AuthManager.js';
+
+let WA_SUPPORT = '258858695506';
+
+function showMsg(id, text, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'msg-box ' + (ok ? 'msg-ok' : 'msg-err');
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 6000);
+}
+
+function initials(name) {
+  return (name || 'U').trim().charAt(0).toUpperCase();
+}
+
+function fmtDate(d) {
+  try { return new Date(d).toLocaleDateString('pt-MZ', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  catch { return '—'; }
+}
+
+async function loadConfig() {
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+    if (cfg?.whatsappSupport) WA_SUPPORT = cfg.whatsappSupport;
+    document.querySelectorAll('a[href*="wa.me/258858695506"]').forEach(a => {
+      a.href = a.href.replace('258858695506', WA_SUPPORT);
+    });
+  } catch (_) {}
+}
+
+function renderIdentity(user, profile) {
+  const name  = profile?.full_name || user.user_metadata?.full_name || (user.phone ? `···${user.phone.slice(-4)}` : 'Utilizador');
+  const email = user.email || profile?.email || '';
+  const phone = user.phone || profile?.phone || '';
+
+  document.getElementById('idName').textContent = name;
+  document.getElementById('idSub').textContent  = email || phone || 'Sem contacto registado';
+
+  const avatarEl = document.getElementById('avatarImg');
+  if (profile?.avatar_url) {
+    avatarEl.innerHTML = `<img src="${profile.avatar_url}" alt="${name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.parentElement.textContent='${initials(name)}'">`;
+  } else {
+    avatarEl.textContent = initials(name);
+  }
+
+  const badges = [];
+  if (authManager.isAdmin()) badges.push('<span class="badge badge-purple">🛡️ Administrador</span>');
+  if (profile?.is_affiliate) badges.push('<span class="badge badge-gold">🤝 Afiliado</span>');
+  badges.push(profile?.account_type === 'avulso'
+    ? '<span class="badge badge-blue">⏳ Acesso Avulso</span>'
+    : '<span class="badge badge-green">✅ Conta Normal</span>');
+  document.getElementById('idBadges').innerHTML = badges.join('');
+
+  // KPIs
+  document.getElementById('kpiCredits').textContent = profile?.credits ?? '—';
+  document.getElementById('kpiDocs').textContent     = profile?.total_documents ?? 0;
+  document.getElementById('kpiPlan').textContent     = profile?.account_type === 'avulso' ? 'Avulso' : 'Normal';
+  document.getElementById('kpiSince').textContent     = profile?.created_at ? fmtDate(profile.created_at) : '—';
+
+  // Formulário de dados pessoais
+  document.getElementById('inpName').value  = profile?.full_name || user.user_metadata?.full_name || '';
+  document.getElementById('inpPhone').value = phone || '';
+  document.getElementById('inpEmail').value = email || '';
+
+  // Plano
+  const planDesc = document.getElementById('planDesc');
+  if (profile?.account_type === 'avulso') {
+    const exp = profile?.credits_expires_at ? fmtDate(profile.credits_expires_at) : 'brevemente';
+    planDesc.textContent = `Tem um acesso avulso com ${profile?.credits ?? 0} crédito(s), válido até ${exp}. Crie uma conta normal para créditos que não expiram tão rápido.`;
+  } else {
+    planDesc.textContent = `Conta normal com ${profile?.credits ?? 0} crédito(s) disponíveis. Cada documento gerado consome 1 crédito.`;
+  }
+
+  // Afiliados
+  const affBtn  = document.getElementById('affBtn');
+  const affDesc = document.getElementById('affDesc');
+  const actAff  = document.getElementById('actAffiliate');
+  if (profile?.is_affiliate) {
+    affBtn.textContent = '💰 Ver Painel de Afiliado';
+    affDesc.textContent = 'Já é afiliado! Acompanhe as suas comissões e o seu link de partilha.';
+    if (actAff) actAff.querySelector('.action-lbl').textContent = 'Painel de Afiliado';
+  } else {
+    affBtn.textContent = '💰 Tornar-me Afiliado';
+    affDesc.textContent = 'Convide amigos e ganhe comissão em cada documento que eles comprarem — registo gratuito.';
+  }
+}
+
+async function loadDocuments(userId) {
+  const list = document.getElementById('docsList');
+  try {
+    const { data, error } = await authManager.supabase
+      .from('documents')
+      .select('id, service_type, title, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(6);
+    if (error || !data?.length) {
+      list.innerHTML = '<div class="empty">Ainda não gerou nenhum documento. Crie o primeiro agora! 🎉</div>';
+      return;
+    }
+    const ICONS = { trabalho:'📚', cv:'📋', carta:'✉️', orcamento:'🏗️', impressao:'🖨️', foto:'📷', conversao:'🔄' };
+    list.innerHTML = data.map(d => `
+      <div class="doc-row">
+        <div class="doc-icon">${ICONS[d.service_type] || '📄'}</div>
+        <div style="flex:1;min-width:0">
+          <div class="doc-title">${(d.title || 'Documento sem título').replace(/</g,'&lt;')}</div>
+          <div class="doc-date">${fmtDate(d.created_at)}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch (_) {
+    list.innerHTML = '<div class="empty">Não foi possível carregar o histórico agora.</div>';
+  }
+}
+
+async function handleAvatarUpload(file) {
+  try {
+    document.getElementById('btnAvatarEdit').textContent = '⏳';
+    const url = await authManager.uploadAvatar(file);
+    document.getElementById('avatarImg').innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+    showMsg('avatarMsg', '✅ Foto de perfil actualizada com sucesso!', true);
+  } catch (err) {
+    showMsg('avatarMsg', '❌ ' + (err.message || 'Erro ao carregar a foto.'), false);
+  } finally {
+    document.getElementById('btnAvatarEdit').textContent = '✏️';
+  }
+}
+
+function bindForms() {
+  document.getElementById('btnAvatarEdit')?.addEventListener('click', () => {
+    document.getElementById('avatarInput')?.click();
+  });
+  document.getElementById('avatarInput')?.addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (file) handleAvatarUpload(file);
+  });
+
+  document.getElementById('btnSaveProfile')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnSaveProfile');
+    const full_name = document.getElementById('inpName').value.trim();
+    const phone     = document.getElementById('inpPhone').value.trim();
+    btn.disabled = true; btn.textContent = 'A guardar…';
+    try {
+      await authManager.updateProfile({ full_name, phone });
+      showMsg('profileMsg', '✅ Dados actualizados com sucesso!', true);
+      renderIdentity(authManager.user, authManager.profile);
+    } catch (err) {
+      showMsg('profileMsg', '❌ ' + (err.message || 'Erro ao guardar.'), false);
+    } finally {
+      btn.disabled = false; btn.textContent = '💾 Guardar alterações';
+    }
+  });
+
+  document.getElementById('btnSaveEmail')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnSaveEmail');
+    const email = document.getElementById('inpEmail').value.trim();
+    btn.disabled = true; btn.textContent = 'A processar…';
+    try {
+      await authManager.updateEmail(email);
+      showMsg('emailMsg', '📩 Enviámos um link de confirmação para o novo e-mail. Clique nele para concluir a alteração.', true);
+    } catch (err) {
+      showMsg('emailMsg', '❌ ' + (err.message || 'Erro ao actualizar o e-mail.'), false);
+    } finally {
+      btn.disabled = false; btn.textContent = '✉️ Actualizar e-mail';
+    }
+  });
+
+  document.getElementById('btnSavePass')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnSavePass');
+    const p1 = document.getElementById('inpPass1').value;
+    const p2 = document.getElementById('inpPass2').value;
+    if (p1 !== p2) { showMsg('passMsg', '❌ As palavras-passe não coincidem.', false); return; }
+    btn.disabled = true; btn.textContent = 'A alterar…';
+    try {
+      await authManager.updateAccountPassword(p1);
+      document.getElementById('inpPass1').value = '';
+      document.getElementById('inpPass2').value = '';
+      showMsg('passMsg', '✅ Palavra-passe alterada com sucesso!', true);
+    } catch (err) {
+      showMsg('passMsg', '❌ ' + (err.message || 'Erro ao alterar a palavra-passe.'), false);
+    } finally {
+      btn.disabled = false; btn.textContent = '🔑 Alterar palavra-passe';
+    }
+  });
+
+  document.getElementById('btnLogoutAll')?.addEventListener('click', async () => {
+    if (!confirm('Isto vai terminar a sessão em todos os dispositivos onde tem sessão iniciada. Continuar?')) return;
+    try {
+      await authManager.signOutEverywhere();
+      location.href = '/';
+    } catch (err) {
+      showMsg('dangerMsg', '❌ ' + (err.message || 'Erro ao terminar sessões.'), false);
+    }
+  });
+}
+
+async function init() {
+  await loadConfig();
+  await authManager.ready();
+  const user = authManager.user;
+  document.getElementById('loadingState').style.display = 'none';
+
+  if (!user) {
+    document.getElementById('notAuth').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('panel').style.display = 'block';
+  renderIdentity(user, authManager.profile);
+  bindForms();
+  await loadDocuments(user.id);
+
+  // Se o perfil ainda não tiver chegado (corrida com _loadProfile), refrescar.
+  if (!authManager.profile) {
+    await authManager.refreshProfile();
+    renderIdentity(authManager.user, authManager.profile);
+  }
+
+  // Deep-link (#dados, #seguranca, #documentos, …) — scroll suave à secção
+  if (location.hash) {
+    setTimeout(() => {
+      const target = document.querySelector(location.hash);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
