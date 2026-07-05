@@ -129,25 +129,11 @@ async function bootstrap() {
   const sandboxBar = document.getElementById('sandboxBar');
   if (sandboxBar) sandboxBar.style.display = 'none';
 
-  // ── Contador público de documentos gerados ──────────────────────────────
-  if (_config.docsGenerated != null) {
-    const bar = document.getElementById('docCounterBar');
-    const num = document.getElementById('docCounterNum');
-    if (bar && num) {
-      // Animar o número de 0 até o valor real
-      const target = Math.max(0, _config.docsGenerated);
-      if (target > 0) {
-        bar.style.display = 'block';
-        let current = Math.max(0, target - 50);
-        const step  = Math.ceil((target - current) / 40);
-        const timer = setInterval(() => {
-          current = Math.min(current + step, target);
-          num.textContent = current.toLocaleString('pt-MZ');
-          if (current >= target) clearInterval(timer);
-        }, 30);
-      }
-    }
-  }
+  // NOTA: o contador de documentos gerados já é mostrado no hero (ver
+  // homeController.js → _animateSocialCounter). Havia aqui um segundo
+  // contador duplicado ("X documentos gerados por moçambicanos") logo
+  // acima de "O que precisa criar?" — removido para não repetir a mesma
+  // informação duas vezes na mesma página.
 
   // ── Inicializar homepage de conversão ──────────────────────────────────
   initHome().catch(e => console.warn('[MzDocs] homeController erro:', e));
