@@ -37,6 +37,8 @@
     .hub-hero{background:linear-gradient(135deg,#07101F,#0f2a4a);color:#fff;padding:40px 20px;text-align:center}
     .hub-hero h1{font-family:'Instrument Serif',serif;font-size:clamp(24px,5vw,40px);margin-bottom:12px;line-height:1.2}
     .hub-hero p{font-size:16px;color:rgba(255,255,255,.7);max-width:600px;margin:0 auto 20px}
+    .hero-quote{font-size:15px;font-style:italic;color:rgba(255,255,255,.7);max-width:560px;margin:0 auto 20px;line-height:1.6}
+    .hero-quote .author{display:block;margin-top:8px;font-size:12.5px;font-style:normal;font-weight:700;color:rgba(255,255,255,.45);letter-spacing:.3px}
     .hub-hero-cta{display:inline-block;background:var(--green);color:#fff;padding:12px 28px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none}
     .hub-hero-cta:hover{background:#007a35}
     .hub-stats{display:flex;justify-content:center;gap:32px;margin-top:24px;flex-wrap:wrap}
@@ -85,11 +87,11 @@
 
 <div class="hub-hero">
   <h1>Guias e Modelos de Documentos para Moçambique</h1>
-  <p>Tudo o que precisa para criar documentos profissionais, jurídicos e académicos — adaptados à realidade moçambicana.</p>
+  <p id="heroQuote" class="hero-quote">Carregando…</p>
   <a class="hub-hero-cta" href="/">🚀 Gerar o Meu Documento Agora</a>
   <div class="hub-stats">
     <div class="hub-stat"><div class="hub-stat-n">15+</div><div class="hub-stat-l">Guias práticos</div></div>
-    <div class="hub-stat"><div class="hub-stat-n">1.200+</div><div class="hub-stat-l">Documentos gerados</div></div>
+    <div class="hub-stat" id="docsStatWrap"><div class="hub-stat-n" id="docsStatN">…</div><div class="hub-stat-l" id="docsStatL">Documentos gerados</div></div>
     <div class="hub-stat"><div class="hub-stat-n">⭐ 4.9</div><div class="hub-stat-l">Avaliação</div></div>
   </div>
 </div>
@@ -269,6 +271,98 @@
   <div>© 2026 MzDocs Pro — Documentos profissionais para Moçambique</div>
   <div><a href="/">Início</a> · <a href="/templates.html">Templates</a> · <a href="/legal.html">Privacidade</a></div>
 </footer>
+<script>
+(function () {
+  // Citações do dia — a mesma para todos os visitantes num dado dia, muda
+  // automaticamente à meia-noite (baseado no dia do ano, não em sorteio).
+  var QUOTES = [
+    { text: "A organização é a chave para transformar sonhos em resultados.", author: "Provérbio popular" },
+    { text: "Quem não se prepara, prepara-se para falhar.", author: "Benjamin Franklin" },
+    { text: "A persistência é o caminho do êxito.", author: "Charlie Chaplin" },
+    { text: "A luta continua.", author: "Samora Machel" },
+    { text: "É impossível progredir sem mudança.", author: "George Bernard Shaw" },
+    { text: "Educai os homens sem consciência e estareis a arruinar o mundo.", author: "Nelson Mandela" },
+    { text: "A burocracia vence-se com paciência e um bom documento.", author: "Ditado moçambicano" },
+    { text: "O sucesso é a soma de pequenos esforços repetidos todos os dias.", author: "Robert Collier" },
+    { text: "Quem tem um porquê para viver pode suportar quase todos os comos.", author: "Friedrich Nietzsche" },
+    { text: "A disciplina é a ponte entre metas e realizações.", author: "Jim Rohn" },
+    { text: "Fazer hoje o que os outros deixam para amanhã.", author: "Ditado popular" },
+    { text: "A educação é a arma mais poderosa para mudar o mundo.", author: "Nelson Mandela" },
+    { text: "Trabalhar com honestidade abre todas as portas.", author: "Provérbio africano" },
+    { text: "Não é o mais forte que sobrevive, mas o mais organizado.", author: "Adaptado de Charles Darwin" },
+    { text: "Um documento bem feito poupa-te uma vida de dores de cabeça.", author: "Ditado moçambicano" },
+    { text: "A paciência é amarga, mas o seu fruto é doce.", author: "Jean-Jacques Rousseau" },
+    { text: "Grandes feitos começam com pequenos passos organizados.", author: "Lao Tzu" },
+    { text: "Quem caminha sozinho pode até chegar mais rápido, mas em conjunto vai mais longe.", author: "Provérbio africano" },
+    { text: "O trabalho árduo vence o talento quando o talento não trabalha arduamente.", author: "Tim Notke" },
+    { text: "Cuidar do papel de hoje evita a correria de amanhã.", author: "Ditado popular" },
+    { text: "A preparação é a chave do sucesso.", author: "Alexander Graham Bell" },
+    { text: "Cada burocracia vencida é uma porta que se abre.", author: "MzDocs Pro" },
+    { text: "A simplicidade é o último grau de sofisticação.", author: "Leonardo da Vinci" },
+    { text: "Quem planeia com antecedência, colhe com tranquilidade.", author: "Provérbio popular" },
+    { text: "Os documentos certos, no momento certo, mudam destinos.", author: "MzDocs Pro" },
+    { text: "A determinação de hoje constrói o sucesso de amanhã.", author: "Provérbio popular" },
+    { text: "Não contes os dias, faz com que os dias contem.", author: "Muhammad Ali" },
+    { text: "O conhecimento é como um jardim: se não for cultivado, não pode ser colhido.", author: "Provérbio africano" },
+    { text: "Um bom plano hoje é melhor que um plano perfeito amanhã.", author: "George S. Patton" },
+    { text: "A confiança nasce da preparação.", author: "Provérbio popular" },
+  ];
+
+  function dayOfYear(date) {
+    var start = new Date(date.getFullYear(), 0, 0);
+    return Math.floor((date - start) / 86400000);
+  }
+
+  var el = document.getElementById('heroQuote');
+  if (el) {
+    var q = QUOTES[dayOfYear(new Date()) % QUOTES.length];
+    var esc = function(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+    el.innerHTML = '“' + esc(q.text) + '”<span class="author">— ' + esc(q.author) + '</span>';
+  }
+})();
+
+(function () {
+  // Número REAL de documentos gerados (vindo de /api/config, a mesma fonte
+  // usada na homepage) — nunca um valor inventado. Formatação compacta
+  // (31 → "31", 2000 → "2k", 2300 → "2.3k", 1000000 → "1M") e mensagens
+  // honestas quando o volume ainda é baixo, em vez de forçar um número
+  // grande.
+  function formatCompact(n) {
+    if (n >= 1000000) { var m = n/1000000; return (Number.isInteger(m)?m:m.toFixed(1)) + 'M'; }
+    if (n >= 1000)    { var k = n/1000;    return (Number.isInteger(k)?k:k.toFixed(1)) + 'k'; }
+    return String(n);
+  }
+
+  fetch('/api/config')
+    .then(function(r){ return r.json(); })
+    .then(function(cfg){
+      var n = cfg && cfg.docsGenerated;
+      var nEl = document.getElementById('docsStatN');
+      var lEl = document.getElementById('docsStatL');
+      var wrap = document.getElementById('docsStatWrap');
+      if (!nEl || !lEl || !wrap) return;
+
+      if (n == null) { wrap.style.display = 'none'; return; }
+      if (n <= 0) {
+        nEl.textContent = '🆕';
+        lEl.textContent = 'Novo — sê o primeiro';
+        return;
+      }
+      if (n < 50) {
+        // Fase inicial: número real, sem o "+" que sugere volume alto.
+        nEl.textContent = String(n);
+        lEl.textContent = 'Documentos gerados';
+        return;
+      }
+      nEl.textContent = formatCompact(n) + '+';
+      lEl.textContent = 'Documentos gerados';
+    })
+    .catch(function(){
+      var wrap = document.getElementById('docsStatWrap');
+      if (wrap) wrap.style.display = 'none';
+    });
+})();
+</script>
 <script>
 // Ícone representativo conforme o tema do título — o mesmo princípio dos
 // cartões curados (🎓 para CV de licenciado, ⚖️ para procuração, etc.),
