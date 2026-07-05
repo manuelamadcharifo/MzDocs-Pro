@@ -274,22 +274,51 @@ function _setupAuthHeader() {
       }
 
       // Dados do utilizador
-      const phone    = user.phone || user._profile?.phone || '';
-      const email    = user.email || user._profile?.email || '';
-      const name     = user._profile?.full_name
-                    || user.user_metadata?.full_name
-                    || (phone ? `···${phone.slice(-4)}` : 'Utilizador');
-      const initials = name.charAt(0).toUpperCase();
-      const subtitle = email || phone || '';
+      const phone     = user.phone || user._profile?.phone || '';
+      const email     = user.email || user._profile?.email || '';
+      const name      = user._profile?.full_name
+                     || user.user_metadata?.full_name
+                     || (phone ? `···${phone.slice(-4)}` : 'Utilizador');
+      const initials  = name.charAt(0).toUpperCase();
+      const subtitle  = email || phone || '';
+      const avatarUrl = user._profile?.avatar_url || '';
+      const isAdmin   = authManager.isAdmin();
+      const isAffil   = user._profile?.is_affiliate === true;
+
+      // Botão rápido de acesso ao Painel/Perfil — inserido antes do
+      // botão de Arquivo para dar visibilidade estratégica ao painel do
+      // utilizador (posicionado no local de maior atenção do header).
+      let btnProfileQuick = document.getElementById('btnProfileQuick');
+      if (!btnProfileQuick && userArea) {
+        btnProfileQuick = document.createElement('a');
+        btnProfileQuick.id = 'btnProfileQuick';
+        btnProfileQuick.className = 'btn-icon';
+        btnProfileQuick.title = 'O meu painel';
+        btnProfileQuick.href = '/perfil.html';
+        btnProfileQuick.textContent = '👤';
+        const historyBtn = document.getElementById('btnHistory');
+        if (historyBtn) userArea.insertBefore(btnProfileQuick, historyBtn);
+        else userMenu?.insertAdjacentElement('afterend', btnProfileQuick);
+      }
+
+      const avatarInner = avatarUrl
+        ? `<img src="${avatarUrl}" alt="${name}" onerror="this.parentElement.textContent='${initials}'">`
+        : initials;
 
       // Usar classes CSS do styles.css — sem inline styles
       if (userMenu) {
         userMenu.innerHTML = `
           <div class="usr-avatar-wrap" id="usrAvatarWrap">
-            <div class="usr-avatar" title="${name}">${initials}</div>
+            <div class="usr-avatar" title="${name}">${avatarInner}</div>
             <div class="usr-dropdown" id="usrDropdown">
               <div class="usr-dd-name">${name}</div>
               <div class="usr-dd-sub">${subtitle}</div>
+              <hr class="usr-dd-sep"/>
+              <a class="usr-dd-link" href="/perfil.html">👤 O Meu Perfil</a>
+              <a class="usr-dd-link" href="/perfil.html#painel">🎯 Painel de Controlo</a>
+              <a class="usr-dd-link" href="/perfil.html#documentos">📁 Meus Documentos</a>
+              <a class="usr-dd-link" href="/afiliado.html">${isAffil ? '🤝 Painel de Afiliado' : '💰 Tornar-me Afiliado'}</a>
+              ${isAdmin ? '<a class="usr-dd-link" href="/admin.html">🛡️ Administração</a>' : ''}
               <hr class="usr-dd-sep"/>
               <button class="usr-dd-btn" id="btnLogout">🚪 Terminar sessão</button>
             </div>
@@ -321,6 +350,7 @@ function _setupAuthHeader() {
 
     } else {
       // ── Não autenticado ─────────────────────────────────────────────────────
+      document.getElementById('btnProfileQuick')?.remove();
       if (authBtn) {
         authBtn.style.display = 'block';
         authBtn.textContent   = '🔐 Entrar';
