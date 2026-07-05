@@ -149,6 +149,12 @@ async function bootstrap() {
   // ── Onboarding de 15 segundos (só na primeira visita) ──────────────────
   _showOnboardingIfNeeded();
 
+  // ── Deep-links de acção (?topup=1 / ?history=1) ─────────────────────────
+  // Usados por /perfil.html para que "Comprar Créditos" e "Ver arquivo
+  // completo" abram directamente o modal correspondente na home, em vez de
+  // simplesmente deixar o utilizador na página inicial sem fazer nada.
+  _handleActionDeepLinks(payCtrl, histCtrl);
+
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.register('/sw.js');
@@ -226,6 +232,33 @@ async function bootstrap() {
   });
 }
 
+// ── Deep-links de acção vindos de outras páginas (ex: /perfil.html) ───────
+// Suporta:
+//   /?topup=1    → abre o modal de compra de créditos
+//   /?history=1  → abre o modal de "Meus Documentos" (arquivo)
+// A query-string é limpa da URL depois de aberto o modal, para que um
+// refresh da página não reabra o modal indefinidamente.
+function _handleActionDeepLinks(payCtrl, histCtrl) {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const wantsTopup   = params.get('topup')   === '1';
+    const wantsHistory = params.get('history') === '1';
+    if (!wantsTopup && !wantsHistory) return;
+
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete('topup');
+    clean.searchParams.delete('history');
+    window.history.replaceState({}, '', clean.toString());
+
+    setTimeout(() => {
+      if (wantsTopup)   payCtrl?.showPricing?.();
+      if (wantsHistory) histCtrl?.open?.();
+    }, 300);
+  } catch (e) {
+    console.warn('[MzDocs] _handleActionDeepLinks erro:', e);
+  }
+}
+
 async function _setupPushNotifications(registration) {
   if (!('Notification' in window) || !('PushManager' in window)) return;
   if (Notification.permission === 'granted') return;
@@ -285,21 +318,11 @@ function _setupAuthHeader() {
       const isAdmin   = authManager.isAdmin();
       const isAffil   = user._profile?.is_affiliate === true;
 
-      // Botão rápido de acesso ao Painel/Perfil — inserido antes do
-      // botão de Arquivo para dar visibilidade estratégica ao painel do
-      // utilizador (posicionado no local de maior atenção do header).
-      let btnProfileQuick = document.getElementById('btnProfileQuick');
-      if (!btnProfileQuick && userArea) {
-        btnProfileQuick = document.createElement('a');
-        btnProfileQuick.id = 'btnProfileQuick';
-        btnProfileQuick.className = 'btn-icon';
-        btnProfileQuick.title = 'O meu painel';
-        btnProfileQuick.href = '/perfil.html';
-        btnProfileQuick.textContent = '👤';
-        const historyBtn = document.getElementById('btnHistory');
-        if (historyBtn) userArea.insertBefore(btnProfileQuick, historyBtn);
-        else userMenu?.insertAdjacentElement('afterend', btnProfileQuick);
-      }
+      // NOTA: o botão redundante de acesso rápido ao perfil (ícone 👤 solto
+      // no header, ao lado do ícone de Arquivo) foi removido — clicar no
+      // avatar/"M" já abre o dropdown com o link "O Meu Perfil", pelo que
+      // o ícone extra era duplicado e confuso.
+      document.getElementById('btnProfileQuick')?.remove();
 
       const avatarInner = avatarUrl
         ? `<img src="${avatarUrl}" alt="${name}" onerror="this.parentElement.textContent='${initials}'">`
