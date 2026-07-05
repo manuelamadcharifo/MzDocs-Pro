@@ -54,7 +54,7 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --ink: #07101F; --muted: #64748B; --border: #E2E8F0; --surface: #F8FAFD;
+      --ink: #07101F; --ink2: #0F1E3B; --muted: #64748B; --border: #E2E8F0; --surface: #F8FAFD;
       --blue: #3B82F6; --blue-d: #1D4ED8; --green: #009A44;
       --r: 14px; --max: 720px;
     }
@@ -64,7 +64,7 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
       line-height: 1.7; font-size: 1rem;
     }
 
-    /* ── Header ── */
+    /* ── Header (barra fina fixa) ── */
     .site-header {
       background: var(--ink); padding: 0 20px; height: 56px;
       display: flex; align-items: center; justify-content: space-between;
@@ -79,13 +79,34 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
       background: linear-gradient(135deg, var(--blue), var(--green));
       display: flex; align-items: center; justify-content: center; font-size: 16px;
     }
-    .logo-text { font-family: 'Instrument Serif', serif; font-size: 18px; }
-    .header-cta {
-      background: var(--blue); color: #fff; border: none; border-radius: 8px;
-      padding: 7px 14px; font-size: 13px; font-weight: 700;
-      cursor: pointer; text-decoration: none; white-space: nowrap;
+    .logo-text { font-size: 17px; font-weight: 800; }
+    .logo-text span { color: #F59E0B; font-style: italic; }
+    .header-back {
+      color: rgba(255,255,255,.7); font-size: 13px; text-decoration: none;
+      display: flex; align-items: center; gap: 5px; transition: color .2s;
     }
-    .header-cta:hover { background: var(--blue-d); }
+    .header-back:hover { color: #fff; }
+
+    /* ── Hero (faixa escura com título) ── */
+    .hero {
+      background: var(--ink2); padding: 48px 20px 36px; text-align: center;
+    }
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+      color: rgba(255,255,255,.7); font-size: 11px; font-weight: 700;
+      letter-spacing: .8px; text-transform: uppercase; padding: 5px 12px;
+      border-radius: 20px; margin-bottom: 16px;
+    }
+    .hero h1 {
+      font-family: 'Instrument Serif', serif; color: #fff;
+      font-size: clamp(24px, 4.5vw, 36px); font-weight: 800; line-height: 1.2;
+      margin-bottom: 12px; max-width: 720px; margin-left: auto; margin-right: auto;
+    }
+    .hero-meta { color: rgba(255,255,255,.45); font-size: 13px; margin-top: 8px; }
+
+    @media (max-width: 480px) { .hero { padding: 32px 16px 28px; } }
+
 
     /* ── Breadcrumb ── */
     .breadcrumb {
@@ -100,19 +121,6 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
     article {
       max-width: var(--max); margin: 0 auto;
       padding: 24px 20px 60px;
-    }
-    .article-meta {
-      display: flex; align-items: center; gap: 10px;
-      font-size: 13px; color: var(--muted); margin-bottom: 20px; flex-wrap: wrap;
-    }
-    .article-meta .tag {
-      background: #EFF6FF; color: var(--blue-d); border-radius: 20px;
-      padding: 2px 10px; font-size: 12px; font-weight: 600;
-    }
-    h1 {
-      font-family: 'Instrument Serif', serif;
-      font-size: clamp(26px, 5vw, 38px); line-height: 1.15;
-      margin-bottom: 16px; color: var(--ink);
     }
     .article-body h2 {
       font-size: 1.35rem; font-weight: 800; margin: 2rem 0 .75rem;
@@ -161,7 +169,6 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
     /* ── Responsive ── */
     @media (max-width: 480px) {
       article { padding: 16px 16px 48px; }
-      .header-cta { padding: 6px 10px; font-size: 12px; }
     }
   </style>
 </head>
@@ -170,10 +177,16 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
 <header class="site-header">
   <a class="site-logo" href="/">
     <div class="logo-badge">📄</div>
-    <span class="logo-text">MzDocs</span>
+    <span class="logo-text">MzDocs<span>Pro</span></span>
   </a>
-  <a class="header-cta" href="/">Criar Documento Grátis →</a>
+  <a class="header-back" href="/">← Voltar ao início</a>
 </header>
+
+<section class="hero">
+  <div class="hero-eyebrow">✍️ Blog &amp; Guias</div>
+  <h1>{{TITLE}}</h1>
+  <div class="hero-meta">Publicado em {{DATE_DISPLAY}} · MzDocs Pro</div>
+</section>
 
 <div class="breadcrumb">
   <a href="/">Início</a><span>›</span>
@@ -182,15 +195,6 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
 </div>
 
 <article>
-  <div class="article-meta">
-    <span class="tag">📚 Guia</span>
-    <span>{{DATE_DISPLAY}}</span>
-    <span>·</span>
-    <span>MzDocs Pro</span>
-  </div>
-
-  <h1>{{TITLE}}</h1>
-
   <div class="article-body">
     {{CONTENT_HTML}}
   </div>
