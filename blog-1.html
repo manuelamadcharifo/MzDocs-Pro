@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Blog — Guias de Documentos para Moçambique — MzDocs Pro</title>
+  <meta name="description" content="Todos os artigos e guias do blog MzDocs Pro sobre documentos, requerimentos e trâmites em Moçambique. Os mais recentes aparecem primeiro."/>
+  <meta name="robots" content="index, follow"/>
+  <link rel="canonical" href="https://mzdocs.co.mz/blog"/>
+
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="Blog — MzDocs Pro"/>
+  <meta property="og:description" content="Todos os artigos e guias sobre documentos e trâmites em Moçambique."/>
+  <meta property="og:url" content="https://mzdocs.co.mz/blog"/>
+  <meta property="og:site_name" content="MzDocs Pro"/>
+  <meta property="og:locale" content="pt_MZ"/>
+
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"Blog","name":"Blog MzDocs Pro","url":"https://mzdocs.co.mz/blog","inLanguage":"pt-MZ","publisher":{"@type":"Organization","name":"MzDocs Pro","url":"https://mzdocs.co.mz"}}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=Instrument+Serif:ital@0;1&display=swap"/>
+
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --ink:#07101F;--ink2:#0F1E3B;--muted:#64748B;--border:#E2E8F0;--surface:#F8FAFD;
+      --blue:#3B82F6;--blue-d:#1D4ED8;--green:#009A44;--r:14px;--max:820px;
+    }
+    body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);color:var(--ink);line-height:1.6}
+
+    .site-header{background:var(--ink);padding:0 20px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+    .site-logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff}
+    .logo-badge{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--blue),var(--green));display:flex;align-items:center;justify-content:center;font-size:16px}
+    .logo-text{font-size:17px;font-weight:800}
+    .logo-text span{color:#F59E0B;font-style:italic}
+    .header-cta{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;white-space:nowrap}
+    .header-cta:hover{background:var(--blue-d)}
+
+    .hub-hero{background:var(--ink2);color:#fff;padding:44px 20px 32px;text-align:center}
+    .hub-hero h1{font-family:'Instrument Serif',serif;font-size:clamp(26px,5vw,40px);margin-bottom:10px;line-height:1.2}
+    .hub-hero p{font-size:15px;color:rgba(255,255,255,.65);max-width:560px;margin:0 auto}
+    .hero-quote{font-size:15px;font-style:italic;color:rgba(255,255,255,.7);max-width:560px;margin:0 auto;line-height:1.6}
+    .hero-quote .author{display:block;margin-top:8px;font-size:12.5px;font-style:normal;font-weight:700;color:rgba(255,255,255,.45);letter-spacing:.3px}
+
+    .hub-body{max-width:var(--max);margin:0 auto;padding:32px 20px 80px}
+
+    .search-box{background:#fff;border:1.5px solid var(--border);border-radius:var(--r);padding:14px 16px;display:flex;gap:10px;align-items:center;margin-bottom:28px}
+    .search-box input{flex:1;border:none;outline:none;font-family:inherit;font-size:14px;color:var(--ink);background:transparent}
+    .search-box input::placeholder{color:var(--muted)}
+
+    .state-msg{text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}
+
+    .post-list{display:flex;flex-direction:column;gap:14px}
+    .post-card{background:#fff;border:1.5px solid var(--border);border-radius:var(--r);padding:20px;text-decoration:none;color:var(--ink);display:block;transition:border-color .15s,box-shadow .15s}
+    .post-card:hover{border-color:var(--blue);box-shadow:0 4px 16px rgba(59,130,246,.1)}
+    .post-date{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+    .post-date .dot{width:5px;height:5px;border-radius:50%;background:var(--green)}
+    .post-title{font-size:17px;font-weight:800;margin-bottom:6px;line-height:1.35}
+    .post-desc{font-size:13.5px;color:var(--muted);line-height:1.55;margin-bottom:10px}
+    .post-link{font-size:12.5px;color:var(--blue);font-weight:700}
+
+    .cta-banner{background:var(--ink2);border-radius:16px;padding:32px 24px;text-align:center;color:#fff;margin:40px 0 0}
+    .cta-banner h2{font-family:'Instrument Serif',serif;font-size:22px;margin-bottom:8px}
+    .cta-banner p{color:rgba(255,255,255,.65);margin-bottom:18px;font-size:14px}
+    .cta-banner-btn{display:inline-block;background:var(--green);color:#fff;padding:12px 30px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none}
+    .cta-banner-btn:hover{background:#007a35}
+
+    .site-footer{background:var(--ink);color:rgba(255,255,255,.5);padding:24px 20px;text-align:center;font-size:13px;line-height:2}
+    .site-footer a{color:rgba(255,255,255,.6);text-decoration:none}
+    .site-footer a:hover{color:#fff}
+
+    .load-more-wrap{text-align:center;margin-top:24px}
+    .load-more-btn{background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:10px 24px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:inherit}
+    .load-more-btn:hover{border-color:var(--blue);color:var(--blue)}
+    .load-more-btn:disabled{opacity:.5;cursor:default}
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <a class="site-logo" href="/">
+    <div class="logo-badge">📄</div>
+    <span class="logo-text">MzDocs<span>Pro</span></span>
+  </a>
+  <a class="header-cta" href="/">Criar Documento →</a>
+</header>
+
+<div class="hub-hero">
+  <h1>Blog MzDocs Pro</h1>
+  <p id="heroQuote" class="hero-quote">Carregando…</p>
+</div>
+
+<div class="hub-body">
+
+  <div class="search-box">
+    <span style="font-size:18px;color:var(--muted)">🔍</span>
+    <input type="text" id="searchInput" placeholder="Pesquisar artigos... ex: BI, contrato, declaração" autocomplete="off"/>
+  </div>
+
+  <div id="stateMsg" class="state-msg">A carregar artigos…</div>
+  <div id="postList" class="post-list" style="display:none"></div>
+
+  <div class="load-more-wrap" id="loadMoreWrap" style="display:none">
+    <button class="load-more-btn" id="loadMoreBtn">Carregar mais artigos</button>
+  </div>
+
+  <div class="cta-banner">
+    <h2>Pronto para Criar o Seu Documento?</h2>
+    <p>Escolha o tipo, preencha os dados e receba o seu ficheiro em PDF ou Word em segundos.</p>
+    <a class="cta-banner-btn" href="/">🚀 Gerar Documento Grátis</a>
+  </div>
+
+</div>
+
+<footer class="site-footer">
+  <div>© 2026 MzDocs Pro — Documentos profissionais para Moçambique</div>
+  <div><a href="/">Início</a> · <a href="/pages/">Guias</a> · <a href="/legal.html">Privacidade</a></div>
+</footer>
+
+<script>
+(function () {
+  // Citações do dia — a mesma para todos os visitantes num dado dia,
+  // muda automaticamente à meia-noite (baseado no dia do ano, não em
+  // sorteio aleatório a cada visita).
+  var QUOTES = [
+    { text: "A organização é a chave para transformar sonhos em resultados.", author: "Provérbio popular" },
+    { text: "Quem não se prepara, prepara-se para falhar.", author: "Benjamin Franklin" },
+    { text: "A persistência é o caminho do êxito.", author: "Charlie Chaplin" },
+    { text: "A luta continua.", author: "Samora Machel" },
+    { text: "É impossível progredir sem mudança.", author: "George Bernard Shaw" },
+    { text: "Educai os homens sem consciência e estareis a arruinar o mundo.", author: "Nelson Mandela" },
+    { text: "A burocracia vence-se com paciência e um bom documento.", author: "Ditado moçambicano" },
+    { text: "O sucesso é a soma de pequenos esforços repetidos todos os dias.", author: "Robert Collier" },
+    { text: "Quem tem um porquê para viver pode suportar quase todos os comos.", author: "Friedrich Nietzsche" },
+    { text: "A disciplina é a ponte entre metas e realizações.", author: "Jim Rohn" },
+    { text: "Fazer hoje o que os outros deixam para amanhã.", author: "Ditado popular" },
+    { text: "A educação é a arma mais poderosa para mudar o mundo.", author: "Nelson Mandela" },
+    { text: "Trabalhar com honestidade abre todas as portas.", author: "Provérbio africano" },
+    { text: "Não é o mais forte que sobrevive, mas o mais organizado.", author: "Adaptado de Charles Darwin" },
+    { text: "Um documento bem feito poupa-te uma vida de dores de cabeça.", author: "Ditado moçambicano" },
+    { text: "A paciência é amarga, mas o seu fruto é doce.", author: "Jean-Jacques Rousseau" },
+    { text: "Grandes feitos começam com pequenos passos organizados.", author: "Lao Tzu" },
+    { text: "Quem caminha sozinho pode até chegar mais rápido, mas em conjunto vai mais longe.", author: "Provérbio africano" },
+    { text: "O trabalho árduo vence o talento quando o talento não trabalha arduamente.", author: "Tim Notke" },
+    { text: "Cuidar do papel de hoje evita a correria de amanhã.", author: "Ditado popular" },
+    { text: "A preparação é a chave do sucesso.", author: "Alexander Graham Bell" },
+    { text: "Cada burocracia vencida é uma porta que se abre.", author: "MzDocs Pro" },
+    { text: "A simplicidade é o último grau de sofisticação.", author: "Leonardo da Vinci" },
+    { text: "Quem planeia com antecedência, colhe com tranquilidade.", author: "Provérbio popular" },
+    { text: "Os documentos certos, no momento certo, mudam destinos.", author: "MzDocs Pro" },
+    { text: "A determinação de hoje constrói o sucesso de amanhã.", author: "Provérbio popular" },
+    { text: "Não contes os dias, faz com que os dias contem.", author: "Muhammad Ali" },
+    { text: "O conhecimento é como um jardim: se não for cultivado, não pode ser colhido.", author: "Provérbio africano" },
+    { text: "Um bom plano hoje é melhor que um plano perfeito amanhã.", author: "George S. Patton" },
+    { text: "A confiança nasce da preparação.", author: "Provérbio popular" },
+  ];
+
+  function dayOfYear(date) {
+    var start = new Date(date.getFullYear(), 0, 0);
+    var diff = date - start;
+    return Math.floor(diff / 86400000);
+  }
+
+  function showDailyQuote() {
+    var el = document.getElementById('heroQuote');
+    if (!el) return;
+    var idx = dayOfYear(new Date()) % QUOTES.length;
+    var q = QUOTES[idx];
+    el.innerHTML = '“' + q.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+      '”<span class="author">— ' + q.author.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+  }
+
+  showDailyQuote();
+})();
+</script>
+<script>
+(function () {
+  var PAGE_SIZE = 30;
+  var offset = 0;
+  var allLoadedPosts = [];   // artigos em modo "navegar" (paginados, mais recente primeiro)
+  var searchResults = null;  // != null quando há uma pesquisa activa (resultados vindos do servidor)
+  var isLoading = false;
+  var reachedEnd = false;
+
+  var stateMsg     = document.getElementById('stateMsg');
+  var postList     = document.getElementById('postList');
+  var searchInput  = document.getElementById('searchInput');
+  var loadMoreWrap = document.getElementById('loadMoreWrap');
+  var loadMoreBtn  = document.getElementById('loadMoreBtn');
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    try {
+      var d = new Date(iso);
+      return d.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
+    } catch (e) { return ''; }
+  }
+
+  function escHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderCard(post) {
+    var a = document.createElement('a');
+    a.className = 'post-card';
+    a.href = '/pages/' + encodeURIComponent(post.slug);
+    a.innerHTML =
+      '<div class="post-date"><span class="dot"></span>' + escHtml(formatDate(post.date)) + '</div>' +
+      '<div class="post-title">' + escHtml(post.title) + '</div>' +
+      '<div class="post-desc">' + escHtml(post.description) + '</div>' +
+      '<div class="post-link">Ler artigo →</div>';
+    return a;
+  }
+
+  function render() {
+    var inSearchMode = searchResults !== null;
+    var visible = inSearchMode ? searchResults : allLoadedPosts;
+
+    postList.innerHTML = '';
+
+    if (visible.length === 0) {
+      postList.style.display = 'none';
+      stateMsg.style.display = 'block';
+      stateMsg.textContent = inSearchMode
+        ? '😕 Nenhum artigo encontrado para "' + searchInput.value.trim() + '".'
+        : 'Ainda não há artigos publicados.';
+      loadMoreWrap.style.display = 'none';
+      return;
+    }
+
+    stateMsg.style.display = 'none';
+    postList.style.display = 'flex';
+    visible.forEach(function (p) { postList.appendChild(renderCard(p)); });
+
+    // "Carregar mais" só existe em modo navegação (sem pesquisa activa).
+    loadMoreWrap.style.display = (!inSearchMode && !reachedEnd) ? 'block' : 'none';
+  }
+
+  function loadMore() {
+    if (isLoading || reachedEnd) return;
+    isLoading = true;
+    loadMoreBtn.disabled = true;
+    loadMoreBtn.textContent = 'A carregar…';
+
+    fetch('/api/misc?action=blog-list&limit=' + PAGE_SIZE + '&offset=' + offset)
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (data) {
+        var posts = (data && data.posts) || [];
+        allLoadedPosts = allLoadedPosts.concat(posts);
+        offset += posts.length;
+        if (posts.length < PAGE_SIZE) reachedEnd = true;
+        render();
+      })
+      .catch(function (err) {
+        console.error('[blog] falha ao carregar artigos:', err);
+        if (allLoadedPosts.length === 0) {
+          stateMsg.style.display = 'block';
+          stateMsg.textContent = '⚠️ Não foi possível carregar os artigos agora. Tenta recarregar a página.';
+        }
+      })
+      .finally(function () {
+        isLoading = false;
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.textContent = 'Carregar mais artigos';
+      });
+  }
+
+  // A pesquisa consulta sempre TODOS os artigos publicados no servidor
+  // (não só os que já foram carregados pela paginação do "Carregar mais"),
+  // para nunca dar a sensação de que a pesquisa "não funciona".
+  function runSearch(term) {
+    stateMsg.style.display = 'block';
+    stateMsg.textContent = 'A pesquisar…';
+    postList.style.display = 'none';
+    loadMoreWrap.style.display = 'none';
+
+    fetch('/api/misc?action=blog-list&limit=100&q=' + encodeURIComponent(term))
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (data) {
+        searchResults = (data && data.posts) || [];
+        render();
+      })
+      .catch(function (err) {
+        console.error('[blog] falha na pesquisa:', err);
+        stateMsg.style.display = 'block';
+        stateMsg.textContent = '⚠️ Não foi possível pesquisar agora. Tenta novamente.';
+      });
+  }
+
+  var searchDebounce;
+  searchInput.addEventListener('input', function () {
+    clearTimeout(searchDebounce);
+    var term = searchInput.value.trim();
+    searchDebounce = setTimeout(function () {
+      if (!term) {
+        searchResults = null; // volta ao modo navegação normal
+        render();
+      } else {
+        runSearch(term);
+      }
+    }, 250);
+  });
+
+  loadMoreBtn.addEventListener('click', loadMore);
+
+  loadMore(); // primeira página em modo navegação, ao carregar a página
+})();
+</script>
+
+</body>
+</html>
