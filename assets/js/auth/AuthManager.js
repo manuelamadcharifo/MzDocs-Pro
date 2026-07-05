@@ -110,7 +110,7 @@ export class AuthManager {
  try {
  const { data, error } = await this.supabase
  .from('profiles')
- .select('is_admin, is_blocked, credits, full_name, email, phone, account_type, credits_expires_at, free_credit_used')
+ .select('is_admin, is_blocked, credits, full_name, email, phone, account_type, credits_expires_at, free_credit_used, avatar_url, is_affiliate, total_documents, created_at')
  .eq('id', userId)
  .single();
  if (error && error.code !== 'PGRST116') {
@@ -400,6 +400,118 @@ export class AuthManager {
 
     return this._refreshPromise;
   }
+
+ // ── GESTÃO DE PERFIL (usado pela página /perfil.html) ──────────────────────
+
+ // Recarrega o perfil a partir do Supabase e notifica os ouvintes (usado
+ // depois de qualquer alteração para refrescar o header/dropdown em toda a app).
+ async refreshProfile() {
+ if (!this.user?.id) return null;
+ await this._loadProfile(this.user.id);
+ this._notify();
+ return this.profile;
+ }
+
+ // Actualiza dados simples do perfil (nome completo, telefone). Nunca
+ // permite alterar campos sensíveis como is_admin/credits a partir daqui —
+ // só a whitelist de campos abaixo é aceite.
+ async updateProfile({ full_name, phone } = {}) {
+ if (!this.supabase || !this.user?.id) throw new Error('Sessão inválida — inicie sessão novamente.');
+ const patch = {};
+ if (typeof full_name === 'string') patch.full_name = full_name.trim().slice(0, 120);
+ if (typeof phone === 'string') {
+ const clean = phone.replace(/\D/g, '');
+ patch.phone = clean ? (clean.startsWith('258') ? `+${clean}` : `+258${clean}`) : null;
+ }
+ if (!Object.keys(patch).length) return this.profile;
+ patch.updated_at = new Date().toISOString();
+
+ const { error } = await this.supabase.from('profiles').update(patch).eq('id', this.user.id);
+ if (error) throw new Error(error.message || 'Erro ao actualizar os dados. Tente novamente.');
+
+ if (this.user._profile) Object.assign(this.user._profile, patch);
+ // Manter user_metadata.full_name sincronizado (usado como fallback no header)
+ if (patch.full_name) {
+ try { await this.supabase.auth.updateUser({ data: { full_name: patch.full_name } }); } catch (_) {}
+ }
+ this._notify();
+ return this.profile;
+ }
+
+ // Pede alteração de e-mail — o Supabase envia um link de confirmação para
+ // o NOVO endereço antes de o trocar de facto.
+ async updateEmail(newEmail) {
+ if (!this.supabase) throw new Error('Supabase não configurado');
+ const email = (newEmail || '').trim().toLowerCase();
+ if (!email || !email.includes('@')) throw new Error('Indique um e-mail válido.');
+ const siteUrl = window.location.origin;
+ const { error } = await this.supabase.auth.updateUser(
+ { email },
+ { emailRedirectTo: `${siteUrl}/?email_updated=true` }
+ );
+ if (error) throw new Error(error.message || 'Erro ao actualizar o e-mail.');
+ return { success: true, pendingConfirmation: true };
+ }
+
+ // Altera a password do utilizador autenticado (já validado por sessão activa).
+ async updateAccountPassword(newPassword) {
+ if (!this.supabase) throw new Error('Supabase não configurado');
+ if (!newPassword || newPassword.length < 6) throw new Error('A password deve ter pelo menos 6 caracteres.');
+ const { error } = await this.supabase.auth.updateUser({ password: newPassword });
+ if (error) throw new Error(error.message || 'Erro ao alterar a password.');
+ return { success: true };
+ }
+
+ // Carrega uma foto de perfil para o storage bucket público "avatars" e
+ // grava o URL em profiles.avatar_url.
+ async uploadAvatar(file) {
+ if (!this.supabase || !this.user?.id) throw new Error('Sessão inválida — inicie sessão novamente.');
+ if (!file) throw new Error('Nenhum ficheiro seleccionado.');
+ if (!file.type?.startsWith('image/')) throw new Error('O ficheiro tem de ser uma imagem.');
+ if (file.size > 3 * 1024 * 1024) throw new Error('A imagem não pode exceder 3MB.');
+
+ const ext  = (file.name?.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+ const path = `${this.user.id}/avatar-${Date.now()}.${ext}`;
+
+ const { error: upErr } = await this.supabase.storage
+ .from('avatars')
+ .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '3600' });
+ if (upErr) throw new Error(upErr.message || 'Erro ao carregar a imagem.');
+
+ const { data: pub } = this.supabase.storage.from('avatars').getPublicUrl(path);
+ const avatarUrl = pub?.publicUrl;
+ if (!avatarUrl) throw new Error('Não foi possível obter o URL da imagem.');
+
+ const { error: dbErr } = await this.supabase
+ .from('profiles')
+ .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+ .eq('id', this.user.id);
+ if (dbErr) throw new Error(dbErr.message || 'Erro ao guardar a foto de perfil.');
+
+ if (this.user._profile) this.user._profile.avatar_url = avatarUrl;
+ this._notify();
+ return avatarUrl;
+ }
+
+ // Remove a foto de perfil (volta ao avatar de iniciais).
+ async removeAvatar() {
+ if (!this.supabase || !this.user?.id) throw new Error('Sessão inválida.');
+ const { error } = await this.supabase.from('profiles')
+ .update({ avatar_url: null, updated_at: new Date().toISOString() })
+ .eq('id', this.user.id);
+ if (error) throw new Error(error.message || 'Erro ao remover a foto.');
+ if (this.user._profile) this.user._profile.avatar_url = null;
+ this._notify();
+ }
+
+ // Termina sessão em TODOS os dispositivos (revoga todos os refresh tokens).
+ async signOutEverywhere() {
+ if (this.supabase) await this.supabase.auth.signOut({ scope: 'global' });
+ this.session = null;
+ this.user = null;
+ this._isAdmin = false;
+ this._notify();
+ }
 
  onChange(callback) {
  this._listeners.push(callback);
