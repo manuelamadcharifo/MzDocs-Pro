@@ -74,7 +74,39 @@ export class SmartOCRService {
     }
   }
 
-  // ── Comprimir imagem para < 1MB (evita limite 4.5MB Vercel) ───
+  // ── Pipeline para VÁRIAS páginas do mesmo rascunho (só Trabalho Escolar) ──
+  // NOVO: em vez de N chamadas separadas (N× custo de IA), comprime todas as
+  // imagens e envia-as TODAS numa única chamada de visão — o modelo lê as
+  // páginas na ordem em que foram tiradas/seleccionadas e trata-as como um
+  // documento contínuo. Sem Tesseract aqui (só complementa uma imagem única
+  // e tornaria N páginas lento sem benefício real — a IA visual já é o
+  // caminho principal mesmo no fluxo de 1 foto).
+  async extractFieldsMulti(files, serviceType, onProgress) {
+    if (onProgress) onProgress(10, `A preparar ${files.length} páginas…`);
+    const images = [];
+    for (let i = 0; i < files.length; i++) {
+      const base64 = await this._compressImage(files[i]).catch(() => null);
+      if (base64) images.push(base64);
+      if (onProgress) onProgress(10 + Math.round(((i + 1) / files.length) * 40), `A preparar página ${i + 1}/${files.length}…`);
+    }
+    if (!images.length) return { rawText: '', confidence: 0, fields: {}, missing: [] };
+
+    if (onProgress) onProgress(60, 'A analisar todas as páginas com IA…');
+    const schema = this._getFieldSchema(serviceType);
+    if (!schema.length) return { rawText: '', confidence: 0, fields: {}, missing: [] };
+
+    try {
+      const result = await this._analyzeWithAI(images, 'image/jpeg', '', schema, serviceType);
+      if (onProgress) onProgress(100, 'Concluído!');
+      const { transcript, ...rest } = result || {};
+      return { rawText: transcript || '', confidence: transcript ? 70 : 0, ...rest };
+    } catch (err) {
+      console.warn('[SmartOCR] IA (multi-página) falhou:', err.message);
+      return { rawText: '', confidence: 0, fields: {}, missing: schema.map(f => f.id) };
+    }
+  }
+
+
   _compressImage(file, maxPx = 1200, quality = 0.82) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -242,10 +274,16 @@ export class SmartOCRService {
   }
 
   // ── Chamada ao backend IA ─────────────────────────────────────
-  async _analyzeWithAI(base64, mimeType, ocrText, schema, serviceType) {
+  // `base64OrArray`: uma única string base64 (fluxo normal, 1 foto) ou um
+  // array de strings base64 (NOVO: várias páginas do mesmo rascunho).
+  async _analyzeWithAI(base64OrArray, mimeType, ocrText, schema, serviceType) {
     const body = { ocrText: ocrText || '', schema, serviceType };
-    if (base64 && mimeType?.startsWith('image/')) {
-      body.imageBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+    const isMulti = Array.isArray(base64OrArray);
+    if (isMulti && base64OrArray.length && mimeType?.startsWith('image/')) {
+      body.imagesBase64 = base64OrArray.map(b => b.includes(',') ? b.split(',')[1] : b);
+      body.mimeType      = mimeType;
+    } else if (!isMulti && base64OrArray && mimeType?.startsWith('image/')) {
+      body.imageBase64 = base64OrArray.includes(',') ? base64OrArray.split(',')[1] : base64OrArray;
       body.mimeType    = mimeType;
     }
     const res = await fetch('/api/ocr-analyze', {
