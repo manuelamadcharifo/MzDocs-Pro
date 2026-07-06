@@ -1,10 +1,11 @@
-# MzDocs Pro — v24
+# MzDocs Pro — v25
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
 
-> 📌 **Nota de versão:** este documento reflecte o estado real do código até à migração
-> `migration_v24_secure_orphan_credit_packages.sql` (Junho/2026). O histórico de auditorias
-> anteriores está preservado nas secções abaixo (v12, v13–v16, v17–v24).
+> 📌 **Nota de versão:** este documento reflecte o estado real do código até à auditoria de
+> Julho/2026 (correcções em `perfil.html`, `templates.html`, `api/misc.js`, CSP de avatares e
+> robustez do `HistoryController`/`Views.js` — ver secção "Alterações — v25" abaixo). O histórico
+> de auditorias anteriores está preservado nas secções abaixo (v12, v13–v16, v17–v24).
 
 > ⚠️ **Acção urgente — plano Vercel:** este projecto processa pagamentos (`api/process-payment.js`,
 > tabela `transactions`). Os Termos de Serviço da Vercel definem **qualquer fluxo de cobrança a
@@ -42,6 +43,7 @@ Plataforma moçambicana de geração, edição e exportação de documentos prof
 | **Rede de Parceiros** | Papelarias/cyber cafés parceiros listados perto do utilizador (`parceiros.html`) |
 | **Blog / SEO** | CMS de artigos com geração assistida por IA (`blog_posts`, `blog_categories`); publicação automática de HTML estático no GitHub |
 | **Painel Admin** | Analytics em tempo real, feedback, utilizadores, pagamentos, parceiros, configurações (incluindo preços dinâmicos) |
+| **Página de Conta (`perfil.html`)** | NOVO (v25): dados pessoais, segurança (email/password), avatar, plano/créditos e documentos recentes — Comprar Créditos e Ver Arquivo abrem em modal na própria página, sem navegar para a home |
 | **PWA** | Instalável em Android e iOS, funciona offline; precache corrigido (33 ficheiros adicionados em v21) |
 
 ---
@@ -212,14 +214,24 @@ MzDocs-Pro/
 ├── admin.html                         # Painel administrativo
 ├── admin-parceiros.html               # Gestão da Rede de Parceiros (admin)
 ├── parceiros.html                     # Listagem pública de parceiros
-├── templates.html                     # Galeria comunitária de templates
+├── templates.html                     # Galeria comunitária de templates — inclui agora os modais
+│                                      #   de Resultado/Créditos/Histórico (v25, ver abaixo)
+├── perfil.html                        # NOVO (v25): página de conta do utilizador — dados pessoais,
+│                                      #   segurança (email/password), avatar, plano/créditos,
+│                                      #   documentos recentes clicáveis; Créditos e Arquivo abrem
+│                                      #   em modal na própria página (payOverlay/historyOverlay
+│                                      #   embutidos), sem navegar para "/"
 ├── index.html                         # App principal (PWA)
 ├── offline.html                       # Página offline
 ├── legal.html                         # Conformidade legal (Lei n.º 58/2021)
-├── sw.js                              # Service Worker (CACHE_VERSION v21-20260629;
-│                                      #   33 ficheiros adicionados ao precache nesta versão)
+├── sw.js                              # Service Worker; CACHE_VERSION é reescrita automaticamente
+│                                      #   a cada deploy por scripts/inject-version.js (formato
+│                                      #   v<sha-git-7-chars>-<YYYYMMDD>) — o valor no repositório
+│                                      #   é só um placeholder, não reflecte a versão em produção
 ├── manifest.json                      # PWA manifest
-├── vercel.json                        # 12 functions + rewrites + crons
+├── vercel.json                        # 12 functions + rewrites + crons + CSP (img-src inclui
+│                                      #   https://*.supabase.co desde v25 — necessário para os
+│                                      #   avatares de perfil carregados do Supabase Storage)
 ├── package.json                       # v11.0.0
 └── scripts/
     └── inject-version.js              # Actualiza CACHE_VERSION automaticamente a cada deploy
@@ -727,7 +739,22 @@ O mesmo mecanismo existe no `LongDocumentEngine` — se as fases 2/3 falharem ap
 
 ---
 
-## ⚠️ Áreas Não Cobertas / Pontos em Aberto
+## 🛠️ Alterações — v25 (auditoria Julho 2026 — self-service de conta + bugs de produção)
+
+Esta ronda partiu de reports directos de utilização em produção (não uma auditoria de código a frio), pelo que cada linha abaixo corresponde a um sintoma real observado no telemóvel.
+
+| Ficheiro | Alteração |
+|---|---|
+| `perfil.html` | **Praticamente reescrito.** Antes, os botões "Comprar Créditos" e "Ver arquivo completo" apenas faziam `href="/"` — largavam o utilizador na home sem completar a acção. Agora incluem a marcação dos modais `payOverlay`/`historyOverlay` (mesmos IDs que `index.html`) e instanciam `PaymentController`/`HistoryController` directamente na página — Créditos e Arquivo abrem **sem sair do perfil**. Também: avatar com melhor feedback de erro (mensagens de erro deixam de desaparecer sozinhas ao fim de 6s), lista de "Documentos Recentes" tornada clicável (reutiliza o visualizador "lite" do `HistoryController`), select do Supabase passou a trazer `content` (antes só trazia metadados). |
+| `assets/js/app.js` | Removido o botão 👤 redundante no header (duplicava a função do avatar/"M", que já abre o dropdown). Dropdown do utilizador corrigido: "O Meu Perfil" e "Painel de Controlo" apontavam praticamente para o mesmo scroll (`/perfil.html` vs `/perfil.html#painel`, sendo `#painel` uma marca vazia colada ao topo) — agora "O Meu Perfil" vai à secção de Dados Pessoais (`#dados`) e "Painel de Controlo" fica no topo (KPIs + acções rápidas). Adicionado suporte a deep-links `?topup=1`/`?history=1` para abrir modais a partir de outras páginas. |
+| `assets/js/controllers/HistoryController.js` | O fallback para o visualizador "lite" (usado em páginas sem o editor A4 completo) confiava só em `window.docController` estar definido. Como `app.js` define essa variável em **qualquer** página onde é incluído — mesmo sem a marcação completa (caso de `templates.html`) — isso causava `TypeError: Cannot set properties of null` ao tentar escrever em `#resModel`/`#resMeta`, que não existiam nessa página. Guard reforçado: agora também confirma que `#resultOverlay`/`#resModel` existem mesmo no DOM antes de usar o editor completo. |
+| `assets/js/views/Views.js` | `_renderResultInner` escrevia directamente em `document.getElementById('resModel')`/`resMeta` sem verificar se existiam — blindado com verificação de nulidade, para nunca mais interromper a função a meio (o que deixava o modal com o título do documento anterior em vez do actual). |
+| `templates.html` | Três bugs distintos, todos reais: **(1)** a página carrega `app.js` completo (liga os botões 📁/⚡ do header) mas nunca tinha a marcação dos modais — cliques nesses botões não faziam nada; adicionada a marcação de `resultOverlay`/`payOverlay`/`historyOverlay`. **(2)** `openDetail(id)` chamava `renderTemplatePreview(t)` **antes** de preencher título/descrição, sem try/catch — se o preview de um template específico falhasse, a função parava a meio e o modal ficava a mostrar o título do último template aberto com sucesso (parecia que "todos os cards abrem o mesmo template"). Corrigido: texto preenchido primeiro, preview isolado num try/catch. **(3)** os cliques nos cards eram religados a cada "carregar mais"/filtro (`querySelectorAll(...).forEach(...)` sem limpar os anteriores), acumulando listeners duplicados nos cards mais antigos — substituído por um único listener delegado no grid. |
+| `api/misc.js` (`tplList`) | **Bug crítico, causa raiz real do ponto (2) acima.** A função ignorava por completo `req.query.id`. `templates.html` chama `/api/templates/list?id=eq.<uuid>&limit=1` para abrir um template específico, mas sem o filtro de `id` a query executada era sempre "ORDER BY downloads DESC LIMIT 1" — devolvia sempre o template mais descarregado do catálogo inteiro, fosse qual fosse o `id` pedido. Corrigido com validação estrita de formato UUID (evita injecção de filtros extra via query string) antes de aplicar `&id=eq.<uuid>` ao pedido ao Supabase. |
+| `vercel.json` (CSP) | A directiva `img-src` nunca incluiu `https://*.supabase.co` — os avatares (guardados no Supabase Storage) eram bloqueados pelo browser mesmo com o upload a funcionar correctamente (o erro só aparecia na consola: "Refused to load the image ... violates CSP"). Adicionado `https://*.supabase.co` ao `img-src`. |
+| `sw.js` (`CACHE_VERSION`) | Confirmado que já é auto-gerido por `scripts/inject-version.js` a cada deploy (`v<sha>-<data>`) — o bump manual feito durante o diagnóstico desta ronda era redundante mas inofensivo, dado que o build sempre sobrescreve o valor. |
+
+
 
 - **Migração para `api/_lib/supabaseAdmin.js` (estado actual):**
   - ✅ Já migradas (sem `@supabase/supabase-js` nem `require('ws')`): `deduct-credit.js`, `process-payment.js`, `generate-document.js`, `auth/index.js`, `verify-credits.js`, `partners.js`, `delete-temp-account.js`, `cleanup-temp-accounts.js`.
@@ -754,8 +781,15 @@ O mesmo mecanismo existe no `LongDocumentEngine` — se as fases 2/3 falharem ap
 | Componente | Versão | Nota |
 |------------|--------|------|
 | `package.json` | `11.0.0` | — |
-| `sw.js` (CACHE_VERSION) | `v21-20260629` | auto-actualizado pelo build |
-| `README.md` | `v24` (esta edição) | — |
+| `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy | formato `v<sha-git-7-chars>-<YYYYMMDD>`, escrito por `scripts/inject-version.js` — o valor no repositório é só um placeholder |
+| `README.md` | `v25` (esta edição) | — |
+| `perfil.html` | **NOVO (v25)** | página de conta com Créditos/Arquivo em modal embutido (sem navegar para "/") |
+| `templates.html` | v25 | modais Resultado/Créditos/Histórico adicionados; `openDetail()` corrigido (texto antes do preview); listener de clique delegado |
+| `api/misc.js` | `v3.0` | 🟡 parcialmente migrado · v25: `tplList` corrigido para filtrar por `id` (bug crítico) |
+| `vercel.json` (CSP) | v25 | `img-src` agora inclui `https://*.supabase.co` (avatares) |
+| `assets/js/controllers/HistoryController.js` | v25 | guard do visualizador "lite" reforçado (confirma DOM, não só `window.docController`) |
+| `assets/js/views/Views.js` | v25 | `_renderResultInner` blindado contra elementos ausentes |
+| `assets/js/app.js` | v25 | dropdown do utilizador corrigido; ícone duplicado removido; deep-links `?topup=1`/`?history=1` |
 | `api/_lib/supabaseAdmin.js` | — | helper sem versão explícita |
 | `api/_lib/visionAI.js` | `v1.0` | — |
 | `api/_lib/legalSearch.js` | — | NOVO (v17) |
@@ -763,7 +797,6 @@ O mesmo mecanismo existe no `LongDocumentEngine` — se as fases 2/3 falharem ap
 | `api/_lib/rateLimit.js` | — | NOVO (rate-limit partilhado) |
 | `api/auth/index.js` | `v2.1` | — |
 | `api/admin/index.js` | `v2.0` | ⚠️ ainda usa SDK legacy |
-| `api/misc.js` | `v3.0` | 🟡 parcialmente migrado |
 | `api/process-payment.js` | `v5.0` | — |
 | `api/deduct-credit.js` | `v3.0` | — |
 | `api/generate-document.js` | `v2.1` | amostra grátis + custo progressivo |
