@@ -671,22 +671,26 @@ async function loadGallery(reset = true) {
     templates.forEach(t => grid.insertAdjacentHTML('beforeend', renderCard(t)));
     galleryOffset += templates.length;
     document.getElementById('btnLoadMore').style.display = templates.length === 24 ? 'block' : 'none';
-    // Bind clicks
-    grid.querySelectorAll('.tpl-card[data-id]').forEach(card => {
-      card.addEventListener('click', e => {
-        if (e.target.closest('.tpl-save-btn')) return;
-        openDetail(card.dataset.id);
-      });
-      card.querySelector('.tpl-save-btn')?.addEventListener('click', e => {
-        e.stopPropagation();
-        toggleSave(card.dataset.id, card.querySelector('.tpl-save-btn'));
-      });
-    });
     _mountCardPreviews(grid, templates);
   } catch (err) {
     grid.innerHTML = `<div class="tpl-empty" style="grid-column:span 2"><div class="tpl-empty-ico">⚠️</div><h3>Erro ao carregar</h3><p>${err.message}</p></div>`;
   }
 }
+
+// CORRIGIDO: os cliques nos cards eram ligados com grid.querySelectorAll(...)
+// .forEach(...) dentro de loadGallery(), que corre de novo a cada filtro/
+// "carregar mais". Isso re-adicionava um NOVO listener a cards que já
+// tinham um de uma chamada anterior (a lista nunca é esvaziada em
+// reset=false), fazendo cliques antigos acumularem 2, 3, 4... chamadas a
+// openDetail() de cada vez. Um único listener delegado no grid, ligado
+// uma vez só, evita duplicação seja qual for o número de recargas.
+document.getElementById('tplGrid')?.addEventListener('click', e => {
+  const saveBtn = e.target.closest('.tpl-save-btn');
+  const card    = e.target.closest('.tpl-card[data-id]');
+  if (!card) return;
+  if (saveBtn) { e.stopPropagation(); toggleSave(card.dataset.id, saveBtn); return; }
+  openDetail(card.dataset.id);
+});
 
 // CORRIGIDO: em vez de um <iframe srcdoc> construído à mão (que teve vários
 // problemas de viewport/escala), os cards sem thumbnail_url agora usam o
@@ -844,16 +848,30 @@ async function openDetail(id) {
   if (!t) { notify('Template não encontrado','error'); return; }
   currentTpl = t;
 
-  // CORRIGIDO: o preview mostrava só um ícone 🎨 genérico quando não havia
-  // thumbnail_url — mesmo quando o template já tinha template_html +
-  // template_css reais (caso de todos os templates oficiais do seed). Agora
-  // renderiza-se uma amostra real do documento usando o motor renderA4Pages
-  // (mesmo de TemplatePicker.js/Views.js) com dados de exemplo realistas,
-  // com um botão para maximizar e ver o preview em tela cheia.
-  renderTemplatePreview(t);
-
+  // CORRIGIDO (bug grave): antes, renderTemplatePreview(t) corria ANTES de
+  // preencher #detailTitle/#detailDesc/#detailMeta/#detailTags, e sem
+  // try/catch. Se essa função lançasse uma excepção para um template em
+  // concreto (ex: template_html malformado que faz fillTemplate/
+  // renderA4Pages rebentar), a função openDetail() parava logo ali —
+  // o modal já estava aberto (overlay.classList.add('open') no topo), mas
+  // ficava com o TÍTULO/DESCRIÇÃO DO TEMPLATE ANTERIOR que tinha sido
+  // aberto com sucesso. Resultado: clicar em qualquer template que desse
+  // erro no preview mostrava sempre o modal do último template que tinha
+  // funcionado (ex: "Trabalho Académico — Académico Clássico"), por mais
+  // cards diferentes que se clicasse. Agora o texto é sempre actualizado
+  // primeiro (não depende do preview visual), e o preview corre isolado
+  // num try/catch — se falhar, mostra-se um ícone simples em vez de travar
+  // o resto do modal.
   document.getElementById('detailTitle').textContent = t.template_name;
   document.getElementById('detailDesc').textContent  = t.description || 'Sem descrição.';
+
+  try {
+    renderTemplatePreview(t);
+  } catch (err) {
+    console.error('[Templates] Falha ao renderizar preview de', t.template_name, err);
+    const prev = document.getElementById('detailPreview');
+    if (prev) prev.innerHTML = `<span>🎨</span>`;
+  }
 
   // Meta
   const metaEl = document.getElementById('detailMeta');
