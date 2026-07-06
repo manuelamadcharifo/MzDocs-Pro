@@ -1492,12 +1492,38 @@ async function handleOcrAnalyze(req, res) {
   if (req.method !== 'POST')   return res.status(405).json({ error: 'POST only' });
 
   const body = parseBody(req);
-  const { ocrText = '', schema = [], serviceType = '', imageBase64, mimeType } = body;
+  const { ocrText = '', schema = [], serviceType = '', imageBase64, imagesBase64, mimeType } = body;
   if (!schema.length) return res.status(400).json({ error: 'schema required' });
 
-  const hasImage  = !!(imageBase64 && mimeType?.startsWith('image/'));
+  // NOVO: várias páginas do mesmo rascunho manuscrito (Trabalho Escolar) —
+  // imagesBase64 é um array; mantém-se compatibilidade total com o fluxo de
+  // 1 foto (imageBase64, string única) usado por todos os outros serviços.
+  // Limite de 8 imagens: alinhado com o limite no frontend (OCRController).
+  const images = Array.isArray(imagesBase64) && imagesBase64.length
+    ? imagesBase64.slice(0, 8)
+    : (imageBase64 ? [imageBase64] : []);
+  const hasImage = images.length > 0 && !!mimeType?.startsWith('image/');
+  const isMultiPage = images.length > 1;
+
   const schemaDesc = schema.map(f => `- ${f.id}: "${f.label}" (${f.type})`).join('\n');
-  const userPrompt = `És um especialista em extracção de dados de documentos moçambicanos.\n${ocrText ? `TEXTO EXTRAÍDO DO DOCUMENTO:\n${ocrText.slice(0, 2000)}\n` : ''}\nTIPO DE DOCUMENTO: ${serviceType}\n\nCAMPOS A EXTRAIR:\n${schemaDesc}\n\nINSTRUÇÕES:\n- Analisa ${hasImage ? 'a imagem e o texto' : 'o texto'} cuidadosamente\n- Para cada campo, extrai o valor exacto que aparece no documento\n- Se o campo não existir, inclui-o em "missing"\n- Responde APENAS com JSON válido, sem markdown, sem explicações\n\nFORMATO OBRIGATÓRIO:\n{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":["campo_ausente"]}`;
+
+  // NOVO: com várias páginas, além de extrair os campos do formulário,
+  // pedimos também a TRANSCRIÇÃO integral do texto manuscrito (em ordem de
+  // leitura, todas as páginas), para servir de base ao documento final —
+  // sem isto, um rascunho de várias páginas só contribuía com os metadados
+  // da capa (tema/nível/disciplina), perdendo o conteúdo que o aluno
+  // efectivamente escreveu.
+  const transcriptInstructions = isMultiPage
+    ? `\n- Além dos campos, transcreve TAMBÉM o texto manuscrito de TODAS as páginas, pela ordem em que foram fornecidas, para o campo "transcript" (junta as páginas num só texto corrido, mantendo parágrafos)\n`
+    : '';
+  const transcriptFormat = isMultiPage ? `,"transcript":"texto completo transcrito de todas as páginas"` : '';
+
+  const userPrompt = `És um especialista em extracção de dados de documentos moçambicanos.\n${ocrText ? `TEXTO EXTRAÍDO DO DOCUMENTO:\n${ocrText.slice(0, 2000)}\n` : ''}\nTIPO DE DOCUMENTO: ${serviceType}\n\nCAMPOS A EXTRAIR:\n${schemaDesc}\n\nINSTRUÇÕES:\n- Analisa ${hasImage ? (isMultiPage ? `as ${images.length} imagens (páginas do mesmo rascunho) e o texto` : 'a imagem e o texto') : 'o texto'} cuidadosamente\n- Para cada campo, extrai o valor exacto que aparece no documento\n- Se o campo não existir, inclui-o em "missing"${transcriptInstructions}- Responde APENAS com JSON válido, sem markdown, sem explicações\n\nFORMATO OBRIGATÓRIO:\n{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":["campo_ausente"]${transcriptFormat}}`;
+
+  // Transcrever várias páginas manuscritas produz uma resposta bem maior do
+  // que só os campos do formulário — sem aumentar o limite, o JSON saía
+  // cortado a meio e falhava o parse.
+  const maxTokens = isMultiPage ? 4000 : 1500;
 
   if (process.env.GROQ_API_KEY) {
     const visionModels = hasImage
@@ -1506,12 +1532,12 @@ async function handleOcrAnalyze(req, res) {
     for (const model of visionModels) {
       try {
         const content = hasImage
-          ? [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }, { type: 'text', text: userPrompt }]
+          ? [...images.map(img => ({ type: 'image_url', image_url: { url: `data:${mimeType};base64,${img}` } })), { type: 'text', text: userPrompt }]
           : userPrompt;
         const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-          body: JSON.stringify({ model, max_tokens: 1500, temperature: 0.1, messages: [{ role: 'user', content }] }),
+          body: JSON.stringify({ model, max_tokens: maxTokens, temperature: 0.1, messages: [{ role: 'user', content }] }),
         });
         if (r.ok) {
           const d = await r.json();
@@ -1527,10 +1553,10 @@ async function handleOcrAnalyze(req, res) {
     for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
       try {
         const parts = [];
-        if (hasImage) parts.push({ inline_data: { mime_type: mimeType, data: imageBase64 } });
+        if (hasImage) images.forEach(img => parts.push({ inline_data: { mime_type: mimeType, data: img } }));
         parts.push({ text: userPrompt });
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: maxTokens } }) });
         if (r.ok) {
           const d = await r.json();
           const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
@@ -1543,12 +1569,12 @@ async function handleOcrAnalyze(req, res) {
   if (process.env.OPENROUTER_API_KEY) {
     try {
       const content = hasImage
-        ? [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }, { type: 'text', text: userPrompt }]
+        ? [...images.map(img => ({ type: 'image_url', image_url: { url: `data:${mimeType};base64,${img}` } })), { type: 'text', text: userPrompt }]
         : userPrompt;
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, 'HTTP-Referer': SITE_URL },
-        body: JSON.stringify({ model: hasImage ? 'meta-llama/llama-4-scout' : 'meta-llama/llama-3.3-70b-instruct', max_tokens: 1500, temperature: 0.1, messages: [{ role: 'user', content }] }),
+        body: JSON.stringify({ model: hasImage ? 'meta-llama/llama-4-scout' : 'meta-llama/llama-3.3-70b-instruct', max_tokens: maxTokens, temperature: 0.1, messages: [{ role: 'user', content }] }),
       });
       if (r.ok) {
         const d = await r.json();
