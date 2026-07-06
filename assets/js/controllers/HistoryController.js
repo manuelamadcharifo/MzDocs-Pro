@@ -338,6 +338,21 @@ export class HistoryController {
   _viewDoc(id, docs) {
     const doc = docs.find(d => d.id === id);
     if (!doc) return;
+
+    // ── Fallback leve: páginas sem o motor completo de documentos (ex:
+    // /perfil.html, /templates.html, que não carregam o overlay de
+    // resultado #resultOverlay/#resModel/#resMeta) não têm como mostrar o
+    // editor A4 completo. Verificamos tanto window.docController como a
+    // presença real do elemento no DOM — confiar só na variável global é
+    // frágil (ex: app.js define window.docController em qualquer página
+    // onde é incluído, mesmo que essa página não tenha a marcação toda),
+    // e foi exactamente isso que causou "Cannot set properties of null"
+    // ao tentar abrir um documento nalgumas páginas.
+    if (!window.docController || !document.getElementById('resultOverlay') || !document.getElementById('resModel')) {
+      this._viewDocLite(doc);
+      return;
+    }
+
     this.close();
 
     const ctrl = window.docController;
@@ -401,6 +416,50 @@ export class HistoryController {
       if (model) model.textContent = doc.model_used || '';
 
       ctrl?._bindEditBtn?.();
+    });
+  }
+
+  // ── Visualizador leve e autónomo (sem dependências do editor A4 completo) ──
+  // Usado em páginas como /perfil.html, que só incluem este controlador e o
+  // modal de histórico, sem toda a infraestrutura de geração/edição de
+  // documentos da homepage.
+  _viewDocLite(doc) {
+    document.getElementById('histLiteOverlay')?.remove();
+
+    const dateStr = new Date(doc.created_at).toLocaleDateString('pt-MZ', {
+      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+    const safeContent = (doc.content || '').replace(/</g, '&lt;');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'histLiteOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(7,16,31,.65);backdrop-filter:blur(6px);display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .18s ease';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:88svh;overflow-y:auto;display:flex;flex-direction:column;animation:slideUp .3s cubic-bezier(.34,1.1,.64,1)">
+        <div style="display:flex;align-items:center;gap:12px;padding:18px 18px 14px;border-bottom:1px solid #E2E8F0;position:sticky;top:0;background:#fff">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15px;font-weight:800;color:#07101F;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(doc.title || doc.service_type || 'Documento').replace(/</g,'&lt;')}</div>
+            <div style="font-size:11.5px;color:#64748B;margin-top:2px">📁 Do arquivo · ${dateStr}</div>
+          </div>
+          <button id="histLiteClose" style="border:none;background:#F8FAFD;width:32px;height:32px;border-radius:50%;font-size:15px;cursor:pointer;flex-shrink:0">✕</button>
+        </div>
+        <div style="padding:18px;white-space:pre-wrap;word-wrap:break-word;font-size:13.5px;line-height:1.7;color:#0F1E3B;flex:1">${safeContent || '<span style="color:#94a3b8">Este documento não tem conteúdo de texto guardado.</span>'}</div>
+        <div style="display:flex;gap:8px;padding:14px 18px;border-top:1px solid #E2E8F0;position:sticky;bottom:0;background:#fff">
+          <button id="histLiteCopy" style="flex:1;padding:11px;border:1.5px solid #E2E8F0;background:#F8FAFD;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📋 Copiar texto</button>
+          <a href="/?history=1&doc=${encodeURIComponent(doc.id)}" style="flex:1;text-align:center;padding:11px;border:none;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border-radius:10px;font-size:13px;font-weight:700;text-decoration:none;font-family:inherit">✏️ Abrir no editor completo</a>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+
+    const cleanup = () => { overlay.remove(); document.body.style.overflow = ''; };
+    overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(); });
+    overlay.querySelector('#histLiteClose')?.addEventListener('click', cleanup);
+    overlay.querySelector('#histLiteCopy')?.addEventListener('click', () => {
+      navigator.clipboard?.writeText(doc.content || '')
+        .then(() => NotificationView.success('📋 Copiado!'))
+        .catch(() => NotificationView.error('Não foi possível copiar'));
     });
   }
 
