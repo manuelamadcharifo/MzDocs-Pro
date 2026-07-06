@@ -455,6 +455,133 @@
   </div>
 </div>
 
+<!-- MODAIS PARTILHADOS (mesmos IDs que index.html) — esta página já carrega
+     o app.js completo (ver <script src="assets/js/app.js"> no fim), que já
+     cria o PaymentController/HistoryController/DocumentController e já liga
+     os botões 📁 (Arquivo) e ⚡ (créditos) do header. Sem esta marcação,
+     esses botões clicavam e não faziam absolutamente nada visível — os
+     controllers tentavam abrir #payOverlay/#historyOverlay/#resultOverlay,
+     que simplesmente não existiam nesta página. -->
+
+<!-- MODAL RESULTADO (necessário para "👁️ Ver" um documento do Arquivo) -->
+<div class="overlay" id="resultOverlay">
+  <div class="sheet tall" id="resultSheet">
+    <div class="pill"></div>
+    <div class="result-hdr">
+      <span class="res-ok">✅ Seu Documento está Pronto</span>
+      <span class="res-model" id="resModel"></span>
+      <button class="sh-x" id="resultClose">✕</button>
+    </div>
+    <div class="res-meta" id="resMeta"></div>
+    <div class="res-preview" id="resPreview"></div>
+    <div class="res-actions" id="resActions">
+      <button id="btnDl"        class="res-btn res-btn-primary">⬇️ Download</button>
+      <button id="btnCopy"      class="res-btn">📋 Copiar</button>
+      <button class="res-btn wa-btn" id="btnWaResult">💬 WhatsApp</button>
+      <button id="btnTemplate"  class="res-btn res-btn-purple">🎨 Modelo</button>
+      <button id="btnAcademic"  class="res-btn res-btn-green">📚 APA</button>
+      <button id="btnEdit"      class="res-btn res-btn-blue">✏️ Editar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PAGAMENTO -->
+<div class="overlay" id="payOverlay">
+  <div class="sheet" id="paySheet">
+    <div class="pill"></div>
+    <div class="sheet-hdr">
+      <div><div class="sh-title" id="payTitle">Adquirir Créditos</div><div class="sh-sub" id="paySubtitle">Pagamento manual — M-Pesa, e-Mola ou mKesh via WhatsApp</div></div>
+      <button class="sh-x" id="payClose">✕</button>
+    </div>
+    <div id="avulsoSection" style="display:none;margin-bottom:16px;">
+      <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;">
+        <div style="font-size:13px;font-weight:700;color:#1D4ED8;margin-bottom:4px;">🚀 Acesso Avulso — Sem Conta</div>
+        <div style="font-size:13px;color:#1e40af;line-height:1.5;">3 documentos gerados por IA · válido 7 dias · sem conta permanente</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+          <span style="font-size:20px;font-weight:800;color:#1D4ED8;" id="pkgPriceAvulso">MZN 50</span>
+          <button class="pkg-avulso-btn" data-pkg="avulso"
+            style="padding:8px 18px;background:#1D4ED8;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
+            Pagar agora
+          </button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:14px 0 4px;">
+        <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+        <span style="font-size:12px;color:#94a3b8;font-weight:500;">ou crie conta e poupe mais</span>
+        <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+      </div>
+    </div>
+    <div class="pkg-grid">
+      <div class="pkg" data-pkg="starter">
+        <div class="pkg-name">Starter</div>
+        <div class="pkg-price" id="pkgPriceStarter">MZN 120</div>
+        <div class="pkg-cr" id="pkgCrStarter">10 créditos</div>
+        <div class="pkg-per" id="pkgPerStarter">MZN 12/doc</div>
+      </div>
+      <div class="pkg popular" data-pkg="basico">
+        <div class="pkg-badge">Popular</div>
+        <div class="pkg-name">Básico</div>
+        <div class="pkg-price" id="pkgPriceBasico">MZN 280</div>
+        <div class="pkg-cr" id="pkgCrBasico">25 créditos</div>
+        <div class="pkg-per" id="pkgPerBasico">MZN 11.2/doc</div>
+      </div>
+      <div class="pkg" data-pkg="pro">
+        <div class="pkg-name">Pro</div>
+        <div class="pkg-price" id="pkgPricePro">MZN 600</div>
+        <div class="pkg-cr" id="pkgCrPro">60 créditos</div>
+        <div class="pkg-per" id="pkgPerPro">MZN 10/doc</div>
+      </div>
+      <div class="pkg" data-pkg="empresa">
+        <div class="pkg-name">Empresa</div>
+        <div class="pkg-price" id="pkgPriceEmpresa">MZN 1500</div>
+        <div class="pkg-cr" id="pkgCrEmpresa">150 créditos</div>
+        <div class="pkg-per" id="pkgPerEmpresa">MZN 10/doc</div>
+      </div>
+    </div>
+    <div id="mpesaSection" style="display:none">
+      <div class="mp-hdr">
+        <div class="mp-logo">M</div>
+        <div><strong>Pagamento por Carteira Móvel</strong><p id="mpEnvLabel">Processado manualmente — M-Pesa, e-Mola ou mKesh</p></div>
+      </div>
+      <label class="field-lbl">Número de telemóvel (M-Pesa, e-Mola ou mKesh)</label>
+      <div class="phone-wrap">
+        <span>+258</span>
+        <input type="tel" id="phoneInput" placeholder="8X XXX XXXX" maxlength="9" inputmode="numeric"/>
+      </div>
+      <div class="pay-sum" id="paySummary"></div>
+      <button class="btn-pay" id="btnPay" disabled>Continuar</button>
+      <p class="mp-note" id="mpNote">⚠️ Pagamento processado manualmente: ao confirmar, será encaminhado para o WhatsApp para enviar o comprovativo.</p>
+      <div id="payReceiverInfo"></div>
+      <div class="pay-manual-info" id="payManualInfo" style="display:none;margin-top:12px;padding:12px 14px;background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:10px;font-size:13px;color:#92400E;line-height:1.6;">
+        ⚠️ <strong>Pagamento manual — não é automático:</strong><br/>
+        Após clicar, será redireccionado para o WhatsApp. Envie o comprovativo (M-Pesa, e-Mola ou mKesh, conforme o número usado) para o nosso número e os créditos serão activados em até <strong>24 horas</strong>.<br/>
+        <span style="margin-top:6px;display:block;">📌 Guarde o número de referência que receberá — é necessário para confirmar o pagamento.</span>
+        <span style="margin-top:8px;display:block;font-size:12px;">Consulte a nossa <a href="/legal.html#reembolso" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Política de Reembolso</a> · <a href="/legal.html#suporte" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Suporte</a></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HISTÓRICO -->
+<div class="overlay" id="historyOverlay">
+  <div class="sheet tall" id="historySheet">
+    <div class="pill"></div>
+    <div class="sheet-hdr">
+      <div>
+        <div class="sh-title">📁 Arquivo de Documentos</div>
+        <div class="sh-sub">Os seus documentos gerados nesta conta</div>
+      </div>
+      <button class="sh-x" id="historyClose">✕</button>
+    </div>
+    <div id="historyBody" style="padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;">
+      <div id="historyLoading" style="text-align:center;padding:40px;color:#64748b;">
+        <div style="font-size:32px;margin-bottom:8px;">⏳</div>
+        <div>A carregar documentos…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Notificações reutilizadas -->
 <div class="notif-stack" id="notifStack"></div>
 
