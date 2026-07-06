@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v21-20260629'; // Auditoria: adicionados 33 ficheiros (prompts builders, templates do marketplace, SampleData, LegalContext) que faltavam no precache e quebravam a geração de documentos em modo offline
+const CACHE_VERSION = 'v22-20260706'; // Perfil: modais de Créditos/Arquivo embutidos em perfil.html + fallback "_viewDocLite" do HistoryController — sem bump, telemóveis com SW antigo continuavam a servir a versão anterior de HistoryController.js/PaymentController.js em cache e rebentavam ao tentar usar #resultOverlay/#resMeta, que só existem em index.html
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
