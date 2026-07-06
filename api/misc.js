@@ -840,6 +840,23 @@ async function handleTemplates(action, req, res) {
 async function tplList(req, res) {
   const service = req.query?.service || null;
   const limit   = Math.min(parseInt(req.query?.limit || 50), 100);
+
+  // CORRIGIDO (bug grave): esta função ignorava por completo req.query.id.
+  // O frontend (templates.html → openDetail) chama isto como
+  // "/list?id=eq.<uuid>&limit=1" para carregar UM template específico ao
+  // clicar num card — mas como o "id" nunca era lido nem aplicado ao filtro,
+  // a query executada era sempre "ORDER BY downloads DESC LIMIT 1", ou seja,
+  // devolvia sempre o template mais descarregado do catálogo inteiro,
+  // fosse qual fosse o id pedido. Resultado: clicar em QUALQUER card da
+  // galeria abria sempre o mesmo modal (o template nº1 em downloads).
+  //
+  // Validamos o formato UUID em vez de concatenar req.query.id directamente
+  // no path — sem isto, alguém podia injectar filtros extra do PostgREST
+  // (ex: "...&id=neq.0&status=neq.approved") através da query string.
+  const idMatch = /^(?:eq\.)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+    .exec(String(req.query?.id || ''));
+  const id = idMatch ? idMatch[1] : null;
+
   // CORRIGIDO: faltava template_html aqui — só template_css estava no
   // select. Sem o HTML, o frontend (templates.html → _buildSampleHtml)
   // nunca conseguia preencher os placeholders {{...}} com dados de
@@ -849,6 +866,7 @@ async function tplList(req, res) {
   const fields  = 'id,service_type,template_name,description,thumbnail_url,template_html,template_css,downloads,likes,rating_sum,rating_count,created_at';
   let path = `templates_custom?status=eq.approved&is_public=eq.true&order=downloads.desc&limit=${limit}&select=${fields}`;
   if (service) path += `&service_type=eq.${encodeURIComponent(service)}`;
+  if (id) path += `&id=eq.${id}`;
   try {
     const data = await restRequest(path);
     const templates = (Array.isArray(data) ? data : []).map(t => ({
