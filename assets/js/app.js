@@ -337,8 +337,8 @@ function _setupAuthHeader() {
               <div class="usr-dd-name">${name}</div>
               <div class="usr-dd-sub">${subtitle}</div>
               <hr class="usr-dd-sep"/>
-              <a class="usr-dd-link" href="/perfil.html">👤 O Meu Perfil</a>
-              <a class="usr-dd-link" href="/perfil.html#painel">🎯 Painel de Controlo</a>
+              <a class="usr-dd-link" href="/perfil.html#dados">👤 O Meu Perfil</a>
+              <a class="usr-dd-link" href="/perfil.html">🎯 Painel de Controlo</a>
               <a class="usr-dd-link" href="/perfil.html#documentos">📁 Meus Documentos</a>
               <a class="usr-dd-link" href="/afiliado.html">${isAffil ? '🤝 Painel de Afiliado' : '💰 Tornar-me Afiliado'}</a>
               ${isAdmin ? '<a class="usr-dd-link" href="/admin.html">🛡️ Administração</a>' : ''}
