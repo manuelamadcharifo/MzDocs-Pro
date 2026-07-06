@@ -491,7 +491,7 @@ async function loadDocuments(userId) {
   try {
     const { data, error } = await authManager.supabase
       .from('documents')
-      .select('id, service_type, title, created_at')
+      .select('id, service_type, title, created_at, content, model_used, template_html, template_css')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(6);
@@ -501,14 +501,24 @@ async function loadDocuments(userId) {
     }
     const ICONS = { trabalho:'📚', cv:'📋', carta:'✉️', orcamento:'🏗️', impressao:'🖨️', foto:'📷', conversao:'🔄' };
     list.innerHTML = data.map(d => `
-      <div class="doc-row">
+      <div class="doc-row" data-id="${d.id}" style="cursor:pointer">
         <div class="doc-icon">${ICONS[d.service_type] || '📄'}</div>
         <div style="flex:1;min-width:0">
           <div class="doc-title">${(d.title || 'Documento sem título').replace(/</g,'&lt;')}</div>
           <div class="doc-date">${fmtDate(d.created_at)}</div>
         </div>
+        <div style="color:var(--muted);font-size:16px;flex-shrink:0">›</div>
       </div>
     `).join('');
+    // CORRIGIDO: a lista de "Documentos Recentes" era só decorativa — não
+    // reagia a toques. Reutiliza-se o mesmo visualizador "lite" que o
+    // HistoryController já usa em "Ver arquivo completo" (window.historyController
+    // é criado em init(), antes desta função ser chamada).
+    list.querySelectorAll('.doc-row[data-id]').forEach(row => {
+      row.addEventListener('click', () => {
+        window.historyController?._viewDoc(row.dataset.id, data);
+      });
+    });
   } catch (_) {
     list.innerHTML = '<div class="empty">Não foi possível carregar o histórico agora.</div>';
   }
@@ -630,16 +640,19 @@ async function init() {
   document.getElementById('panel').style.display = 'block';
   renderIdentity(user, authManager.profile);
   bindForms();
-  await loadDocuments(user.id);
 
   // ── Créditos e Arquivo funcionam directamente aqui em /perfil.html —
   // mesmos controllers que a home usa, ligados aos mesmos IDs de modal
   // que acabámos de incluir nesta página (payOverlay / historyOverlay).
+  // Criados ANTES de loadDocuments() para que clicar num documento recente
+  // já tenha window.historyController disponível mesmo no primeiro instante.
   window.authManager = authManager;
   const creditModel = new CreditModel();
   await creditModel.init();
   window.paymentController = new PaymentController(creditModel);
   window.historyController = new HistoryController();
+
+  await loadDocuments(user.id);
 
   // Se ficarmos sem window.docController (não existe nesta página), o
   // HistoryController usa automaticamente o seu visualizador "lite" —
