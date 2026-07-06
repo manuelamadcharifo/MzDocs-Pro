@@ -27,14 +27,26 @@ export class OCRController {
   }
 
   async processFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
     const maxSize = 10 * 1024 * 1024; // 10 MB para PDF/Word; 5 MB para imagens
-    const isImage = file.type.startsWith('image/');
-    if (file.size > maxSize || (isImage && file.size > 5 * 1024 * 1024)) {
-      NotificationView.error(`Ficheiro muito grande (máx. ${isImage ? '5' : '10'}MB)`);
-      return;
+    // NOVO: limite de páginas para o rascunho manuscrito do Trabalho Escolar —
+    // 8 fotos cobre confortavelmente um trabalho escolar típico (poucas
+    // páginas manuscritas); acima disso o pedido às APIs de IA visual fica
+    // demasiado grande para uma única chamada e o custo deixa de compensar
+    // face a escrever o texto directamente.
+    const maxPages = 8;
+    if (files.length > maxPages) {
+      NotificationView.warn(`⚠️ Máximo de ${maxPages} fotos de cada vez. Foram consideradas só as primeiras ${maxPages}.`);
+      files.length = maxPages;
+    }
+    for (const file of files) {
+      const isImage = file.type.startsWith('image/');
+      if (file.size > maxSize || (isImage && file.size > 5 * 1024 * 1024)) {
+        NotificationView.error(`Ficheiro "${file.name}" muito grande (máx. ${isImage ? '5' : '10'}MB)`);
+        return;
+      }
     }
 
     const ocrBar       = document.getElementById('ocrBar');
@@ -45,19 +57,25 @@ export class OCRController {
     if (ocrBar) ocrBar.style.display = 'block';
     if (ocrResultBox) ocrResultBox.style.display = 'none';
     if (ocrFill) ocrFill.style.width = '0%';
-    if (ocrStatusTxt) ocrStatusTxt.textContent = 'A inicializar OCR…';
+    if (ocrStatusTxt) ocrStatusTxt.textContent = files.length > 1 ? `A inicializar OCR de ${files.length} páginas…` : 'A inicializar OCR…';
 
     try {
       const serviceType = this.docModel?.service || '';
 
-      const result = await this.smartOCR.extractFields(
-        file,
-        serviceType,
-        (pct, msg) => {
-          if (ocrFill) ocrFill.style.width = pct + '%';
-          if (ocrStatusTxt) ocrStatusTxt.textContent = msg || `A reconhecer… ${pct}%`;
-        }
-      );
+      const progress = (pct, msg) => {
+        if (ocrFill) ocrFill.style.width = pct + '%';
+        if (ocrStatusTxt) ocrStatusTxt.textContent = msg || `A reconhecer… ${pct}%`;
+      };
+
+      // Uma só foto → caminho de sempre (extractFields). Várias páginas →
+      // extractFieldsMulti, que junta todas as imagens numa ÚNICA chamada à
+      // IA visual (não N chamadas separadas — mantém o custo controlado:
+      // 5 páginas custam sensivelmente o mesmo que 1 chamada de OCR normal,
+      // só que com mais tokens de imagem de entrada, e nenhum tokens extra
+      // de saída, já que a resposta continua limitada a max_tokens:1500).
+      const result = files.length > 1
+        ? await this.smartOCR.extractFieldsMulti(files, serviceType, progress)
+        : await this.smartOCR.extractFields(files[0], serviceType, progress);
 
       if (ocrBar) ocrBar.style.display = 'none';
 
