@@ -3,12 +3,28 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v22-20260706'; // Perfil: modais de Créditos/Arquivo embutidos em perfil.html + fallback "_viewDocLite" do HistoryController — sem bump, telemóveis com SW antigo continuavam a servir a versão anterior de HistoryController.js/PaymentController.js em cache e rebentavam ao tentar usar #resultOverlay/#resMeta, que só existem em index.html
+const CACHE_VERSION = 'v23-20260706'; // Auto-hospedagem do Workbox/idb (fim da dependência de CDNs externas no arranque do SW — causa raiz de "app não abre sem internet") + fallback de navegação para a app shell precacheada + timeout de rede de 4s
 
-importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
-importScripts('https://cdn.jsdelivr.net/npm/idb@7/build/umd.js');
+// CORRIGIDO (bug crítico — causa raiz de "a app não abre sem dados/internet"):
+// Antes, o Service Worker carregava o Workbox e o idb via importScripts a partir
+// de CDNs externos (storage.googleapis.com, cdn.jsdelivr.net) EM TEMPO DE
+// INSTALAÇÃO/ACTIVAÇÃO do próprio SW. O loader "workbox-sw.js" além disso faz,
+// internamente, mais importScripts em cadeia para cada submódulo usado
+// (workbox-core, workbox-precaching, workbox-strategies, workbox-routing,
+// workbox-expiration), todos pedidos ao vivo à CDN da Google. Se o telemóvel
+// estivesse sem dados exactamente no momento em que o browser tenta (re)instalar
+// o SW — o que acontece sempre que o ficheiro sw.js muda, ou seja, a cada
+// deploy — TODas essas importScripts falhavam, a instalação do SW abortava, e
+// sem um SW activo a app deixa de ter QUALQUER capacidade offline: mesmo o
+// "/index.html" já precacheado nunca chegava a ser servido, e o utilizador via
+// o ecrã de erro nativo do browser em vez da app ou do offline.html.
+// Agora o Workbox e o idb estão auto-alojados em /assets/vendor/ — ficheiros
+// estáticos normais, servidos como qualquer outro asset do site, sem depender
+// de uma CDN de terceiros estar acessível no momento exacto da instalação.
+importScripts('/assets/vendor/workbox/workbox-sw.js');
+importScripts('/assets/vendor/idb.umd.js');
 
-workbox.setConfig({ debug: false });
+workbox.setConfig({ debug: false, modulePathPrefix: '/assets/vendor/workbox' });
 
 // ── PRECACHING ──────────────────────────────────────────────────────────────
 workbox.precaching.precacheAndRoute([
@@ -182,10 +198,27 @@ workbox.routing.registerRoute(
 );
 
 // ── OFFLINE FALLBACK PARA NAVEGAÇÃO ────────────────────────────────────────
+// CORRIGIDO: dois problemas que faziam a app "não abrir" sem dados/internet:
+// 1. Sem networkTimeoutSeconds, o NetworkFirst esperava indefinidamente por
+//    uma rede instável (sinal fraco/sem dados mas com wi-fi "ligado" sem
+//    internet real) antes de desistir — parecia que a app tinha travado.
+// 2. Em falha, ia direto para '/offline.html' sem primeiro tentar a app
+//    shell já precacheada ('/index.html'). Isso é irrelevante para o URL
+//    exacto "/" (que o precache já intercepta antes disto), mas afecta
+//    QUALQUER outro pedido de navegação — ex: "/?ref=MAN77831" (o link do
+//    panfleto com QR code), "/perfil.html", "/templates.html" — que nunca
+//    tinham sido visitados com rede nesta versão do cache. Agora, se a
+//    cache de páginas também falhar, tenta servir a app shell precacheada
+//    antes de desistir para offline.html.
 const navigationHandler = async (params) => {
     try {
-        return await new workbox.strategies.NetworkFirst({ cacheName: `pages-${CACHE_VERSION}` }).handle(params);
+        return await new workbox.strategies.NetworkFirst({
+            cacheName: `pages-${CACHE_VERSION}`,
+            networkTimeoutSeconds: 4,
+        }).handle(params);
     } catch {
+        const shell = await caches.match('/index.html');
+        if (shell) return shell;
         return caches.match('/offline.html');
     }
 };
