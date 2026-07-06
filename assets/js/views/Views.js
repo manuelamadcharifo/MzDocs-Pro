@@ -279,7 +279,13 @@ export const DocumentView = {
   },
 
   _renderResultInner(content, svc, credits, model, templateCss = null) {
-    document.getElementById('resModel').textContent = model || 'openrouter';
+    // CORRIGIDO: esta função assume que a página tem o overlay de resultado
+    // completo (#resModel/#resMeta/#resPreview, só existem em index.html).
+    // Se for chamada nalgum contexto sem essa infra (ex: engano futuro numa
+    // página como /perfil.html ou /templates.html), grava sem rebentar em
+    // vez de lançar "Cannot set properties of null" e parar tudo a meio.
+    const resModelEl = document.getElementById('resModel');
+    if (resModelEl) resModelEl.textContent = model || 'openrouter';
     // CORRIGIDO: guardar templateCss activo para usar no _renderResultFrame
     this._activeTemplateCss = templateCss || null;
 
@@ -298,8 +304,11 @@ export const DocumentView = {
 
     // CORRIGIDO: "null créditos restantes" — credits pode ser null quando vem do histórico
     const creditsLabel = (credits != null && credits !== '') ? `⚡ ${credits} créditos restantes &nbsp;|&nbsp; ` : '';
-    document.getElementById('resMeta').innerHTML =
-      `📄 ${svcTitle} &nbsp;|&nbsp; ${creditsLabel}🕐 ${new Date().toLocaleTimeString('pt')}`;
+    const resMetaEl = document.getElementById('resMeta');
+    if (resMetaEl) {
+      resMetaEl.innerHTML =
+        `📄 ${svcTitle} &nbsp;|&nbsp; ${creditsLabel}🕐 ${new Date().toLocaleTimeString('pt')}`;
+    }
 
     const previewContainer = document.getElementById('resPreview');
     if (!previewContainer) return;
