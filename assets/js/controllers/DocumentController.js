@@ -274,6 +274,29 @@ export class DocumentController {
    if (isAcademic) this._refreshAcademicPreCount();
  }
 
+ // NOVO: rascunho manuscrito com várias páginas — só para "Trabalho Escolar".
+ // Um trabalho escolar manuscrito normalmente tem várias folhas (não cabe
+ // numa única foto), por isso só aqui permitimos seleccionar/fotografar
+ // várias imagens de uma vez; nos outros serviços mantém-se 1 foto (a
+ // maioria é um documento de 1 página — CV, carta, requerimento, etc. — e
+ // limitar a 1 evita custo extra de IA sem necessidade real).
+ const ocrInput = document.getElementById('ocrInput');
+ const ocrCard  = document.querySelector('#ocrZone .ocr-card p');
+ const btnCamEl = document.getElementById('btnCam');
+ const btnFileEl = document.getElementById('btnFile');
+ const isMultiPageDraft = key === 'trabalho';
+ if (ocrInput) {
+   if (isMultiPageDraft) ocrInput.setAttribute('multiple', '');
+   else ocrInput.removeAttribute('multiple');
+ }
+ if (ocrCard) {
+   ocrCard.textContent = isMultiPageDraft
+     ? 'Fotografe todas as páginas (pode seleccionar várias fotos de uma vez) e o sistema transforma em documento digital'
+     : 'Fotografe e o sistema transforma em documento digital';
+ }
+ if (btnCamEl) btnCamEl.textContent = isMultiPageDraft ? '📸 Tirar Fotos' : '📸 Tirar Foto';
+ if (btnFileEl) btnFileEl.textContent = isMultiPageDraft ? '📁 Escolher Ficheiros' : '📁 Escolher Ficheiro';
+
  DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
  DocumentView.removePreviewPanel();
 
