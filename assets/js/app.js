@@ -20,6 +20,7 @@ import { authUI } from './auth/AuthUI.js';
 import { authGuard } from './auth/AuthGuard.js';
 import { DocumentEditor } from './components/DocumentEditor.js';
 import { Analytics } from './analytics/Analytics.js';
+import { MarketingTracker } from './services/MarketingTracker.js';
 
 // ── CAPTURA LINK DE AFILIADO (?ref=CODIGO) ─────────────────────────────────
 (function () {
@@ -44,6 +45,11 @@ import { Analytics } from './analytics/Analytics.js';
 // ───────────────────────────────────────────────────────────────────────────
 
 async function bootstrap() {
+  // NOVO (Fase 1 — Marketing Analytics): inicializado antes de tudo, para
+  // que window.marketingTracker já exista quando AuthManager/DocumentController
+  // tentarem disparar eventos (signup, login, documento gerado, …).
+  window.marketingTracker = MarketingTracker.init();
+
   await authManager.ready();
 
   // CORRIGIDO: carregar /api/config (incluindo preços/créditos reais dos
