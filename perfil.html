@@ -390,6 +390,7 @@ import { CreditModel } from '/assets/js/models/Models.js';
 import { PaymentController, syncPackagesV8FromConfig, renderPackageCards } from '/assets/js/controllers/PaymentController.js';
 import { updatePackagesFromConfig } from '/assets/js/services/PaymentService.js';
 import { HistoryController } from '/assets/js/controllers/HistoryController.js';
+import { MarketingTracker } from '/assets/js/services/MarketingTracker.js';
 
 let WA_SUPPORT = '258858695506';
 
@@ -627,6 +628,7 @@ function bindForms() {
 }
 
 async function init() {
+  window.marketingTracker = MarketingTracker.init();
   await loadConfig();
   await authManager.ready();
   const user = authManager.user;
