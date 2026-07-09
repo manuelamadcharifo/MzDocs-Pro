@@ -103,6 +103,7 @@ module.exports = async function handler(req, res) {
 
   if (q._ns === 'affiliate') return handleAffiliate(q._a || lastSegment || '', req, res);
   if (q._ns === 'templates') return handleTemplates(q._a || 'list', req, res);
+  if (q._ns === 'marketing') return handleMarketing(q._a || 'track', req, res);
 
   const isAffiliate = pathParts.includes('affiliate');
   if (isAffiliate) return handleAffiliate(lastSegment === 'affiliate' ? (q.action || '') : lastSegment, req, res);
@@ -624,8 +625,105 @@ async function handlePageView(req, res) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// SITEMAP
+// MARKETING ANALYTICS — Fase 1 (fundação de tracking)
+// POST /api/misc?_ns=marketing&_a=visit   { visitor_id, source, referrer, landing_page, device, browser, language }
+// POST /api/misc?_ns=marketing&_a=event   { visitor_id, user_id?, event, document_type?, value?, metadata? }
+//
+// Rota única, sem função serverless nova (reutiliza api/misc.js, dentro do
+// limite de 12 do plano Hobby). Nunca falha de forma visível para o
+// utilizador — analytics não deve poder quebrar a experiência da app; em
+// erro, respondemos sempre 200 e só registamos no log do servidor.
 // ════════════════════════════════════════════════════════════════════════════
+const VALID_MKT_EVENTS = new Set([
+  'signup', 'login', 'document_generated', 'pdf_download',
+  'credit_purchase', 'plan_purchase', 'became_affiliate',
+  'referred_friend', 'commission_earned', 'template_created', 'template_purchased',
+]);
+
+function _clientIp(req) {
+  const fwd = (req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return fwd || req.socket?.remoteAddress || '0.0.0.0';
+}
+
+function _parseDevice(ua = '') {
+  if (/mobile/i.test(ua) && !/ipad|tablet/i.test(ua)) return 'mobile';
+  if (/ipad|tablet/i.test(ua)) return 'tablet';
+  return 'desktop';
+}
+
+function _parseBrowser(ua = '') {
+  if (/edg\//i.test(ua)) return 'Edge';
+  if (/chrome\//i.test(ua) && !/chromium/i.test(ua)) return 'Chrome';
+  if (/firefox\//i.test(ua)) return 'Firefox';
+  if (/safari\//i.test(ua) && !/chrome/i.test(ua)) return 'Safari';
+  if (/opr\//i.test(ua)) return 'Opera';
+  return 'outro';
+}
+
+async function handleMarketing(action, req, res) {
+  res.setHeader('Access-Control-Allow-Origin', ORIGIN);
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST')   return res.status(405).json({ error: 'POST only' });
+
+  // Rate limit por IP — analytics é o alvo perfeito para spam/flood
+  // (não custa créditos, é tentador abusar). 60/min é generoso para uso
+  // normal (1 visita + poucos eventos por carregamento de página) e
+  // barra scripts a martelar o endpoint.
+  const ip = _clientIp(req);
+  const allowed = await checkRateLimit('marketing', ip, { limit: 60, windowSec: 60 }).catch(() => true);
+  if (!allowed) return res.status(200).json({ ok: false, throttled: true });
+
+  const body = parseBody(req);
+  const visitorId = (body.visitor_id || '').toString().slice(0, 64);
+  if (!visitorId) return res.status(200).json({ ok: false, error: 'visitor_id required' });
+
+  try {
+    if (action === 'visit') {
+      const ua = (req.headers['user-agent'] || '').slice(0, 300);
+      await insert('marketing_visits', {
+        visitor_id:       visitorId,
+        marketing_source: (body.source || 'direct').toString().slice(0, 50).toLowerCase(),
+        referrer:         (body.referrer || '').toString().slice(0, 500) || null,
+        landing_page:     (body.landing_page || '/').toString().slice(0, 300),
+        user_agent:       ua,
+        device:           _parseDevice(ua),
+        browser:          _parseBrowser(ua),
+        // CORRIGIDO: país/cidade vêm dos headers de geo do próprio Vercel —
+        // zero custo, zero chamada a um serviço externo de geo-IP.
+        country:          req.headers['x-vercel-ip-country'] || null,
+        city:             req.headers['x-vercel-ip-city']    || null,
+        language:         (body.language || '').toString().slice(0, 10) || null,
+        ip_hash:          crypto.createHash('sha256').update(ip).digest('hex'),
+      });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'event') {
+      const event = (body.event || '').toString();
+      if (!VALID_MKT_EVENTS.has(event)) return res.status(200).json({ ok: false, error: 'evento desconhecido' });
+      await insert('marketing_events', {
+        visitor_id:    visitorId,
+        user_id:       (body.user_id && /^[0-9a-f-]{36}$/i.test(body.user_id)) ? body.user_id : null,
+        event,
+        document_type: (body.document_type || '').toString().slice(0, 50) || null,
+        value:         Number.isFinite(body.value) ? body.value : null,
+        metadata:      (body.metadata && typeof body.metadata === 'object') ? body.metadata : {},
+      });
+      return res.status(200).json({ ok: true });
+    }
+
+    return res.status(200).json({ ok: false, error: `acção desconhecida: ${action}` });
+  } catch (err) {
+    // Nunca deixar analytics derrubar a experiência do utilizador.
+    console.error('[handleMarketing] erro:', err.message);
+    return res.status(200).json({ ok: false });
+  }
+}
+
+
 async function handleSitemap(req, res) {
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
