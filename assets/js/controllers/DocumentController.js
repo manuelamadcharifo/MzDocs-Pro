@@ -584,6 +584,13 @@ export class DocumentController {
 
  // Analytics: documento gerado com sucesso
  Analytics.trackDocumentGenerated(key, cost, newHistoryId);
+ try {
+   window.marketingTracker?.trackEvent('document_generated', {
+     userId: window.authManager?.user?.id || null,
+     documentType: key,
+     value: cost,
+   });
+ } catch (_) {}
 
  // Rascunho já não é necessário — documento gerado com sucesso
  offlineDB.clearDraft(key).catch(() => {});
@@ -690,6 +697,13 @@ export class DocumentController {
   // Analytics
   const longHistId = crypto.randomUUID();
   Analytics.trackDocumentGenerated(key, cost, longHistId);
+  try {
+    window.marketingTracker?.trackEvent('document_generated', {
+      userId: window.authManager?.user?.id || null,
+      documentType: key,
+      value: cost,
+    });
+  } catch (_) {}
 
   // Guardar no histórico (estava em falta em _generateLong — presente em _generateNormal)
   try {
