@@ -181,6 +181,14 @@ export class AuthManager {
       throw new Error(data.error || 'Erro ao criar conta');
     }
 
+    // NOVO: evento de marketing — a conta já existe no servidor a partir
+    // daqui, independentemente do que acontecer a seguir com a sessão/
+    // auto-login (que tem 3 caminhos possíveis abaixo). Disparar aqui, uma
+    // única vez, é o ponto correcto para "Criou conta" no funil.
+    try {
+      window.marketingTracker?.trackEvent('signup', { userId: data.user?.id || null });
+    } catch (_) {}
+
     // Caso 1: servidor devolveu sessão (login automático)
     if (data.session && this.supabase) {
       console.log('[AuthManager] signUp: Sessão recebida, aplicando setSession…');
@@ -279,6 +287,7 @@ export class AuthManager {
  this.user = phoneData.user;
  await this._loadProfile(phoneData.user.id);
  this._notify();
+ try { window.marketingTracker?.trackEvent('login', { userId: phoneData.user.id }); } catch (_) {}
  return phoneData;
  }
  const { data: profileData, error: profileError } = await this.supabase
@@ -307,6 +316,7 @@ export class AuthManager {
  this.user = data.user;
  await this._loadProfile(data.user.id);
  this._notify();
+ try { window.marketingTracker?.trackEvent('login', { userId: data.user.id }); } catch (_) {}
  return data;
  }
 
