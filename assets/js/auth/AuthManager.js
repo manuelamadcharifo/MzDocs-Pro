@@ -150,13 +150,19 @@ export class AuthManager {
     // Capturar ref_code do link de afiliado se existir
     const refCode = sessionStorage.getItem('mz_ref') || null;
 
+    // NOVO (Fase 4 — Funil/CRM): enviar o visitor_id anónimo (o mesmo que o
+    // MarketingTracker já usa desde a Fase 1) para o backend gravar em
+    // profiles.visitor_id. É o que permite depois reconstruir a timeline
+    // completa do cliente — incluindo a actividade de antes de ter conta.
+    const visitorId = window.marketingTracker?.visitorId || null;
+
     let res;
     try {
       res = await this._withTimeout(
         fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, email, password, fullName, ref_code: refCode })
+          body: JSON.stringify({ phone, email, password, fullName, ref_code: refCode, visitor_id: visitorId })
         }),
         15000,
         'O servidor demorou demasiado a criar a conta. Tente novamente.'
