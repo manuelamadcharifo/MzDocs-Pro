@@ -118,7 +118,15 @@ async function handleSignup(req, res) {
   const body = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
 
-  const { phone, email, fullName, password, ref_code } = body;
+  const { phone, email, fullName, password, ref_code, visitor_id } = body;
+
+  // NOVO (Fase 4 — Funil/CRM): visitor_id é opcional (localStorage pode estar
+  // indisponível — modo privado, etc.), por isso nunca bloqueia o registo.
+  // Validação simples do formato (uuid-like, gerado por MarketingTracker) só
+  // para evitar gravar lixo arbitrário na coluna.
+  const visitorId = (typeof visitor_id === 'string' && /^[a-zA-Z0-9-]{10,64}$/.test(visitor_id))
+    ? visitor_id
+    : null;
   if (!phone)                          return res.status(400).json({ error: 'Número de telemóvel é obrigatório' });
   if (!email)                          return res.status(400).json({ error: 'E-mail é obrigatório' });
   if (!password || password.length < 6) return res.status(400).json({ error: 'Password deve ter pelo menos 6 caracteres' });
@@ -178,6 +186,7 @@ async function handleSignup(req, res) {
       account_type:     'normal',
       credits:          1,
       credits_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      visitor_id:       visitorId,
     };
 
     // Verificar link de afiliado
@@ -198,7 +207,7 @@ async function handleSignup(req, res) {
       message: 'Conta criada! 1 crédito grátis atribuído (válido 1 mês).',
     });
 
-    waitUntil(_persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload }));
+    waitUntil(_persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId }));
 
   } catch (err) {
     console.error('[auth/signup]', err.message);
@@ -217,7 +226,7 @@ async function handleSignup(req, res) {
 // passada a waitUntil(), que diz ao runtime da Vercel para manter a função
 // viva até esta promise terminar, eliminando a perda intermitente de
 // nome/telefone em contas novas.
-async function _persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload }) {
+async function _persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId }) {
   if (!SERVICE_KEY) {
     console.warn(`[auth/signup] Sem service role — perfil não actualizado para ${userId.slice(0,8)}***`);
     return;
@@ -231,9 +240,10 @@ async function _persistSignupProfile({ userId, normalized, normalizedEmail, norm
       await restRequest(`profiles?id=eq.${userId}`, {
         method: 'PATCH',
         body: {
-          phone:     normalized,
-          email:     normalizedEmail,
-          full_name: normalizedName,
+          phone:      normalized,
+          email:      normalizedEmail,
+          full_name:  normalizedName,
+          visitor_id: visitorId,
           updated_at: new Date().toISOString(),
         },
         prefer: 'return=minimal',
