@@ -27,6 +27,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
     "@vercel/functions": "^3.7.2",
+    "qrcode": "^1.5.4",
     "ws": "^8.18.0"
   },
   "devDependencies": {
