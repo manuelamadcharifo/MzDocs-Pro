@@ -469,6 +469,22 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
         }).catch(e => console.warn('[verify-receipt] process_affiliate_commission falhou:', e.message));
       }
 
+      // NOVO (Fase 2 — Marketing Analytics): só agora — depois dos créditos
+      // terem sido mesmo atribuídos — é que esta venda conta para o
+      // dashboard de marketing. Sem visitor_id (ex: venda confirmada pelo
+      // admin numa transacção antiga, criada antes desta Fase 2) o evento
+      // simplesmente não é gravado; nunca inventamos uma origem.
+      if (creditedUser && updatedTx[0]?.visitor_id) {
+        insert('marketing_events', {
+          visitor_id:    updatedTx[0].visitor_id,
+          user_id:       creditedUser,
+          event:         'credit_purchase',
+          document_type: null,
+          value:         amount,
+          metadata:      { package_id: packageId, credits, verification_method: 'auto' },
+        }).catch(e => console.warn('[verify-receipt] marketing_events insert:', e.message));
+      }
+
       console.log('[verify-receipt] AUTO-APROVADO:', transactionId, 'créditos:', credits);
 
       return {
