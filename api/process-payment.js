@@ -108,6 +108,11 @@ module.exports = async function handler(req, res) {
   const rawUserId        = body.userId || null;
   const receiptImage     = body.receiptImage    || null; // base64, opcional
   const receiptMimeType  = body.receiptMimeType || 'image/jpeg';
+  // NOVO (Fase 2 — Marketing Analytics): visitor_id do MarketingTracker,
+  // guardado na própria transacção para que, quando o pagamento for
+  // confirmado (auto por IA ou manual pelo admin — nunca no clique do
+  // botão), se saiba a que origem de marketing atribuir a venda.
+  const visitorId         = (body.visitorId || '').toString().slice(0, 64) || null;
 
   // ── Validações ────────────────────────────────────────────────────────────
   if (!rawPhone) {
@@ -180,6 +185,7 @@ module.exports = async function handler(req, res) {
         status:         'pending',
         payment_method: 'manual',
         phone_number:   normalizedPhone,
+        visitor_id:     visitorId,
       });
     } catch (insertErr) {
       // CORRIGIDO (auditoria 3.5): detalhes internos do Supabase (mensagem,
