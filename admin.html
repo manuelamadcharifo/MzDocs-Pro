@@ -65,6 +65,9 @@
       <a class="nav-item" data-section="qrcodes">
         <span class="nav-icon">📱</span><span class="nav-label">QR Codes</span>
       </a>
+      <a class="nav-item" data-section="funnel">
+        <span class="nav-icon">🧭</span><span class="nav-label">Funil</span>
+      </a>
       <a class="nav-item" data-section="settings">
         <span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span>
       </a>
@@ -730,6 +733,74 @@
       </div>
 
       <div id="qrCodesList"><div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">A carregar…</div></div>
+    </section>
+
+    <!-- ── FUNIL DE CONVERSÃO (Fase 4) ───────────────────────────────── -->
+    <section id="section-funnel" class="admin-section">
+      <div class="section-toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">🧭 Funil de Conversão</h2>
+          <p style="font-size:13px;color:#64748b">Visitas → Registos → Documentos gerados → Compras, com taxa de conversão em cada passo</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="funnelDays" class="filter-select" onchange="adminApp._loadFunnel()">
+            <option value="7">Últimos 7 dias</option>
+            <option value="30" selected>Últimos 30 dias</option>
+            <option value="90">Últimos 90 dias</option>
+          </select>
+          <button class="btn-primary" onclick="adminApp._loadFunnel()">🔄</button>
+        </div>
+      </div>
+
+      <div id="funnelNotApplied" style="display:none;background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#92400E">
+        ⚠️ A view <code>marketing_funnel_daily</code> ainda não existe na base de dados. Corra <code>migration_v33_funnel_crm.sql</code> no Supabase.
+      </div>
+
+      <!-- Passos do funil, em cascata -->
+      <div id="funnelSteps" class="stats-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#EFF6FF;">👁</div>
+          <div class="stat-body">
+            <div class="stat-value" id="funnelVisits">—</div>
+            <div class="stat-label">Visitantes únicos</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#F0FDF4;">📝</div>
+          <div class="stat-body">
+            <div class="stat-value" id="funnelSignups">—</div>
+            <div class="stat-label">Registos <span id="funnelRateSignup" style="font-weight:700;color:#16a34a"></span></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#FDF4FF;">📄</div>
+          <div class="stat-body">
+            <div class="stat-value" id="funnelDocs">—</div>
+            <div class="stat-label">Geraram documento <span id="funnelRateDoc" style="font-weight:700;color:#a855f7"></span></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#FFF7ED;">💰</div>
+          <div class="stat-body">
+            <div class="stat-value" id="funnelBuyers">—</div>
+            <div class="stat-label">Compraram <span id="funnelRateBuy" style="font-weight:700;color:#f59e0b"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-card" style="margin-bottom:12px">
+        <h3 class="chart-title">📊 Conversão global (visita → compra): <span id="funnelOverallRate" style="color:#0f172a">—</span></h3>
+        <div style="position:relative;height:220px;">
+          <canvas id="funnelChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h3 class="chart-title">📅 Tendência diária</h3>
+        <div style="position:relative;height:200px;">
+          <canvas id="funnelTrendChart"></canvas>
+        </div>
+      </div>
     </section>
 
     <section id="section-settings" class="admin-section">
