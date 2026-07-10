@@ -169,7 +169,7 @@ async function handleConfirmPayment(req, res) {
     // Verificar que transação existe e está pendente
     const { data: tx, error: txErr } = await supabase
       .from('transactions')
-      .select('id, status, package_id, amount, user_id')
+      .select('id, status, package_id, amount, user_id, visitor_id')
       .eq('id', transactionId)
       .single();
 
@@ -233,6 +233,19 @@ async function handleConfirmPayment(req, res) {
       p_package_id:     tx.package_id,
       p_amount:         tx.amount,
     }).catch(e => console.warn('[affiliate commission]', e.message));
+
+    // NOVO (Fase 2 — Marketing Analytics): mesma lógica do auto-approval em
+    // api/misc.js — só regista se a transacção tiver visitor_id (Fase 1 em
+    // diante); transacções antigas ficam de fora, nunca inventamos origem.
+    if (tx.visitor_id) {
+      supabase.from('marketing_events').insert({
+        visitor_id:    tx.visitor_id,
+        user_id:       tx.user_id || userId,
+        event:         'credit_purchase',
+        value:         tx.amount,
+        metadata:      { package_id: tx.package_id, credits: creditsInt, verification_method: 'manual' },
+      }).then(({ error }) => { if (error) console.warn('[confirm-payment] marketing_events falhou:', error.message); });
+    }
 
     return res.status(200).json({
       success:    true,
@@ -985,6 +998,37 @@ async function handleAnalytics(req, res) {
       conversion_rate: v.clicks > 0 ? Math.round((v.conversions / v.clicks) * 1000) / 10 : 0,
     })).sort((a, b) => b.clicks - a.clicks);
 
+    // NOVO (Fase 2 — Marketing Analytics): agregação por origem
+    // (?src=facebook, ?src=qr001, etc.), usando a view marketing_source_daily
+    // criada na Fase 1 (migration_v30) — soma o período pedido em vez de dia
+    // a dia, que é o que o dashboard precisa de mostrar.
+    // CORRIGIDO: .catch(()=>({data:[]})) aqui é deliberado — se a Fase 1
+    // ainda não tiver sido aplicada nalgum ambiente (migration não corrida),
+    // este bloco falha em silêncio e o resto do dashboard de Analytics
+    // continua a funcionar normalmente, em vez de a página inteira quebrar.
+    let marketingSources = [];
+    try {
+      const { data: mktRows } = await supabase
+        .from('marketing_source_daily')
+        .select('marketing_source, visits, unique_visitors, signups, buyers, revenue')
+        .gte('day', since.toISOString().split('T')[0]);
+      const bySource = {};
+      (mktRows || []).forEach(r => {
+        const s = bySource[r.marketing_source] || { source: r.marketing_source, visits: 0, unique_visitors: 0, signups: 0, buyers: 0, revenue: 0 };
+        s.visits          += r.visits          || 0;
+        s.unique_visitors += r.unique_visitors  || 0;
+        s.signups         += r.signups          || 0;
+        s.buyers          += r.buyers           || 0;
+        s.revenue         += Number(r.revenue)  || 0;
+        bySource[r.marketing_source] = s;
+      });
+      marketingSources = Object.values(bySource)
+        .map(s => ({ ...s, conversion_rate: s.visits > 0 ? Math.round((s.buyers / s.visits) * 1000) / 10 : 0 }))
+        .sort((a, b) => b.revenue - a.revenue || b.visits - a.visits);
+    } catch (mktErr) {
+      console.warn('[admin/analytics] marketing_source_daily indisponível (Fase 1 aplicada?):', mktErr.message);
+    }
+
     return res.status(200).json({
       success: true, visitsByDay: byDay, onlineNow: onlineNow || 0,
       topServices, feedbackList, feedbackSummary,
@@ -997,6 +1041,7 @@ async function handleAnalytics(req, res) {
         bySegment:  newClientsBySegment,
       },
       affiliateClicksBySegment,
+      marketingSources,
     });
   } catch (err) {
     console.error('[admin/analytics]', err);
@@ -1814,7 +1859,7 @@ async function handleApproveReceipt(req, res) {
     // Buscar transacção
     const { data: tx, error: txErr } = await supabase
       .from('transactions')
-      .select('id,user_id,package_id,credits,status,reference_id,phone_number,amount')
+      .select('id,user_id,package_id,credits,status,reference_id,phone_number,amount,visitor_id')
       .eq('id', transactionId)
       .in('status', ['review_needed', 'pending'])
       .single();
@@ -1940,6 +1985,19 @@ async function handleApproveReceipt(req, res) {
         p_package_id:     tx.package_id,
         p_amount:         tx.amount,
       }).catch(e => console.warn('[approve-receipt] process_affiliate_commission falhou:', e.message));
+    }
+
+    // NOVO (Fase 2 — Marketing Analytics): mesma regra dos outros dois
+    // pontos de confirmação (auto-approval em api/misc.js e confirmação
+    // manual directa acima) — só regista se houver visitor_id.
+    if (commissionUserId && tx.visitor_id) {
+      supabase.from('marketing_events').insert({
+        visitor_id: tx.visitor_id,
+        user_id:    commissionUserId,
+        event:      'credit_purchase',
+        value:      tx.amount,
+        metadata:   { package_id: tx.package_id, credits: creditsInt, verification_method: 'manual_review' },
+      }).then(({ error }) => { if (error) console.warn('[approve-receipt] marketing_events falhou:', error.message); });
     }
 
     // 4. Log de auditoria
