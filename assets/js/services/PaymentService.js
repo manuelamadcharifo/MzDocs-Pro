@@ -53,62 +53,6 @@ export function updatePackagesFromConfig(packagesFromApi) {
     if (data.name) PACKAGES[id].name = data.name;
   }
 }
-// assets/js/services/PaymentService.js
-// Pagamento: M-Pesa automático (desactivado) + Manual (fallback WhatsApp)
-//
-// CORRIGIDO (auditoria 3.4/3.6): o pagamento é, na prática, sempre PROCESSADO
-// MANUALMENTE via WhatsApp (mpesaActive = false). A interface deve deixar
-// isto explícito para o utilizador desde o início. Além disso, qualquer
-// número moçambicano válido (M-Pesa, e-Mola ou mKesh) é aceite, já que o
-// utilizador apenas envia um comprovativo por WhatsApp — não é exigido um
-// número M-Pesa especificamente.
-
-// CORRIGIDO (Junho/2026): hard-coded, desligado de whatsapp_support em
-// system_settings — o admin alterava o número em Configurações e o
-// utilizador nunca via a mudança aqui. updateWhatsAppFromConfig() é
-// chamado em app.js, no mesmo ponto em que os preços são sincronizados.
-let WA_NUMBER = '258858695506'; // fallback — só usado antes da config carregar
-
-export function updateWhatsAppFromConfig(whatsappSupport) {
-  if (!whatsappSupport) return;
-  // Aceita tanto "+258858695506" como "258858695506" como "858695506"
-  // (formato livre no campo de admin) — normaliza para o formato sem "+"
-  // que wa.me espera, assumindo Moçambique (258) quando o número vier
-  // sem código de país.
-  const digits = String(whatsappSupport).replace(/\D/g, '');
-  if (digits.length === 9)  WA_NUMBER = `258${digits}`;
-  else if (digits.length >= 11) WA_NUMBER = digits;
-}
-
-// CORRIGIDO (Junho/2026): estes valores eram a única fonte usada pelo
-// checkout — alterar o preço no painel de admin (system_settings) nunca
-// se reflectia aqui. Agora servem só como FALLBACK inicial (para o
-// checkout funcionar mesmo antes de /api/config responder, ou se falhar);
-// updatePackagesFromConfig() é chamado em app.js logo após o fetch a
-// /api/config, e substitui estes valores pelos reais. Ver
-// api/_lib/packages.js para a mesma lógica espelhada no backend.
-const PACKAGES = {
-  avulso:  { credits: 3,   price: 50,   name: 'Avulso',  popular: false, desc: '3 documentos, sem conta permanente' },
-  starter: { credits: 10,  price: 120,  name: 'Starter',  popular: false },
-  basico:  { credits: 25,  price: 280,  name: 'Básico',   popular: true  },
-  pro:     { credits: 60,  price: 600,  name: 'Pro',      popular: false },
-  empresa: { credits: 150, price: 1500, name: 'Empresa',  popular: false },
-};
-
-// Actualiza PACKAGES in-place a partir de { avulso: {price, credits, name}, ... }
-// vindo de /api/config. Mantém popular/desc (não vêm do backend) e só
-// substitui price/credits/name quando presentes e válidos — nunca apaga
-// um pacote inteiro por uma resposta incompleta.
-export function updatePackagesFromConfig(packagesFromApi) {
-  if (!packagesFromApi || typeof packagesFromApi !== 'object') return;
-  for (const [id, data] of Object.entries(packagesFromApi)) {
-    if (!PACKAGES[id] || !data) continue;
-    if (Number.isFinite(data.price) && data.price > 0)     PACKAGES[id].price   = data.price;
-    if (Number.isFinite(data.credits) && data.credits > 0) PACKAGES[id].credits = data.credits;
-    if (data.name) PACKAGES[id].name = data.name;
-  }
-}
-
 export class PaymentService {
   constructor() {
     this.endpoint = '/api/process-payment';
