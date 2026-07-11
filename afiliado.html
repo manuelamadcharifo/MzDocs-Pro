@@ -85,7 +85,7 @@
 
     /* STATS GRID */
     .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
-    @media(min-width:480px){.stats-grid{grid-template-columns:repeat(4,1fr)}}
+    @media(min-width:480px){.stats-grid{grid-template-columns:repeat(5,1fr)}}
     .stat-box{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:13px;box-shadow:var(--sh)}
     .stat-box .val{font-size:20px;font-weight:800;color:var(--ink)}
     .stat-box .lbl{font-size:10.5px;color:var(--muted);margin-top:2px}
@@ -308,6 +308,7 @@
     <!-- TABS -->
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab('overview',this)">📊 Visão Geral</button>
+      <button class="tab-btn" onclick="switchTab('referrals',this)">👥 Referidos</button>
       <button class="tab-btn" onclick="switchTab('ranking',this)">🏆 Ranking</button>
       <button class="tab-btn" onclick="switchTab('commissions',this)">💰 Comissões</button>
       <button class="tab-btn" onclick="switchTab('withdraw',this)">💸 Levantamentos</button>
@@ -321,6 +322,10 @@
         <div class="stat-box">
           <div class="val" id="statBalance">—</div>
           <div class="lbl">💰 Saldo (MZN)</div>
+        </div>
+        <div class="stat-box">
+          <div class="val" id="statReferrals">—</div>
+          <div class="lbl">👥 Registados</div>
         </div>
         <div class="stat-box">
           <div class="val" id="statConversions">—</div>
@@ -374,6 +379,24 @@
       <div class="card" id="tipCard">
         <div class="card-title">💡 Estratégias para o Seu Perfil</div>
         <div id="tipContent" style="font-size:13px;color:var(--muted);line-height:1.7"></div>
+      </div>
+    </div>
+
+    <!-- TAB: REFERIDOS -->
+    <div class="tab-panel" id="tab-referrals">
+      <div class="card">
+        <div class="card-title">👥 Pessoas que se Registaram com o Seu Link</div>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px">Inclui todos os registos, mesmo quem ainda não comprou — "Cliente Pagante" é quem já gerou pelo menos uma comissão.</p>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Nome</th><th>Registou-se</th><th>Estado</th><th>Comissão Gerada</th>
+            </tr></thead>
+            <tbody id="referralsTable">
+              <tr><td colspan="4" class="empty">A carregar…</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -567,6 +590,7 @@ function showDashboard(d) {
 
   // Stats
   document.getElementById('statBalance').textContent = (p.balance||0).toLocaleString('pt-MZ');
+  document.getElementById('statReferrals').textContent = (d.referrals_summary?.total||0).toLocaleString('pt-MZ');
   document.getElementById('statConversions').textContent = (p.conversions||0).toLocaleString();
   document.getElementById('statClicks').textContent = (p.clicks||0).toLocaleString('pt-MZ');
   document.getElementById('statEarned').textContent = (p.total_earned||0).toLocaleString('pt-MZ');
@@ -600,6 +624,20 @@ function showDashboard(d) {
           <td><span class="badge badge-${c.status}">${statusLabel(c.status)}</span></td>
         </tr>`).join('')
     : '<tr><td colspan="5" class="empty">Sem comissões ainda. Comece a partilhar o seu link!</td></tr>';
+
+  // Referidos — todos os registos vindos do link, pagantes ou não
+  const rt = document.getElementById('referralsTable');
+  rt.innerHTML = (d.referrals||[]).length
+    ? d.referrals.map(r => `
+        <tr>
+          <td style="font-weight:700">${r.name}</td>
+          <td style="white-space:nowrap">${new Date(r.joined_at).toLocaleDateString('pt-MZ')}</td>
+          <td>${r.purchased
+              ? '<span class="badge badge-approved">✅ Cliente Pagante</span>'
+              : '<span class="badge badge-pending">⏳ Registado, sem compra</span>'}</td>
+          <td style="font-weight:800;color:var(--green)">${r.commission_total ? '+' + r.commission_total.toLocaleString('pt-MZ') + ' MZN' : '—'}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">Ainda ninguém se registou com o seu link. Partilhe para começar!</td></tr>';
 
   // Levantamentos
   const wt = document.getElementById('withdrawalsTable');
