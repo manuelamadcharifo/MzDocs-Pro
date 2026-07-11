@@ -68,6 +68,12 @@
       <a class="nav-item" data-section="funnel">
         <span class="nav-icon">🧭</span><span class="nav-label">Funil</span>
       </a>
+      <a class="nav-item" data-section="campaigns">
+        <span class="nav-icon">📣</span><span class="nav-label">Campanhas</span>
+      </a>
+      <a class="nav-item" data-section="goals">
+        <span class="nav-icon">🎯</span><span class="nav-label">Metas</span>
+      </a>
       <a class="nav-item" data-section="settings">
         <span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span>
       </a>
@@ -91,9 +97,21 @@
       <h2 class="topbar-title" id="pageTitle">Dashboard</h2>
       <div class="topbar-right">
         <span id="adminDate" class="topbar-date"></span>
+        <button class="btn-refresh-top" id="notifBellBtn" onclick="adminApp._toggleNotifPanel()" title="Notificações" style="position:relative">
+          🔔<span id="notifBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:#dc2626;color:#fff;font-size:10px;font-weight:800;border-radius:10px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px">0</span>
+        </button>
         <button class="btn-refresh-top" onclick="adminApp.refresh()" title="Actualizar">🔄</button>
       </div>
     </header>
+
+    <!-- Painel de Notificações (dropdown) -->
+    <div id="notifPanel" style="display:none;position:fixed;top:56px;right:12px;z-index:200;width:340px;max-width:92vw;max-height:70vh;overflow-y:auto;background:#fff;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.18);border:1px solid #e2e8f0">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #f1f5f9">
+        <strong style="font-size:14px">🔔 Notificações</strong>
+        <button style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:700;cursor:pointer" onclick="adminApp._markAllNotifsRead()">Marcar todas como lidas</button>
+      </div>
+      <div id="notifList"><div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">A carregar…</div></div>
+    </div>
 
     <!-- ── DASHBOARD ─────────────────────────────────────────── -->
     <section id="section-dashboard" class="admin-section active">
@@ -205,6 +223,7 @@
             <option value="blocked">🚫 Bloqueados</option>
           </select>
           <button class="btn-primary" onclick="adminApp.refresh()">🔄</button>
+          <button class="btn-ghost" title="Exportar CSV/Excel/PDF" onclick="adminApp._exportUsers()">⬇️ Exportar</button>
           <button class="btn-success" onclick="adminApp.createAvulsoModal()" style="background:#009A44;color:#fff;border:none;border-radius:8px;padding:.45rem .9rem;font-size:.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.3rem">➕ Avulso</button>
         </div>
       </div>
@@ -246,6 +265,7 @@
           </select>
           <input type="date" id="filterDate" class="filter-select" onchange="adminApp._loadTransactions()">
         </div>
+        <button class="btn-ghost" title="Exportar CSV/Excel/PDF" onclick="adminApp._exportTransactions()">⬇️ Exportar</button>
         <button class="btn-primary" onclick="adminApp._loadTransactions()">🔄</button>
       </div>
 
@@ -751,6 +771,7 @@
             <option value="30" selected>Últimos 30 dias</option>
             <option value="90">Últimos 90 dias</option>
           </select>
+          <button class="btn-ghost" title="Exportar CSV/Excel/PDF" onclick="adminApp._exportFunnel()">⬇️ Exportar</button>
           <button class="btn-primary" onclick="adminApp._loadFunnel()">🔄</button>
         </div>
       </div>
@@ -803,6 +824,31 @@
         <div style="position:relative;height:200px;">
           <canvas id="funnelTrendChart"></canvas>
         </div>
+      </div>
+    </section>
+
+    <!-- ── CAMPANHAS DE MARKETING (Fase 5) ──────────────────────────── -->
+    <section id="section-campaigns" class="admin-section">
+      <div class="section-toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">📣 Campanhas de Marketing</h2>
+          <p style="font-size:13px;color:#64748b">Promoções com nome, período e meta — reutiliza o mesmo tracking de origem (?src=...) dos QR Codes</p>
+        </div>
+        <button class="btn-primary" onclick="adminApp._openCampaignForm()">＋ Nova Campanha</button>
+      </div>
+      <div id="campaignsList"><div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">A carregar…</div></div>
+    </section>
+
+    <!-- ── METAS MENSAIS (Fase 5) ───────────────────────────────────── -->
+    <section id="section-goals" class="admin-section">
+      <div class="section-toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">🎯 Metas do Mês</h2>
+          <p id="goalsMonthLabel" style="font-size:13px;color:#64748b">A carregar…</p>
+        </div>
+      </div>
+      <div id="goalsList" class="stats-grid" style="grid-template-columns:repeat(2,1fr)">
+        <div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px;grid-column:1/-1">A carregar…</div>
       </div>
     </section>
 
