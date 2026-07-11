@@ -138,6 +138,7 @@ function _buildMetaParagraphs(meta, Paragraph, TextRun, BorderStyle) {
       children: runs,
       spacing: { after: 200 },
       border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC', space: 4 } },
+      keepLines: true, keepNext: true, // widow/orphan: nunca separado do resto do documento
     }),
   ];
 }
@@ -295,6 +296,7 @@ export class HTMLToDocxExporter {
           children: [new TextRun({ text, font: 'Calibri', size: 44, bold: true, color: avatarColor })],
           spacing: { before: 0, after: 142 },
           shading:  { fill: avatarBg, type: ShadingType.CLEAR, color: 'auto' },
+          keepLines: true, keepNext: true, // widow/orphan: mantém-se junto ao nome que se segue
         }));
         return;
       }
@@ -306,6 +308,7 @@ export class HTMLToDocxExporter {
           alignment: AlignmentType.CENTER,
           children: [new TextRun({ text: t, font: 'Calibri', size: 25, bold: true, color: textColor })],
           spacing: { after: 57 },
+          keepLines: true, keepNext: true, // mantém-se junto ao cargo que se segue
         }));
         return;
       }
@@ -317,6 +320,7 @@ export class HTMLToDocxExporter {
           alignment: AlignmentType.CENTER,
           children: [new TextRun({ text: t, font: 'Calibri', size: 17, color: 'BBCCDD' })],
           spacing: { after: 170 },
+          keepLines: true,
         }));
         return;
       }
@@ -327,6 +331,7 @@ export class HTMLToDocxExporter {
           children: [],
           border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: '3D6080', space: 1 } },
           spacing: { before: 57, after: 170 },
+          keepNext: true, // separador nunca fica sozinho no fim de página, solto do que vem a seguir
         }));
         return;
       }
@@ -338,6 +343,7 @@ export class HTMLToDocxExporter {
           children: [new TextRun({ text: t, font: 'Calibri', size: 14, bold: true, color: accentSb })],
           spacing: { before: 170, after: 85 },
           border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: '3D5F80', space: 2 } },
+          keepLines: true, keepNext: true, // título nunca isolado no fim de página, sem o conteúdo da secção
         }));
         return;
       }
@@ -348,6 +354,7 @@ export class HTMLToDocxExporter {
         if (t) result.push(new Paragraph({
           children: [new TextRun({ text: t, font: 'Calibri', size: 17, color: 'DDECF5' })],
           spacing: { after: 57 },
+          keepLines: true,
         }));
         return;
       }
@@ -359,6 +366,7 @@ export class HTMLToDocxExporter {
           if (t) result.push(new Paragraph({
             children: [new TextRun({ text: '• ' + t, font: 'Calibri', size: 17, color: 'DDECF5' })],
             spacing: { after: 43 },
+            keepLines: true,
           }));
         }
         return;
@@ -376,6 +384,7 @@ export class HTMLToDocxExporter {
             ...(level ? [new TextRun({ text: ' — ' + level, font: 'Calibri', size: 15, color: 'AABBD0' })] : []),
           ],
           spacing: { after: 57 },
+          keepLines: true,
         }));
         return;
       }
@@ -386,6 +395,7 @@ export class HTMLToDocxExporter {
         if (t && !/^-{2,}$/.test(t)) result.push(new Paragraph({
           children: [new TextRun({ text: t, font: 'Calibri', size: 17, color: 'DDECF5' })],
           spacing: { after: 57 },
+          keepLines: true,
         }));
         return;
       }
@@ -418,6 +428,7 @@ export class HTMLToDocxExporter {
         if (t) result.push(new Paragraph({
           children: [new TextRun({ text: t, font: 'Calibri', size: 44, bold: true, color: accentColor })],
           spacing: { after: 57 },
+          keepLines: true, keepNext: true, // mantém-se junto ao cargo/subtítulo que se segue
         }));
         return;
       }
@@ -428,6 +439,7 @@ export class HTMLToDocxExporter {
         if (t) result.push(new Paragraph({
           children: [new TextRun({ text: t, font: 'Calibri', size: 20, color: '6B7280' })],
           spacing: { after: 170 },
+          keepLines: true, keepNext: true,
         }));
         return;
       }
@@ -439,6 +451,7 @@ export class HTMLToDocxExporter {
           children: [new TextRun({ text: t, font: 'Calibri', size: 20, bold: true, color: accentColor })],
           spacing: { before: 227, after: 113 },
           border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: accentColor, space: 2 } },
+          keepLines: true, keepNext: true, // título de secção nunca isolado no fim de página
         }));
         return;
       }
@@ -449,6 +462,7 @@ export class HTMLToDocxExporter {
         if (t) result.push(new Paragraph({
           children: [new TextRun({ text: t, font: 'Calibri', size: 19, bold: true, color: accentColor })],
           spacing: { before: 142, after: 57 },
+          keepLines: true, keepNext: true,
         }));
         return;
       }
@@ -465,6 +479,7 @@ export class HTMLToDocxExporter {
         if (dateText) result.push(new Paragraph({
           children: [new TextRun({ text: dateText, font: 'Calibri', size: 16, italic: true, color: '6B7280' })],
           spacing: { before: 113, after: 28 },
+          keepLines: true, keepNext: true, // data nunca separada do título/empresa que se seguem
         }));
 
         // Título da entrada
@@ -472,6 +487,7 @@ export class HTMLToDocxExporter {
         if (titleText) result.push(new Paragraph({
           children: [new TextRun({ text: titleText, font: 'Calibri', size: 20, bold: true, color: '111827' })],
           spacing: { after: 28 },
+          keepLines: true, keepNext: true,
         }));
 
         // Empresa/instituição
@@ -479,6 +495,7 @@ export class HTMLToDocxExporter {
         if (companyText) result.push(new Paragraph({
           children: [new TextRun({ text: companyText, font: 'Calibri', size: 18, color: '4B5563' })],
           spacing: { after: 28 },
+          keepLines: true, keepNext: true, // mantém-se junto ao 1º bullet que se segue
         }));
 
         // Bullets
@@ -489,6 +506,7 @@ export class HTMLToDocxExporter {
               children: [new TextRun({ text: t, font: 'Calibri', size: 18, color: '374151' })],
               bullet: { level: 0 },
               spacing: { after: 28 },
+              keepLines: true,
             }));
           }
         }
@@ -504,6 +522,7 @@ export class HTMLToDocxExporter {
           if (t) result.push(new Paragraph({
             children: [new TextRun({ text: '• ' + t, font: 'Calibri', size: 18, color: textColor })],
             spacing: { after: 43 },
+            keepLines: true,
           }));
         }
         return;
@@ -517,6 +536,7 @@ export class HTMLToDocxExporter {
             children: [new TextRun({ text: '• ' + t, font: 'Calibri', size: 18, color: textColor })],
             indent:  { left: 227, hanging: 227 },
             spacing: { after: 43 },
+            keepLines: true,
           }));
         }
         return;
@@ -529,6 +549,7 @@ export class HTMLToDocxExporter {
         result.push(new Paragraph({
           children: [new TextRun({ text: t, font: 'Calibri', size: 19, color: '374151' })],
           spacing: { after: 85 },
+          keepLines: true, // widow/orphan: nunca corta o parágrafo a meio numa quebra de página
         }));
         return;
       }
@@ -539,6 +560,7 @@ export class HTMLToDocxExporter {
         if (t) result.push(new Paragraph({
           children: [new TextRun({ text: t, font: 'Calibri', size: 17, color: '4B5563' })],
           spacing: { after: 28 },
+          keepLines: true,
         }));
         return;
       }
@@ -549,6 +571,7 @@ export class HTMLToDocxExporter {
           children: [],
           border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB', space: 1 } },
           spacing: { before: 85, after: 85 },
+          keepNext: true, // separador nunca fica sozinho no fim de página
         }));
         return;
       }
@@ -622,18 +645,21 @@ export class HTMLToDocxExporter {
       alignment: AlignmentType.CENTER,
       children: [new TextRun({ text: avEl.textContent.trim(), font: 'Calibri', size: 44, bold: true, color: textColor })],
       spacing: { after: 113 },
+      keepLines: true, keepNext: true, // bloco de cabeçalho mantém-se sempre junto
     }));
 
     if (nameEl) result.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       children: [new TextRun({ text: nameEl.textContent.trim(), font: 'Calibri', size: 44, bold: true, color: textColor })],
       spacing: { after: 57 },
+      keepLines: true, keepNext: true,
     }));
 
     if (cargoEl) result.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       children: [new TextRun({ text: cargoEl.textContent.trim(), font: 'Calibri', size: 20, color: 'DDECF5' })],
       spacing: { after: 113 },
+      keepLines: true, keepNext: true,
     }));
 
     // Contactos
@@ -643,6 +669,7 @@ export class HTMLToDocxExporter {
         alignment: AlignmentType.CENTER,
         children: [new TextRun({ text: t, font: 'Calibri', size: 17, color: 'DDECF5' })],
         spacing: { after: 28 },
+        keepLines: true,
       }));
     }
 
