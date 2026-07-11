@@ -777,7 +777,16 @@ async function handleSitemap(req, res) {
     dynamicPages = (Array.isArray(data) ? data : [])
       .filter(p => p.slug && !staticSlugs.has(p.slug))
       .map(p => ({
-        loc:        `/pages/${p.slug}/`,   // cleanUrls → index.html servido em /slug/
+        // CORRIGIDO (auditoria de indexação): antes usava '/pages/slug/'
+        // (com barra final), mas a tag <link rel="canonical"> gerada pelo
+        // mesmo template (blogTemplate.js) usa '/pages/slug' (SEM barra) —
+        // e como o vercel.json não define trailingSlash:true, o Vercel
+        // redirecciona (308) de /slug/ para /slug por omissão. Ou seja, o
+        // sitemap estava a listar URLs que fazem um salto de redirect
+        // antes de chegar à versão canónica — más práticas para SEO
+        // (Google prefere URLs do sitemap que respondem 200 directamente).
+        // Agora ambos usam exactamente a mesma forma.
+        loc:        `/pages/${p.slug}`,
         priority:   '0.8',
         changefreq: 'monthly',
         lastmod:    p.updated_at ? p.updated_at.slice(0, 10) : undefined,
@@ -1413,6 +1422,53 @@ async function affDashboard(req, res, supabase) {
     .select('id,amount,mpesa_phone,status,created_at,processed_at').eq('affiliate_id', user.id)
     .order('created_at', { ascending: false }).limit(10);
 
+  // NOVO: "Meus Referidos" — lista de quem se registou com o link deste
+  // afiliado (profiles.referred_by), não só quem já gerou comissão. Antes
+  // só se via o total agregado de cliques/conversões — agora dá para ver
+  // exactamente QUEM entrou pelo link e se já é cliente pagante ou não.
+  const { data: referralsRaw } = await supabase.from('profiles')
+    .select('id, full_name, phone, created_at, account_type')
+    .eq('referred_by', user.id)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  let referrals = [];
+  let payingReferrals = 0;
+  if (referralsRaw && referralsRaw.length) {
+    const refIds = referralsRaw.map(r => r.id);
+    const { data: commByReferred } = await supabase.from('affiliate_commissions')
+      .select('referred_user_id, commission_mzn, status')
+      .eq('affiliate_id', user.id)
+      .in('referred_user_id', refIds);
+
+    const commMap = {};
+    (commByReferred || []).forEach(c => {
+      const m = commMap[c.referred_user_id] || { count: 0, total: 0, paid: false };
+      m.count += 1;
+      if (c.status === 'approved' || c.status === 'paid') { m.total += c.commission_mzn || 0; m.paid = true; }
+      commMap[c.referred_user_id] = m;
+    });
+
+    referrals = referralsRaw.map(r => {
+      const c = commMap[r.id];
+      if (c?.paid) payingReferrals++;
+      // Privacidade: primeiro nome + inicial do apelido (mesmo padrão já
+      // usado no ranking de afiliados), nunca o telefone completo do
+      // referido a outro utilizador.
+      const parts = (r.full_name || '').trim().split(/\s+/).filter(Boolean);
+      const displayName = parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : (parts[0] || 'Utilizador');
+      return {
+        id: r.id,
+        name: displayName,
+        joined_at: r.created_at,
+        account_type: r.account_type || 'normal',
+        purchased: !!c?.paid,
+        commissions_count: c?.count || 0,
+        commission_total: c?.total || 0,
+      };
+    });
+  }
+
   // Ranking do mês actual
   const currentMonth = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
   const { data: rankingRaw } = await supabase.from('affiliate_ranking')
@@ -1468,6 +1524,11 @@ async function affDashboard(req, res, supabase) {
     },
     commissions:  commissions || [],
     withdrawals:  withdrawals || [],
+    referrals,
+    referrals_summary: {
+      total:  referralsRaw?.length || 0,
+      paying: payingReferrals,
+    },
     ranking,
     notifications: notifs || [],
     unread_notifications: unreadCount || 0,
