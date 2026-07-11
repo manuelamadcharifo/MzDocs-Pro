@@ -559,6 +559,16 @@ async function _markReviewNeeded(transactionId, receiptHash, confidence, reason)
       }
     );
     console.log('[verify-receipt] marcado review_needed:', transactionId, reason);
+
+    // NOVO (Fase 5 — Notificações administrativas): avisa o admin que há
+    // um comprovativo à espera de revisão manual — best-effort, nunca deve
+    // impedir o fluxo de verificação em si.
+    insert('admin_notifications', {
+      type:    'pending_receipt',
+      title:   '🧾 Comprovativo à espera de revisão',
+      message: `Confiança ${(confidence || 0) < 0.4 ? 'baixa' : 'moderada'} na verificação automática (${reason || 'motivo não especificado'}). Transacção ${transactionId}.`,
+      link:    '#transactions',
+    }).catch(e => console.warn('[verify-receipt] admin_notifications insert falhou:', e.message));
   } catch (e) {
     console.error('[verify-receipt] _markReviewNeeded falhou:', e.message);
   }
@@ -1397,6 +1407,16 @@ async function continueRegister(res, supabase, user, profile, extra = {}) {
         return res.status(500).json({ error: 'Não foi possível concluir o registo. A equipa já foi notificada.', sql_needed: true });
       return res.status(500).json({ error: 'Não foi possível guardar o seu registo. Por favor, tente novamente.' });
     }
+
+    // NOVO (Fase 5): avisa o admin de uma nova candidatura a afiliado —
+    // best-effort, nunca deve fazer a candidatura falhar.
+    insert('admin_notifications', {
+      type:    'affiliate_application',
+      title:   '🤝 Nova candidatura a afiliado',
+      message: `${profile.full_name || user.email || 'Utilizador'} candidatou-se (código ${finalCode}). Aguarda aprovação.`,
+      link:    '#affiliates',
+    }).catch(e => console.warn('[affRegister] admin_notifications insert falhou:', e.message));
+
     return res.status(200).json({ success: true, ref_code: finalCode, is_affiliate: false, message: 'Candidatura enviada! Aguarde aprovação em 24-48h.' });
   } catch (err) {
     console.error('[affRegister] erro:', err.message);
@@ -1604,6 +1624,16 @@ async function affWithdraw(req, res, supabase) {
       body: `Pedido de ${amount} MZN submetido. Processado em até 48h via M-Pesa.`,
     });
   } catch (_) { /* notificação é best-effort */ }
+
+  // NOVO (Fase 5): avisa o admin de que há um levantamento à espera de
+  // processamento — o afiliado já recebeu a confirmação acima; isto é só
+  // para o admin saber sem ter de ir verificar a secção manualmente.
+  insert('admin_notifications', {
+    type:    'withdrawal_request',
+    title:   '💸 Pedido de levantamento de afiliado',
+    message: `${amount} MZN para ${phone}. Processar em até 48h.`,
+    link:    '#affiliates',
+  }).catch(e => console.warn('[affWithdraw] admin_notifications insert falhou:', e.message));
   return res.status(200).json({ success: true, message: `Pedido de ${amount} MZN submetido. Processado em até 48 horas via M-Pesa.` });
 }
 
@@ -1959,7 +1989,19 @@ async function _generateAndPublishArticle({ title, keywords, existingTitles, tra
 
   const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
   await _publishBlogStaticFile(finalSlug, title, metaDescription, html, SITE_URL)
-    .catch(e => console.warn('[blog-cron] publicação estática falhou:', e.message, transactionNote || ''));
+    .catch(e => {
+      console.warn('[blog-cron] publicação estática falhou:', e.message, transactionNote || '');
+      // NOVO (Fase 5): o artigo já ficou gravado em blog_pages (published:true
+      // acima), mas se o ficheiro estático no GitHub falhar, o sitemap/URL
+      // real pode não existir — o admin precisa de saber para investigar
+      // (normalmente token do GitHub expirado ou rate-limit).
+      insert('admin_notifications', {
+        type:    'blog_publish_failed',
+        title:   '⚠️ Falha ao publicar artigo no GitHub',
+        message: `"${title}" (slug: ${finalSlug}) foi gravado na base de dados mas a publicação estática falhou: ${e.message}`,
+        link:    '#blog',
+      }).catch(() => {});
+    });
 
   return { slug: finalSlug, title, id: newPage?.id, provider: result.provider };
 }
