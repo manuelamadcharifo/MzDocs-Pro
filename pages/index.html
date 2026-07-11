@@ -79,14 +79,14 @@
 </head>
 <body>
 <header class="site-header">
-  <a class="site-logo" href="/"><div class="logo-badge">📄</div><span class="logo-text">MzDocs</span></a>
-  <a class="header-cta" href="/">Criar Documento →</a>
+  <a class="site-logo" href="/" data-track-link><div class="logo-badge">📄</div><span class="logo-text">MzDocs</span></a>
+  <a class="header-cta" href="/" data-track-link>Criar Documento →</a>
 </header>
 
 <div class="hub-hero">
   <h1>Guias e Modelos de Documentos para Moçambique</h1>
   <p>Tudo o que precisa para criar documentos profissionais, jurídicos e académicos — adaptados à realidade moçambicana.</p>
-  <a class="hub-hero-cta" href="/">🚀 Gerar o Meu Documento Agora</a>
+  <a class="hub-hero-cta" href="/" data-track-link>🚀 Gerar o Meu Documento Agora</a>
   <div class="hub-stats">
     <div class="hub-stat"><div class="hub-stat-n">15+</div><div class="hub-stat-l">Guias práticos</div></div>
     <div class="hub-stat"><div class="hub-stat-n">1.200+</div><div class="hub-stat-l">Documentos gerados</div></div>
@@ -100,7 +100,7 @@
     <span style="font-size:18px;color:var(--muted)">🔍</span>
     <input type="text" id="searchInput" placeholder="Pesquisar guias... ex: CV, requerimento, procuração" oninput="filterArticles(this.value)"/>
   </div>
-  <div class="no-results" id="noResults">😕 Nenhum guia encontrado. <a href="/" style="color:var(--blue)">Gere o documento directamente aqui.</a></div>
+  <div class="no-results" id="noResults">😕 Nenhum guia encontrado. <a href="/" data-track-link style="color:var(--blue)">Gere o documento directamente aqui.</a></div>
 
   <!-- CV & CARREIRA -->
   <div class="cluster">
@@ -242,14 +242,14 @@
   <div class="cta-banner">
     <h2>Pronto para Gerar o Seu Documento?</h2>
     <p>Escolha o tipo, preencha os dados e receba o seu ficheiro em PDF ou Word em segundos.</p>
-    <a class="cta-banner-btn" href="/">🚀 Gerar Documento Grátis</a>
+    <a class="cta-banner-btn" href="/" data-track-link>🚀 Gerar Documento Grátis</a>
   </div>
 
 </div>
 
 <footer class="site-footer">
   <div>© 2026 MzDocs Pro — Documentos profissionais para Moçambique</div>
-  <div><a href="/">Início</a> · <a href="/templates.html">Templates</a> · <a href="/legal.html">Privacidade</a></div>
+  <div><a href="/" data-track-link>Início</a> · <a href="/templates.html">Templates</a> · <a href="/legal.html">Privacidade</a></div>
 </footer>
 <script>
 function filterArticles(q){
@@ -268,6 +268,44 @@ function filterArticles(q){
   });
   document.getElementById('noResults').style.display=total===0?'block':'none';
 }
+
+// NOVO (Fase 4.1 — atribuição blog/pesquisa orgânica): mesma lógica usada
+// em api/_lib/blogTemplate.js (ver esse ficheiro para a explicação
+// completa) — esta é a página-índice do blog (/pages/), também estática,
+// por isso precisa da mesma rotina em separado.
+(function(){
+  try {
+    var SOURCE_KEY = 'mzd_src';
+    var stored = null;
+    try { stored = localStorage.getItem(SOURCE_KEY); } catch(_) {}
+    var qs = new URLSearchParams(window.location.search);
+    var source = qs.get('src') || stored;
+    if (!source) {
+      var host = '';
+      try { host = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./,'') : ''; } catch(_) {}
+      if (/mzdocs\.co\.mz$/.test(host))        source = null;
+      else if (/google\./.test(host))          source = 'organic_google';
+      else if (/bing\./.test(host))            source = 'organic_bing';
+      else if (/yahoo\./.test(host))           source = 'organic_yahoo';
+      else if (/duckduckgo\./.test(host))      source = 'organic_duckduckgo';
+      else if (/baidu\./.test(host))           source = 'organic_baidu';
+      else if (/facebook\.|instagram\./.test(host)) source = 'social_facebook';
+      else if (/tiktok\./.test(host))          source = 'social_tiktok';
+      else if (/whatsapp\./.test(host))        source = 'social_whatsapp';
+      else                                     source = 'blog';
+    }
+    if (source) {
+      try { localStorage.setItem(SOURCE_KEY, source.slice(0,50)); } catch(_) {}
+      document.querySelectorAll('a[data-track-link]').forEach(function(a){
+        try {
+          var u = new URL(a.getAttribute('href'), window.location.origin);
+          if (!u.searchParams.get('src')) u.searchParams.set('src', source);
+          a.setAttribute('href', u.pathname + u.search + u.hash);
+        } catch(_) {}
+      });
+    }
+  } catch(_) {}
+})();
 </script>
 </body>
 </html>
