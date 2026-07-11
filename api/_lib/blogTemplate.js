@@ -175,11 +175,11 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
 <body>
 
 <header class="site-header">
-  <a class="site-logo" href="/">
+  <a class="site-logo" href="/" data-track-link>
     <div class="logo-badge">📄</div>
     <span class="logo-text">MzDocs<span>Pro</span></span>
   </a>
-  <a class="header-back" href="/">← Voltar ao início</a>
+  <a class="header-back" href="/" data-track-link>← Voltar ao início</a>
 </header>
 
 <section class="hero">
@@ -203,7 +203,7 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
   <div class="cta-box">
     <h3>📄 Crie o seu documento em segundos</h3>
     <p>O MzDocs Pro usa IA para gerar documentos profissionais adaptados a Moçambique.<br/>CV, cartas, requerimentos e muito mais — sem complicação.</p>
-    <a class="cta-btn" href="/">Experimentar Grátis →</a>
+    <a class="cta-btn" href="/" data-track-link>Experimentar Grátis →</a>
   </div>
 </article>
 
@@ -211,7 +211,7 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
   <div>
     © 2026 MzDocs Pro · Moçambique 🇲🇿
     &nbsp;|&nbsp;<a href="/legal.html">Termos e Privacidade</a>
-    &nbsp;|&nbsp;<a href="/">Início</a>
+    &nbsp;|&nbsp;<a href="/" data-track-link>Início</a>
   </div>
 </footer>
 
@@ -226,11 +226,94 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
       }).catch(function(){});
     } catch(e) {}
   })();
+
+  // NOVO (Fase 4.1 — atribuição blog/pesquisa orgânica): as páginas de
+  // blog são HTML estático, sem o MarketingTracker.js da app (SPA) — por
+  // isso, sem isto, um leitor que chega aqui pelo Google e depois clica
+  // para a app era sempre contado como "direct" no dashboard de Marketing.
+  // Esta rotina: 1) descobre a origem (?src= explícito > localStorage já
+  // existente > referrer de motor de busca/rede social > "blog" por
+  // omissão); 2) grava na MESMA chave de localStorage que o
+  // MarketingTracker usa (mzd_src) — funciona porque é o mesmo domínio;
+  // 3) por segurança (modo privado / localStorage bloqueado), também
+  // reescreve os links de saída marcados com data-track-link para incluir
+  // ?src=..., para nunca depender só do localStorage.
+  (function(){
+    try {
+      var SOURCE_KEY = 'mzd_src';
+      var stored = null;
+      try { stored = localStorage.getItem(SOURCE_KEY); } catch(_) {}
+
+      var qs = new URLSearchParams(window.location.search);
+      var explicit = qs.get('src');
+      var source = explicit || stored;
+
+      if (!source) {
+        var host = '';
+        try { host = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./,'') : ''; } catch(_) {}
+        if (/mzdocs\.co\.mz$/.test(host))        source = null; // navegação interna, deixa por definir
+        else if (/google\./.test(host))          source = 'organic_google';
+        else if (/bing\./.test(host))            source = 'organic_bing';
+        else if (/yahoo\./.test(host))           source = 'organic_yahoo';
+        else if (/duckduckgo\./.test(host))      source = 'organic_duckduckgo';
+        else if (/baidu\./.test(host))           source = 'organic_baidu';
+        else if (/facebook\.|instagram\./.test(host)) source = 'social_facebook';
+        else if (/tiktok\./.test(host))          source = 'social_tiktok';
+        else if (/whatsapp\./.test(host))        source = 'social_whatsapp';
+        else                                     source = 'blog'; // sem referrer conhecido = chegou a um artigo (link partilhado, favorito, etc.)
+      }
+
+      if (source) {
+        try { localStorage.setItem(SOURCE_KEY, source.slice(0, 50)); } catch(_) {}
+        document.querySelectorAll('a[data-track-link]').forEach(function(a){
+          try {
+            var u = new URL(a.getAttribute('href'), window.location.origin);
+            if (!u.searchParams.get('src')) u.searchParams.set('src', source);
+            a.setAttribute('href', u.pathname + u.search + u.hash);
+          } catch(_) {}
+        });
+      }
+    } catch(_) {}
+  })();
 </script>
 
 </body>
 </html>
 `;
+
+// IndexNow (Bing/Yandex — protocolo aberto, também adoptado por outros
+// motores, mas NÃO pelo Google, que não participa no IndexNow). Nota
+// importante para quem for ler este código: o Google não tem nenhuma API
+// pública de "pedir indexação instantânea" para artigos de blog — a Search
+// Console Indexing API é oficialmente restrita a páginas de emprego/
+// eventos ao vivo, mesmo que alguns sites a usem incorrectamente para
+// tudo. Para o Google, o mecanismo correcto e já existente neste projecto
+// é o sitemap.xml dinâmico (é lido periodicamente pelo Googlebot) + meta
+// robots "index,follow" + canonical — tudo isso já está correcto no
+// template. O IndexNow abaixo acelera a descoberta no Bing/Yandex, que
+// aceitam notificação instantânea.
+const INDEXNOW_KEY = process.env.INDEXNOW_KEY || 'b639f89ca02f968b334519652a68d401';
+
+async function submitToIndexNow(urls, SITE_URL) {
+  if (!urls || !urls.length) return;
+  try {
+    const host = new URL(SITE_URL).hostname;
+    await fetch('https://api.indexnow.org/indexnow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({
+        host,
+        key: INDEXNOW_KEY,
+        keyLocation: `${SITE_URL}/${INDEXNOW_KEY}.txt`,
+        urlList: urls,
+      }),
+    });
+  } catch (err) {
+    // Melhor-esforço — nunca deve impedir a publicação em si.
+    console.warn('[blogTemplate] IndexNow falhou (não crítico):', err.message);
+  }
+}
+
 
 function escHtml(s = '') {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -294,6 +377,10 @@ async function publishBlogPageToGithub({ slug, title, metaDescription, contentHt
     const errBody = await putRes.text().catch(() => '');
     throw new Error(`GitHub PUT falhou (${putRes.status}): ${errBody.slice(0, 300)}`);
   }
+
+  // Notificar IndexNow (Bing/Yandex) — melhor-esforço, nunca bloqueia nem
+  // faz a publicação falhar se a notificação em si falhar.
+  submitToIndexNow([`${SITE_URL}/pages/${slug}`], SITE_URL).catch(() => {});
 }
 
-module.exports = { BLOG_POST_TEMPLATE, renderBlogPage, publishBlogPageToGithub, escHtml, fill };
+module.exports = { BLOG_POST_TEMPLATE, renderBlogPage, publishBlogPageToGithub, submitToIndexNow, escHtml, fill };
