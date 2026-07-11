@@ -33,6 +33,32 @@ function _getVisitorId() {
   } catch (_) { return _uuid(); } // localStorage indisponível (modo privado, etc.) — degrada sem rebentar
 }
 
+// NOVO (Fase 4.1 — atribuição blog/pesquisa orgânica): quando não há
+// ?src=/?ref= na URL nem origem já guardada, tenta identificar a origem
+// pelo document.referrer — motores de busca e redes sociais mais comuns.
+// A MESMA lógica (cópia deliberada, sem módulo partilhado) existe em
+// api/_lib/blogTemplate.js, porque as páginas do blog são HTML estático
+// sem import de módulos ES — mas escrevem para a MESMA chave de
+// localStorage (mzd_src), por isso um leitor que chega ao blog vindo do
+// Google e só depois clica para a app é correctamente atribuído aqui.
+function _detectReferrerSource() {
+  try {
+    const ref = document.referrer;
+    if (!ref) return null;
+    const host = new URL(ref).hostname.replace(/^www\./, '');
+    if (/mzdocs\.co\.mz$/.test(host)) return null; // navegação interna — não é uma origem nova
+    if (/google\./.test(host))          return 'organic_google';
+    if (/bing\./.test(host))            return 'organic_bing';
+    if (/yahoo\./.test(host))           return 'organic_yahoo';
+    if (/duckduckgo\./.test(host))      return 'organic_duckduckgo';
+    if (/baidu\./.test(host))           return 'organic_baidu';
+    if (/facebook\.|instagram\./.test(host)) return 'social_facebook';
+    if (/tiktok\./.test(host))          return 'social_tiktok';
+    if (/whatsapp\./.test(host))        return 'social_whatsapp';
+    return null;
+  } catch (_) { return null; }
+}
+
 function _getSource() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -41,7 +67,14 @@ function _getSource() {
       localStorage.setItem(SOURCE_KEY, fromUrl.toLowerCase().slice(0, 50));
       return fromUrl.toLowerCase().slice(0, 50);
     }
-    return localStorage.getItem(SOURCE_KEY) || 'direct';
+    const stored = localStorage.getItem(SOURCE_KEY);
+    if (stored) return stored;
+    const detected = _detectReferrerSource();
+    if (detected) {
+      localStorage.setItem(SOURCE_KEY, detected);
+      return detected;
+    }
+    return 'direct';
   } catch (_) { return 'direct'; }
 }
 
