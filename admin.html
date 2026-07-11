@@ -100,6 +100,7 @@
         <button class="btn-refresh-top" id="notifBellBtn" onclick="adminApp._toggleNotifPanel()" title="Notificações" style="position:relative">
           🔔<span id="notifBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:#dc2626;color:#fff;font-size:10px;font-weight:800;border-radius:10px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px">0</span>
         </button>
+        <button class="btn-refresh-top" onclick="adminApp._openPushSendForm()" title="Enviar notificação push">📤</button>
         <button class="btn-refresh-top" onclick="adminApp.refresh()" title="Actualizar">🔄</button>
       </div>
     </header>
@@ -111,6 +112,9 @@
         <button style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:700;cursor:pointer" onclick="adminApp._markAllNotifsRead()">Marcar todas como lidas</button>
       </div>
       <div id="notifList"><div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">A carregar…</div></div>
+      <div style="padding:10px 14px;border-top:1px solid #f1f5f9">
+        <button id="pushAdminToggleBtn" class="btn-ghost" style="width:100%;font-size:12px" onclick="adminApp._enableAdminPush()">🔔 Activar notificações neste telemóvel</button>
+      </div>
     </div>
 
     <!-- ── DASHBOARD ─────────────────────────────────────────── -->
