@@ -41,6 +41,9 @@ export function getFormatCSS(format) {
       strong{font-weight:bold;}em{font-style:italic;}
       hr{border:none;border-top:1px solid #bbb;margin:7pt 0;}
       h1,h2,h3,h4{page-break-after:avoid;}
+      p,li,blockquote{orphans:3;widows:3;}
+      li,blockquote,tr{page-break-inside:avoid;break-inside:avoid;}
+      h1,h2,h3,h4,h5,h6{page-break-inside:avoid;break-inside:avoid;}
     `;
     if (format === 'word') return base + `
       body,.doc-page{font-family:'Calibri','Segoe UI',Arial,sans-serif;font-size:11pt;}
