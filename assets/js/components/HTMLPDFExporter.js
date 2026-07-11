@@ -62,6 +62,25 @@ function mdToHtml(md) {
   return t;
 }
 
+// ── Controlo de paginação (widow/orphan) ─────────────────────────────────
+// Equivalente, em CSS de impressão do browser, ao mesmo controlo já usado
+// nos exportadores dos trabalhos académicos:
+//  - PDFExporter.js (jsPDF): "não deixar parágrafo com 1 linha em nova página"
+//  - WordExporter.js (docx-js): keepLines:true / keepNext:true
+// Aqui não há posicionamento manual linha-a-linha (o browser é quem decide
+// as quebras via window.print()), por isso usamos as propriedades CSS
+// equivalentes: orphans/widows (nº mínimo de linhas de um parágrafo que
+// devem ficar no fim/início de uma página, evitando 1 linha solta) e
+// page-break-inside:avoid para blocos curtos que nunca devem partir-se
+// (itens de lista, citações, linhas de tabela). Aplicado a TODOS os
+// serviços com template visual (CV, carta, recibo, procuração, etc.),
+// que antes não tinham nenhuma destas regras.
+const PAGINATION_CSS = `
+  p, li, blockquote { orphans: 3; widows: 3; }
+  li, blockquote, tr { page-break-inside: avoid; break-inside: avoid; }
+  h1, h2, h3, h4, h5, h6 { page-break-inside: avoid; break-inside: avoid; page-break-after: avoid; }
+`;
+
 // ── CSS padrão (sem template escolhido) ──────────────────────────────────
 const DEFAULT_CSS = `
   body {
@@ -175,6 +194,9 @@ export class HTMLPDFExporter {
     box-shadow: 0 4px 24px rgba(0,0,0,.2);
   }
 }
+
+/* Controlo de paginação — aplicado sempre, mesmo com template visual activo */
+${PAGINATION_CSS}
 
 /* CSS do template (anula os defaults acima quando aplicável) */
 ${css}
@@ -296,6 +318,7 @@ window.addEventListener('load', function() {
   html { background: #e5e7eb; padding: 20px; }
   body { width: 210mm; min-height: 297mm; margin: 0 auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.2); }
 }
+${PAGINATION_CSS}
 ${safeCss}
 </style>
 </head>
