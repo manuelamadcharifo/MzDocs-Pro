@@ -187,26 +187,6 @@
       "destination": "/api/admin/index"
     },
     {
-      "source": "/api/admin/template-approve",
-      "destination": "/api/admin/index"
-    },
-    {
-      "source": "/api/admin/template-reject",
-      "destination": "/api/admin/index"
-    },
-    {
-      "source": "/api/admin/template-feature",
-      "destination": "/api/admin/index"
-    },
-    {
-      "source": "/api/admin/template-type",
-      "destination": "/api/admin/index"
-    },
-    {
-      "source": "/api/admin/template-edit",
-      "destination": "/api/admin/index"
-    },
-    {
       "source": "/api/admin/ai-providers",
       "destination": "/api/admin/index"
     },
