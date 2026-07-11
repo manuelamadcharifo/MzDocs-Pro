@@ -265,18 +265,58 @@ function _handleActionDeepLinks(payCtrl, histCtrl) {
   }
 }
 
+function _urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
 async function _setupPushNotifications(registration) {
   if (!('Notification' in window) || !('PushManager' in window)) return;
-  if (Notification.permission === 'granted') return;
   if (Notification.permission === 'denied') return;
-  // Pedir permissão de forma não intrusiva — só após 30s na app
+
+  // Já subscrito neste dispositivo — nada a fazer (o SW já sabe receber push).
+  if (Notification.permission === 'granted') {
+    const existing = await registration.pushManager.getSubscription().catch(() => null);
+    if (existing) return;
+  }
+
+  // Pedir permissão de forma não intrusiva — só após 30s na app, e só a
+  // utilizadores autenticados (ver chamador em main()).
   setTimeout(async () => {
     try {
       const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        console.log('[MzDocs] Notificações push activadas ✅');
+      if (permission !== 'granted') return;
+      console.log('[MzDocs] Notificações push activadas ✅');
+
+      const cfgRes = await fetch('/api/misc?action=config');
+      const cfg = await cfgRes.json();
+      if (!cfg.vapidPublicKey) {
+        console.warn('[MzDocs] VAPID_PUBLIC_KEY não configurada no servidor — push desactivado.');
+        return;
       }
-    } catch (_) {}
+
+      let sub = await registration.pushManager.getSubscription();
+      if (!sub) {
+        sub = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: _urlBase64ToUint8Array(cfg.vapidPublicKey),
+        });
+      }
+
+      const token = authManager.getToken?.();
+      await fetch('/api/misc?action=push-subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
+        body: JSON.stringify({ subscription: sub.toJSON() }),
+      }).catch(() => {});
+    } catch (e) {
+      console.warn('[MzDocs] Falha ao subscrever push:', e);
+    }
   }, 30000);
 }
 
