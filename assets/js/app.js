@@ -131,10 +131,6 @@ async function bootstrap() {
   const fab = document.getElementById('fabWa');
   if (fab) fab.href = `https://wa.me/${userModel.WA_SUPPORT}`;
 
-  // Sandbox bar sempre oculta (pagamentos em produção)
-  const sandboxBar = document.getElementById('sandboxBar');
-  if (sandboxBar) sandboxBar.style.display = 'none';
-
   // NOTA: o contador de documentos gerados já é mostrado no hero (ver
   // homeController.js → _animateSocialCounter). Havia aqui um segundo
   // contador duplicado ("X documentos gerados por moçambicanos") logo
