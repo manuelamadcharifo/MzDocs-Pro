@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v23-20260706'; // Auto-hospedagem do Workbox/idb (fim da dependência de CDNs externas no arranque do SW — causa raiz de "app não abre sem internet") + fallback de navegação para a app shell precacheada + timeout de rede de 4s
+const CACHE_VERSION = 'v24-20260711'; // Push notifications: notificationclick foca aba existente em vez de abrir sempre nova; vibrate/tag/renotify adicionados ao showNotification.
 
 // CORRIGIDO (bug crítico — causa raiz de "a app não abre sem dados/internet"):
 // Antes, o Service Worker carregava o Workbox e o idb via importScripts a partir
@@ -272,16 +272,31 @@ self.addEventListener('push', event => {
     event.waitUntil(
         self.registration.showNotification(data.title || 'MzDocs Pro', {
             body: data.body || 'Nova notificação',
-            icon: '/assets/icons/icon-192x192.png',
+            icon: data.icon || '/assets/icons/icon-192x192.png',
             badge: '/assets/icons/icon-192x192.png',
-            data: data.url || '/'
+            data: data.url || '/',
+            vibrate: [100, 50, 100],
+            tag: 'mzdocs-push', // notificações novas substituem a anterior, sem empilhar
+            renotify: true,
         })
     );
 });
 
 self.addEventListener('notificationclick', event => {
     event.notification.close();
-    event.waitUntil(clients.openWindow(event.notification.data));
+    const targetUrl = event.notification.data || '/';
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+            for (const client of windowClients) {
+                // Já há uma aba aberta da app — foca-a e navega, em vez de abrir outra.
+                if (client.url.includes(self.location.origin) && 'focus' in client) {
+                    client.navigate(targetUrl).catch(() => {});
+                    return client.focus();
+                }
+            }
+            return clients.openWindow(targetUrl);
+        })
+    );
 });
 
 // ── LIFECYCLE ────────────────────────────────────────────────────────────────
