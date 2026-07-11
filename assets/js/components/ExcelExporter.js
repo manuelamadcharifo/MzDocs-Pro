@@ -16,11 +16,18 @@ export class ExcelExporter {
         const textLines = sections.filter(s => s.type !== 'table');
 
         // ── Folha 1: Documento completo (texto estruturado) ─────────
-        const docRows = this._buildDocRows(textLines, metadata);
+        const { rows: docRows, headingBreaks } = this._buildDocRows(textLines, metadata);
         const wsDoc   = utils.aoa_to_sheet(docRows);
 
         // Largura das colunas
         wsDoc['!cols'] = [{ wch: 15 }, { wch: 80 }];
+
+        // Quebras de página forçadas antes de cada TÍTULO/SECÇÃO — garante que,
+        // tal como no Word/PDF (widow/orphan control), um título nunca fica
+        // sozinho no fim de uma página, separado do seu próprio conteúdo.
+        // Não se aplica a "Subsecção" (h3) para não multiplicar quebras e criar
+        // páginas quase vazias (o mesmo cuidado de "não deixar espaços").
+        if (headingBreaks.length) wsDoc['!rowBreaks'] = headingBreaks;
 
         // Estilos de cabeçalho (SheetJS community não suporta style — usamos apenas estrutura)
         utils.book_append_sheet(wb, wsDoc, 'Documento');
@@ -77,8 +84,11 @@ export class ExcelExporter {
     }
 
     // ── Constrói linhas para a folha "Documento" ──────────────────
+    // Devolve tambem os indices das linhas de TITULO/SECCAO, para que o
+    // chamador possa marcar quebras de pagina forcadas antes delas.
     _buildDocRows(textSections, metadata) {
         const rows = [];
+        const headingBreaks = [];
 
         // Cabeçalho do ficheiro
         if (metadata.title) {
@@ -101,6 +111,11 @@ export class ExcelExporter {
             const h2 = line.match(/^##\s+/);
             const h3 = line.match(/^###\s+/);
 
+            // Marca o início de um TÍTULO/SECÇÃO para quebra de página forçada
+            // (nunca a primeira linha da folha — não faz sentido quebrar antes
+            // do próprio início do documento).
+            if ((h1 || h2) && rows.length > 0) headingBreaks.push(rows.length);
+
             if (h1)      rows.push(['TÍTULO', clean]);
             else if (h2) rows.push(['SECÇÃO', clean]);
             else if (h3) rows.push(['Subsecção', clean]);
@@ -109,7 +124,7 @@ export class ExcelExporter {
             else rows.push(['', clean]);
         });
 
-        return rows;
+        return { rows, headingBreaks };
     }
 
     async _loadXLSX() {
