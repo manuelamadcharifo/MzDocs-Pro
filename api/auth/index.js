@@ -26,6 +26,7 @@ const {
   insert,
   update,
   restRequest,
+  rpc,
   anonAuthRequest,
   adminSendRecovery,
   SUPABASE_URL,
@@ -237,18 +238,36 @@ async function _persistSignupProfile({ userId, normalized, normalizedEmail, norm
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       // Primeiro tentar UPDATE (o trigger já criou a linha)
+      // CORRIGIDO (v36): referred_by estava calculado em profilePayload mas
+      // NUNCA entrava neste PATCH — só no upsert de fallback mais abaixo,
+      // que quase nunca corre (só se este PATCH falhar). Na prática, um
+      // registo feito através de um link de afiliado ficava sem
+      // referred_by gravado, e por isso NUNCA gerava comissão nem bónus
+      // de registo para o afiliado — silenciosamente, sem erro nenhum.
+      const patchBody = {
+        phone:      normalized,
+        email:      normalizedEmail,
+        full_name:  normalizedName,
+        visitor_id: visitorId,
+        updated_at: new Date().toISOString(),
+      };
+      if (profilePayload.referred_by) patchBody.referred_by = profilePayload.referred_by;
+
       await restRequest(`profiles?id=eq.${userId}`, {
         method: 'PATCH',
-        body: {
-          phone:      normalized,
-          email:      normalizedEmail,
-          full_name:  normalizedName,
-          visitor_id: visitorId,
-          updated_at: new Date().toISOString(),
-        },
+        body: patchBody,
         prefer: 'return=minimal',
       });
       console.log(`[auth/signup] Perfil actualizado com nome/telefone (tentativa ${attempt + 1})`);
+
+      // Bónus de créditos por registo via link de afiliado (aff_bonus_signup)
+      // — só faz sentido tentar depois de referred_by estar mesmo gravado.
+      if (profilePayload.referred_by) {
+        rpc('grant_referral_signup_bonus', { p_user_id: userId }).catch(err =>
+          console.warn('[auth/signup] grant_referral_signup_bonus falhou:', err.message)
+        );
+      }
+
       return;
     } catch (err) {
       console.warn(`[auth/signup] PATCH tentativa ${attempt + 1}/3:`, err.message);
@@ -261,6 +280,11 @@ async function _persistSignupProfile({ userId, normalized, normalizedEmail, norm
             prefer: 'resolution=merge-duplicates,return=minimal',
           });
           console.log(`[auth/signup] Perfil inserido via upsert`);
+          if (profilePayload.referred_by) {
+            rpc('grant_referral_signup_bonus', { p_user_id: userId }).catch(err =>
+              console.warn('[auth/signup] grant_referral_signup_bonus falhou:', err.message)
+            );
+          }
           return;
         } catch (upsertErr) {
           console.warn(`[auth/signup] upsert fallback:`, upsertErr.message);
