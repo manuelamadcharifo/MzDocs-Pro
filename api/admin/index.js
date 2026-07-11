@@ -56,10 +56,11 @@ module.exports = async function handler(req, res) {
     case 'qrcodes':           return handleQrCodes(req, res);
     case 'funnel':            return handleFunnel(req, res);
     case 'user-timeline':     return handleUserTimeline(req, res);
+    case 'republish-blog':    return handleRepublishBlog(req, res);
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
-        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt','ai-providers','qrcodes','funnel','user-timeline'],
+        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt','ai-providers','qrcodes','funnel','user-timeline','republish-blog'],
       });
   }
 };
@@ -1949,6 +1950,69 @@ async function _generateStaticPage(page, SITE_URL) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// REPUBLICAR TODOS OS ARTIGOS JÁ PUBLICADOS — usado uma única vez depois de
+// corrigir o template do blog (blogTemplate.js), para os artigos que já
+// estavam no ar (criados ANTES da correcção) passarem a ter os links com
+// ?src=... e a notificação IndexNow. Artigos novos/agendados a partir de
+// agora já saem correctos automaticamente — este botão só serve para pôr
+// o histórico em dia. Processa em lotes (não tudo de uma vez) para não
+// estourar o limite de 30s da função nem o rate-limit secundário do
+// GitHub; o admin pode clicar de novo para continuar de onde ficou.
+// GET /api/admin/republish-blog?offset=0&limit=15
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleRepublishBlog(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
+  const token = req.headers.authorization?.replace('Bearer ', '').trim();
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    const offset = Math.max(parseInt(req.query?.offset || '0', 10) || 0, 0);
+    const limit  = Math.min(Math.max(parseInt(req.query?.limit  || '15', 10) || 15, 1), 30);
+    const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
+
+    const { data: pages, count, error } = await supabase
+      .from('blog_pages')
+      .select('slug, title, meta_description, content_html', { count: 'exact' })
+      .eq('published', true)
+      .order('created_at', { ascending: true })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+
+    const { publishBlogPageToGithub } = require('../_lib/blogTemplate');
+    const results = { ok: [], failed: [] };
+    for (const p of (pages || [])) {
+      try {
+        await publishBlogPageToGithub({
+          slug: p.slug, title: p.title, metaDescription: p.meta_description,
+          contentHtml: p.content_html, SITE_URL,
+        });
+        results.ok.push(p.slug);
+      } catch (pubErr) {
+        console.error('[admin/republish-blog]', p.slug, pubErr.message);
+        results.failed.push({ slug: p.slug, error: pubErr.message });
+      }
+    }
+
+    const processedSoFar = offset + (pages || []).length;
+    return res.status(200).json({
+      success: true,
+      total: count || 0,
+      processed_this_batch: (pages || []).length,
+      processed_so_far: processedSoFar,
+      remaining: Math.max((count || 0) - processedSoFar, 0),
+      next_offset: processedSoFar,
+      results,
+    });
+  } catch (err) {
+    console.error('[admin/republish-blog]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PENDING-RECEIPTS — lista transacções a aguardar revisão manual
 // GET /api/admin/pending-receipts
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2488,4 +2552,3 @@ async function handleQrCodes(req, res) {
     return res.status(500).json({ error: err.message || 'Erro interno' });
   }
 }
-
