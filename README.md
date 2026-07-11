@@ -1,11 +1,18 @@
-# MzDocs Pro — v25
+# MzDocs Pro — v26
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
 
 > 📌 **Nota de versão:** este documento reflecte o estado real do código até à auditoria de
-> Julho/2026 (correcções em `perfil.html`, `templates.html`, `api/misc.js`, CSP de avatares e
-> robustez do `HistoryController`/`Views.js` — ver secção "Alterações — v25" abaixo). O histórico
-> de auditorias anteriores está preservado nas secções abaixo (v12, v13–v16, v17–v24).
+> 11 de Julho/2026 — Marketing Analytics completo (Fases 1–5, `migration_v30` a `v34`),
+> Notificações Push reais com infraestrutura VAPID (`migration_v35`), bónus de comissão por
+> tier e crédito de boas-vindas por registo via afiliado (`migration_v36`), correcção do bug
+> crítico em que `referred_by` nunca era gravado no signup normal (quebrava a cadeia de
+> comissões de afiliados por registo), limpeza de promessas de marketing não implementadas em
+> `afiliado.html`, correcção de CSS dos modais do admin, e remoção do banner morto de
+> "Modo Sandbox" (`index.html`/`app.js` — resquício do modo M-Pesa automático, nunca usado em
+> produção, mas mantido como marcação morta com risco de reaparecer) — ver secção
+> "Alterações — v26" abaixo. O histórico de auditorias anteriores está preservado nas secções
+> abaixo (v12, v13–v16, v17–v24, v25).
 
 > ⚠️ **Acção urgente — plano Vercel:** este projecto processa pagamentos (`api/process-payment.js`,
 > tabela `transactions`). Os Termos de Serviço da Vercel definem **qualquer fluxo de cobrança a
@@ -599,6 +606,9 @@ Avulso 10% · Starter 15% · Básico 15% · Pro 20% · Empresa 20%.
 
 - **Segmentos** (`aff_segment`): `papelaria` · `cyber` · `universidade` · `explicacao` · `digitador` · `individual` — bónus configurável por segmento (`aff_bonus_papelaria` = +5%, `aff_bonus_cyber` = +3%, `aff_bonus_universidade` = +5%).
 - **Níveis** (`aff_tier`): 🥉 bronze → 🥈 prata (5+ conversões) → 🥇 ouro (20+) → 💎 diamante (50+), calculados por `update_affiliate_tier()`. Diamante reduz o mínimo de levantamento para metade.
+- **Bónus de comissão por tier (NOVO — v36)**: soma-se à taxa base + bónus de segmento — Bronze +0% · Prata +2% · Ouro +5% · Diamante +8% (`aff_tier_bonus_<tier>`). Antes da v36, `afiliado.html` já prometia isto ao utilizador mas `process_affiliate_commission_v2` nunca lia o tier — um afiliado Diamante ganhava sempre a mesma % que um Bronze do mesmo segmento.
+- **Crédito de boas-vindas por registo via link (NOVO — v36)**: `aff_bonus_signup` concede créditos extra a quem se regista com `?ref=<código>`, via `grant_referral_signup_bonus()`. A chave já existia desde a v10 mas nunca era lida em lado nenhum — configuração morta até agora.
+- **🐛 Bug crítico corrigido (v36):** `profiles.referred_by` nunca era gravado no caminho normal do signup em `api/auth/index.js` — só era incluído no PATCH de *fallback*, que praticamente nunca corre. Ou seja, comissões de afiliado por compras de utilizadores registados via link podiam estar a falhar silenciosamente para **todos** os registos normais desde que o programa de afiliados existe. Corrigido em paralelo em `api/auth/index.js` e na migration `v36`. Recomenda-se conferir manualmente na Supabase se há afiliados com cliques/registos aparentes mas sem comissões correspondentes, para compensar casos afectados.
 - **Anti-fraude**: tabela `affiliate_fraud_flags` com eventos (`self_referral`, `ip_burst`, `fake_clicks`, `suspicious_conversion`) e severidade.
 
 ---
@@ -776,20 +786,51 @@ Esta ronda partiu de reports directos de utilização em produção (não uma au
 
 ---
 
+## 🛠️ Alterações — v26 (Marketing Analytics, Push real, correcções de afiliados)
+
+Ronda de trabalho de 10–11 de Julho/2026, cobrindo três frentes: o sistema de Marketing
+Analytics completo (5 fases), notificações push reais, e uma auditoria dedicada ao sistema de
+afiliados que encontrou uma falha silenciosa a afectar comissões desde sempre.
+
+| Ficheiro / Migração | Alteração |
+|---|---|
+| `migration_v30_marketing_analytics.sql` | Fase 1 — fundação: tabelas `marketing_visits`, `marketing_events`, `marketing_sources`, agregação diária, sem duplicar `page_views`/`online_sessions` (v9) nem `ai_provider_daily_usage` (v27) já existentes. |
+| `migration_v31_marketing_purchase_attribution.sql` | Fase 2 — liga compras confirmadas à fonte de marketing que originou a visita. |
+| `migration_v32_marketing_qrcodes.sql` | Fase 3 — QR codes geridos no admin, registados como `marketing_sources` (`type='qr'`), reaproveitando a agregação já construída nas fases 1–2. |
+| `migration_v33_funnel_crm.sql` | Fase 4 — dashboard de funil (visita → registo → documento gerado → compra, com taxa de conversão por passo) e timeline/CRM por utilizador, incluindo actividade anónima pré-registo. |
+| `migration_v34_campaigns_goals_notifications.sql` | Fase 5 — campanhas, metas e notificações administrativas. |
+| `assets/js/services/MarketingTracker.js` | **NOVO.** Módulo cliente que alimenta as 5 fases acima. |
+| `migration_v35_push_notifications.sql` + `api/_lib/webpush.js` | **NOVO.** Notificações push reais (Android/Chrome) via infraestrutura VAPID — tabela `push_subscriptions` para subscrições de clientes e admins. Funciona com a app fechada, uma vez instalada como PWA. |
+| `migration_v36_tier_bonus_and_referral_signup.sql` | Ver detalhe completo na secção "Sistema de Afiliados" acima — bónus de comissão por tier, crédito de boas-vindas por registo via link, e correcção do bug crítico de `referred_by` nunca gravado no signup normal. |
+| `admin.html` / `AdminApp.js` | Correcção de incompatibilidade de classes CSS que deixava modais do admin sem estilo (apareciam "nus", sem layout). |
+| `afiliado.html` | Removidas promessas de marketing sem implementação correspondente no código (a página tinha texto a anunciar funcionalidades que não existiam ainda — corrigido para reflectir só o que está realmente activo). |
+| `index.html` / `assets/js/app.js` | Removido por completo o banner morto `#sandboxBar` ("Modo Sandbox — Pagamentos M-Pesa não são reais") e o código JS que o mantinha forçosamente oculto. Resquício do antigo modo M-Pesa automático (nunca usado em produção — o projecto é 100% pagamento manual via WhatsApp); já estava sempre oculto por CSS + JS, mas mantinha-se como marcação morta e um pequeno risco caso a linha que o oculta fosse alguma vez removida por engano. |
+
+> ⚠️ **Nota sobre `migration_v31_marketing_purchase_attribution.sql`:** o ficheiro tal como está
+> neste repositório contém apenas bytes nulos (ficheiro corrompido/vazio no export usado para
+> esta auditoria). Confirmar no Supabase se a migração já foi aplicada em produção antes de a
+> tentar correr novamente; se não tiver o SQL original, recriar a partir do histórico do
+> Supabase Dashboard ou do commit correspondente no GitHub.
+
+---
+
 ## 📦 Versões
 
 | Componente | Versão | Nota |
 |------------|--------|------|
 | `package.json` | `11.0.0` | — |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy | formato `v<sha-git-7-chars>-<YYYYMMDD>`, escrito por `scripts/inject-version.js` — o valor no repositório é só um placeholder |
-| `README.md` | `v25` (esta edição) | — |
+| `README.md` | `v26` (esta edição) | — |
+| `assets/js/services/MarketingTracker.js` | **NOVO (v26)** | cliente do Marketing Analytics (Fases 1–5) |
+| `api/_lib/webpush.js` | **NOVO (v26)** | envio de notificações push via VAPID |
+| `index.html` | v26 | banner `#sandboxBar` removido (código morto) |
 | `perfil.html` | **NOVO (v25)** | página de conta com Créditos/Arquivo em modal embutido (sem navegar para "/") |
 | `templates.html` | v25 | modais Resultado/Créditos/Histórico adicionados; `openDetail()` corrigido (texto antes do preview); listener de clique delegado |
 | `api/misc.js` | `v3.0` | 🟡 parcialmente migrado · v25: `tplList` corrigido para filtrar por `id` (bug crítico) |
 | `vercel.json` (CSP) | v25 | `img-src` agora inclui `https://*.supabase.co` (avatares) |
 | `assets/js/controllers/HistoryController.js` | v25 | guard do visualizador "lite" reforçado (confirma DOM, não só `window.docController`) |
 | `assets/js/views/Views.js` | v25 | `_renderResultInner` blindado contra elementos ausentes |
-| `assets/js/app.js` | v25 | dropdown do utilizador corrigido; ícone duplicado removido; deep-links `?topup=1`/`?history=1` |
+| `assets/js/app.js` | v26 | v25: dropdown do utilizador corrigido; ícone duplicado removido; deep-links `?topup=1`/`?history=1` · v26: removida referência ao banner morto `#sandboxBar` |
 | `api/_lib/supabaseAdmin.js` | — | helper sem versão explícita |
 | `api/_lib/visionAI.js` | `v1.0` | — |
 | `api/_lib/legalSearch.js` | — | NOVO (v17) |
@@ -808,7 +849,7 @@ Esta ronda partiu de reports directos de utilização em produção (não uma au
 | `api/convert.js` | sem versão | — |
 | `assets/js/services/SmartOCRService.js` | `v4.0` | — |
 | `assets/js/services/LongDocumentEngine.js` | `v2.0` | — |
-| Migrações Supabase | até `migration_v24` | ver secção de deploy |
+| Migrações Supabase | até `migration_v36` | ver secção "Alterações — v26"; `v31` corrompida no export desta auditoria (ver aviso acima) |
 | Templates integrados | 70 (14 serviços × 5) | 17 serviços no total |
 
 ---
