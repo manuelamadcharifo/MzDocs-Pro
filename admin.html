@@ -74,6 +74,9 @@
       <a class="nav-item" data-section="goals">
         <span class="nav-icon">🎯</span><span class="nav-label">Metas</span>
       </a>
+      <a class="nav-item" data-section="finance">
+        <span class="nav-icon">💵</span><span class="nav-label">Finanças</span>
+      </a>
       <a class="nav-item" data-section="settings">
         <span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span>
       </a>
@@ -193,6 +196,15 @@
           <div class="stat-body">
             <div class="stat-value" id="statDocsWeek">—</div>
             <div class="stat-label">Documentos (7 dias)</div>
+          </div>
+        </div>
+        <div class="stat-card" style="border:1.5px solid #bbf7d0">
+          <div class="stat-icon" style="background:#F0FDF4;">💵</div>
+          <div class="stat-body">
+            <div class="stat-value" id="statWithdrawable">—</div>
+            <div class="stat-label">Valor Levantável</div>
+            <div class="stat-sub" id="statWithdrawableSub" style="font-size:11px;color:#94a3b8;margin-top:2px;"></div>
+            <button class="stat-action" onclick="adminApp.nav('finance')">Ver detalhe →</button>
           </div>
         </div>
       </div>
@@ -853,6 +865,156 @@
       </div>
       <div id="goalsList" class="stats-grid" style="grid-template-columns:repeat(2,1fr)">
         <div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px;grid-column:1/-1">A carregar…</div>
+      </div>
+    </section>
+
+    <!-- ── FINANÇAS (v37) — Valor Levantável e despesas operacionais ──── -->
+    <section id="section-finance" class="admin-section">
+      <div class="section-toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">💵 Finanças</h2>
+          <p style="font-size:13px;color:#64748b">Quanto pode ser levantado da plataforma agora, depois de reservar o dinheiro dos afiliados e das despesas operacionais</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="financeFxLabel" style="font-size:12px;color:#94a3b8"></span>
+          <button onclick="adminApp._loadFinance()" style="padding:8px 14px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔄 Actualizar</button>
+        </div>
+      </div>
+
+      <!-- Resumo — Valor Levantável em destaque -->
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#EFF6FF;">💰</div>
+          <div class="stat-body">
+            <div class="stat-value" id="finRevenueTotal">—</div>
+            <div class="stat-label">Receita Total Confirmada</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#FFF7ED;">🤝</div>
+          <div class="stat-body">
+            <div class="stat-value" id="finAffiliateReserved">—</div>
+            <div class="stat-label">Reservado p/ Afiliados</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#FEF2F2;">🧾</div>
+          <div class="stat-body">
+            <div class="stat-value" id="finExpensesTotal">—</div>
+            <div class="stat-label">Despesas Registadas</div>
+          </div>
+        </div>
+        <div class="stat-card" style="border:1.5px solid #bbf7d0">
+          <div class="stat-icon" style="background:#F0FDF4;">✅</div>
+          <div class="stat-body">
+            <div class="stat-value" id="finWithdrawable" style="color:#16a34a">—</div>
+            <div class="stat-label">Valor Levantável Agora</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-grid" style="margin-top:16px">
+
+        <!-- Custos recorrentes — configuráveis, com cálculo dinâmico -->
+        <div class="settings-card">
+          <h3>📉 Custos Operacionais Recorrentes</h3>
+          <p style="font-size:.8rem;color:#64748b;margin-bottom:10px">
+            Introduza os valores reais uma vez — o sistema amortiza o custo por mês automaticamente
+            e converte USD→MZN à taxa de câmbio actual (obtida em tempo real, nunca fixa).
+          </p>
+          <form id="financeConfigForm">
+            <div class="form-row">
+              <label>Fornecedor do domínio</label>
+              <input type="text" id="fin_domain_provider" placeholder="mozdomains.co.mz"/>
+            </div>
+            <div class="form-row">
+              <label>Custo anual do domínio (MZN)</label>
+              <input type="number" id="fin_domain_annual_mzn" min="0" step="0.01" placeholder="200"/>
+            </div>
+            <div class="form-row">
+              <label>Próxima renovação do domínio</label>
+              <input type="date" id="fin_domain_renewal_date"/>
+            </div>
+            <div class="form-row">
+              <label>Plano Vercel</label>
+              <select id="fin_vercel_plan">
+                <option value="Hobby (Grátis)">Hobby (Grátis)</option>
+                <option value="Pro">Pro</option>
+                <option value="Enterprise">Enterprise</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Custo mensal Vercel (USD)</label>
+              <input type="number" id="fin_vercel_monthly_usd" min="0" step="0.01" placeholder="0 (Hobby) ou 20 (Pro)"/>
+            </div>
+            <div class="form-row">
+              <label>Orçamento mensal IA paga (USD)</label>
+              <input type="number" id="fin_ai_monthly_usd" min="0" step="0.01" placeholder="0 — os 5 providers activos são grátis"/>
+            </div>
+            <div class="form-row">
+              <label>Outras despesas mensais (MZN)</label>
+              <input type="number" id="fin_other_monthly_mzn" min="0" step="0.01" placeholder="0"/>
+            </div>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem" onclick="adminApp._saveFinanceConfig()">💾 Guardar Custos Recorrentes</button>
+          </form>
+          <div id="financeCostsBreakdown" style="margin-top:14px;font-size:12.5px;color:#475569;border-top:1px solid #f1f5f9;padding-top:12px"></div>
+        </div>
+
+        <!-- Registar despesa avulsa -->
+        <div class="settings-card">
+          <h3>🧾 Registar Despesa</h3>
+          <p style="font-size:.8rem;color:#64748b;margin-bottom:10px">Ex: pagamento anual do domínio, upgrade pontual do plano Vercel, compra de créditos de IA</p>
+          <div class="form-row">
+            <label>Categoria</label>
+            <select id="expCategory">
+              <option value="domain">Domínio</option>
+              <option value="hosting">Hosting / Vercel</option>
+              <option value="ai_providers">Providers de IA</option>
+              <option value="other">Outra</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Descrição</label>
+            <input type="text" id="expDescription" placeholder="Ex: Renovação anual mozdomains.co.mz"/>
+          </div>
+          <div class="form-row">
+            <label>Valor (MZN)</label>
+            <input type="number" id="expAmount" min="0" step="0.01" placeholder="200"/>
+          </div>
+          <div class="form-row">
+            <label>Data</label>
+            <input type="date" id="expDate"/>
+          </div>
+          <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem" onclick="adminApp._addFinanceExpense()">➕ Registar Despesa</button>
+
+          <div id="financeExpensesList" style="margin-top:14px;max-height:220px;overflow-y:auto;font-size:.8rem">
+            <div style="color:#94a3b8;text-align:center;padding:12px 0">A carregar…</div>
+          </div>
+        </div>
+
+        <!-- Registar levantamento -->
+        <div class="settings-card">
+          <h3>🏧 Registar Levantamento</h3>
+          <p style="font-size:.8rem;color:#64748b;margin-bottom:10px">Regista quando o dono da plataforma efectivamente levanta dinheiro, para o "Valor Levantável" ficar sempre correcto</p>
+          <div class="form-row">
+            <label>Valor levantado (MZN)</label>
+            <input type="number" id="wdAmount" min="0" step="0.01" placeholder="1000"/>
+          </div>
+          <div class="form-row">
+            <label>Nota</label>
+            <input type="text" id="wdNote" placeholder="Ex: Levantamento M-Pesa para conta pessoal"/>
+          </div>
+          <div class="form-row">
+            <label>Data</label>
+            <input type="date" id="wdDate"/>
+          </div>
+          <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem" onclick="adminApp._addFinanceWithdrawal()">💸 Registar Levantamento</button>
+
+          <div id="financeWithdrawalsList" style="margin-top:14px;max-height:220px;overflow-y:auto;font-size:.8rem">
+            <div style="color:#94a3b8;text-align:center;padding:12px 0">A carregar…</div>
+          </div>
+        </div>
+
       </div>
     </section>
 
