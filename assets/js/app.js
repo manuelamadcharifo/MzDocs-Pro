@@ -23,25 +23,12 @@ import { Analytics } from './analytics/Analytics.js';
 import { MarketingTracker } from './services/MarketingTracker.js';
 
 // ── CAPTURA LINK DE AFILIADO (?ref=CODIGO) ─────────────────────────────────
-(function () {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref');
-    if (ref && ref.length <= 20) {
-      sessionStorage.setItem('mz_ref', ref.trim().toUpperCase());
-      // Chamar API para registar o clique
-      fetch('/api/affiliate/click', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ref_code: ref.trim().toUpperCase(), page: window.location.pathname }),
-      }).catch(() => {}); // silencioso — não bloquear o site
-      // Limpar o ?ref= da URL sem recarregar
-      const clean = new URL(window.location.href);
-      clean.searchParams.delete('ref');
-      window.history.replaceState({}, '', clean.toString());
-    }
-  } catch (_) {}
-})();
+// CORRIGIDO: este bloco duplicava a captura do ref e o registo do clique já
+// feitos em index.html (3 pontos independentes no total gravavam o código,
+// dois deles em sessionStorage — que se perde ao fechar o separador/app e
+// é por isso que os "Registados" ficavam sempre a 0 apesar dos "Cliques"
+// subirem). A captura e o registo do clique agora acontecem uma única vez,
+// em index.html, gravando em localStorage (persistente). Nada a fazer aqui.
 // ───────────────────────────────────────────────────────────────────────────
 
 async function bootstrap() {
