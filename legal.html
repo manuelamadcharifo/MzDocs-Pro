@@ -127,11 +127,14 @@
 
 <!-- HEADER -->
 <header class="hdr">
-  <a href="/" class="hdr-logo">
-    <div class="hdr-badge">📄</div>
-    <div class="hdr-name">MzDocs<span>Pro</span></div>
+  <a href="/" class="hdr-logo" data-track-link>
+    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div style="display:none;align-items:center;gap:8px">
+      <div class="hdr-badge">📄</div>
+      <div class="hdr-name">MzDocs<span>Pro</span></div>
+    </div>
   </a>
-  <a href="/" class="hdr-back">← Voltar ao início</a>
+  <a href="/" class="hdr-back" data-track-link>← Voltar ao início</a>
 </header>
 
 <!-- HERO -->
@@ -537,6 +540,56 @@
       if (target) target.scrollIntoView({ behavior:'smooth' });
     });
   });
+</script>
+
+<!-- NOVO: atribuição de origem (blog/pesquisa orgânica/social) — esta
+     página é HTML estático, sem o MarketingTracker.js da SPA. Sem isto,
+     um leitor que chegasse aqui pelo Google e depois clicasse para a app
+     era sempre contado como "direct" no dashboard de Marketing. Mesma
+     lógica usada em api/_lib/blogTemplate.js: 1) descobre a origem
+     (?src= explícito > localStorage já existente > referrer de motor de
+     busca/rede social > "direct" por omissão); 2) grava na mesma
+     chave que o MarketingTracker usa (mzd_src); 3) por segurança (modo
+     privado / localStorage bloqueado), também reescreve os links de saída
+     marcados com data-track-link para incluir ?src=... -->
+<script>
+(function(){
+  try {
+    var SOURCE_KEY = 'mzd_src';
+    var stored = null;
+    try { stored = localStorage.getItem(SOURCE_KEY); } catch(_) {}
+
+    var qs = new URLSearchParams(window.location.search);
+    var explicit = qs.get('src');
+    var source = explicit || stored;
+
+    if (!source) {
+      var host = '';
+      try { host = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./,'') : ''; } catch(_) {}
+      if (/mzdocs\.co\.mz$/.test(host))        source = null;
+      else if (/google\./.test(host))          source = 'organic_google';
+      else if (/bing\./.test(host))            source = 'organic_bing';
+      else if (/yahoo\./.test(host))           source = 'organic_yahoo';
+      else if (/duckduckgo\./.test(host))      source = 'organic_duckduckgo';
+      else if (/baidu\./.test(host))           source = 'organic_baidu';
+      else if (/facebook\.|instagram\./.test(host)) source = 'social_facebook';
+      else if (/tiktok\./.test(host))          source = 'social_tiktok';
+      else if (/whatsapp\./.test(host))        source = 'social_whatsapp';
+      else                                     source = 'direct';
+    }
+
+    if (source) {
+      try { localStorage.setItem(SOURCE_KEY, source.slice(0, 50)); } catch(_) {}
+      document.querySelectorAll('a[data-track-link]').forEach(function(a){
+        try {
+          var u = new URL(a.getAttribute('href'), window.location.origin);
+          if (!u.searchParams.get('src')) u.searchParams.set('src', source);
+          a.setAttribute('href', u.pathname + u.search + u.hash);
+        } catch(_) {}
+      });
+    }
+  } catch(_) {}
+})();
 </script>
 </body>
 </html>
