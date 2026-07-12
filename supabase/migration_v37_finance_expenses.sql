@@ -62,7 +62,7 @@ ALTER TABLE finance_withdrawals ENABLE ROW LEVEL SECURITY;
 -- confirmados, para nunca subtrair um custo que não existe de facto.
 INSERT INTO system_settings (key, value, description, updated_at) VALUES
   ('finance_domain_provider',      'mozdomains.co.mz', 'Fornecedor do domínio (informativo)', NOW()),
-  ('finance_domain_annual_mzn',    '200',              'Custo anual do domínio, em MZN', NOW()),
+  ('finance_domain_annual_mzn',    '2600',              'Custo anual do domínio, em MZN', NOW()),
   ('finance_domain_renewal_date',  '',                 'Próxima data de renovação do domínio (AAAA-MM-DD)', NOW()),
   ('finance_vercel_plan',          'Hobby (Grátis)',   'Nome do plano Vercel actualmente usado', NOW()),
   ('finance_vercel_monthly_usd',   '0',                'Custo mensal do plano Vercel, em USD (0 se Hobby/grátis)', NOW()),
