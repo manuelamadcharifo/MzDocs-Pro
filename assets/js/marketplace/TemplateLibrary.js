@@ -133,7 +133,7 @@ export async function loadPublicTemplatesFromSupabase(serviceKey) {
     // 1. Templates públicos aprovados
     const { data: pub, error: pubErr } = await supabase
       .from('templates_custom')
-      .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id')
+      .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id, credit_cost, price_mzn')
       .eq('service_type', serviceKey)
       .eq('status', 'approved')
       .eq('is_public', true)
@@ -146,7 +146,7 @@ export async function loadPublicTemplatesFromSupabase(serviceKey) {
     if (userId) {
       const { data: own, error: ownErr } = await supabase
         .from('templates_custom')
-        .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id')
+        .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id, credit_cost, price_mzn')
         .eq('service_type', serviceKey)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -189,6 +189,12 @@ export async function loadPublicTemplatesFromSupabase(serviceKey) {
         _fromMarketplace: true,
         _isOwnPending:    isOwnPending,
         _downloads:   row.downloads || 0,
+        // NOVO (v38 — filtro grátis/pago no selector de modelos): um
+        // template do marketplace é pago se o criador definiu preço em
+        // créditos (credit_cost) ou em MZN (price_mzn) ao submetê-lo.
+        credit_cost:  row.credit_cost || 0,
+        price_mzn:    row.price_mzn || 0,
+        _isFree:      !((row.credit_cost || 0) > 0 || (row.price_mzn || 0) > 0),
       };
 
       addSessionTemplate(serviceKey, tpl);
