@@ -70,6 +70,21 @@ const PICKER_CSS = `
   transition:background .15s}
 .tpl-close:hover{background:#e2e8f0;color:#0f172a}
 
+/* ── Mini filtro Grátis/Pagos (v38) ── */
+.tpl-filter-bar{
+  display:flex;gap:6px;padding:8px 12px 0;flex-shrink:0;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.tpl-filter-bar::-webkit-scrollbar{display:none}
+.tpl-filter-chip{
+  flex-shrink:0;padding:6px 12px;border-radius:20px;
+  border:1.5px solid #e2e8f0;background:#fff;
+  font-size:11.5px;font-weight:700;color:#475569;cursor:pointer;
+  transition:all .15s;white-space:nowrap;font-family:inherit;
+}
+.tpl-filter-chip:hover:not(.active){border-color:#93c5fd;background:#eff6ff}
+.tpl-filter-chip.active{background:#0f172a;border-color:#0f172a;color:#fff}
+
 /* ── Lista de templates (scroll horizontal) ── */
 .tpl-list-wrap{
   flex-shrink:0;padding:10px 12px 8px;
@@ -95,6 +110,12 @@ const PICKER_CSS = `
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tpl-card-desc{font-size:9px;color:#64748b;line-height:1.2;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Badge de preço — canto superior esquerdo (o badge 🌐/MEU já usa o direito) */
+.tpl-price-badge{
+  position:absolute;top:3px;left:3px;font-size:7px;font-weight:800;
+  padding:1px 5px;border-radius:4px;color:#fff;white-space:nowrap;
+}
+.tpl-price-badge.paid{background:#f59e0b}
 
 /* ── Barra de nome seleccionado ── */
 .tpl-sel-bar{
@@ -229,6 +250,7 @@ export class TemplatePicker {
     this._customFile    = null;   // File object
     this._customName    = null;   // nome do ficheiro
     this._customActive  = false;  // flag: usar modelo próprio em vez dos pré-definidos
+    this._filter         = 'all'; // v38: mini filtro Grátis/Pagos ('all'|'free'|'paid')
   }
 
   open({ serviceKey, content, svc, onApply, onDownloadPDF, onDownloadWord }) {
@@ -238,8 +260,13 @@ export class TemplatePicker {
     this._onApply = onApply;
     this._onPDF   = onDownloadPDF;
     this._onWord  = onDownloadWord;
+    // Repor filtro para "Todos" a cada abertura, para nunca ficar preso
+    // num filtro (ex: "Pagos") num serviço que não tenha templates pagos.
+    this._filter  = 'all';
 
     this._inject();
+    document.querySelectorAll('#tplFilterBar .tpl-filter-chip')
+      .forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
     this._render();
 
     document.getElementById(OVERLAY_ID)?.classList.add('open');
@@ -291,6 +318,12 @@ export class TemplatePicker {
           </div>
           <button class="tpl-close" id="tplClose" aria-label="Fechar">✕</button>
         </div>
+        <!-- v38: mini filtro Grátis/Pagos -->
+        <div class="tpl-filter-bar" id="tplFilterBar">
+          <button class="tpl-filter-chip active" data-filter="all">Todos</button>
+          <button class="tpl-filter-chip" data-filter="free">🆓 Grátis</button>
+          <button class="tpl-filter-chip" data-filter="paid">💰 Pagos</button>
+        </div>
         <div class="tpl-list-wrap">
           <div class="tpl-list" id="tplList"></div>
         </div>
@@ -325,6 +358,17 @@ export class TemplatePicker {
     document.getElementById('tplBtnPDF')?.addEventListener('click',   () => this._onPDF?.(this._tpl));
     document.getElementById('tplBtnWord')?.addEventListener('click',  () => this._onWord?.(this._tpl));
 
+    // ── v38: mini filtro Grátis/Pagos ─────────────────────────────────────
+    document.querySelectorAll('#tplFilterBar .tpl-filter-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (this._filter === btn.dataset.filter) return;
+        this._filter = btn.dataset.filter;
+        document.querySelectorAll('#tplFilterBar .tpl-filter-chip')
+          .forEach(b => b.classList.toggle('active', b === btn));
+        this._render();
+      });
+    });
+
     // ── Upload de modelo próprio ──────────────────────────────────────────
     const uploadZone  = document.getElementById('tplUploadZone');
     const uploadInput = document.getElementById('tplUploadInput');
@@ -352,15 +396,43 @@ export class TemplatePicker {
 
   // ── Renderizar lista de templates ─────────────────────────────────────────
   _render() {
-    const templates = [...getSessionTemplates(this._key), ...getTemplates(this._key)];
+    const allTemplates = [...getSessionTemplates(this._key), ...getTemplates(this._key)];
     const sub = document.getElementById('tplHdrSub');
     if (sub && this._svc) sub.textContent = `${this._svc.icon || ''} ${this._svc.title || ''}`;
+
+    // v38: marcar grátis/pago. Templates pré-definidos da biblioteca (sem
+    // _fromMarketplace) são sempre gratuitos; templates do marketplace já
+    // vêm com _isFree calculado em TemplateLibrary.js a partir do
+    // credit_cost/price_mzn definidos pelo criador.
+    allTemplates.forEach(t => { if (t._isFree === undefined) t._isFree = true; });
+
+    // Actualizar contagens no mini filtro
+    const freeCount = allTemplates.filter(t => t._isFree).length;
+    const paidCount = allTemplates.length - freeCount;
+    const filterBar = document.getElementById('tplFilterBar');
+    if (filterBar) {
+      const allBtn  = filterBar.querySelector('[data-filter="all"]');
+      const freeBtn = filterBar.querySelector('[data-filter="free"]');
+      const paidBtn = filterBar.querySelector('[data-filter="paid"]');
+      if (allBtn)  allBtn.textContent  = `Todos (${allTemplates.length})`;
+      if (freeBtn) freeBtn.textContent = `🆓 Grátis (${freeCount})`;
+      if (paidBtn) paidBtn.textContent = `💰 Pagos (${paidCount})`;
+      // Só mostrar o filtro "Pagos" quando existir pelo menos um template pago
+      if (paidBtn) paidBtn.style.display = paidCount > 0 ? '' : 'none';
+    }
+
+    const templates = this._filter === 'free' ? allTemplates.filter(t => t._isFree)
+                     : this._filter === 'paid' ? allTemplates.filter(t => !t._isFree)
+                     : allTemplates;
 
     const list = document.getElementById('tplList');
     if (!list) return;
 
     if (!templates?.length) {
-      list.innerHTML = '<div style="padding:12px;font-size:12px;color:#64748b;white-space:nowrap">Sem modelos disponíveis.</div>';
+      const msg = this._filter === 'free' ? 'Sem modelos gratuitos disponíveis.'
+                : this._filter === 'paid' ? 'Sem modelos pagos disponíveis.'
+                : 'Sem modelos disponíveis.';
+      list.innerHTML = `<div style="padding:12px;font-size:12px;color:#64748b;white-space:nowrap">${msg}</div>`;
       return;
     }
 
@@ -373,6 +445,7 @@ export class TemplatePicker {
             <div class="tpl-tl" style="background:${t.preview?.accent||'#3B82F6'};opacity:.2;width:80%"></div>
             <div class="tpl-tl" style="background:${t.preview?.accent||'#3B82F6'};opacity:.15;width:90%"></div>
           </div>
+          ${!t._isFree ? `<div class="tpl-price-badge paid">💰 ${t.price_mzn > 0 ? t.price_mzn + ' MZN' : (t.credit_cost || 0) + ' créd.'}</div>` : ''}
           ${t._fromMarketplace ? '<div style="position:absolute;top:3px;right:3px;background:#f59e0b;color:#fff;font-size:7px;font-weight:800;padding:1px 5px;border-radius:4px">🌐</div>' : ''}
           ${t._isCustom ? '<div style="position:absolute;top:3px;right:3px;background:#10b981;color:#fff;font-size:7px;font-weight:800;padding:1px 5px;border-radius:4px">MEU</div>' : ''}
         </div>
@@ -386,7 +459,7 @@ export class TemplatePicker {
       el.addEventListener('keydown', e => (e.key === 'Enter' || e.key === ' ') && pick());
     });
 
-    // Seleccionar o primeiro por defeito
+    // Seleccionar o primeiro por defeito (dentro dos filtrados)
     if (templates[0]) this._pick(templates[0].id);
   }
 
@@ -407,7 +480,12 @@ export class TemplatePicker {
 
     // Nome
     const bar = document.getElementById('tplSelBar');
-    if (bar) bar.textContent = `${tpl.name} — ${tpl.description || ''}`;
+    if (bar) {
+      const priceTag = !tpl._isFree
+        ? ` · 💰 ${tpl.price_mzn > 0 ? tpl.price_mzn + ' MZN' : (tpl.credit_cost || 0) + ' créditos'}`
+        : '';
+      bar.textContent = `${tpl.name} — ${tpl.description || ''}${priceTag}`;
+    }
 
     this._renderPreview(tpl);
   }
