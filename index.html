@@ -486,19 +486,56 @@ window.openLoginFromTeaser = function() {
 
 <script>
 // ── Rastreamento de cliques de afiliados (?ref=CÓDIGO) ───────────────────────
+// CORRIGIDO: este era 1 de 3 pontos no código (index.html x2 + app.js) que
+// capturavam o ?ref= de forma independente. Isso causava dois problemas:
+//   1) O clique era registado 2-3x por visita (contador "Cliques" inflacionado).
+//   2) Só este bloco guardava o código em localStorage (persistente); os
+//      outros dois guardavam em sessionStorage, que é apagado quando o
+//      utilizador fecha o separador/app e volta mais tarde para se
+//      registar — o caso mais comum em telemóvel (clica no link partilhado
+//      no WhatsApp, navega, fecha, volta depois para criar conta). Como o
+//      AuthManager só lia sessionStorage, o registo perdia sempre a
+//      atribuição ao afiliado, mesmo tendo o clique sido bem contado —
+//      por isso "Cliques" subia mas "Registados" ficava sempre a 0.
+// Agora este é o ÚNICO ponto que grava o ref e regista o clique; os outros
+// dois blocos (mais abaixo e em app.js) foram reduzidos para não duplicar.
+window.__mzRefCaptured = window.__mzRefCaptured || false;
 (function() {
   try {
+    if (window.__mzRefCaptured) return;
     const ref = new URLSearchParams(window.location.search).get('ref');
-    if (ref && /^[A-Z0-9]{6,12}$/.test(ref)) {
-      // Guardar ref no localStorage para associar a conversões futuras
-      localStorage.setItem('mz_ref', ref);
-      localStorage.setItem('mz_ref_ts', Date.now());
-      // Registar o clique no servidor (fire-and-forget)
+    if (ref && /^[A-Z0-9][A-Z0-9-]{3,19}$/i.test(ref)) {
+      const code = ref.trim().toUpperCase();
+      window.__mzRefCaptured = true;
+      // Guardar no localStorage (persistente entre sessões/separadores) para
+      // associar a conversões futuras — janela de atribuição de 30 dias,
+      // controlada no AuthManager via mz_ref_ts.
+      localStorage.setItem('mz_ref', code);
+      localStorage.setItem('mz_ref_ts', String(Date.now()));
+      // Registar o clique no servidor (fire-and-forget), uma única vez
       fetch('/api/affiliate/click', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ref_code: ref, page: window.location.pathname }),
+        body: JSON.stringify({ ref_code: code, page: window.location.pathname }),
+        keepalive: true,
       }).catch(() => {});
+      // Mostrar banner "Convidado por parceiro"
+      fetch('/api/affiliate/check?ref=' + encodeURIComponent(code))
+        .then(r => r.json())
+        .then(d => {
+          if (!d.valid) return;
+          const bar = document.createElement('div');
+          bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#009A44;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.8rem;font-weight:600';
+          bar.innerHTML = '🎁 Convidado por <strong>' + (d.name || 'um parceiro') + '</strong> · Registe-se e ganhe 1 crédito grátis! <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:.5rem;font-size:14px">✕</button>';
+          document.body.prepend(bar);
+          setTimeout(() => { if (bar.parentElement) bar.remove(); }, 8000);
+        }).catch(() => {});
+      // Limpar o ?ref= da URL sem recarregar
+      try {
+        const clean = new URL(window.location.href);
+        clean.searchParams.delete('ref');
+        window.history.replaceState({}, '', clean.toString());
+      } catch (_) {}
     }
   } catch (_) {}
 })();
@@ -617,37 +654,13 @@ window.openLoginFromTeaser = function() {
   const submitBtn = document.getElementById('feedbackSubmit');
   const sessionId = Math.random().toString(36).slice(2);
 
-  // ── Capturar link de afiliado (?ref=CÓDIGO) ─────────────────────────────
-  (function() {
-    var params  = new URLSearchParams(window.location.search);
-    var refCode = params.get('ref');
-    // Aceitar qualquer código alfanumérico (com ou sem hífen), 4-20 chars
-    if (!refCode || !/^[A-Z0-9][A-Z0-9\-]{3,19}$/i.test(refCode)) return;
-    refCode = refCode.toUpperCase();
-
-    // Guardar em sessionStorage para associar ao registo
-    sessionStorage.setItem('mz_ref', refCode);
-
-    // Registar clique na API
-    fetch('/api/affiliate/click', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref_code: refCode, page: window.location.pathname }),
-      keepalive: true,
-    }).catch(function() {});
-
-    // Mostrar banner "Convidado por parceiro"
-    fetch('/api/affiliate/check?ref=' + encodeURIComponent(refCode))
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (!d.valid) return;
-        var bar = document.createElement('div');
-        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#009A44;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.8rem;font-weight:600';
-        bar.innerHTML = '🎁 Convidado por <strong>' + (d.name || 'um parceiro') + '</strong> · Registe-se e ganhe 1 crédito grátis! <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:.5rem;font-size:14px">✕</button>';
-        document.body.prepend(bar);
-        setTimeout(function() { if (bar.parentElement) bar.remove(); }, 8000);
-      }).catch(function() {});
-  })();
+  // ── Link de afiliado (?ref=CÓDIGO) ───────────────────────────────────────
+  // CORRIGIDO: a captura do ref, o registo do clique e o banner "Convidado
+  // por parceiro" já são feitos uma única vez no bloco <script> logo após o
+  // ponto de entrada da app (ver comentário lá). Este bloco duplicado foi
+  // removido para não inflacionar o contador de cliques nem sobrepor o
+  // mz_ref persistente com uma cópia em sessionStorage que se perdia entre
+  // sessões.
 
   // Activar estrelas
   stars.forEach(s => {
