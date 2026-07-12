@@ -1067,7 +1067,60 @@
           </form>
         </div>
 
+        <!-- Programa de Afiliados — NOVO: estas chaves (aff_*) já existiam na
+             base de dados desde a migração v10/v14/v36, mas nunca tinham
+             campo no painel — só eram editáveis directamente por SQL. -->
         <div class="settings-card">
+          <h3>🤝 Programa de Afiliados</h3>
+          <div id="affSettingsLoader" style="color:#94a3b8;font-size:.85rem;padding:8px 0;">A carregar…</div>
+          <form id="affSettingsForm" style="display:none;">
+            <div class="form-row">
+              <label>Bónus de registo (créditos) — dado a quem se regista via link de afiliado</label>
+              <input type="number" id="cfg_aff_bonus_signup" min="0"/>
+            </div>
+            <div class="form-row">
+              <label>Levantamento mínimo (MZN)</label>
+              <input type="number" id="cfg_aff_min_withdraw" min="0"/>
+            </div>
+            <div class="form-row">
+              <label>Comissão — Avulso (%)</label>
+              <input type="number" id="cfg_aff_rate_avulso" min="0" max="100"/>
+            </div>
+            <div class="form-row">
+              <label>Comissão — Starter (%)</label>
+              <input type="number" id="cfg_aff_rate_starter" min="0" max="100"/>
+            </div>
+            <div class="form-row">
+              <label>Comissão — Básico (%)</label>
+              <input type="number" id="cfg_aff_rate_basico" min="0" max="100"/>
+            </div>
+            <div class="form-row">
+              <label>Comissão — Pro (%)</label>
+              <input type="number" id="cfg_aff_rate_pro" min="0" max="100"/>
+            </div>
+            <div class="form-row">
+              <label>Comissão — Empresa (%)</label>
+              <input type="number" id="cfg_aff_rate_empresa" min="0" max="100"/>
+            </div>
+            <div class="form-row">
+              <label>Bónus extra — Papelaria (p.p.)</label>
+              <input type="number" id="cfg_aff_bonus_papelaria" min="0" max="100"/>
+            </div>
+            <div class="form-row">
+              <label>Bónus extra — Cyber Café (p.p.)</label>
+              <input type="number" id="cfg_aff_bonus_cyber" min="0" max="100"/>
+            </div>
+            <div class="form-row">
+              <label>Bónus extra — Universidade (p.p.)</label>
+              <input type="number" id="cfg_aff_bonus_universidade" min="0" max="100"/>
+            </div>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem"
+              onclick="adminApp.saveAffiliateSettings()">💾 Guardar Programa de Afiliados</button>
+          </form>
+        </div>
+
+        <div class="settings-card">
+
           <h3>📦 Preços dos Pacotes</h3>
           <form id="pricingForm">
             <div class="form-row">
