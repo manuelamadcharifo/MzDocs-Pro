@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 180" width="360" height="180">
+  <g transform="matrix(0.23008, 0, 0, 0.23008, 65.231644, 84.868248)" style="">
+    <rect x="125" y="18" width="56" height="74" rx="9" ry="9" fill="none" stroke="#1a1a1a" stroke-width="3.5"/>
+    <polyline points="159,18 181,18 181,40 159,40" fill="none" stroke="#1a1a1a" stroke-width="3.5" stroke-linejoin="round"/>
+    <line x1="136" y1="58" x2="170" y2="58" stroke="#1a1a1a" stroke-width="2.8" stroke-linecap="round"/>
+    <line x1="136" y1="68" x2="170" y2="68" stroke="#1a1a1a" stroke-width="2.8" stroke-linecap="round"/>
+    <line x1="136" y1="78" x2="162" y2="78" stroke="#1a1a1a" stroke-width="2.8" stroke-linecap="round"/>
+    <g transform="matrix(1, 0, 0, 1, 188, 28)">
+      <line x1="0" y1="-11" x2="0" y2="11" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="-11" y1="0" x2="11" y2="0" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="-6" y1="-6" x2="6" y2="6" stroke="#1a1a1a" stroke-width="1" stroke-linecap="round"/>
+      <line x1="6" y1="-6" x2="-6" y2="6" stroke="#1a1a1a" stroke-width="1" stroke-linecap="round"/>
+      <circle cx="14" cy="-9" r="2" fill="#1a1a1a"/>
+    </g>
+  </g>
+  <g style="" transform="matrix(0.454079, 0, 0, 0.454079, 91.204086, 35.362633)">
+    <path d="M 39.253 152.948 C 134.682 96.125 226.527 85.975 314.798 122.505" fill="none" stroke-width="3.5" stroke-linecap="round" style="" stroke="#6DC04B"/>
+    <g transform="matrix(1, 0, 0, 1, 0.832787, -4.996724)">
+      <text x="50" y="155" font-family="'Arial Black', 'Arial', sans-serif" font-size="46" font-weight="900" fill="#6DC04B" letter-spacing="-1" style="white-space: pre;">Mz</text>
+      <text x="114.187" y="155" font-family="'Arial Black', 'Arial', sans-serif" font-size="46" font-weight="900" fill="#1a1a1a" letter-spacing="-1" style="white-space: pre; font-size: 46px;">Docs Pro</text>
+    </g>
+  </g>
+</svg>
