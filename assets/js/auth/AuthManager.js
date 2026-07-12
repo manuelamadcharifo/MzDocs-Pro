@@ -147,8 +147,29 @@ export class AuthManager {
   async signUp(phone, email, password, fullName = '') {
     console.log('[AuthManager] signUp: A iniciar criação de conta…', { email, phone });
 
-    // Capturar ref_code do link de afiliado se existir
-    const refCode = sessionStorage.getItem('mz_ref') || null;
+    // Capturar ref_code do link de afiliado se existir.
+    // CORRIGIDO: antes só se lia sessionStorage.getItem('mz_ref'), que é
+    // apagado quando o utilizador fecha o separador/app. Como o fluxo
+    // típico em telemóvel é clicar num link partilhado (WhatsApp/Facebook),
+    // navegar, fechar, e só depois voltar para criar conta, a sessão de
+    // navegador raramente sobrevive até ao registo — por isso NENHUM
+    // afiliado via link aparecia como "Registado" no painel, apesar dos
+    // cliques serem contados correctamente. Agora lê-se primeiro o valor
+    // persistente em localStorage (com janela de atribuição de 30 dias,
+    // igual à validade do crédito de boas-vindas), com sessionStorage como
+    // último recurso para compatibilidade.
+    const REF_ATTRIBUTION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+    let refCode = null;
+    try {
+      const storedRef = localStorage.getItem('mz_ref');
+      const storedTs  = parseInt(localStorage.getItem('mz_ref_ts') || '0', 10);
+      if (storedRef && storedTs && (Date.now() - storedTs) <= REF_ATTRIBUTION_WINDOW_MS) {
+        refCode = storedRef;
+      }
+    } catch (_) {}
+    if (!refCode) {
+      try { refCode = sessionStorage.getItem('mz_ref') || null; } catch (_) {}
+    }
 
     // NOVO (Fase 4 — Funil/CRM): enviar o visitor_id anónimo (o mesmo que o
     // MarketingTracker já usa desde a Fase 1) para o backend gravar em
