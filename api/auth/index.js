@@ -191,8 +191,16 @@ async function handleSignup(req, res) {
     };
 
     // Verificar link de afiliado
-    if (ref_code && typeof ref_code === 'string' && /^MZ-[A-Z0-9]{6}$/.test(ref_code)) {
-      const affProfile = await selectOne('profiles', 'ref_code', ref_code, 'id,is_affiliate').catch(() => null);
+    // CORRIGIDO: esta validação exigia o formato antigo "MZ-XXXXXX" (com
+    // hífen, 6 caracteres). Os códigos reais gerados em continueRegister()
+    // (api/misc.js) são "3 letras do nome + 5-6 dígitos", ex: "MAN77831" —
+    // nunca correspondiam a este regex. Resultado: TODOS os registos feitos
+    // através de um link de afiliado real ficavam silenciosamente sem
+    // referred_by gravado, para qualquer afiliado, sempre — nunca gerava
+    // comissão nem bónus de registo, sem erro nenhum a indicar a causa.
+    const refCodeNormalized = (typeof ref_code === 'string' ? ref_code.trim().toUpperCase() : '');
+    if (refCodeNormalized && /^[A-Z0-9]{4,20}$/.test(refCodeNormalized)) {
+      const affProfile = await selectOne('profiles', 'ref_code', refCodeNormalized, 'id,is_affiliate').catch(() => null);
       if (affProfile) profilePayload.referred_by = affProfile.id;
     }
 
