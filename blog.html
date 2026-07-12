@@ -81,14 +81,18 @@
 </head>
 <body>
 <header class="site-header">
-  <a class="site-logo" href="/"><div class="logo-badge">📄</div><span class="logo-text">MzDocs</span></a>
-  <a class="header-cta" href="/">Criar Documento →</a>
+  <a class="site-logo" href="/" data-track-link><img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:32px;height:auto;width:auto;display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div style="display:none;align-items:center;gap:8px">
+      <div class="logo-badge">📄</div>
+      <span class="logo-text">MzDocs</span>
+    </div></a>
+  <a class="header-cta" href="/" data-track-link>Criar Documento →</a>
 </header>
 
 <div class="hub-hero">
   <h1>Guias e Modelos de Documentos para Moçambique</h1>
   <p id="heroQuote" class="hero-quote">Carregando…</p>
-  <a class="hub-hero-cta" href="/">🚀 Gerar o Meu Documento Agora</a>
+  <a class="hub-hero-cta" href="/" data-track-link>🚀 Gerar o Meu Documento Agora</a>
   <div class="hub-stats">
     <div class="hub-stat"><div class="hub-stat-n">15+</div><div class="hub-stat-l">Guias práticos</div></div>
     <div class="hub-stat" id="docsStatWrap"><div class="hub-stat-n" id="docsStatN">…</div><div class="hub-stat-l" id="docsStatL">Documentos gerados</div></div>
@@ -102,7 +106,7 @@
     <span style="font-size:18px;color:var(--muted)">🔍</span>
     <input type="text" id="searchInput" placeholder="Pesquisar guias... ex: CV, requerimento, procuração" oninput="filterArticles(this.value)"/>
   </div>
-  <div class="no-results" id="noResults">😕 Nenhum guia encontrado. <a href="/" style="color:var(--blue)">Gere o documento directamente aqui.</a></div>
+  <div class="no-results" id="noResults">😕 Nenhum guia encontrado. <a href="/" style="color:var(--blue)" data-track-link>Gere o documento directamente aqui.</a></div>
 
   <!-- MAIS RECENTES (dinâmico, vindo da base de dados) -->
   <div class="cluster" id="recentCluster" style="display:none">
@@ -262,14 +266,14 @@
   <div class="cta-banner">
     <h2>Pronto para Gerar o Seu Documento?</h2>
     <p>Escolha o tipo, preencha os dados e receba o seu ficheiro em PDF ou Word em segundos.</p>
-    <a class="cta-banner-btn" href="/">🚀 Gerar Documento Grátis</a>
+    <a class="cta-banner-btn" href="/" data-track-link>🚀 Gerar Documento Grátis</a>
   </div>
 
 </div>
 
 <footer class="site-footer">
   <div>© 2026 MzDocs Pro — Documentos profissionais para Moçambique</div>
-  <div><a href="/">Início</a> · <a href="/templates.html">Templates</a> · <a href="/legal.html">Privacidade</a></div>
+  <div><a href="/" data-track-link>Início</a> · <a href="/templates.html">Templates</a> · <a href="/legal.html">Privacidade</a></div>
 </footer>
 <script>
 (function () {
@@ -492,6 +496,56 @@ function filterArticles(q){
 }
 
 loadRecent();
+</script>
+
+<!-- NOVO: atribuição de origem (blog/pesquisa orgânica/social) — esta
+     página é HTML estático, sem o MarketingTracker.js da SPA. Sem isto,
+     um leitor que chegasse aqui pelo Google e depois clicasse para a app
+     era sempre contado como "direct" no dashboard de Marketing. Mesma
+     lógica usada em api/_lib/blogTemplate.js: 1) descobre a origem
+     (?src= explícito > localStorage já existente > referrer de motor de
+     busca/rede social > "blog" por omissão); 2) grava na mesma
+     chave que o MarketingTracker usa (mzd_src); 3) por segurança (modo
+     privado / localStorage bloqueado), também reescreve os links de saída
+     marcados com data-track-link para incluir ?src=... -->
+<script>
+(function(){
+  try {
+    var SOURCE_KEY = 'mzd_src';
+    var stored = null;
+    try { stored = localStorage.getItem(SOURCE_KEY); } catch(_) {}
+
+    var qs = new URLSearchParams(window.location.search);
+    var explicit = qs.get('src');
+    var source = explicit || stored;
+
+    if (!source) {
+      var host = '';
+      try { host = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./,'') : ''; } catch(_) {}
+      if (/mzdocs\.co\.mz$/.test(host))        source = null;
+      else if (/google\./.test(host))          source = 'organic_google';
+      else if (/bing\./.test(host))            source = 'organic_bing';
+      else if (/yahoo\./.test(host))           source = 'organic_yahoo';
+      else if (/duckduckgo\./.test(host))      source = 'organic_duckduckgo';
+      else if (/baidu\./.test(host))           source = 'organic_baidu';
+      else if (/facebook\.|instagram\./.test(host)) source = 'social_facebook';
+      else if (/tiktok\./.test(host))          source = 'social_tiktok';
+      else if (/whatsapp\./.test(host))        source = 'social_whatsapp';
+      else                                     source = 'blog';
+    }
+
+    if (source) {
+      try { localStorage.setItem(SOURCE_KEY, source.slice(0, 50)); } catch(_) {}
+      document.querySelectorAll('a[data-track-link]').forEach(function(a){
+        try {
+          var u = new URL(a.getAttribute('href'), window.location.origin);
+          if (!u.searchParams.get('src')) u.searchParams.set('src', source);
+          a.setAttribute('href', u.pathname + u.search + u.hash);
+        } catch(_) {}
+      });
+    }
+  } catch(_) {}
+})();
 </script>
 </body>
 </html>
