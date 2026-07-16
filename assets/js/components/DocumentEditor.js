@@ -1193,6 +1193,12 @@ export class DocumentEditor {
     // Com setTimeout(0) o callback corre após o modal ser painted (micro-task).
     this._templateCss  = templateCss  || null;
     this._templateHtml = templateHtml || null;
+    // v40: snapshot do conteúdo/template tal como chegam, para ao fechar
+    // sabermos se houve mesmo uma alteração real gravada (ver close()) —
+    // o contador de edições do documento só deve ser gasto nesse caso,
+    // nunca só por abrir e fechar o editor sem mexer em nada.
+    this._originalContent      = content;
+    this._originalTemplateHtml = templateHtml || null;
     // Guardar historyId para actualizar o histórico ao fechar (FIX 3)
     this._historyId = window.documentController?.docModel?.formData?._historyId
                    || window.docController?.docModel?.formData?._historyId
@@ -1247,6 +1253,14 @@ export class DocumentEditor {
       }
     }
 
+    // v40: só conta como "edição real" se o conteúdo final (ou o template
+    // editado) for de facto diferente do que estava quando o editor abriu.
+    // Isto é o que decide se o contador de edições do documento é gasto —
+    // ver DocumentController.js → editor:closed.
+    const contentChanged  = (finalContent || '').trim()  !== (this._originalContent || '').trim();
+    const templateChanged = (finalTemplate || '') !== (this._originalTemplateHtml || '');
+    const hasRealChange    = contentChanged || templateChanged;
+
     // Despachar evento para DocumentController guardar no histórico
     document.dispatchEvent(new CustomEvent('editor:closed', {
       detail: {
@@ -1255,6 +1269,7 @@ export class DocumentEditor {
         templateCss:  this._templateCss || null,
         serviceType:  this.serviceType,
         historyId:    this._historyId,
+        hasRealChange,
       },
     }));
 
