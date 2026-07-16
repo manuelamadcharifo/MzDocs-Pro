@@ -1,272 +1,1358 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt-MZ">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>{{TITLE}} — MzDocs Pro</title>
-  <meta name="description" content="{{META_DESCRIPTION}}"/>
-  <meta name="robots" content="index, follow"/>
-  <link rel="canonical" href="{{CANONICAL_URL}}"/>
-
-  <!-- Open Graph -->
-  <meta property="og:type"        content="article"/>
-  <meta property="og:title"       content="{{TITLE}} — MzDocs Pro"/>
-  <meta property="og:description" content="{{META_DESCRIPTION}}"/>
-  <meta property="og:url"         content="{{CANONICAL_URL}}"/>
-  <meta property="og:site_name"   content="MzDocs Pro"/>
-  <meta property="og:locale"      content="pt_MZ"/>
-
-  <!-- Schema.org Article -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Article",
-    "headline": "{{TITLE}}",
-    "description": "{{META_DESCRIPTION}}",
-    "url": "{{CANONICAL_URL}}",
-    "datePublished": "{{DATE_PUBLISHED}}",
-    "dateModified": "{{DATE_MODIFIED}}",
-    "publisher": {
-      "@type": "Organization",
-      "name": "MzDocs Pro",
-      "url": "https://mzdocs.co.mz"
-    },
-    "inLanguage": "pt-MZ"
-  }
-  </script>
-
+  <meta name="theme-color" content="#07101F"/>
+  <meta name="description" content="Galeria de Templates MzDocs Pro — Modelos criados pela comunidade moçambicana para CV, cartas, contratos e muito mais."/>
+  <title>Templates Comunitários — MzDocs Pro</title>
+  <link rel="manifest" href="manifest.json"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=Instrument+Serif:ital@0;1&display=swap"/>
-
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="assets/css/styles.css"/>
+  <link rel="stylesheet" href="assets/css/auth.css"/>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --ink: #07101F; --ink2: #0F1E3B; --muted: #64748B; --border: #E2E8F0; --surface: #F8FAFD;
-      --blue: #3B82F6; --blue-d: #1D4ED8; --green: #009A44;
-      --r: 14px; --max: 720px;
-    }
-    body {
-      font-family: 'Bricolage Grotesque', sans-serif;
-      background: var(--surface); color: var(--ink);
-      line-height: 1.7; font-size: 1rem;
-    }
+    /* ── Galeria de Templates ── */
+    .tpl-page { padding: 16px 14px 100px; max-width: 640px; margin: 0 auto; }
 
-    /* ── Header (barra fina fixa) ── */
-    .site-header {
-      background: var(--ink); padding: 0 20px; height: 56px;
-      display: flex; align-items: center; justify-content: space-between;
-      position: sticky; top: 0; z-index: 50;
-    }
-    .site-logo {
-      display: flex; align-items: center; gap: 10px;
-      text-decoration: none; color: #fff;
-    }
-    .logo-badge {
-      width: 30px; height: 30px; border-radius: 8px;
-      background: linear-gradient(135deg, var(--blue), var(--green));
-      display: flex; align-items: center; justify-content: center; font-size: 16px;
-    }
-    .logo-text { font-size: 17px; font-weight: 800; }
-    .logo-text span { color: #F59E0B; font-style: italic; }
-    .header-back {
-      color: rgba(255,255,255,.7); font-size: 13px; text-decoration: none;
-      display: flex; align-items: center; gap: 5px; transition: color .2s;
-    }
-    .header-back:hover { color: #fff; }
+    /* Topo */
+    .tpl-hero { text-align: center; padding: 24px 0 20px; }
+    .tpl-hero h1 { font-size: 22px; font-weight: 800; color: var(--ink); margin: 0 0 6px; }
+    .tpl-hero p  { font-size: 13.5px; color: var(--dim); margin: 0 0 18px; line-height: 1.5; }
 
-    /* ── Hero (faixa escura com título) ── */
-    .hero {
-      background: var(--ink2); padding: 48px 20px 36px; text-align: center;
-    }
-    .hero-eyebrow {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
-      color: rgba(255,255,255,.7); font-size: 11px; font-weight: 700;
-      letter-spacing: .8px; text-transform: uppercase; padding: 5px 12px;
-      border-radius: 20px; margin-bottom: 16px;
-    }
-    .hero h1 {
-      font-family: 'Instrument Serif', serif; color: #fff;
-      font-size: clamp(24px, 4.5vw, 36px); font-weight: 800; line-height: 1.2;
-      margin-bottom: 12px; max-width: 720px; margin-left: auto; margin-right: auto;
-    }
-    .hero-meta { color: rgba(255,255,255,.45); font-size: 13px; margin-top: 8px; }
+    /* Tabs de contexto */
+    .tpl-tabs { display: flex; gap: 6px; margin-bottom: 18px; background: var(--surface); border-radius: 12px; padding: 4px; }
+    .tpl-tab  { flex: 1; padding: 8px 10px; border: none; background: none; font-family: inherit; font-size: 12px; font-weight: 700; color: var(--dim); border-radius: 9px; cursor: pointer; transition: var(--t); text-align: center; }
+    .tpl-tab.active { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
 
-    @media (max-width: 480px) { .hero { padding: 32px 16px 28px; } }
+    /* Filtros tipo */
+    .tpl-type-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 14px; scrollbar-width: none; }
+    .tpl-type-row::-webkit-scrollbar { display: none; }
+    .tpl-type-btn { flex-shrink: 0; padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--white); color: var(--dim); font-family: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: var(--t); white-space: nowrap; }
+    .tpl-type-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .tpl-type-btn[data-type="official"]   { border-color: #3B82F6; color: #3B82F6; }
+    .tpl-type-btn[data-type="official"].active   { background: #3B82F6; color: #fff; }
+    .tpl-type-btn[data-type="community"] { border-color: #10B981; color: #10B981; }
+    .tpl-type-btn[data-type="community"].active { background: #10B981; color: #fff; }
+    .tpl-type-btn[data-type="premium"]   { border-color: #F59E0B; color: #F59E0B; }
+    .tpl-type-btn[data-type="premium"].active   { background: #F59E0B; color: #fff; }
+    .tpl-type-btn[data-pricing="free"].active { background: #10B981; color: #fff; border-color: #10B981; }
+    .tpl-type-btn[data-pricing="paid"].active { background: #F59E0B; color: #fff; border-color: #F59E0B; }
 
+    /* Ordenação */
+    .tpl-sort { display: flex; gap: 6px; margin-bottom: 16px; align-items: center; }
+    .tpl-sort label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .8px; white-space: nowrap; }
+    .tpl-sort select { font-size: 12px; border: 1.5px solid var(--border); border-radius: 8px; padding: 5px 10px; background: var(--white); font-family: inherit; color: var(--ink); cursor: pointer; }
 
-    /* ── Breadcrumb ── */
-    .breadcrumb {
-      max-width: var(--max); margin: 0 auto;
-      padding: 14px 20px 0; font-size: 13px; color: var(--muted);
-    }
-    .breadcrumb a { color: var(--blue); text-decoration: none; }
-    .breadcrumb a:hover { text-decoration: underline; }
-    .breadcrumb span { margin: 0 6px; }
+    /* Grid */
+    .tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-    /* ── Artigo ── */
-    article {
-      max-width: var(--max); margin: 0 auto;
-      padding: 24px 20px 60px;
+    /* Cartão */
+    .tpl-card { background: #fff; border-radius: 14px; border: 1.5px solid var(--border); overflow: hidden; cursor: pointer; transition: var(--t); position: relative; }
+    .tpl-card:active { transform: scale(.98); }
+    .tpl-card-thumb { width: 100%; aspect-ratio: 4/3; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 36px; position: relative; overflow: hidden; }
+    .tpl-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .tpl-card-thumb .tpl-no-thumb { font-size: 32px; }
+    /* CORRIGIDO: a escala anterior (0.357 fixo) não correspondia à largura
+       real da página A4 renderizada (210mm = 793.7px a 96dpi, valor fixo
+       independentemente da tela, pois o iframe tem o seu próprio contexto
+       de unidades). O card mostrava maioritariamente espaço vazio do topo
+       da margem. Agora a largura do iframe é fixada em 793.7px e escalada
+       para a largura real do card via CSS puro (container query simulada
+       com %), garantindo que a largura do "papel" sempre encaixe
+       exactamente na largura do card, revelando o topo do documento. */
+    /* CORRIGIDO: substitui o <iframe srcdoc> construído à mão pelo motor
+       real renderA4Pages (ver _mountCardPreviews) — este mount point fica
+       posicionado de forma absoluta a cobrir todo o .tpl-card-thumb, com
+       overflow:hidden para recortar a altura e mostrar apenas o topo da
+       primeira página, como miniatura/capa do documento. */
+    .tpl-card-thumb-mount {
+      position: absolute; inset: 0; overflow: hidden; pointer-events: none;
     }
-    .article-body h2 {
-      font-size: 1.35rem; font-weight: 800; margin: 2rem 0 .75rem;
-      color: var(--ink); border-left: 4px solid var(--blue);
-      padding-left: 12px;
-    }
-    .article-body h3 {
-      font-size: 1.1rem; font-weight: 700; margin: 1.5rem 0 .5rem; color: var(--ink);
-    }
-    .article-body p { margin-bottom: 1rem; color: #1e293b; }
-    .article-body ul, .article-body ol {
-      margin: .75rem 0 1rem 1.5rem;
-    }
-    .article-body li { margin-bottom: .4rem; }
-    .article-body strong { font-weight: 700; }
-    .article-body em { font-style: italic; }
-    .article-body blockquote {
-      border-left: 4px solid var(--green); margin: 1.5rem 0;
-      padding: .75rem 1rem; background: #ECFDF5; border-radius: 0 8px 8px 0;
-      color: #065f46; font-style: italic;
-    }
+    .tpl-card-thumb-mount .a4-pages-outer { padding: 0; background: transparent; gap: 0; }
+    .tpl-card-thumb-mount .a4-page { max-width: none; box-shadow: none; border-radius: 0; }
+    .tpl-card-body { padding: 10px 11px 12px; }
+    .tpl-card-name { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 3px; line-height: 1.3; }
+    .tpl-card-sub  { font-size: 11.5px; color: var(--dim); line-height: 1.4; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .tpl-card-meta { display: flex; align-items: center; justify-content: space-between; }
+    .tpl-card-uses { font-size: 11px; color: var(--muted); }
+    .tpl-card-rating { font-size: 11px; color: var(--ink); font-weight: 700; }
 
-    /* ── CTA box ── */
-    .cta-box {
-      background: linear-gradient(135deg, #EFF6FF, #DBEAFE);
-      border: 2px solid #BFDBFE; border-radius: var(--r);
-      padding: 24px; margin: 2.5rem 0; text-align: center;
-    }
-    .cta-box h3 { font-size: 1.2rem; margin-bottom: 8px; color: var(--blue-d); }
-    .cta-box p  { color: #1e40af; margin-bottom: 16px; font-size: .95rem; }
-    .cta-btn {
-      display: inline-block; background: var(--blue-d); color: #fff;
-      text-decoration: none; padding: 12px 28px; border-radius: 10px;
-      font-weight: 700; font-size: .95rem; transition: background .2s;
-    }
-    .cta-btn:hover { background: #1e3a8a; }
+    /* Badges */
+    .tpl-badge { position: absolute; top: 7px; left: 7px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 800; letter-spacing: .3px; }
+    .tpl-badge-official  { background: #3B82F6; color: #fff; }
+    .tpl-badge-community { background: #10B981; color: #fff; }
+    .tpl-badge-premium   { background: #F59E0B; color: #fff; }
+    .tpl-badge-private   { background: #6B7280; color: #fff; }
+    .tpl-badge-featured  { position: absolute; top: 7px; right: 7px; background: #EF4444; color: #fff; padding: 2px 7px; border-radius: 20px; font-size: 10px; font-weight: 800; }
 
-    /* ── Footer ── */
-    .site-footer {
-      background: var(--ink); color: rgba(255,255,255,.5);
-      padding: 24px 20px; text-align: center; font-size: 13px; line-height: 2;
-    }
-    .site-footer a { color: rgba(255,255,255,.6); text-decoration: none; }
-    .site-footer a:hover { color: #fff; }
+    /* Save button on card */
+    .tpl-save-btn { position: absolute; bottom: 8px; right: 8px; background: none; border: none; font-size: 18px; cursor: pointer; opacity: .55; transition: opacity .15s; padding: 2px; }
+    .tpl-save-btn.saved { opacity: 1; }
+    .tpl-save-btn:hover { opacity: 1; }
 
-    /* ── Responsive ── */
-    @media (max-width: 480px) {
-      article { padding: 16px 16px 48px; }
+    /* CTA submeter */
+    .tpl-submit-cta { background: linear-gradient(135deg,#07101F,#1a2a3a); border-radius: 16px; padding: 20px 16px; margin-bottom: 20px; text-align: center; color: #fff; }
+    .tpl-submit-cta h3 { font-size: 16px; font-weight: 800; margin: 0 0 6px; }
+    .tpl-submit-cta p  { font-size: 12.5px; color: rgba(255,255,255,.65); margin: 0 0 14px; line-height: 1.5; }
+    .btn-tpl-submit { background: #009A44; color: #fff; border: none; border-radius: 10px; padding: 11px 20px; font-size: 13px; font-weight: 800; cursor: pointer; width: 100%; font-family: inherit; transition: background .15s; }
+    .btn-tpl-submit:hover { background: #007a35; }
+
+    /* Empty state */
+    .tpl-empty { text-align: center; padding: 48px 16px; color: var(--dim); }
+    .tpl-empty-ico { font-size: 48px; margin-bottom: 12px; }
+    .tpl-empty h3  { font-size: 16px; font-weight: 700; margin: 0 0 8px; }
+    .tpl-empty p   { font-size: 13px; }
+
+    /* Skeleton loader */
+    .tpl-skeleton { background: linear-gradient(90deg, var(--surface) 25%, #e8e8e8 50%, var(--surface) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 14px; }
+    .tpl-skeleton-card { height: 200px; }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+    /* Modal detalhe do template */
+    .tpl-detail-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200; }
+    .tpl-detail-overlay.open { display: flex; align-items: flex-end; }
+    .tpl-detail-sheet { background: #fff; border-radius: 20px 20px 0 0; width: 100%; max-height: 92vh; overflow-y: auto; padding: 0 0 32px; }
+    .tpl-detail-drag  { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 16px; }
+    .tpl-detail-preview { width: 100%; aspect-ratio: 16/9; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 48px; overflow: hidden; position: relative; }
+    .tpl-detail-preview img { width: 100%; height: 100%; object-fit: cover; }
+    /* CORRIGIDO: o preview real do documento agora usa renderA4Pages (mesmo
+       motor de TemplatePicker.js/Views.js) em vez de um <iframe srcdoc>
+       construído à mão — este mount point ocupa toda a área disponível,
+       com overflow:hidden para recortar a altura e mostrar apenas o topo
+       da primeira página. */
+    .tpl-detail-preview-mount { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    .tpl-detail-preview-mount .a4-pages-outer { padding: 0; background: transparent; gap: 0; }
+    .tpl-detail-preview-mount .a4-page { max-width: none; box-shadow: none; border-radius: 0; }
+    .tpl-preview-maximize {
+      position: absolute; bottom: 8px; right: 8px; z-index: 2;
+      background: rgba(15,23,42,.82); color: #fff; border: none; border-radius: 8px;
+      font-size: 11.5px; font-weight: 700; padding: 6px 10px; cursor: pointer;
+      display: flex; align-items: center; gap: 4px; font-family: inherit;
     }
+    .tpl-preview-maximize:hover { background: rgba(15,23,42,.95); }
+    /* Modal de pré-visualização em tela cheia — agora mostra a(s) página(s)
+       completa(s) e roláveis via renderA4Pages, em vez de um único iframe
+       de altura fixa. */
+    .tpl-fullscreen-overlay { display: none; position: fixed; inset: 0; background: #0f172a; z-index: 9999; flex-direction: column; }
+    .tpl-fullscreen-overlay.open { display: flex; }
+    .tpl-fullscreen-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #1e293b; color: #fff; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+    .tpl-fullscreen-bar button { background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 4px 8px; }
+    .tpl-fullscreen-mount { flex: 1; width: 100%; overflow-y: auto; }
+    .tpl-detail-body { padding: 16px 16px 0; }
+    .tpl-detail-title { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
+    .tpl-detail-desc  { font-size: 13px; color: var(--dim); line-height: 1.55; margin: 0 0 14px; }
+    .tpl-detail-meta  { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .tpl-detail-stat  { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
+    .tpl-detail-tags  { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .tpl-detail-tag   { background: var(--surface); color: var(--dim); border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 600; }
+    .tpl-detail-actions { display: flex; gap: 8px; padding: 0 16px; flex-direction: column; }
+    .btn-tpl-use  { background: var(--ink); color: #fff; border: none; border-radius: 12px; padding: 14px; font-size: 14px; font-weight: 800; cursor: pointer; font-family: inherit; }
+    .btn-tpl-save { background: var(--surface); color: var(--ink); border: 1.5px solid var(--border); border-radius: 12px; padding: 12px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .btn-tpl-share { background: #25D366; color: #fff; border: none; border-radius: 12px; padding: 12px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .btn-tpl-report { background: none; border: none; color: var(--muted); font-size: 11px; text-align: center; cursor: pointer; margin-top: 4px; font-family: inherit; }
+
+    /* Modal submeter */
+    .tpl-submit-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 300; }
+    .tpl-submit-overlay.open { display: flex; align-items: flex-end; }
+    .tpl-submit-sheet { background: #fff; border-radius: 20px 20px 0 0; width: 100%; max-height: 95vh; overflow-y: auto; padding: 0 0 40px; }
+    .tpl-submit-hdr { padding: 14px 16px 0; }
+    .tpl-submit-hdr h2 { font-size: 17px; font-weight: 800; margin: 0 0 4px; }
+    .tpl-submit-hdr p  { font-size: 12.5px; color: var(--dim); margin: 0 0 16px; }
+    .tpl-form { padding: 0 16px; display: flex; flex-direction: column; gap: 13px; }
+    .tpl-field label { display: block; font-size: 11.5px; font-weight: 700; color: var(--dim); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px; }
+    .tpl-field input, .tpl-field textarea, .tpl-field select {
+      width: 100%; box-sizing: border-box; border: 1.5px solid var(--border);
+      border-radius: 10px; padding: 10px 12px; font-size: 13.5px;
+      font-family: inherit; color: var(--ink); background: var(--white);
+      transition: border-color .15s;
+    }
+    .tpl-field input:focus, .tpl-field textarea:focus, .tpl-field select:focus {
+      outline: none; border-color: var(--blue);
+    }
+    .tpl-field textarea { resize: vertical; min-height: 80px; }
+    .tpl-photo-hint { font-size: 12px; color: var(--dim); line-height: 1.5; margin-bottom: 8px; }
+    .tpl-photo-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tpl-photo-btn {
+      border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 8px;
+      font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
+      background: var(--white); color: var(--ink); transition: var(--t);
+    }
+    .tpl-photo-btn:hover { border-color: var(--blue); background: #EFF6FF; }
+    .tpl-photo-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .tpl-photo-status { margin-top: 8px; font-size: 12.5px; font-weight: 600; padding: 8px 10px; border-radius: 8px; }
+    .tpl-photo-status.loading { background: #EFF6FF; color: #1d4ed8; }
+    .tpl-photo-status.success { background: #ECFDF5; color: #047857; }
+    .tpl-photo-status.error   { background: #FEF2F2; color: #B91C1C; }
+    .tpl-type-radios { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tpl-type-radio { border: 2px solid var(--border); border-radius: 10px; padding: 10px; cursor: pointer; text-align: center; transition: var(--t); }
+    .tpl-type-radio.selected { border-color: var(--blue); background: #EFF6FF; }
+    .tpl-type-radio h4 { font-size: 13px; font-weight: 700; margin: 0 0 3px; }
+    .tpl-type-radio p  { font-size: 11px; color: var(--dim); margin: 0; }
+    .btn-tpl-submit-form { background: var(--ink); color: #fff; border: none; border-radius: 12px; padding: 14px; font-size: 14px; font-weight: 800; cursor: pointer; font-family: inherit; margin-top: 4px; }
+    .btn-tpl-cancel { background: var(--surface); color: var(--dim); border: none; border-radius: 12px; padding: 12px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+
+    /* Private tab extra info */
+    .tpl-private-info { background: #F1F5F9; border-radius: 10px; padding: 12px 14px; margin-top: -4px; }
+    .tpl-private-info p { font-size: 12px; color: var(--dim); margin: 0; line-height: 1.5; }
+
+    /* Share link box */
+    .tpl-share-box { display: flex; gap: 8px; margin-top: 8px; }
+    .tpl-share-box input { flex: 1; border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; font-family: inherit; color: var(--dim); background: var(--surface); }
+    .tpl-share-box button { background: var(--ink); color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
+
+    /* Meus templates tab extras */
+    .tpl-mine-card { background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px; display: flex; gap: 12px; align-items: flex-start; }
+    .tpl-mine-ico  { font-size: 28px; flex-shrink: 0; }
+    .tpl-mine-info { flex: 1; min-width: 0; }
+    .tpl-mine-name { font-size: 13.5px; font-weight: 700; color: var(--ink); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tpl-mine-meta { font-size: 11.5px; color: var(--dim); margin-bottom: 6px; }
+    .tpl-mine-status { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 800; }
+    .tpl-mine-status.pending  { background: #FEF3C7; color: #92400E; }
+    .tpl-mine-status.approved { background: #D1FAE5; color: #065F46; }
+    .tpl-mine-status.rejected { background: #FEE2E2; color: #991B1B; }
+    .tpl-mine-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .tpl-mine-btn { font-size: 11px; font-weight: 700; padding: 5px 11px; border-radius: 8px; border: 1.5px solid var(--border); background: none; color: var(--dim); cursor: pointer; font-family: inherit; }
+    .tpl-mine-btn.danger { color: #EF4444; border-color: #FCA5A5; }
+
+    /* Load more */
+    .btn-load-more { width: 100%; padding: 12px; background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; font-size: 13px; font-weight: 700; color: var(--dim); cursor: pointer; font-family: inherit; margin-top: 12px; }
   </style>
 </head>
 <body>
 
-<header class="site-header">
-  <a class="site-logo" href="/" data-track-link>
-    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-    <div style="display:none;align-items:center;gap:8px">
-      <div class="logo-badge">📄</div>
-      <span class="logo-text">MzDocs<span>Pro</span></span>
+<!-- HEADER (reutiliza o mesmo do index.html) -->
+<header class="hdr">
+  <div class="hdr-l">
+    <a href="/" style="display:flex;align-items:center;text-decoration:none;gap:6px;">
+      <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="height:32px;width:auto;"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div style="display:none;align-items:center;gap:6px">
+        <div class="logo-badge">📄</div>
+        <div class="logo-text"><span class="lt-name">MzDocs</span><span class="lt-pro">Pro</span></div>
+      </div>
+    </a>
+  </div>
+  <div class="hdr-r">
+    <button class="btn-auth" id="authBtn">🔐 Entrar</button>
+    <div class="user-area" id="userArea">
+      <div class="user-menu" id="userMenu"></div>
+      <button class="btn-icon" id="btnHistory" title="Arquivo">📁</button>
+      <div class="credit-pill" id="creditPill">
+        <span class="cp-icon">⚡</span><span class="cp-val" id="creditVal">—</span>
+      </div>
     </div>
-  </a>
-  <a class="header-back" href="/" data-track-link>← Voltar ao início</a>
+  </div>
 </header>
 
-<section class="hero">
-  <div class="hero-eyebrow">✍️ Blog &amp; Guias</div>
-  <h1>{{TITLE}}</h1>
-  <div class="hero-meta">Publicado em {{DATE_DISPLAY}} · MzDocs Pro</div>
-</section>
+<div class="tpl-page">
 
-<div class="breadcrumb">
-  <a href="/" data-track-link>Início</a><span>›</span>
-  <a href="/pages/">Blog</a><span>›</span>
-  {{TITLE}}
+  <!-- HERO -->
+  <div class="tpl-hero">
+    <h1>🎨 Templates Comunitários</h1>
+    <p>Modelos criados pela comunidade moçambicana.<br/>Encontre, use e partilhe os melhores.</p>
+  </div>
+
+  <!-- TABS: Galeria / Os Meus / Guardados -->
+  <div class="tpl-tabs" id="tplTabs">
+    <button class="tpl-tab active" data-tab="gallery">🏪 Galeria</button>
+    <button class="tpl-tab" data-tab="mine">✏️ Os Meus</button>
+    <button class="tpl-tab" data-tab="saved">🔖 Guardados</button>
+  </div>
+
+  <!-- ═══════ GALERIA ═══════ -->
+  <div id="tabGallery">
+
+    <!-- Filtros de tipo -->
+    <div class="tpl-type-row" id="typeFilters">
+      <button class="tpl-type-btn active" data-type="">✦ Todos</button>
+      <button class="tpl-type-btn" data-type="official">🏛️ Oficiais</button>
+      <button class="tpl-type-btn" data-type="community">👥 Comunidade</button>
+      <button class="tpl-type-btn" data-type="premium">⭐ Premium</button>
+    </div>
+
+    <!-- v39: mini filtro Grátis/Pagos (o preço é sempre em créditos) -->
+    <div class="tpl-type-row" id="pricingFilters" style="margin-top:6px">
+      <button class="tpl-type-btn active" data-pricing="">Todos os preços</button>
+      <button class="tpl-type-btn" data-pricing="free" style="border-color:#10B981;color:#10B981">🆓 Grátis</button>
+      <button class="tpl-type-btn" data-pricing="paid" style="border-color:#F59E0B;color:#F59E0B">💰 Pagos</button>
+    </div>
+
+    <!-- Ordenação -->
+    <div class="tpl-sort">
+      <label>Ordenar:</label>
+      <select id="sortSelect">
+        <option value="featured">Destacados</option>
+        <option value="popular">Mais Usados</option>
+        <option value="newest">Mais Recentes</option>
+        <option value="rating">Melhor Avaliação</option>
+      </select>
+    </div>
+
+    <!-- Grade -->
+    <div class="tpl-grid" id="tplGrid">
+      <!-- Skeleton loaders -->
+      <div class="tpl-skeleton tpl-skeleton-card"></div>
+      <div class="tpl-skeleton tpl-skeleton-card"></div>
+      <div class="tpl-skeleton tpl-skeleton-card"></div>
+      <div class="tpl-skeleton tpl-skeleton-card"></div>
+    </div>
+    <button class="btn-load-more" id="btnLoadMore" style="display:none">Ver mais templates</button>
+
+    <!-- CTA submeter -->
+    <div class="tpl-submit-cta" style="margin-top:24px">
+      <h3>🚀 Partilhe o seu modelo</h3>
+      <p>Criou um template incrível? Submeta para a galeria e ajude outros moçambicanos.</p>
+      <button class="btn-tpl-submit" id="btnOpenSubmit">+ Submeter Template</button>
+    </div>
+  </div>
+
+  <!-- ═══════ OS MEUS ═══════ -->
+  <div id="tabMine" style="display:none">
+    <div id="mineList"></div>
+    <button class="btn-tpl-submit" id="btnOpenSubmitMine" style="margin-top:16px;width:100%;padding:13px;background:var(--ink);color:#fff;border:none;border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">
+      + Criar Novo Template
+    </button>
+  </div>
+
+  <!-- ═══════ GUARDADOS ═══════ -->
+  <div id="tabSaved" style="display:none">
+    <div id="savedList"></div>
+  </div>
+
+</div><!-- /.tpl-page -->
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- MODAL: DETALHE DO TEMPLATE                                         -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="tpl-detail-overlay" id="detailOverlay">
+  <div class="tpl-detail-sheet" id="detailSheet">
+    <div class="tpl-detail-drag"></div>
+    <div class="tpl-detail-preview" id="detailPreview"></div>
+    <div class="tpl-detail-body">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px">
+        <div class="tpl-detail-title" id="detailTitle"></div>
+        <button id="detailClose" style="background:none;border:none;font-size:20px;cursor:pointer;flex-shrink:0;padding:0;color:var(--dim)">✕</button>
+      </div>
+      <div class="tpl-detail-desc" id="detailDesc"></div>
+      <div class="tpl-detail-meta" id="detailMeta"></div>
+      <div class="tpl-detail-tags" id="detailTags"></div>
+      <!-- Share link (privados) -->
+      <div id="detailShareSection" style="display:none;margin-bottom:14px">
+        <div style="font-size:11.5px;font-weight:700;color:var(--dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">🔗 Link de Partilha</div>
+        <div class="tpl-share-box">
+          <input type="text" id="detailShareLink" readonly/>
+          <button onclick="copyShareLink()">Copiar</button>
+        </div>
+        <button onclick="regenerateToken()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;margin-top:4px;font-family:inherit">🔄 Gerar novo link</button>
+      </div>
+    </div>
+    <div class="tpl-detail-actions">
+      <button class="btn-tpl-use" id="btnTplUse">✦ Usar este Template</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn-tpl-save" id="btnTplSave" style="flex:1">🔖 Guardar</button>
+        <button class="btn-tpl-share" id="btnTplShareWa" style="flex:1">💬 Partilhar</button>
+      </div>
+      <button class="btn-tpl-report" id="btnTplReport">⚑ Reportar template inadequado</button>
+    </div>
+  </div>
 </div>
 
-<article>
-  <div class="article-body">
-    {{CONTENT_HTML}}
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- MODAL: SUBMETER TEMPLATE                                           -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="tpl-submit-overlay" id="submitOverlay">
+  <div class="tpl-submit-sheet">
+    <div class="tpl-detail-drag"></div>
+    <div class="tpl-submit-hdr">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2>🎨 Submeter Template</h2>
+        <button id="submitClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--dim)">✕</button>
+      </div>
+      <p>Partilhe o seu modelo com a comunidade ou guarde-o de forma privada.</p>
+    </div>
+    <div class="tpl-form" id="submitForm">
+
+      <div class="tpl-field">
+        <label>Tipo de Template</label>
+        <div class="tpl-type-radios" id="submitTypeRadios">
+          <div class="tpl-type-radio selected" data-val="community" onclick="selectType('community',this)">
+            <h4>👥 Comunidade</h4>
+            <p>Público, sujeito a aprovação</p>
+          </div>
+          <div class="tpl-type-radio" data-val="private" onclick="selectType('private',this)">
+            <h4>🔒 Privado</h4>
+            <p>Só você acede (ou link)</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="tpl-private-info" id="privateInfo" style="display:none">
+        <p>🔒 Templates privados são aprovados imediatamente e só você consegue ver. Pode partilhar via link secreto.</p>
+      </div>
+
+      <div class="tpl-field">
+        <label>Tipo de Documento *</label>
+        <select id="sfService">
+          <option value="">— Seleccione —</option>
+          <option value="cv">Currículo (CV)</option>
+          <option value="carta">Carta Formal</option>
+          <option value="trabalho">Trabalho Escolar</option>
+          <option value="arrendamento">Contrato de Arrendamento</option>
+          <option value="procuracao">Procuração</option>
+          <option value="requerimento">Requerimento</option>
+          <option value="residencia">Declaração de Residência</option>
+          <option value="recibo">Recibo de Pagamento</option>
+          <option value="recomendacao">Carta de Recomendação</option>
+          <option value="planonegocio">Plano de Negócios</option>
+          <option value="prestacao">Contrato de Prestação</option>
+          <option value="outro">Outro</option>
+        </select>
+      </div>
+
+      <!-- CORRIGIDO: faltava aqui a opção de tirar foto de um modelo físico
+           para gerar o HTML/CSS automaticamente — já existia em "Escolher
+           Modelo" (TemplatePicker.js → /api/extract-template), mas nunca
+           tinha sido ligada ao formulário de submissão de templates da
+           galeria, que só aceitava CSS/HTML escritos manualmente. -->
+      <div class="tpl-field">
+        <label>Tem uma foto do modelo? (opcional)</label>
+        <div class="tpl-photo-hint">📷 Tire uma foto ou carregue uma imagem de um documento já formatado — a IA tenta recriar o layout em HTML/CSS automaticamente, preenchendo os campos abaixo.</div>
+        <div class="tpl-photo-buttons">
+          <button type="button" class="tpl-photo-btn" id="btnSfPhotoCamera">📸 Tirar Foto</button>
+          <button type="button" class="tpl-photo-btn" id="btnSfPhotoFile">📁 Escolher Ficheiro</button>
+        </div>
+        <input type="file" id="sfPhotoInputCamera" accept="image/*" capture="environment" style="display:none"/>
+        <input type="file" id="sfPhotoInputFile" accept="image/*" style="display:none"/>
+        <div id="sfPhotoStatus" class="tpl-photo-status" style="display:none"></div>
+      </div>
+
+      <div class="tpl-field">
+        <label>Nome do Template *</label>
+        <input type="text" id="sfName" placeholder="Ex: CV Moderno Azul para TI" maxlength="100"/>
+      </div>
+
+      <div class="tpl-field">
+        <label>Descrição</label>
+        <textarea id="sfDesc" placeholder="Descreva o estilo, para quem é ideal, o que inclui…" maxlength="500"></textarea>
+      </div>
+
+      <div class="tpl-field">
+        <label>Tags (separadas por vírgula)</label>
+        <input type="text" id="sfTags" placeholder="moderno, azul, profissional, TI"/>
+      </div>
+
+      <div class="tpl-field">
+        <label>URL da Miniatura (opcional)</label>
+        <input type="url" id="sfThumb" placeholder="https://…"/>
+      </div>
+
+      <div class="tpl-field">
+        <label>CSS / Estilos do Template *</label>
+        <textarea id="sfCss" style="min-height:120px;font-family:monospace;font-size:12px" placeholder="/* Cole aqui o CSS do seu template */&#10;.cv-header { font-size: 24px; color: #1D4ED8; }&#10;…"></textarea>
+      </div>
+
+      <div class="tpl-field">
+        <label>HTML do Template (opcional)</label>
+        <textarea id="sfHtml" style="min-height:80px;font-family:monospace;font-size:12px" placeholder="<!-- Estrutura HTML base do template (opcional) -->"></textarea>
+      </div>
+
+      <button class="btn-tpl-submit-form" id="btnSubmitForm">🚀 Submeter Template</button>
+      <button class="btn-tpl-cancel" id="btnCancelSubmit" onclick="closeSubmit()">Cancelar</button>
+    </div>
   </div>
+</div>
 
-  <!-- CTA integrado -->
-  <div class="cta-box">
-    <h3>📄 Crie o seu documento em segundos</h3>
-    <p>O MzDocs Pro usa IA para gerar documentos profissionais adaptados a Moçambique.<br/>CV, cartas, requerimentos e muito mais — sem complicação.</p>
-    <a class="cta-btn" href="/" data-track-link>Experimentar Grátis →</a>
+<!-- MODAIS PARTILHADOS (mesmos IDs que index.html) — esta página já carrega
+     o app.js completo (ver <script src="assets/js/app.js"> no fim), que já
+     cria o PaymentController/HistoryController/DocumentController e já liga
+     os botões 📁 (Arquivo) e ⚡ (créditos) do header. Sem esta marcação,
+     esses botões clicavam e não faziam absolutamente nada visível — os
+     controllers tentavam abrir #payOverlay/#historyOverlay/#resultOverlay,
+     que simplesmente não existiam nesta página. -->
+
+<!-- MODAL RESULTADO (necessário para "👁️ Ver" um documento do Arquivo) -->
+<div class="overlay" id="resultOverlay">
+  <div class="sheet tall" id="resultSheet">
+    <div class="pill"></div>
+    <div class="result-hdr">
+      <span class="res-ok">✅ Seu Documento está Pronto</span>
+      <span class="res-model" id="resModel"></span>
+      <button class="sh-x" id="resultClose">✕</button>
+    </div>
+    <div class="res-meta" id="resMeta"></div>
+    <div class="res-preview" id="resPreview"></div>
+    <div class="res-actions" id="resActions">
+      <button id="btnDl"        class="res-btn res-btn-primary">⬇️ Download</button>
+      <button id="btnCopy"      class="res-btn">📋 Copiar</button>
+      <button class="res-btn wa-btn" id="btnWaResult">💬 WhatsApp</button>
+      <button id="btnTemplate"  class="res-btn res-btn-purple">🎨 Modelo</button>
+      <button id="btnAcademic"  class="res-btn res-btn-green">📚 APA</button>
+      <button id="btnEdit"      class="res-btn res-btn-blue">✏️ Editar</button>
+    </div>
   </div>
-</article>
+</div>
 
-<footer class="site-footer">
-  <div>
-    © 2026 MzDocs Pro · Moçambique 🇲🇿
-    &nbsp;|&nbsp;<a href="/legal.html">Termos e Privacidade</a>
-    &nbsp;|&nbsp;<a href="/" data-track-link>Início</a>
+<!-- MODAL PAGAMENTO -->
+<div class="overlay" id="payOverlay">
+  <div class="sheet" id="paySheet">
+    <div class="pill"></div>
+    <div class="sheet-hdr">
+      <div><div class="sh-title" id="payTitle">Adquirir Créditos</div><div class="sh-sub" id="paySubtitle">Pagamento manual — M-Pesa, e-Mola ou mKesh via WhatsApp</div></div>
+      <button class="sh-x" id="payClose">✕</button>
+    </div>
+    <div id="avulsoSection" style="display:none;margin-bottom:16px;">
+      <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;">
+        <div style="font-size:13px;font-weight:700;color:#1D4ED8;margin-bottom:4px;">🚀 Acesso Avulso — Sem Conta</div>
+        <div style="font-size:13px;color:#1e40af;line-height:1.5;">3 documentos gerados por IA · válido 7 dias · sem conta permanente</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+          <span style="font-size:20px;font-weight:800;color:#1D4ED8;" id="pkgPriceAvulso">MZN 50</span>
+          <button class="pkg-avulso-btn" data-pkg="avulso"
+            style="padding:8px 18px;background:#1D4ED8;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
+            Pagar agora
+          </button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:14px 0 4px;">
+        <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+        <span style="font-size:12px;color:#94a3b8;font-weight:500;">ou crie conta e poupe mais</span>
+        <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+      </div>
+    </div>
+    <div class="pkg-grid">
+      <div class="pkg" data-pkg="starter">
+        <div class="pkg-name">Starter</div>
+        <div class="pkg-price" id="pkgPriceStarter">MZN 120</div>
+        <div class="pkg-cr" id="pkgCrStarter">10 créditos</div>
+        <div class="pkg-per" id="pkgPerStarter">MZN 12/doc</div>
+      </div>
+      <div class="pkg popular" data-pkg="basico">
+        <div class="pkg-badge">Popular</div>
+        <div class="pkg-name">Básico</div>
+        <div class="pkg-price" id="pkgPriceBasico">MZN 280</div>
+        <div class="pkg-cr" id="pkgCrBasico">25 créditos</div>
+        <div class="pkg-per" id="pkgPerBasico">MZN 11.2/doc</div>
+      </div>
+      <div class="pkg" data-pkg="pro">
+        <div class="pkg-name">Pro</div>
+        <div class="pkg-price" id="pkgPricePro">MZN 600</div>
+        <div class="pkg-cr" id="pkgCrPro">60 créditos</div>
+        <div class="pkg-per" id="pkgPerPro">MZN 10/doc</div>
+      </div>
+      <div class="pkg" data-pkg="empresa">
+        <div class="pkg-name">Empresa</div>
+        <div class="pkg-price" id="pkgPriceEmpresa">MZN 1500</div>
+        <div class="pkg-cr" id="pkgCrEmpresa">150 créditos</div>
+        <div class="pkg-per" id="pkgPerEmpresa">MZN 10/doc</div>
+      </div>
+    </div>
+    <div id="mpesaSection" style="display:none">
+      <div class="mp-hdr">
+        <div class="mp-logo">M</div>
+        <div><strong>Pagamento por Carteira Móvel</strong><p id="mpEnvLabel">Processado manualmente — M-Pesa, e-Mola ou mKesh</p></div>
+      </div>
+      <label class="field-lbl">Número de telemóvel (M-Pesa, e-Mola ou mKesh)</label>
+      <div class="phone-wrap">
+        <span>+258</span>
+        <input type="tel" id="phoneInput" placeholder="8X XXX XXXX" maxlength="9" inputmode="numeric"/>
+      </div>
+      <div class="pay-sum" id="paySummary"></div>
+      <button class="btn-pay" id="btnPay" disabled>Continuar</button>
+      <p class="mp-note" id="mpNote">⚠️ Pagamento processado manualmente: ao confirmar, será encaminhado para o WhatsApp para enviar o comprovativo.</p>
+      <div id="payReceiverInfo"></div>
+      <div class="pay-manual-info" id="payManualInfo" style="display:none;margin-top:12px;padding:12px 14px;background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:10px;font-size:13px;color:#92400E;line-height:1.6;">
+        ⚠️ <strong>Pagamento manual — não é automático:</strong><br/>
+        Após clicar, será redireccionado para o WhatsApp. Envie o comprovativo (M-Pesa, e-Mola ou mKesh, conforme o número usado) para o nosso número e os créditos serão activados em até <strong>24 horas</strong>.<br/>
+        <span style="margin-top:6px;display:block;">📌 Guarde o número de referência que receberá — é necessário para confirmar o pagamento.</span>
+        <span style="margin-top:8px;display:block;font-size:12px;">Consulte a nossa <a href="/legal.html#reembolso" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Política de Reembolso</a> · <a href="/legal.html#suporte" target="_blank" style="color:#92400E;font-weight:700;text-decoration:underline;">Suporte</a></span>
+      </div>
+    </div>
   </div>
-</footer>
+</div>
 
-<!-- Contador de visitas -->
-<script>
-  (function(){
-    try {
-      fetch('/api/page-view', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: '{{SLUG}}' })
-      }).catch(function(){});
-    } catch(e) {}
-  })();
-</script>
+<!-- MODAL HISTÓRICO -->
+<div class="overlay" id="historyOverlay">
+  <div class="sheet tall" id="historySheet">
+    <div class="pill"></div>
+    <div class="sheet-hdr">
+      <div>
+        <div class="sh-title">📁 Arquivo de Documentos</div>
+        <div class="sh-sub">Os seus documentos gerados nesta conta</div>
+      </div>
+      <button class="sh-x" id="historyClose">✕</button>
+    </div>
+    <div id="historyBody" style="padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;">
+      <div id="historyLoading" style="text-align:center;padding:40px;color:#64748b;">
+        <div style="font-size:32px;margin-bottom:8px;">⏳</div>
+        <div>A carregar documentos…</div>
+      </div>
+    </div>
+  </div>
+</div>
 
+<!-- Notificações reutilizadas -->
+<div class="notif-stack" id="notifStack"></div>
 
-<!-- NOVO: atribuição de origem (blog/pesquisa orgânica/social) — esta
-     página é HTML estático, sem o MarketingTracker.js da SPA. Sem isto,
-     um leitor que chegasse aqui pelo Google e depois clicasse para a app
-     era sempre contado como "direct" no dashboard de Marketing. Mesma
-     lógica usada em api/_lib/blogTemplate.js: 1) descobre a origem
-     (?src= explícito > localStorage já existente > referrer de motor de
-     busca/rede social > "blog" por omissão); 2) grava na mesma
-     chave que o MarketingTracker usa (mzd_src); 3) por segurança (modo
-     privado / localStorage bloqueado), também reescreve os links de saída
-     marcados com data-track-link para incluir ?src=... -->
-<script>
-(function(){
+<script type="module">
+// CORRIGIDO: o preview da galeria usava um sistema de iframe construído do
+// zero (com bugs de viewport/escala já corrigidos numa iteração anterior),
+// em vez de reaproveitar o motor de renderização A4 já maduro e testado em
+// produção (TemplatePicker.js + A4Renderer.js — usado tanto no "Escolher
+// Modelo" como no preview do resultado final). Agora a galeria usa
+// exactamente o mesmo motor: renderA4Pages (folhas A4 separadas, escala
+// dinâmica via ResizeObserver, altura calculada a partir do conteúdo real)
+// e fillTemplate + dados de exemplo realistas por tipo de documento
+// (SampleData.js), em vez de mostrar apenas título+descrição.
+import { renderA4Pages, markdownToHtml, A4_PAGES_CONTAINER_CSS } from '/assets/js/utils/A4Renderer.js';
+import { SAMPLE_DATA, SAMPLE_MARKDOWN, fillTemplate, getSampleData } from '/assets/js/marketplace/SampleData.js';
+
+// ── Config ────────────────────────────────────────────────────────────────────
+const API    = '/api/templates';
+const SITE   = 'https://mzdocs.co.mz';
+let   currentUser = null;
+let   savedIds    = new Set();
+let   currentTpl  = null;
+let   submitType  = 'community';
+let   galleryOffset = 0;
+let   activeType    = '';
+let   activePricing = ''; // v39: '' | 'free' | 'paid'
+let   activeSort    = 'featured';
+
+// Injectar CSS partilhado das folhas A4 uma única vez (idempotente) — mesmo
+// padrão usado em Views.js, garante consistência visual com o resto da app.
+if (!document.getElementById('a4PagesSharedStyle')) {
+  const styleEl = document.createElement('style');
+  styleEl.id = 'a4PagesSharedStyle';
+  styleEl.textContent = A4_PAGES_CONTAINER_CSS;
+  document.head.appendChild(styleEl);
+}
+
+// ── Auth token helper ─────────────────────────────────────────────────────────
+function getToken() {
   try {
-    var SOURCE_KEY = 'mzd_src';
-    var stored = null;
-    try { stored = localStorage.getItem(SOURCE_KEY); } catch(_) {}
+    const raw = localStorage.getItem('sb-' + (window._SUPABASE_PROJECT || '') + '-auth-token')
+      || Object.entries(localStorage).find(([k]) => k.includes('-auth-token'))?.[1];
+    return raw ? JSON.parse(raw)?.access_token : null;
+  } catch { return null; }
+}
 
-    var qs = new URLSearchParams(window.location.search);
-    var explicit = qs.get('src');
-    var source = explicit || stored;
+function authHeaders() {
+  const t = getToken();
+  return t ? { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` }
+           : { 'Content-Type': 'application/json' };
+}
 
-    if (!source) {
-      var host = '';
-      try { host = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./,'') : ''; } catch(_) {}
-      if (/mzdocs\.co\.mz$/.test(host))        source = null;
-      else if (/google\./.test(host))          source = 'organic_google';
-      else if (/bing\./.test(host))            source = 'organic_bing';
-      else if (/yahoo\./.test(host))           source = 'organic_yahoo';
-      else if (/duckduckgo\./.test(host))      source = 'organic_duckduckgo';
-      else if (/baidu\./.test(host))           source = 'organic_baidu';
-      else if (/facebook\.|instagram\./.test(host)) source = 'social_facebook';
-      else if (/tiktok\./.test(host))          source = 'social_tiktok';
-      else if (/whatsapp\./.test(host))        source = 'social_whatsapp';
-      else                                     source = 'blog';
+// ── Notificação ───────────────────────────────────────────────────────────────
+function notify(msg, type = 'info') {
+  const s = document.getElementById('notifStack');
+  if (!s) return;
+  const n = document.createElement('div');
+  n.className = `notif notif-${type}`;
+  n.textContent = msg;
+  s.appendChild(n);
+  setTimeout(() => n.remove(), 3500);
+}
+
+// ── Renderizar galeria ────────────────────────────────────────────────────────
+async function loadGallery(reset = true) {
+  if (reset) { galleryOffset = 0; }
+  const grid = document.getElementById('tplGrid');
+  if (reset) {
+    grid.innerHTML = '<div class="tpl-skeleton tpl-skeleton-card"></div>'.repeat(4);
+  }
+  const params = new URLSearchParams({
+    sort: activeSort, limit: 24, offset: galleryOffset,
+  });
+  if (activeType) params.set('type', activeType);
+  if (activePricing) params.set('pricing', activePricing);
+  try {
+    const r = await fetch(`${API}/gallery?${params}`);
+    const { templates = [] } = await r.json();
+    if (reset) grid.innerHTML = '';
+    if (!templates.length && reset) {
+      grid.innerHTML = `<div class="tpl-empty" style="grid-column:span 2">
+        <div class="tpl-empty-ico">🎨</div>
+        <h3>Sem templates ainda</h3>
+        <p>Seja o primeiro a submeter um template para esta categoria!</p>
+      </div>`;
+      document.getElementById('btnLoadMore').style.display = 'none';
+      return;
     }
+    templates.forEach(t => grid.insertAdjacentHTML('beforeend', renderCard(t)));
+    galleryOffset += templates.length;
+    document.getElementById('btnLoadMore').style.display = templates.length === 24 ? 'block' : 'none';
+    _mountCardPreviews(grid, templates);
+  } catch (err) {
+    grid.innerHTML = `<div class="tpl-empty" style="grid-column:span 2"><div class="tpl-empty-ico">⚠️</div><h3>Erro ao carregar</h3><p>${err.message}</p></div>`;
+  }
+}
 
-    if (source) {
-      try { localStorage.setItem(SOURCE_KEY, source.slice(0, 50)); } catch(_) {}
-      document.querySelectorAll('a[data-track-link]').forEach(function(a){
-        try {
-          var u = new URL(a.getAttribute('href'), window.location.origin);
-          if (!u.searchParams.get('src')) u.searchParams.set('src', source);
-          a.setAttribute('href', u.pathname + u.search + u.hash);
-        } catch(_) {}
+// CORRIGIDO: os cliques nos cards eram ligados com grid.querySelectorAll(...)
+// .forEach(...) dentro de loadGallery(), que corre de novo a cada filtro/
+// "carregar mais". Isso re-adicionava um NOVO listener a cards que já
+// tinham um de uma chamada anterior (a lista nunca é esvaziada em
+// reset=false), fazendo cliques antigos acumularem 2, 3, 4... chamadas a
+// openDetail() de cada vez. Um único listener delegado no grid, ligado
+// uma vez só, evita duplicação seja qual for o número de recargas.
+document.getElementById('tplGrid')?.addEventListener('click', e => {
+  const saveBtn = e.target.closest('.tpl-save-btn');
+  const card    = e.target.closest('.tpl-card[data-id]');
+  if (!card) return;
+  if (saveBtn) { e.stopPropagation(); toggleSave(card.dataset.id, saveBtn); return; }
+  openDetail(card.dataset.id);
+});
+
+// CORRIGIDO: em vez de um <iframe srcdoc> construído à mão (que teve vários
+// problemas de viewport/escala), os cards sem thumbnail_url agora usam o
+// MESMO motor renderA4Pages já testado em TemplatePicker.js/Views.js —
+// preenchido com dados de exemplo realistas (SampleData.js) em vez de
+// título+descrição. Mostra-se apenas a primeira página, recortada pela
+// altura fixa do card (overflow:hidden), como miniatura da capa do
+// documento.
+function _mountCardPreviews(grid, templates) {
+  templates.forEach(t => {
+    if (t.thumbnail_url) return; // já tem <img>, nada a fazer
+    const mount = grid.querySelector(`.tpl-card-thumb-mount[data-id="${t.id}"]`);
+    if (!mount) return;
+    const sampleHtml = _buildSampleHtml(t);
+    if (!sampleHtml) return; // sem template_html nem template_css — fica o ícone 🎨
+    renderA4Pages(mount, [sampleHtml], {
+      css: t.template_css || '',
+      isRawHTML: true,
+      showPageLabel: false,
+    });
+  });
+}
+
+// Constrói o HTML de uma única página preenchida com dados de exemplo —
+// usa fillTemplate (placeholders {{...}}) quando há template_html, ou o
+// conversor de markdown normal quando o template só tem CSS (ex.: alguns
+// modelos de Procuração, que nunca tiveram htmlTemplate mesmo no picker
+// original).
+function _buildSampleHtml(t) {
+  if (t.template_html) {
+    const data = getSampleData(t.service_type, t.template_name, t.description);
+    return fillTemplate(t.template_html, data);
+  }
+  if (t.template_css) {
+    const md = SAMPLE_MARKDOWN[t.service_type] || SAMPLE_MARKDOWN.generic;
+    return `<div style="padding:10mm">${markdownToHtml(md)}</div>`;
+  }
+  return '';
+}
+
+function renderCard(t) {
+  const typeLabel = { official:'Oficial', community:'Comunidade', premium:'Premium', private:'Privado' };
+  const typeCls   = { official:'tpl-badge-official', community:'tpl-badge-community', premium:'tpl-badge-premium', private:'tpl-badge-private' };
+  const isSaved   = savedIds.has(t.id);
+  const uses      = t.use_count > 0 ? `${t.use_count} usos` : 'Novo';
+  const rating    = t.avg_rating ? `⭐ ${t.avg_rating}` : '';
+  const creditTag = t.credit_cost > 0 ? `<span style="position:absolute;bottom:6px;left:6px;background:#F59E0B;color:#fff;border-radius:8px;padding:2px 7px;font-size:10px;font-weight:800">⭐ ${t.credit_cost} cr</span>` : '';
+
+  // CORRIGIDO: cards sem thumbnail_url mostravam só um ícone 🎨, ou (numa
+  // versão anterior) um iframe construído à mão. Agora deixa-se um
+  // "mount point" vazio aqui — o conteúdo real é inserido depois por
+  // _mountCardPreviews(), usando o motor renderA4Pages, pois esse motor
+  // precisa de o elemento já estar no DOM real para medir/escalar.
+  const thumbHtml = t.thumbnail_url
+    ? `<img src="${t.thumbnail_url}" alt="${t.template_name}" loading="lazy"/>`
+    : (t.template_html || t.template_css)
+      ? `<div class="tpl-card-thumb-mount" data-id="${t.id}"></div>`
+      : `<span class="tpl-no-thumb">🎨</span>`;
+
+  return `<div class="tpl-card" data-id="${t.id}">
+    <div class="tpl-card-thumb">
+      ${thumbHtml}
+      <span class="tpl-badge ${typeCls[t.template_type] || ''}">${typeLabel[t.template_type] || ''}</span>
+      ${t.is_featured ? '<span class="tpl-badge-featured">⭐ Destaque</span>' : ''}
+      ${creditTag}
+    </div>
+    <div class="tpl-card-body">
+      <div class="tpl-card-name">${t.template_name}</div>
+      <div class="tpl-card-sub">${t.description || ''}</div>
+      <div class="tpl-card-meta">
+        <span class="tpl-card-uses">📄 ${uses}</span>
+        ${rating ? `<span class="tpl-card-rating">${rating}</span>` : ''}
+      </div>
+    </div>
+    <button class="tpl-save-btn${isSaved ? ' saved' : ''}" title="${isSaved ? 'Remover dos guardados' : 'Guardar'}">${isSaved ? '🔖' : '🔖'}</button>
+  </div>`;
+}
+
+// ── Detalhe ───────────────────────────────────────────────────────────────────
+const tplCache = {};
+// ── Preview real do documento (substitui o ícone genérico quando não há thumbnail) ──
+
+// CORRIGIDO: removido o sistema de <iframe srcdoc> construído à mão para o
+// modal de detalhe e o fullscreen — substituído por renderA4Pages, o mesmo
+// motor já usado em TemplatePicker.js (Escolher Modelo) e Views.js
+// (preview do resultado), com dados de exemplo realistas (SampleData.js)
+// em vez de apenas título+descrição.
+function renderTemplatePreview(t) {
+  const prev = document.getElementById('detailPreview');
+  if (t.thumbnail_url) {
+    prev.innerHTML = `<img src="${t.thumbnail_url}" alt="${t.template_name}"/>`;
+    return;
+  }
+  const sampleHtml = _buildSampleHtml(t);
+  if (sampleHtml) {
+    prev.innerHTML = `<button class="tpl-preview-maximize" id="btnPreviewMaximize" title="Ver em tela cheia">⛶ Maximizar</button>`;
+    const mount = document.createElement('div');
+    mount.className = 'tpl-detail-preview-mount';
+    prev.appendChild(mount);
+    renderA4Pages(mount, [sampleHtml], { css: t.template_css || '', isRawHTML: true, showPageLabel: false });
+    document.getElementById('btnPreviewMaximize').addEventListener('click', e => {
+      e.stopPropagation();
+      openPreviewFullscreen(t);
+    });
+    return;
+  }
+  prev.innerHTML = `<span>🎨</span>`;
+}
+
+// ── Preview em tela cheia ────────────────────────────────────────────────
+function openPreviewFullscreen(t) {
+  let overlay = document.getElementById('previewFullscreenOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'previewFullscreenOverlay';
+    overlay.className = 'tpl-fullscreen-overlay';
+    overlay.innerHTML = `
+      <div class="tpl-fullscreen-bar">
+        <span id="previewFullscreenTitle"></span>
+        <button id="btnPreviewFullscreenClose" title="Fechar">✕</button>
+      </div>
+      <div id="previewFullscreenMount" class="tpl-fullscreen-mount"></div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#btnPreviewFullscreenClose').addEventListener('click', closePreviewFullscreen);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closePreviewFullscreen(); });
+  }
+  overlay.querySelector('#previewFullscreenTitle').textContent = t.template_name || 'Pré-visualização';
+  const mount = overlay.querySelector('#previewFullscreenMount');
+  const sampleHtml = _buildSampleHtml(t);
+  renderA4Pages(mount, [sampleHtml || ''], { css: t.template_css || '', isRawHTML: true, showPageLabel: false });
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePreviewFullscreen() {
+  document.getElementById('previewFullscreenOverlay')?.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+async function openDetail(id) {
+  const overlay = document.getElementById('detailOverlay');
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  currentTpl = null;
+
+  // Buscar dados se não em cache
+  if (!tplCache[id]) {
+    try {
+      const r = await fetch(`${API}/list?id=eq.${id}&limit=1`);
+      const { templates } = await r.json();
+      tplCache[id] = templates?.[0];
+    } catch { notify('Erro ao carregar template','error'); return; }
+  }
+  const t = tplCache[id];
+  if (!t) { notify('Template não encontrado','error'); return; }
+  currentTpl = t;
+
+  // CORRIGIDO (bug grave): antes, renderTemplatePreview(t) corria ANTES de
+  // preencher #detailTitle/#detailDesc/#detailMeta/#detailTags, e sem
+  // try/catch. Se essa função lançasse uma excepção para um template em
+  // concreto (ex: template_html malformado que faz fillTemplate/
+  // renderA4Pages rebentar), a função openDetail() parava logo ali —
+  // o modal já estava aberto (overlay.classList.add('open') no topo), mas
+  // ficava com o TÍTULO/DESCRIÇÃO DO TEMPLATE ANTERIOR que tinha sido
+  // aberto com sucesso. Resultado: clicar em qualquer template que desse
+  // erro no preview mostrava sempre o modal do último template que tinha
+  // funcionado (ex: "Trabalho Académico — Académico Clássico"), por mais
+  // cards diferentes que se clicasse. Agora o texto é sempre actualizado
+  // primeiro (não depende do preview visual), e o preview corre isolado
+  // num try/catch — se falhar, mostra-se um ícone simples em vez de travar
+  // o resto do modal.
+  document.getElementById('detailTitle').textContent = t.template_name;
+  document.getElementById('detailDesc').textContent  = t.description || 'Sem descrição.';
+
+  try {
+    renderTemplatePreview(t);
+  } catch (err) {
+    console.error('[Templates] Falha ao renderizar preview de', t.template_name, err);
+    const prev = document.getElementById('detailPreview');
+    if (prev) prev.innerHTML = `<span>🎨</span>`;
+  }
+
+  // Meta
+  const metaEl = document.getElementById('detailMeta');
+  metaEl.innerHTML = [
+    t.use_count  ? `<span class="tpl-detail-stat">📄 ${t.use_count} usos</span>` : '',
+    t.downloads  ? `<span class="tpl-detail-stat">⬇️ ${t.downloads}</span>` : '',
+    t.avg_rating ? `<span class="tpl-detail-stat">⭐ ${t.avg_rating} (${t.rating_count})</span>` : '',
+    t.credit_cost > 0 ? `<span class="tpl-detail-stat" style="color:#F59E0B;font-weight:700">⭐ ${t.credit_cost} créditos</span>` : '<span class="tpl-detail-stat" style="color:#10B981;font-weight:700">✓ Gratuito</span>',
+    t.author_name ? `<span class="tpl-detail-stat">👤 ${t.author_name}</span>` : '',
+  ].join('');
+
+  // Tags
+  const tagsEl = document.getElementById('detailTags');
+  tagsEl.innerHTML = (t.tags || []).map(tag => `<span class="tpl-detail-tag">#${tag}</span>`).join('');
+
+  // Botão guardar
+  const saveBtn = document.getElementById('btnTplSave');
+  const isSaved = savedIds.has(id);
+  saveBtn.textContent = isSaved ? '✓ Guardado' : '🔖 Guardar';
+
+  // Link privado (só para o dono)
+  const shareSection = document.getElementById('detailShareSection');
+  const isOwner = currentUser && t.user_id === currentUser.id;
+  if (t.template_type === 'private' && isOwner && t.share_token) {
+    shareSection.style.display = 'block';
+    document.getElementById('detailShareLink').value =
+      `${SITE}/templates?token=${t.share_token}`;
+  } else {
+    shareSection.style.display = 'none';
+  }
+}
+
+function closeDetail() {
+  document.getElementById('detailOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ── Usar template ─────────────────────────────────────────────────────────────
+// CORRIGIDO: templates com credit_cost > 0 nunca debitavam créditos — o
+// endpoint /api/templates/use só regista estatísticas de uso (ver
+// comentário em api/misc.js: "A dedução real de créditos é feita pelo
+// deduct-credit.js existente"), mas esta página nunca chamava esse
+// endpoint. Agora, antes de aplicar um template premium, debita-se o
+// custo no servidor via /api/deduct-credit — mesmo endpoint e mesmo
+// padrão já usado em DocumentController.handleReedit — e só se prossegue
+// com sucesso confirmado. Templates gratuitos (credit_cost = 0) seguem
+// exactamente como antes, sem nenhuma dedução.
+async function useTemplate() {
+  if (!currentTpl) return;
+  if (!currentUser) { notify('Faça login para usar templates','warning'); return; }
+
+  const token = getToken();
+  if (!token) { notify('Sessão expirada. Inicie sessão novamente.','error'); return; }
+
+  const cost = currentTpl.credit_cost || 0;
+  if (cost > 0) {
+    notify(`A debitar ${cost} crédito(s)…`, 'info');
+    try {
+      const deductRes = await fetch('/api/deduct-credit', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ cost, documentType: `template_${currentTpl.service_type || 'custom'}` }),
       });
+      if (deductRes.status === 402) { notify('⚠️ Créditos insuficientes para este template premium.','warning'); return; }
+      if (deductRes.status === 401) { notify('Sessão expirada. Inicie sessão novamente.','error'); return; }
+      if (deductRes.status === 403) { notify('Conta bloqueada. Contacte o suporte.','error'); return; }
+      if (!deductRes.ok) { notify('Erro ao debitar créditos. Tente novamente.','error'); return; }
+      const deductData = await deductRes.json();
+      if (!deductData.success) { notify('Erro ao debitar créditos. Tente novamente.','error'); return; }
+      notify(`✓ ${cost} crédito(s) debitado(s). Restam ${deductData.credits}.`, 'success');
+    } catch (err) {
+      notify('Erro de rede ao debitar créditos: ' + err.message, 'error');
+      return;
     }
-  } catch(_) {}
-})();
+  }
+
+  await fetch(`${API}/use`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ template_id: currentTpl.id, service_key: currentTpl.service_type }),
+  }).catch(() => {});
+
+  // Redirigir para a página principal com o template seleccionado
+  localStorage.setItem('mz_pending_template', JSON.stringify({
+    id: currentTpl.id, service: currentTpl.service_type,
+    css: currentTpl.template_css, html: currentTpl.template_html,
+  }));
+  closeDetail();
+  window.location.href = `/?template=${currentTpl.id}&service=${currentTpl.service_type}`;
+}
+
+// ── Guardar / remover ─────────────────────────────────────────────────────────
+async function toggleSave(id, btn) {
+  if (!currentUser) { notify('Faça login para guardar templates','warning'); return; }
+  try {
+    const r = await fetch(`${API}/save`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ template_id: id }),
+    });
+    const { saved } = await r.json();
+    if (saved) { savedIds.add(id); notify('Template guardado ✓','success'); }
+    else        { savedIds.delete(id); notify('Removido dos guardados','info'); }
+    if (btn) { btn.textContent = saved ? '🔖' : '🔖'; btn.classList.toggle('saved', saved); }
+    const saveBtn = document.getElementById('btnTplSave');
+    if (saveBtn && currentTpl?.id === id) {
+      saveBtn.textContent = saved ? '✓ Guardado' : '🔖 Guardar';
+    }
+  } catch { notify('Erro ao guardar','error'); }
+}
+
+// ── Share token ───────────────────────────────────────────────────────────────
+window.copyShareLink = function() {
+  const input = document.getElementById('detailShareLink');
+  navigator.clipboard.writeText(input.value).then(() => notify('Link copiado!','success'));
+};
+
+window.regenerateToken = async function() {
+  if (!currentTpl || !currentUser) return;
+  const r = await fetch(`${API}/share-token`, {
+    method: 'POST', headers: authHeaders(),
+    body: JSON.stringify({ template_id: currentTpl.id }),
+  });
+  const { share_token } = await r.json();
+  if (share_token) {
+    document.getElementById('detailShareLink').value = `${SITE}/templates?token=${share_token}`;
+    notify('Novo link gerado ✓','success');
+  }
+};
+
+// ── Reportar ──────────────────────────────────────────────────────────────────
+async function reportTemplate() {
+  if (!currentUser) { notify('Faça login para reportar','warning'); return; }
+  const reason = prompt('Motivo do reporte:\n1=spam  2=inadequado  3=copyright  4=má qualidade  5=outro\n\nEscreva o número:');
+  const map = { '1':'spam','2':'inappropriate','3':'copyright','4':'poor_quality','5':'other' };
+  const r = map[reason?.trim()];
+  if (!r) return;
+  await fetch(`${API}/report`, {
+    method: 'POST', headers: authHeaders(),
+    body: JSON.stringify({ template_id: currentTpl.id, reason: r }),
+  });
+  notify('Relatório enviado. Obrigado!','success');
+}
+
+// ── Os Meus Templates ─────────────────────────────────────────────────────────
+async function loadMine() {
+  const list = document.getElementById('mineList');
+  list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--dim)">⏳ A carregar…</div>';
+  if (!currentUser) {
+    list.innerHTML = '<div class="tpl-empty"><div class="tpl-empty-ico">🔐</div><h3>Login necessário</h3><p>Faça login para ver os seus templates.</p></div>';
+    return;
+  }
+  const r = await fetch(`${API}/mine`, { headers: authHeaders() });
+  const { templates = [] } = await r.json();
+  if (!templates.length) {
+    list.innerHTML = '<div class="tpl-empty"><div class="tpl-empty-ico">✏️</div><h3>Sem templates</h3><p>Ainda não criou nenhum template. Submeta o seu primeiro!</p></div>';
+    return;
+  }
+  const svcIco = { cv:'📋', carta:'✉️', trabalho:'📚', arrendamento:'🏠', procuracao:'⚖️', requerimento:'📄', residencia:'🏡', recibo:'🧾', recomendacao:'🌟', planonegocio:'💼', prestacao:'🤝' };
+  list.innerHTML = templates.map(t => `
+    <div class="tpl-mine-card" style="margin-bottom:10px">
+      <div class="tpl-mine-ico">${svcIco[t.service_type] || '📄'}</div>
+      <div class="tpl-mine-info">
+        <div class="tpl-mine-name">${t.template_name}</div>
+        <div class="tpl-mine-meta">${t.service_type} · ${new Date(t.created_at).toLocaleDateString('pt-MZ')}</div>
+        <span class="tpl-mine-status ${t.status}">${
+          t.status === 'pending'  ? '⏳ A aguardar aprovação' :
+          t.status === 'approved' ? '✅ Aprovado' : '❌ Rejeitado'
+        }</span>
+        ${t.status === 'rejected' && t.rejection_note ? `<div style="font-size:11px;color:#EF4444;margin-top:4px">Motivo: ${t.rejection_note}</div>` : ''}
+        ${t.use_count ? `<div style="font-size:11px;color:var(--dim);margin-top:3px">📄 ${t.use_count} usos</div>` : ''}
+        ${t.template_type === 'private' && t.share_token ? `
+          <div style="margin-top:6px">
+            <div style="font-size:11px;color:var(--dim);margin-bottom:3px">🔗 Link privado:</div>
+            <div class="tpl-share-box" style="margin:0">
+              <input type="text" value="${SITE}/templates?token=${t.share_token}" readonly style="font-size:11px"/>
+              <button onclick="navigator.clipboard.writeText('${SITE}/templates?token=${t.share_token}').then(()=>window.tplNotify('Copiado!','success'))">Copiar</button>
+            </div>
+          </div>` : ''}
+        <div class="tpl-mine-actions">
+          <button class="tpl-mine-btn danger" onclick="deleteMine('${t.id}',this.closest('.tpl-mine-card'))">🗑️ Apagar</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+window.deleteMine = async function(id, card) {
+  if (!confirm('Apagar este template permanentemente?')) return;
+  const r = await fetch(`${API}/delete`, {
+    method: 'POST', headers: authHeaders(),
+    body: JSON.stringify({ template_id: id }),
+  });
+  const { success } = await r.json();
+  if (success) { card.remove(); notify('Template apagado','info'); }
+  else notify('Erro ao apagar','error');
+};
+
+// ── Guardados ─────────────────────────────────────────────────────────────────
+async function loadSaved() {
+  const list = document.getElementById('savedList');
+  list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--dim)">⏳ A carregar…</div>';
+  if (!currentUser) {
+    list.innerHTML = '<div class="tpl-empty"><div class="tpl-empty-ico">🔐</div><h3>Login necessário</h3></div>';
+    return;
+  }
+  const r = await fetch(`${API}/saved`, { headers: authHeaders() });
+  const { templates = [] } = await r.json();
+  if (!templates.length) {
+    list.innerHTML = '<div class="tpl-empty"><div class="tpl-empty-ico">🔖</div><h3>Sem guardados</h3><p>Explore a galeria e guarde os templates que mais gosta.</p></div>';
+    return;
+  }
+  list.innerHTML = `<div class="tpl-grid">${templates.map(t => renderCard(t)).join('')}</div>`;
+  list.querySelectorAll('.tpl-card[data-id]').forEach(card => {
+    card.addEventListener('click', () => openDetail(card.dataset.id));
+  });
+}
+
+// ── Submeter template ─────────────────────────────────────────────────────────
+function openSubmit() {
+  if (!currentUser) { notify('Faça login para submeter templates','warning'); return; }
+  document.getElementById('submitOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeSubmit() {
+  document.getElementById('submitOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  _setPhotoStatus('', null);
+}
+
+// ── Extrair template a partir de foto/imagem (igual a "Escolher Modelo") ──
+// CORRIGIDO: o formulário de submissão só aceitava CSS/HTML escritos à
+// mão, exigindo conhecimento de programação. Agora reaproveita-se o mesmo
+// endpoint /api/extract-template já usado em TemplatePicker.js — o
+// utilizador tira uma foto (ou carrega um ficheiro) de um documento já
+// formatado, e os campos Nome/Descrição/CSS/HTML são pré-preenchidos
+// automaticamente a partir do que a IA reconhecer na imagem.
+function _setPhotoStatus(msg, kind) {
+  const el = document.getElementById('sfPhotoStatus');
+  el.style.display = msg ? 'block' : 'none';
+  el.className = `tpl-photo-status${kind ? ' ' + kind : ''}`;
+  el.textContent = msg || '';
+}
+
+async function _extractTemplateFromPhoto(file) {
+  const serviceKey = document.getElementById('sfService').value;
+  if (!serviceKey) {
+    notify('Escolha primeiro o Tipo de Documento antes de enviar a foto.', 'warning');
+    return;
+  }
+  const btnCam = document.getElementById('btnSfPhotoCamera');
+  const btnFile = document.getElementById('btnSfPhotoFile');
+  btnCam.disabled = true; btnFile.disabled = true;
+  _setPhotoStatus('🤖 A analisar a imagem e a recriar o modelo… isto pode demorar alguns segundos.', 'loading');
+
+  try {
+    const base64 = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload  = () => res(reader.result.split(',')[1]);
+      reader.onerror = () => rej(new Error('Falha ao ler o ficheiro de imagem'));
+      reader.readAsDataURL(file);
+    });
+
+    const resp = await fetch('/api/extract-template', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: base64, mimeType: file.type || 'image/jpeg', serviceKey }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) throw new Error(data.error || `Erro do servidor: ${resp.status}`);
+
+    // Pré-preencher o formulário com o que a IA extraiu, sem sobrescrever
+    // texto que o utilizador já tenha escrito manualmente.
+    const nameEl = document.getElementById('sfName');
+    const descEl = document.getElementById('sfDesc');
+    if (!nameEl.value.trim()) nameEl.value = data.name || '';
+    if (!descEl.value.trim()) descEl.value = data.description || '';
+    document.getElementById('sfCss').value  = data.css || '';
+    document.getElementById('sfHtml').value = data.htmlTemplate || '';
+
+    _setPhotoStatus('✅ Modelo extraído com sucesso! Reveja os campos abaixo antes de submeter.', 'success');
+    notify('Modelo extraído da imagem ✓', 'success');
+  } catch (err) {
+    _setPhotoStatus('❌ Não foi possível extrair o modelo: ' + err.message + ' — pode preencher o CSS/HTML manualmente.', 'error');
+  } finally {
+    btnCam.disabled = false; btnFile.disabled = false;
+  }
+}
+
+document.getElementById('btnSfPhotoCamera')?.addEventListener('click', () => {
+  document.getElementById('sfPhotoInputCamera').click();
+});
+document.getElementById('btnSfPhotoFile')?.addEventListener('click', () => {
+  document.getElementById('sfPhotoInputFile').click();
+});
+document.getElementById('sfPhotoInputCamera')?.addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (file) _extractTemplateFromPhoto(file);
+  e.target.value = '';
+});
+document.getElementById('sfPhotoInputFile')?.addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (file) _extractTemplateFromPhoto(file);
+  e.target.value = '';
+});
+
+window.selectType = function(val, el) {
+  submitType = val;
+  document.querySelectorAll('.tpl-type-radio').forEach(r => r.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('privateInfo').style.display = val === 'private' ? 'block' : 'none';
+};
+
+async function submitTemplate() {
+  const btn   = document.getElementById('btnSubmitForm');
+  const name  = document.getElementById('sfName').value.trim();
+  const svc   = document.getElementById('sfService').value;
+  const css   = document.getElementById('sfCss').value.trim();
+  if (!name || !svc || !css) { notify('Preencha Nome, Tipo e CSS','warning'); return; }
+
+  btn.disabled = true; btn.textContent = '⏳ A enviar…';
+  const tags = document.getElementById('sfTags').value.split(',').map(t => t.trim()).filter(Boolean);
+  const body = {
+    template_type:  submitType,
+    service_type:   svc,
+    template_name:  name,
+    description:    document.getElementById('sfDesc').value.trim(),
+    template_css:   css,
+    template_html:  document.getElementById('sfHtml').value.trim(),
+    thumbnail_url:  document.getElementById('sfThumb').value.trim() || null,
+    tags,
+  };
+  try {
+    const r = await fetch(`${API}/submit`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error || 'Erro desconhecido');
+    closeSubmit();
+    notify(data.message, 'success');
+    if (submitType === 'private') {
+      // Copiar link automaticamente
+      const link = `${SITE}/templates?token=${data.share_token}`;
+      navigator.clipboard.writeText(link).catch(() => {});
+      notify(`Link privado copiado: ${link.slice(-20)}`, 'info');
+    }
+    // Limpar formulário
+    ['sfName','sfDesc','sfCss','sfHtml','sfThumb','sfTags'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('sfService').value = '';
+    _setPhotoStatus('', null);
+    loadGallery(); loadMine();
+  } catch (e) {
+    notify(e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '🚀 Submeter Template';
+  }
+}
+
+// ── Acesso por token (link privado) ───────────────────────────────────────────
+async function checkTokenAccess() {
+  const params = new URLSearchParams(window.location.search);
+  const token  = params.get('token');
+  if (!token) return;
+  const r = await fetch(`${API}/by-token?token=${encodeURIComponent(token)}`);
+  const { template } = await r.json();
+  if (template) {
+    // Carregar e abrir directamente
+    tplCache[template.id] = template;
+    openDetail(template.id);
+  }
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  ['gallery','mine','saved'].forEach(t => {
+    document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`).style.display = t === tab ? '' : 'none';
+  });
+  document.querySelectorAll('.tpl-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  if (tab === 'mine') loadMine();
+  if (tab === 'saved') loadSaved();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.tplNotify = notify;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  // Tabs
+  document.getElementById('tplTabs').addEventListener('click', e => {
+    const btn = e.target.closest('.tpl-tab');
+    if (btn) switchTab(btn.dataset.tab);
+  });
+
+  // Filtros tipo
+  document.getElementById('typeFilters').addEventListener('click', e => {
+    const btn = e.target.closest('.tpl-type-btn');
+    if (!btn) return;
+    document.querySelectorAll('#typeFilters .tpl-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeType = btn.dataset.type;
+    loadGallery();
+  });
+
+  // v39: mini filtro Grátis/Pagos
+  document.getElementById('pricingFilters').addEventListener('click', e => {
+    const btn = e.target.closest('.tpl-type-btn');
+    if (!btn) return;
+    document.querySelectorAll('#pricingFilters .tpl-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activePricing = btn.dataset.pricing;
+    loadGallery();
+  });
+
+  // Sort
+  document.getElementById('sortSelect').addEventListener('change', e => {
+    activeSort = e.target.value;
+    loadGallery();
+  });
+
+  // Load more
+  document.getElementById('btnLoadMore').addEventListener('click', () => loadGallery(false));
+
+  // Submeter
+  document.getElementById('btnOpenSubmit').addEventListener('click', openSubmit);
+  document.getElementById('btnOpenSubmitMine').addEventListener('click', openSubmit);
+  document.getElementById('submitClose').addEventListener('click', closeSubmit);
+  document.getElementById('btnSubmitForm').addEventListener('click', submitTemplate);
+
+  // Detail
+  document.getElementById('detailClose').addEventListener('click', closeDetail);
+  document.getElementById('detailOverlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeDetail();
+  });
+  document.getElementById('btnTplUse').addEventListener('click', useTemplate);
+  document.getElementById('btnTplSave').addEventListener('click', () => {
+    if (currentTpl) toggleSave(currentTpl.id, null);
+  });
+  document.getElementById('btnTplShareWa').addEventListener('click', () => {
+    if (!currentTpl) return;
+    const url  = encodeURIComponent(`${SITE}/templates`);
+    const text = encodeURIComponent(`Vê este template no MzDocs Pro: ${currentTpl.template_name}`);
+    window.open(`https://wa.me/?text=${text}%20${url}`, '_blank');
+  });
+  document.getElementById('btnTplReport').addEventListener('click', reportTemplate);
+
+  // Submit overlay click outside
+  document.getElementById('submitOverlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeSubmit();
+  });
+
+  // Detectar user (aguardar app.js inicializar)
+  let tries = 0;
+  const waitUser = setInterval(() => {
+    const am = window.authManager;
+    if (am?.user) {
+      currentUser = am.user;
+      clearInterval(waitUser);
+    }
+    if (++tries > 20) clearInterval(waitUser);
+  }, 300);
+
+  // Carregar galeria inicial
+  loadGallery();
+
+  // Verificar token de acesso privado
+  checkTokenAccess();
+});
 </script>
+
+<!-- Reutilizar app.js para auth, header, etc. -->
+<script type="module" src="assets/js/app.js"></script>
+
 </body>
 </html>
