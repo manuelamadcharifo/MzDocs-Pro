@@ -23,6 +23,7 @@ import { AcademicEngine } from '../academic/AcademicEngine.js';
 import { getTemplates } from '../marketplace/TemplateLibrary.js';
 import { authManager } from '../auth/AuthManager.js';
 import { Analytics } from '../analytics/Analytics.js';
+import { showUsageLimitModal } from '../components/UsageLimitModal.js';
 
 // ─── documentState: single source of truth for generated content ─────────────
 export const documentState = {
@@ -170,7 +171,7 @@ export class DocumentController {
  document.addEventListener('document:reedit', (e) => this.handleReedit(e.detail));
 
  document.addEventListener('editor:closed', (e) => {
-  const { content, templateHtml, templateCss, historyId } = e.detail || {};
+  const { content, templateHtml, templateCss, historyId, hasRealChange } = e.detail || {};
   if (!content) return;
 
   // Actualizar estado do modelo e documentState
@@ -192,6 +193,13 @@ export class DocumentController {
     window.historyController.updateDocumentContent(hId, content, templateHtml).catch(err => {
       console.warn('[DocumentController] editor:closed — updateDocumentContent falhou:', err.message);
     });
+  }
+
+  // v40: só desconta uma edição do limite do documento quando houve
+  // mesmo uma alteração real gravada — abrir e fechar sem mexer em nada
+  // nunca gasta nada (ver DocumentEditor.js → close()).
+  if (hId && hasRealChange) {
+    this._consumeEdit(hId);
   }
 
   // Actualizar também o painel de resultado (se ainda estiver visível)
@@ -582,6 +590,11 @@ export class DocumentController {
   });
  } catch (_) {}
 
+ // v40: informar desde já quantos downloads/edições este documento inclui
+ // — o momento mais estratégico para o utilizador saber isto, sem
+ // interromper o fluxo (é só um toast informativo, não bloqueia nada).
+ this._fetchUsage(newHistoryId).then(u => this._announceUsageLimits(u)).catch(() => {});
+
  // Analytics: documento gerado com sucesso
  Analytics.trackDocumentGenerated(key, cost, newHistoryId);
  try {
@@ -696,6 +709,14 @@ export class DocumentController {
 
   // Analytics
   const longHistId = crypto.randomUUID();
+  // v40: sem isto, _currentHistoryId() (usado pelo gating de downloads/
+  // edições) e o próprio "editor:closed" (actualização do histórico ao
+  // editar) nunca encontravam o ID deste documento — ficavam associados
+  // apenas ao fluxo normal de geração (_generateNormal), nunca ao de
+  // documentos longos (_generateLong).
+  if (this.docModel.formData) {
+    this.docModel.formData._historyId = longHistId;
+  }
   Analytics.trackDocumentGenerated(key, cost, longHistId);
   try {
     window.marketingTracker?.trackEvent('document_generated', {
@@ -718,6 +739,9 @@ export class DocumentController {
     created_at:   new Date().toISOString(),
    });
   } catch (_) {}
+
+  // v40: mesma mensagem informativa de limites, para este segundo fluxo de geração
+  this._fetchUsage(longHistId).then(u => this._announceUsageLimits(u)).catch(() => {});
 
   offlineDB.clearDraft(key).catch(() => {});
   document.getElementById('draftBanner')?.remove();
@@ -1024,7 +1048,129 @@ export class DocumentController {
  }
  }
 
+  // ── v40: limites de downloads/edições por documento ─────────────────────
+  // Cada documento gerado (grátis ou pago) tem um nº limitado de downloads
+  // e de edições manuais no editor — ver migration_v40 para a lógica
+  // completa e o "porquê" do negócio. Estes helpers tratam da parte
+  // cliente: verificar/consumir através de /api/document-usage, e mostrar
+  // o modal de desbloqueio (UsageLimitModal.js) quando o limite é atingido.
+
+  async _getAuthToken() {
+    try {
+      await authManager.ready();
+      return await authManager.getValidToken();
+    } catch (_) { return null; }
+  }
+
+  _currentHistoryId() {
+    return this.docModel?.formData?._historyId || null;
+  }
+
+  async _fetchUsage(documentId) {
+    try {
+      const token = await this._getAuthToken();
+      if (!token) return null;
+      const res = await fetch(`/api/document-usage?document_id=${encodeURIComponent(documentId)}`, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!res.ok) return null;
+      const d = await res.json();
+      return d.usage || null;
+    } catch (_) { return null; }
+  }
+
+  // Mensagem informativa única, mostrada logo após um documento ser gerado
+  // — o momento certo para o utilizador saber, desde já, quantas vezes
+  // pode voltar a descarregar/editar aquele documento específico.
+  _announceUsageLimits(usage) {
+    if (!usage) return;
+    if (usage.downloads_unlimited && usage.edits_unlimited) {
+      NotificationView.info('♾️ Plano Empresa: downloads e edições ilimitados neste documento.');
+      return;
+    }
+    const dl = usage.downloads_unlimited ? '♾️' : usage.downloads_limit;
+    const ed = usage.edits_unlimited ? '♾️' : usage.edits_limit;
+    NotificationView.info(`📄 Documento pronto! Inclui ${dl} downloads e ${ed} edições no editor. Precisar de mais? 1 crédito desbloqueia mais tentativas.`);
+  }
+
+  // Chamado ANTES de qualquer exportação real (PDF/Word/Excel) acontecer.
+  // Devolve true se pode prosseguir, false se o utilizador cancelou/não
+  // desbloqueou. Se não houver documentId (fluxo sem histórico — raro),
+  // deixa passar sem gating, para nunca bloquear por engano.
+  async _gateDownload() {
+    const documentId = this._currentHistoryId();
+    if (!documentId) return true;
+
+    try {
+      const token = await this._getAuthToken();
+      if (!token) return true; // sem sessão: não força limite (ex: modo offline)
+
+      const res = await fetch('/api/document-usage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ action: 'consume-download', document_id: documentId }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.success) return true; // falha no endpoint: não bloquear o download
+
+      if (d.allowed) {
+        if (!d.unlimited && d.remaining <= 1) {
+          NotificationView.warn(`⚠️ Último download incluído neste documento (${d.used}/${d.limit}).`);
+        }
+        return true;
+      }
+
+      // Limite atingido — mostrar modal de desbloqueio
+      const unlocked = await showUsageLimitModal({
+        kind: 'download', used: d.used, limit: d.limit, tier: this._lastKnownTier || 'free',
+        documentId, getToken: () => this._getAuthToken(),
+      });
+      return unlocked; // se desbloqueou, o download prossegue (o novo limite já foi aplicado no servidor)
+    } catch (_) {
+      return true; // erro de rede: não penalizar o utilizador, deixar o download acontecer
+    }
+  }
+
+  // Chamado ao abrir o editor. Devolve true se pode abrir.
+  async _gateEdit() {
+    const documentId = this._currentHistoryId();
+    if (!documentId) return true;
+
+    const usage = await this._fetchUsage(documentId);
+    if (!usage) return true; // sem info: não bloquear
+    this._lastKnownTier = usage.plan_tier;
+
+    if (usage.edits_unlimited || usage.edits_remaining > 0) {
+      if (!usage.edits_unlimited && usage.edits_remaining <= 1) {
+        NotificationView.warn(`⚠️ Última edição incluída neste documento (restam ${usage.edits_remaining}).`);
+      }
+      return true;
+    }
+
+    return await showUsageLimitModal({
+      kind: 'edit', used: usage.edits_used, limit: usage.edits_limit, tier: usage.plan_tier,
+      documentId, getToken: () => this._getAuthToken(),
+    });
+  }
+
+  // Chamado quando o editor fecha com uma alteração real gravada.
+  async _consumeEdit(documentId) {
+    if (!documentId) return;
+    try {
+      const token = await this._getAuthToken();
+      if (!token) return;
+      await fetch('/api/document-usage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ action: 'consume-edit', document_id: documentId }),
+      });
+    } catch (e) {
+      console.warn('[DocumentController] _consumeEdit falhou:', e.message);
+    }
+  }
+
  async _exportPDF() {
+ if (!(await this._gateDownload())) return;
  NotificationView.info('⏳ A preparar PDF…');
  try {
    const svc      = SERVICES[this.docModel.service];
@@ -1064,6 +1210,7 @@ export class DocumentController {
  }
 
  async _exportWord() {
+ if (!(await this._gateDownload())) return;
  NotificationView.info('⏳ A gerar Word…');
  try {
  const svc      = SERVICES[this.docModel.service];
@@ -1095,6 +1242,7 @@ export class DocumentController {
  }
 
  async _exportExcel() {
+ if (!(await this._gateDownload())) return;
  NotificationView.info('⏳ A gerar Excel…');
  try {
  const { ExcelExporter } = await import('../components/ExcelExporter.js');
@@ -1119,11 +1267,14 @@ export class DocumentController {
    });
  }
 
- _openEditor() {
+ async _openEditor() {
  if (!this.docModel.content) {
   NotificationView.warn('⚠️ Nenhum documento gerado ainda.');
   return;
  }
+
+ if (!(await this._gateEdit())) return;
+
  const svc = SERVICES[this.docModel.service] || {};
  const content = this.docModel.content;
  const serviceType = this.docModel.service || 'generic';
