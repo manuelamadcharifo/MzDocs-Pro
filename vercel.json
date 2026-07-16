@@ -55,6 +55,10 @@
       "destination": "/api/misc"
     },
     {
+      "source": "/api/document-usage",
+      "destination": "/api/misc"
+    },
+    {
       "source": "/api/ocr-analyze",
       "destination": "/api/misc"
     },
