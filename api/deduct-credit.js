@@ -20,6 +20,7 @@ const {
   update,
   insert,
   rpc,
+  restRequest,
   adminDeleteUser,
 } = require('./_lib/supabaseAdmin');
 
@@ -89,8 +90,17 @@ module.exports = async function handler(req, res) {
   }
 
   // ── Verificar se conta está bloqueada / créditos expirados ────────────────
+  // NOVO (v40): lemos free_credit_used AQUI, antes da dedução, porque é o
+  // único momento em que ainda reflecte com certeza se este é (ou não) o
+  // crédito grátis de registo a ser gasto agora — depois da dedução, a
+  // função deduct_credits pode já ter marcado free_credit_used=true, e
+  // não teríamos como distinguir "este documento gastou o crédito grátis"
+  // de "um documento seguinte, já pago". Este valor determina os limites
+  // de downloads/edições que o novo documento vai ter (ver migration_v40 e
+  // a trigger compute_document_usage_limits).
+  let creditSource = 'paid'; // valor por omissão seguro (5 downloads/5 edições)
   try {
-    const profileCheck = await selectOne('profiles', 'id', userId, 'is_blocked,credits_expires_at,account_type');
+    const profileCheck = await selectOne('profiles', 'id', userId, 'is_blocked,credits_expires_at,account_type,free_credit_used');
 
     if (profileCheck?.is_blocked) {
       return res.status(403).json({
@@ -111,6 +121,25 @@ module.exports = async function handler(req, res) {
         account_type: profileCheck.account_type,
         credits:      0,
       });
+    }
+
+    if (profileCheck && profileCheck.free_credit_used !== true) {
+      // Ainda não gastou o crédito grátis de registo — é isto que está
+      // prestes a ser debitado agora.
+      creditSource = 'free';
+    } else {
+      // Créditos pagos — distinguir "Empresa" (ilimitado) dos restantes
+      // (Starter/Básico/Pro/Avulso) pela compra mais recente já concluída.
+      try {
+        const lastTx = await restRequest(
+          `transactions?user_id=eq.${userId}&status=eq.completed&order=created_at.desc&limit=1&select=package_id`
+        );
+        if (Array.isArray(lastTx) && lastTx[0]?.package_id === 'empresa') {
+          creditSource = 'enterprise';
+        }
+      } catch (e) {
+        console.warn('[deduct-credit] Falha ao ler última transação (assume paid):', e.message);
+      }
     }
   } catch (e) {
     console.warn('[deduct-credit] Falha ao verificar perfil:', e.message);
@@ -143,7 +172,7 @@ module.exports = async function handler(req, res) {
 
     if (!rpcOk) {
       // Fallback manual com optimistic locking
-      return await _fallbackDeductWithLock(userId, cost, documentType, res);
+      return await _fallbackDeductWithLock(userId, cost, documentType, creditSource, res);
     }
 
     if (remaining === -1 || remaining === null) {
@@ -155,12 +184,17 @@ module.exports = async function handler(req, res) {
     }
 
     // ── Registar no credit_logs ────────────────────────────────────────────
+    // NOVO (v40): credit_source fica gravado aqui — é a partir dele que a
+    // trigger compute_document_usage_limits (migration_v40) vai decidir os
+    // limites de downloads/edições do documento que está prestes a ser
+    // criado com este crédito.
     try {
       await insert('credit_logs', {
         user_id:       userId,
         action:        'consume',
         credits:       -cost,
         document_type: documentType,
+        credit_source: creditSource,
         note:          `Dedução de ${cost} crédito(s) via RPC`,
       });
     } catch (e) { console.warn('[deduct-credit] credit_logs falhou:', e.message); }
@@ -170,9 +204,10 @@ module.exports = async function handler(req, res) {
     }
 
     return res.status(200).json({
-      success: true,
-      credits: remaining,
-      source:  'supabase_rpc',
+      success:       true,
+      credits:       remaining,
+      source:        'supabase_rpc',
+      credit_source: creditSource,
     });
 
   } catch (e) {
@@ -182,7 +217,7 @@ module.exports = async function handler(req, res) {
 };
 
 // ── Fallback com optimistic locking manual ────────────────────────────────
-async function _fallbackDeductWithLock(userId, cost, documentType, res) {
+async function _fallbackDeductWithLock(userId, cost, documentType, creditSource, res) {
   try {
     const profile = await selectOne('profiles', 'id', userId, 'credits,is_temp,account_type');
 
@@ -221,6 +256,7 @@ async function _fallbackDeductWithLock(userId, cost, documentType, res) {
         action:        'consume',
         credits:       -cost,
         document_type: documentType,
+        credit_source: creditSource,
         note:          `Dedução fallback de ${cost} crédito(s)`,
       });
     } catch (e) { console.warn('[deduct-credit] credit_logs fallback falhou:', e.message); }
@@ -230,9 +266,10 @@ async function _fallbackDeductWithLock(userId, cost, documentType, res) {
     }
 
     return res.status(200).json({
-      success: true,
-      credits: newCredits,
-      source:  'supabase_fallback',
+      success:       true,
+      credits:       newCredits,
+      source:        'supabase_fallback',
+      credit_source: creditSource,
     });
   } catch (e) {
     console.error('[deduct-credit] Fallback excepção:', e.message);
