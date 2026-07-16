@@ -64,4 +64,19 @@ function clonePackages(src) {
   return JSON.parse(JSON.stringify(src));
 }
 
-module.exports = { loadPackagesFromSettings, FALLBACK_PACKAGES };
+// Usado pela repartição de vendas de templates (v39): os criadores são
+// pagos em créditos (a mesma moeda usada em toda a plataforma — nunca se
+// pede ao comprador um valor monetário à parte), mas o saldo do criador
+// tem de ser levantável em MZN reais via M-Pesa. Esta função converte
+// créditos → MZN usando a média ponderada de todos os pacotes activos
+// (preço/créditos), a mesma fonte de verdade usada no checkout — nunca um
+// valor fixo no código.
+function estimateMznPerCredit(packages) {
+  const list = Object.values(packages || {});
+  const totalPrice   = list.reduce((s, p) => s + (p.price   || 0), 0);
+  const totalCredits = list.reduce((s, p) => s + (p.credits || 0), 0);
+  if (!totalCredits) return 10; // reserva — só se todos os pacotes vierem sem créditos (não deve acontecer)
+  return totalPrice / totalCredits;
+}
+
+module.exports = { loadPackagesFromSettings, FALLBACK_PACKAGES, estimateMznPerCredit };
