@@ -315,7 +315,7 @@ export class PaymentController {
     const area = document.createElement('div');
     area.id = 'receiptUploadArea';
     area.innerHTML = `
-      <div style="margin-top:14px;">
+      <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px dashed #FCD34D;">
         <p style="font-size:.82rem;color:#374151;margin-bottom:6px;font-weight:600;">
           ✅ Pedido registado! Referência: <span style="color:#2563eb;font-family:monospace;">${result.referenceId || ''}</span>
         </p>
@@ -369,7 +369,12 @@ export class PaymentController {
       </div>
     `;
 
-    manualInfo.appendChild(area);
+    // NOVO (pedido do utilizador): o bloco "Pedido registado!" deve
+    // aparecer PRIMEIRO dentro do mesmo container — antes do aviso
+    // "Pagamento manual — não é automático" — não depois dele. Antes
+    // usava appendChild (ia sempre para o fim, depois de "Política de
+    // Reembolso · Suporte"); agora insere-se como primeiro filho.
+    manualInfo.insertBefore(area, manualInfo.firstChild);
     this._bindUploadEvents();
   }
 
