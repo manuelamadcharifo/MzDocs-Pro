@@ -158,7 +158,7 @@
     .sa-approved{background:var(--green-s);border:1.5px solid #6EE7B7;color:#065F46}
 
     /* TABS */
-    .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0;overflow-y: hidden;overflow-x: auto;}
+    .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0}
     .tab-btn{background:none;border:none;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:700;color:var(--muted);padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:var(--t)}
     .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
     .tab-panel{display:none}
@@ -189,12 +189,9 @@
 <body>
 
 <header class="hdr">
-  <a class="hdr-logo" href="/" data-track-link>
-    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-    <div style="display:none;align-items:center;gap:8px">
-      <div class="hdr-badge">📄</div>
-      <div class="hdr-name">MzDocs Pro</div>
-    </div>
+  <a class="hdr-logo" href="/">
+    <div class="hdr-badge">📄</div>
+    <div class="hdr-name">MzDocs Pro</div>
   </a>
   <a href="/perfil.html" class="hdr-back">👤 Meu Perfil</a>
 </header>
@@ -315,6 +312,7 @@
       <button class="tab-btn" onclick="switchTab('ranking',this)">🏆 Ranking</button>
       <button class="tab-btn" onclick="switchTab('commissions',this)">💰 Comissões</button>
       <button class="tab-btn" onclick="switchTab('withdraw',this)">💸 Levantamentos</button>
+      <button class="tab-btn" onclick="switchTab('marketing',this)">🎨 Marketing</button>
     </div>
 
     <!-- TAB: VISÃO GERAL -->
@@ -484,6 +482,19 @@
               <tr><td colspan="4" class="empty">Nenhum levantamento ainda</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: MARKETING (v41) -->
+    <div class="tab-panel" id="tab-marketing">
+      <div class="card">
+        <div class="card-title">🎨 Materiais de Marketing</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+          Panfletos e banners prontos a usar — cada um já vem com o SEU QR code de afiliado. Basta descarregar e partilhar.
+        </p>
+        <div id="materialsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px">
+          <div class="empty">A carregar materiais…</div>
         </div>
       </div>
     </div>
@@ -771,6 +782,12 @@ window.switchTab = function(tab, btn) {
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.classList.add('active');
   if (btn) btn.classList.add('active');
+  // v41: só carrega os materiais de marketing (podem ser imagens grandes)
+  // quando o afiliado abre esta aba pela primeira vez, não no arranque.
+  if (tab === 'marketing' && !window._materialsLoaded) {
+    window._materialsLoaded = true;
+    loadMarketingMaterials();
+  }
 };
 
 // ── SEGMENTO ─────────────────────────────────────────────────────────────────
@@ -843,57 +860,118 @@ window.submitWithdraw = async function() {
   }
 };
 
-init();
-</script>
+// ── KIT DE MARKETING (v41) ───────────────────────────────────────────────────
+// Busca os materiais activos + o QR pessoal do afiliado, e compõe cada
+// imagem num <canvas> (QR na qr_zone, e nome/código na text_zone, se
+// existir) — tudo no browser, nada fica gravado no servidor por afiliado.
+let _myQrPng = null;
+let _myRefCode = '';
+let _myFullName = '';
 
-<!-- NOVO: atribuição de origem (blog/pesquisa orgânica/social) — esta
-     página é HTML estático, sem o MarketingTracker.js da SPA. Sem isto,
-     um leitor que chegasse aqui pelo Google e depois clicasse para a app
-     era sempre contado como "direct" no dashboard de Marketing. Mesma
-     lógica usada em api/_lib/blogTemplate.js: 1) descobre a origem
-     (?src= explícito > localStorage já existente > referrer de motor de
-     busca/rede social > "direct" por omissão); 2) grava na mesma
-     chave que o MarketingTracker usa (mzd_src); 3) por segurança (modo
-     privado / localStorage bloqueado), também reescreve os links de saída
-     marcados com data-track-link para incluir ?src=... -->
-<script>
-(function(){
+async function loadMarketingMaterials() {
+  const grid = document.getElementById('materialsGrid');
   try {
-    var SOURCE_KEY = 'mzd_src';
-    var stored = null;
-    try { stored = localStorage.getItem(SOURCE_KEY); } catch(_) {}
+    const [matRes, qrRes] = await Promise.all([
+      fetch('/api/affiliate/materials', { headers: { Authorization: 'Bearer ' + _token } }),
+      fetch('/api/affiliate/qrcode',    { headers: { Authorization: 'Bearer ' + _token } }),
+    ]);
+    const matData = await matRes.json();
+    const qrData  = await qrRes.json();
 
-    var qs = new URLSearchParams(window.location.search);
-    var explicit = qs.get('src');
-    var source = explicit || stored;
+    if (!qrData.success) throw new Error(qrData.error || 'Não foi possível gerar o seu QR code.');
+    _myQrPng   = qrData.qr_png;
+    _myRefCode = qrData.ref_code || '';
+    _myFullName = qrData.full_name || '';
 
-    if (!source) {
-      var host = '';
-      try { host = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./,'') : ''; } catch(_) {}
-      if (/mzdocs\.co\.mz$/.test(host))        source = null;
-      else if (/google\./.test(host))          source = 'organic_google';
-      else if (/bing\./.test(host))            source = 'organic_bing';
-      else if (/yahoo\./.test(host))           source = 'organic_yahoo';
-      else if (/duckduckgo\./.test(host))      source = 'organic_duckduckgo';
-      else if (/baidu\./.test(host))           source = 'organic_baidu';
-      else if (/facebook\.|instagram\./.test(host)) source = 'social_facebook';
-      else if (/tiktok\./.test(host))          source = 'social_tiktok';
-      else if (/whatsapp\./.test(host))        source = 'social_whatsapp';
-      else                                     source = 'direct';
+    const materials = matData.materials || [];
+    if (!materials.length) {
+      grid.innerHTML = '<div class="empty">Ainda não há materiais de marketing disponíveis. Volte em breve!</div>';
+      return;
     }
 
-    if (source) {
-      try { localStorage.setItem(SOURCE_KEY, source.slice(0, 50)); } catch(_) {}
-      document.querySelectorAll('a[data-track-link]').forEach(function(a){
-        try {
-          var u = new URL(a.getAttribute('href'), window.location.origin);
-          if (!u.searchParams.get('src')) u.searchParams.set('src', source);
-          a.setAttribute('href', u.pathname + u.search + u.hash);
-        } catch(_) {}
-      });
-    }
-  } catch(_) {}
-})();
+    grid.innerHTML = materials.map((m, i) => `
+      <div style="background:#fff;border:1.5px solid #e7e9ee;border-radius:14px;overflow:hidden">
+        <div style="height:160px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;overflow:hidden">
+          ${m.media_type === 'image'
+            ? `<canvas id="matCanvas-${i}" style="width:100%;height:100%;object-fit:contain"></canvas>`
+            : `<div style="font-size:40px">${ { video:'🎬', audio:'🎵', pdf:'📄' }[m.media_type] || '📦' }</div>`}
+        </div>
+        <div style="padding:12px">
+          <div style="font-weight:800;font-size:13px;color:var(--ink,#0f172a);margin-bottom:2px">${m.title}</div>
+          ${m.description ? `<div style="font-size:11px;color:var(--muted,#64748b);margin-bottom:8px">${m.description}</div>` : ''}
+          ${m.media_type === 'image'
+            ? `<button class="btn btn-green" style="width:100%;justify-content:center;padding:9px;font-size:12px" onclick="downloadMaterial(${i}, '${(m.title||'material').replace(/[^a-z0-9]+/gi,'-')}')">⬇️ Descarregar</button>`
+            : `<a class="btn btn-green" style="width:100%;justify-content:center;padding:9px;font-size:12px;text-decoration:none" href="${m.external_url}" target="_blank" rel="noopener">🔗 Abrir</a>`}
+        </div>
+      </div>
+    `).join('');
+
+    materials.forEach((m, i) => { if (m.media_type === 'image') _renderMaterialCanvas(m, i); });
+  } catch (err) {
+    grid.innerHTML = `<div class="empty">❌ ${err.message}</div>`;
+  }
+}
+
+function _renderMaterialCanvas(material, index) {
+  const canvas = document.getElementById(`matCanvas-${index}`);
+  if (!canvas) return;
+  const baseImg = new Image();
+  baseImg.onload = () => {
+    canvas.width  = baseImg.naturalWidth;
+    canvas.height = baseImg.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(baseImg, 0, 0);
+
+    const drawQr = () => {
+      if (material.qr_zone && _myQrPng) {
+        const qrImg = new Image();
+        qrImg.onload = () => {
+          const z = material.qr_zone;
+          ctx.drawImage(
+            qrImg,
+            (z.x / 100) * canvas.width, (z.y / 100) * canvas.height,
+            (z.w / 100) * canvas.width, (z.h / 100) * canvas.height
+          );
+          drawText();
+        };
+        qrImg.src = _myQrPng;
+      } else {
+        drawText();
+      }
+    };
+
+    const drawText = () => {
+      if (material.text_zone) {
+        const z = material.text_zone;
+        const text = z.field === 'full_name' ? (_myFullName || _myRefCode) : _myRefCode;
+        const px = (z.x / 100) * canvas.width, py = (z.y / 100) * canvas.height;
+        const pw = (z.w / 100) * canvas.width, ph = (z.h / 100) * canvas.height;
+        ctx.fillStyle = z.color || '#0f172a';
+        ctx.font = `700 ${z.font_size || 28}px sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = z.align || 'center';
+        const tx = z.align === 'left' ? px : z.align === 'right' ? px + pw : px + pw / 2;
+        ctx.fillText(text, tx, py + ph / 2, pw);
+      }
+    };
+
+    drawQr();
+  };
+  baseImg.src = material.file_data;
+}
+
+window.downloadMaterial = function(index, filenameBase) {
+  const canvas = document.getElementById(`matCanvas-${index}`);
+  if (!canvas) return;
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `mzdocs-${filenameBase}-${_myRefCode || 'afiliado'}.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+};
+
+init();
 </script>
 </body>
 </html>
