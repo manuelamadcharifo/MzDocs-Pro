@@ -54,6 +54,9 @@
         <span class="nav-icon">🤝</span><span class="nav-label">Afiliados</span>
         <span class="nav-badge" id="navBadgeAffiliates" style="background:#16a34a">0</span>
       </a>
+      <a class="nav-item" data-section="marketing-kit">
+        <span class="nav-icon">🖼️</span><span class="nav-label">Kit de Marketing</span>
+      </a>
       <a class="nav-item" data-section="templates">
         <span class="nav-icon">🎨</span><span class="nav-label">Templates</span>
         <span class="nav-badge" id="navBadgeTemplates" style="background:#f59e0b">0</span>
@@ -697,6 +700,114 @@
       </div>
     </section>
 
+    <!-- ══ KIT DE MARKETING DOS AFILIADOS (v41) ══ -->
+    <section id="section-marketing-kit" class="admin-section">
+      <div class="section-toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">🖼️ Kit de Marketing dos Afiliados</h2>
+          <p style="font-size:13px;color:#64748b">Envie panfletos/banners aqui — cada afiliado vê a mesma peça, mas com o QR code (e código) dele automaticamente colado por cima</p>
+        </div>
+        <button onclick="adminApp._openMaterialForm()" style="padding:10px 16px;border:none;border-radius:10px;background:#0f172a;color:#fff;font-weight:700;font-size:13px;cursor:pointer">➕ Novo Material</button>
+      </div>
+
+      <!-- Formulário de criação/edição -->
+      <div id="materialFormCard" class="settings-card" style="display:none;margin-bottom:20px">
+        <h3 id="materialFormTitle">➕ Novo Material</h3>
+        <input type="hidden" id="matId"/>
+        <div class="form-row">
+          <label>Título</label>
+          <input type="text" id="matTitle" placeholder="Ex: Panfleto Geral — Créditos Grátis"/>
+        </div>
+        <div class="form-row">
+          <label>Descrição (opcional)</label>
+          <input type="text" id="matDescription" placeholder="Ex: Para distribuir em papelarias e universidades"/>
+        </div>
+        <div class="form-row">
+          <label>Categoria</label>
+          <select id="matCategory">
+            <option value="panfleto">Panfleto</option>
+            <option value="banner">Banner</option>
+            <option value="post">Post (redes sociais)</option>
+            <option value="video">Vídeo</option>
+            <option value="audio">Áudio</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Tipo de ficheiro</label>
+          <select id="matMediaType" onchange="adminApp._toggleMaterialMediaFields()">
+            <option value="image">Imagem (upload directo + QR dinâmico)</option>
+            <option value="video">Vídeo (link externo)</option>
+            <option value="audio">Áudio (link externo)</option>
+            <option value="pdf">PDF (link externo)</option>
+          </select>
+        </div>
+
+        <!-- Upload de imagem + editor visual da zona do QR -->
+        <div id="matImageFields">
+          <div class="form-row">
+            <label>Imagem do material (JPEG/PNG, máx. ~3MB)</label>
+            <input type="file" id="matFileInput" accept="image/jpeg,image/png,image/webp" onchange="adminApp._onMaterialImageSelected(event)"/>
+          </div>
+          <div id="matZoneEditorWrap" style="display:none;margin:10px 0">
+            <p style="font-size:.78rem;color:#64748b;margin-bottom:8px">
+              Arraste a caixa <span style="color:#2563eb;font-weight:700">azul</span> para onde o QR code de cada afiliado deve aparecer.
+              Arraste o canto ⤡ para redimensionar. A caixa <span style="color:#16a34a;font-weight:700">verde</span> (opcional) define onde aparece o código do afiliado em texto.
+            </p>
+            <div id="matZoneEditor" style="position:relative;display:inline-block;max-width:100%;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;user-select:none">
+              <img id="matPreviewImg" style="display:block;max-width:100%;height:auto"/>
+              <div id="matQrBox" style="position:absolute;border:2px solid #2563eb;background:rgba(37,99,235,.18);cursor:move">
+                <div class="mat-resize-handle" data-box="qr" style="position:absolute;right:-6px;bottom:-6px;width:14px;height:14px;background:#2563eb;border-radius:3px;cursor:nwse-resize"></div>
+              </div>
+              <div id="matTextBox" style="position:absolute;border:2px dashed #16a34a;background:rgba(22,163,74,.12);cursor:move;display:none">
+                <div class="mat-resize-handle" data-box="text" style="position:absolute;right:-6px;bottom:-6px;width:14px;height:14px;background:#16a34a;border-radius:3px;cursor:nwse-resize"></div>
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:#166534;margin-top:8px;cursor:pointer">
+              <input type="checkbox" id="matTextZoneToggle" onchange="adminApp._toggleMaterialTextZone()"/> Incluir zona de texto (nome/código do afiliado)
+            </label>
+            <div id="matTextZoneOptions" style="display:none;margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+              <select id="matTextField" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:.8rem">
+                <option value="ref_code">Código do afiliado (ex: MAN77831)</option>
+                <option value="full_name">Nome do afiliado</option>
+              </select>
+              <input type="number" id="matTextFontSize" value="28" min="8" max="120" style="width:70px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:.8rem" placeholder="Tamanho"/>
+              <input type="color" id="matTextColor" value="#0f172a" style="width:40px;height:32px;border:1px solid #cbd5e1;border-radius:6px;padding:2px"/>
+              <select id="matTextAlign" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:.8rem">
+                <option value="center">Centrado</option>
+                <option value="left">Esquerda</option>
+                <option value="right">Direita</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Link externo (vídeo/áudio/PDF) -->
+        <div id="matExternalFields" style="display:none">
+          <div class="form-row">
+            <label>Link do ficheiro (YouTube, Google Drive, etc.)</label>
+            <input type="text" id="matExternalUrl" placeholder="https://..."/>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label style="display:flex;align-items:center;gap:6px">
+            <input type="checkbox" id="matIsActive" checked/> Activo (visível para os afiliados)
+          </label>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <button onclick="adminApp._saveMaterial()" class="btn-primary" style="flex:1">💾 Guardar Material</button>
+          <button onclick="adminApp._closeMaterialForm()" style="padding:10px 16px;border:1.5px solid #cbd5e1;border-radius:10px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">Cancelar</button>
+        </div>
+      </div>
+
+      <!-- Lista de materiais -->
+      <div id="materialsList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px">
+        <div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px;grid-column:1/-1">A carregar materiais…</div>
+      </div>
+    </section>
+
     <!-- ══ TEMPLATES MARKETPLACE ══ -->
     <section id="section-templates" class="admin-section">
       <div class="section-toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px">
@@ -1067,60 +1178,7 @@
           </form>
         </div>
 
-        <!-- Programa de Afiliados — NOVO: estas chaves (aff_*) já existiam na
-             base de dados desde a migração v10/v14/v36, mas nunca tinham
-             campo no painel — só eram editáveis directamente por SQL. -->
         <div class="settings-card">
-          <h3>🤝 Programa de Afiliados</h3>
-          <div id="affSettingsLoader" style="color:#94a3b8;font-size:.85rem;padding:8px 0;">A carregar…</div>
-          <form id="affSettingsForm" style="display:none;">
-            <div class="form-row">
-              <label>Bónus de registo (créditos) — dado a quem se regista via link de afiliado</label>
-              <input type="number" id="cfg_aff_bonus_signup" min="0"/>
-            </div>
-            <div class="form-row">
-              <label>Levantamento mínimo (MZN)</label>
-              <input type="number" id="cfg_aff_min_withdraw" min="0"/>
-            </div>
-            <div class="form-row">
-              <label>Comissão — Avulso (%)</label>
-              <input type="number" id="cfg_aff_rate_avulso" min="0" max="100"/>
-            </div>
-            <div class="form-row">
-              <label>Comissão — Starter (%)</label>
-              <input type="number" id="cfg_aff_rate_starter" min="0" max="100"/>
-            </div>
-            <div class="form-row">
-              <label>Comissão — Básico (%)</label>
-              <input type="number" id="cfg_aff_rate_basico" min="0" max="100"/>
-            </div>
-            <div class="form-row">
-              <label>Comissão — Pro (%)</label>
-              <input type="number" id="cfg_aff_rate_pro" min="0" max="100"/>
-            </div>
-            <div class="form-row">
-              <label>Comissão — Empresa (%)</label>
-              <input type="number" id="cfg_aff_rate_empresa" min="0" max="100"/>
-            </div>
-            <div class="form-row">
-              <label>Bónus extra — Papelaria (p.p.)</label>
-              <input type="number" id="cfg_aff_bonus_papelaria" min="0" max="100"/>
-            </div>
-            <div class="form-row">
-              <label>Bónus extra — Cyber Café (p.p.)</label>
-              <input type="number" id="cfg_aff_bonus_cyber" min="0" max="100"/>
-            </div>
-            <div class="form-row">
-              <label>Bónus extra — Universidade (p.p.)</label>
-              <input type="number" id="cfg_aff_bonus_universidade" min="0" max="100"/>
-            </div>
-            <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem"
-              onclick="adminApp.saveAffiliateSettings()">💾 Guardar Programa de Afiliados</button>
-          </form>
-        </div>
-
-        <div class="settings-card">
-
           <h3>📦 Preços dos Pacotes</h3>
           <form id="pricingForm">
             <div class="form-row">
