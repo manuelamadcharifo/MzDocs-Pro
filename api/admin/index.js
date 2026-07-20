@@ -2029,6 +2029,39 @@ async function handleGeneratePage(req, res) {
 // BLOG SCHEDULE QUEUE — títulos agendados (manuais ou de IA) à espera de
 // serem publicados por /api/misc?action=blog-cron
 // ─────────────────────────────────────────────────────────────────────────────
+// Chave "AAAA-M" (mês civil) usada para agrupar contagens por mês.
+function _monthKey(d) {
+  return `${d.getFullYear()}-${d.getMonth()}`;
+}
+
+// Lê blog_monthly_limit / blog_min_interval_days de system_settings, com
+// valores por omissão sensatos caso a migration_v29 ainda não tenha corrido.
+async function _getBlogLimits(supabase) {
+  const { data } = await supabase
+    .from('system_settings').select('key, value')
+    .in('key', ['blog_monthly_limit', 'blog_min_interval_days']);
+  const map = {};
+  (data || []).forEach(r => { map[r.key] = r.value; });
+  return {
+    monthlyLimit:    Math.max(1, parseInt(map.blog_monthly_limit, 10) || 12),
+    minIntervalDays: Math.max(1, parseInt(map.blog_min_interval_days, 10) || 2),
+  };
+}
+
+// Dado um cursor de data e um mapa { "AAAA-M": contagem }, avança o cursor
+// mês a mês até encontrar um mês com vaga (< monthlyLimit), sem nunca voltar
+// atrás. Devolve o novo cursor (não mutado) e regista a vaga ocupada no mapa.
+function _nextSlotRespectingMonthlyLimit(cursor, monthCounts, monthlyLimit) {
+  let c = new Date(cursor);
+  let k = _monthKey(c);
+  while ((monthCounts[k] || 0) >= monthlyLimit) {
+    c = new Date(c.getFullYear(), c.getMonth() + 1, 1);
+    k = _monthKey(c);
+  }
+  monthCounts[k] = (monthCounts[k] || 0) + 1;
+  return c;
+}
+
 async function handleBlogQueue(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
@@ -2039,18 +2072,70 @@ async function handleBlogQueue(req, res) {
     const auth     = await validateAdmin(supabase, token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
+    const { monthlyLimit, minIntervalDays } = await _getBlogLimits(supabase);
+
     if (req.method === 'GET') {
       const { data, error } = await supabase
         .from('blog_schedule_queue')
         .select('id, title, keywords, source, scheduled_at, status, blog_page_id, error_note, created_at')
         .order('scheduled_at', { ascending: true });
       if (error) throw error;
-      return res.status(200).json({ success: true, data: data || [] });
+      const items = data || [];
+
+      const now = new Date();
+      const curKey = _monthKey(now);
+      const thisMonthCount = items.filter(i => i.status !== 'failed' && _monthKey(new Date(i.scheduled_at)) === curKey).length;
+
+      return res.status(200).json({
+        success: true,
+        data: items,
+        summary: {
+          pendingCount:   items.filter(i => i.status === 'pending').length,
+          publishedCount: items.filter(i => i.status === 'published').length,
+          failedCount:    items.filter(i => i.status === 'failed').length,
+          thisMonthCount,
+          monthlyLimit,
+          minIntervalDays,
+        },
+      });
     }
 
     if (req.method === 'POST') {
-      // Body esperado: { items: [{ title, keywords? }], startDate: ISO, intervalDays: N }
-      // OU items com scheduled_at próprio já definido por linha.
+      // ── Reagendamento automático de TODOS os pendentes ────────────────
+      // Body: { reschedule: true, startDate?: ISO, intervalDays?: N }
+      if (req.body?.reschedule) {
+        const step = Math.max(minIntervalDays, parseInt(req.body.intervalDays, 10) || minIntervalDays);
+        const { data: pendingItems, error: pErr } = await supabase
+          .from('blog_schedule_queue').select('id, scheduled_at')
+          .eq('status', 'pending').order('scheduled_at', { ascending: true });
+        if (pErr) throw pErr;
+        if (!pendingItems || !pendingItems.length) {
+          return res.status(200).json({ success: true, updated: 0 });
+        }
+
+        // Contar já publicados/agendados por mês para não estourar o limite.
+        const { data: settledItems } = await supabase
+          .from('blog_schedule_queue').select('scheduled_at').eq('status', 'published');
+        const monthCounts = {};
+        (settledItems || []).forEach(p => { monthCounts[_monthKey(new Date(p.scheduled_at))] = (monthCounts[_monthKey(new Date(p.scheduled_at))] || 0) + 1; });
+
+        let cursor = req.body.startDate ? new Date(req.body.startDate) : new Date();
+        const updates = [];
+        for (const item of pendingItems) {
+          cursor = _nextSlotRespectingMonthlyLimit(cursor, monthCounts, monthlyLimit);
+          updates.push({ id: item.id, scheduled_at: cursor.toISOString() });
+          cursor = new Date(cursor); cursor.setDate(cursor.getDate() + step);
+        }
+
+        for (const u of updates) {
+          await supabase.from('blog_schedule_queue')
+            .update({ scheduled_at: u.scheduled_at }).eq('id', u.id).eq('status', 'pending');
+        }
+        return res.status(200).json({ success: true, updated: updates.length, intervalUsed: step, monthlyLimit });
+      }
+
+      // ── Agendamento em massa de novos títulos ─────────────────────────
+      // Body: { items: [{ title, keywords? }], startDate: ISO, intervalDays: N }
       const { items, startDate, intervalDays } = req.body || {};
       if (!Array.isArray(items) || !items.length) {
         return res.status(400).json({ error: 'items (array de títulos) é obrigatório' });
@@ -2059,34 +2144,82 @@ async function handleBlogQueue(req, res) {
         return res.status(400).json({ error: 'Máximo de 200 títulos por importação' });
       }
 
-      const base = startDate ? new Date(startDate) : new Date();
-      const step = Math.max(1, parseInt(intervalDays, 10) || 7);
+      const step = Math.max(minIntervalDays, parseInt(intervalDays, 10) || minIntervalDays);
 
-      const rows = items.map((it, i) => {
+      // Contar o que já está agendado/publicado por mês (falhados não contam).
+      const { data: existingItems } = await supabase
+        .from('blog_schedule_queue').select('scheduled_at').neq('status', 'failed');
+      const monthCounts = {};
+      (existingItems || []).forEach(p => { monthCounts[_monthKey(new Date(p.scheduled_at))] = (monthCounts[_monthKey(new Date(p.scheduled_at))] || 0) + 1; });
+
+      let cursor = startDate ? new Date(startDate) : new Date();
+      const rows = [];
+      for (const it of items) {
         const title = typeof it === 'string' ? it.trim() : String(it.title || '').trim();
+        if (!title) continue;
         const keywords = typeof it === 'object' ? (it.keywords || null) : null;
         let scheduledAt;
         if (typeof it === 'object' && it.scheduled_at) {
           scheduledAt = new Date(it.scheduled_at);
         } else {
-          scheduledAt = new Date(base); scheduledAt.setDate(scheduledAt.getDate() + i * step);
+          cursor = _nextSlotRespectingMonthlyLimit(cursor, monthCounts, monthlyLimit);
+          scheduledAt = new Date(cursor);
+          cursor = new Date(cursor); cursor.setDate(cursor.getDate() + step);
         }
-        return {
+        rows.push({
           title, keywords, source: 'manual', scheduled_at: scheduledAt.toISOString(),
           status: 'pending', created_by: auth.user.id,
-        };
-      }).filter(r => r.title.length > 0);
+        });
+      }
 
       if (!rows.length) return res.status(400).json({ error: 'Nenhum título válido encontrado' });
 
       const { data, error } = await supabase.from('blog_schedule_queue').insert(rows).select('id, title, scheduled_at');
       if (error) throw error;
 
-      return res.status(200).json({ success: true, inserted: data.length, data });
+      return res.status(200).json({ success: true, inserted: data.length, data, intervalUsed: step, monthlyLimit });
+    }
+
+    if (req.method === 'PATCH') {
+      // Reagendamento manual de UM item pendente.
+      // Body: { id, scheduled_at: ISO }
+      const { id, scheduled_at } = req.body || {};
+      if (!id || !scheduled_at) return res.status(400).json({ error: 'id e scheduled_at são obrigatórios' });
+      const newDate = new Date(scheduled_at);
+      if (isNaN(newDate.getTime())) return res.status(400).json({ error: 'Data inválida' });
+
+      // Não deixar ultrapassar o limite mensal do mês de destino.
+      const monthStart = new Date(newDate.getFullYear(), newDate.getMonth(), 1).toISOString();
+      const monthEnd   = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 1).toISOString();
+      const { data: monthItems, error: mErr } = await supabase
+        .from('blog_schedule_queue').select('id')
+        .neq('status', 'failed').neq('id', id)
+        .gte('scheduled_at', monthStart).lt('scheduled_at', monthEnd);
+      if (mErr) throw mErr;
+      if ((monthItems || []).length >= monthlyLimit) {
+        return res.status(400).json({ error: `Limite mensal (${monthlyLimit} artigos) já atingido para esse mês. Escolhe outro mês ou aumenta o limite em "Geração Automática".` });
+      }
+
+      const { error } = await supabase.from('blog_schedule_queue')
+        .update({ scheduled_at: newDate.toISOString() }).eq('id', id).eq('status', 'pending');
+      if (error) throw error;
+      return res.status(200).json({ success: true });
     }
 
     if (req.method === 'DELETE') {
-      const { id } = req.body || req.query || {};
+      const body = req.body || req.query || {};
+
+      // Remover TODOS os pendentes de uma vez.
+      if (body.all === 'pending') {
+        const { data: toDelete, error: selErr } = await supabase
+          .from('blog_schedule_queue').select('id').eq('status', 'pending');
+        if (selErr) throw selErr;
+        const { error } = await supabase.from('blog_schedule_queue').delete().eq('status', 'pending');
+        if (error) throw error;
+        return res.status(200).json({ success: true, deleted: (toDelete || []).length });
+      }
+
+      const { id } = body;
       if (!id) return res.status(400).json({ error: 'id é obrigatório' });
       const { error } = await supabase.from('blog_schedule_queue').delete().eq('id', id).eq('status', 'pending');
       if (error) throw error;
@@ -2117,20 +2250,22 @@ async function handleBlogSettings(req, res) {
     if (req.method === 'GET') {
       const { data, error } = await supabase
         .from('system_settings').select('key, value')
-        .in('key', ['blog_autogen_enabled', 'blog_autogen_interval_days', 'blog_autogen_last_run']);
+        .in('key', ['blog_autogen_enabled', 'blog_autogen_interval_days', 'blog_autogen_last_run', 'blog_monthly_limit', 'blog_min_interval_days']);
       if (error) throw error;
       const map = {};
       (data || []).forEach(r => { map[r.key] = r.value; });
       return res.status(200).json({
         success: true,
-        enabled:      map.blog_autogen_enabled === 'true',
-        intervalDays: parseInt(map.blog_autogen_interval_days, 10) || 7,
-        lastRun:      map.blog_autogen_last_run || null,
+        enabled:         map.blog_autogen_enabled === 'true',
+        intervalDays:    parseInt(map.blog_autogen_interval_days, 10) || 7,
+        lastRun:         map.blog_autogen_last_run || null,
+        monthlyLimit:    Math.max(1, parseInt(map.blog_monthly_limit, 10) || 12),
+        minIntervalDays: Math.max(1, parseInt(map.blog_min_interval_days, 10) || 2),
       });
     }
 
     if (req.method === 'POST') {
-      const { enabled, intervalDays } = req.body || {};
+      const { enabled, intervalDays, monthlyLimit, minIntervalDays } = req.body || {};
       const updates = [];
       if (typeof enabled === 'boolean') {
         updates.push(supabase.from('system_settings')
@@ -2140,6 +2275,18 @@ async function handleBlogSettings(req, res) {
         const n = Math.max(1, parseInt(intervalDays, 10) || 7);
         updates.push(supabase.from('system_settings')
           .upsert({ key: 'blog_autogen_interval_days', value: String(n) }, { onConflict: 'key' }));
+      }
+      if (monthlyLimit) {
+        // Tecto generoso de 31 (um por dia) para não permitir configurar um
+        // ritmo que pareça publicação em massa aos olhos do Google.
+        const n = Math.min(31, Math.max(1, parseInt(monthlyLimit, 10) || 12));
+        updates.push(supabase.from('system_settings')
+          .upsert({ key: 'blog_monthly_limit', value: String(n) }, { onConflict: 'key' }));
+      }
+      if (minIntervalDays) {
+        const n = Math.max(1, parseInt(minIntervalDays, 10) || 2);
+        updates.push(supabase.from('system_settings')
+          .upsert({ key: 'blog_min_interval_days', value: String(n) }, { onConflict: 'key' }));
       }
       await Promise.all(updates);
       return res.status(200).json({ success: true });
