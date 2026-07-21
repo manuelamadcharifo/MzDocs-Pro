@@ -1659,7 +1659,7 @@ async function affDashboard(req, res, supabase) {
     .order('created_at', { ascending: false }).limit(20);
 
   const { data: withdrawals } = await supabase.from('affiliate_withdrawals')
-    .select('id,amount,mpesa_phone,status,created_at,processed_at').eq('affiliate_id', user.id)
+    .select('id,amount,mpesa_phone,status,created_at,processed_at,receipt_number,receipt_screenshot_url').eq('affiliate_id', user.id)
     .order('created_at', { ascending: false }).limit(10);
 
   // NOVO: "Meus Referidos" — lista de quem se registou com o link deste
