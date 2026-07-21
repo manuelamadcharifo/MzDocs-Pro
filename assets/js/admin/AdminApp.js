@@ -2633,22 +2633,16 @@ USING (EXISTS (
     }
 
     async _processWithdrawal(wdId, status) {
-        let note = '';
-        if (status === 'rejected') {
-            note = await this._prompt(
-                'Motivo da rejeição',
-                'Ex: Dados bancários inválidos, valor excede saldo…',
-                { icon: '❌', subtitle: 'Opcional — será notificado ao afiliado.', confirmLabel: 'Rejeitar' }
-            );
-            if (note === null) return; // cancelado
-        } else {
-            const confirmed = await this._dialog(
-                'Confirmar pagamento M-Pesa?',
-                'O levantamento será marcado como pago e o afiliado notificado.',
-                { confirmLabel: 'Pagar', confirmColor: '#22c55e', icon: '💸' }
-            );
-            if (!confirmed) return;
+        if (status === 'completed') {
+            this._openPayWithdrawalModal(wdId);
+            return;
         }
+        const note = await this._prompt(
+            'Motivo da rejeição',
+            'Ex: Dados bancários inválidos, valor excede saldo…',
+            { icon: '❌', subtitle: 'Opcional — será notificado ao afiliado.', confirmLabel: 'Rejeitar' }
+        );
+        if (note === null) return; // cancelado
         const token = await this._getAdminToken();
         const res = await fetch('/api/admin/affiliates', {
             method: 'POST',
@@ -2657,8 +2651,81 @@ USING (EXISTS (
         });
         const d = await res.json();
         if (!res.ok) { this._notify('Erro: ' + d.error, 'error'); return; }
-        this._notify(status === 'completed' ? '✅ Pagamento confirmado! Afiliado notificado.' : '❌ Levantamento rejeitado. Saldo devolvido.', status === 'completed' ? 'success' : 'error');
+        this._notify('❌ Levantamento rejeitado. Saldo devolvido.', 'error');
         this._loadWithdrawals('pending');
+    }
+
+    // Pagar um levantamento de afiliado exige sempre o print da
+    // transferência M-Pesa — vira o comprovativo do recibo (v43) que o
+    // afiliado poderá baixar e que fica registado no Livro de Pagamentos
+    // a Afiliados, no separador Finanças.
+    _openPayWithdrawalModal(wdId) {
+        this.showModal(`
+            <p class="modal-title">💸 Confirmar Pagamento M-Pesa</p>
+            <p class="modal-sub">Anexe o print da transferência M-Pesa. O sistema gera automaticamente um recibo que o afiliado poderá baixar.</p>
+            <div class="modal-field">
+                <label>Print / screenshot do M-Pesa</label>
+                <input type="file" id="wdReceiptFile" accept="image/png,image/jpeg,image/webp">
+                <div id="wdReceiptPreview" style="margin-top:8px;"></div>
+            </div>
+            <div class="modal-actions">
+                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#16a34a;color:#fff" onclick="adminApp._confirmPayWithdrawal('${wdId}')">✅ Confirmar Pagamento</button>
+            </div>
+        `);
+        document.getElementById('wdReceiptFile')?.addEventListener('change', (ev) => {
+            const file = ev.target.files?.[0];
+            const preview = document.getElementById('wdReceiptPreview');
+            if (file && preview) {
+                preview.innerHTML = `<img src="${URL.createObjectURL(file)}" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;">`;
+            }
+        });
+    }
+
+    // Redimensiona/comprime a imagem no browser antes de enviar, para
+    // nunca ultrapassar o limite de corpo do pedido do Vercel (~4.5 MB) —
+    // qualquer screenshot de telemóvel, mesmo em alta resolução, sai daqui
+    // tipicamente com algumas centenas de KB.
+    _compressImageToBase64(file, maxWidth = 1000, quality = 0.82) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Não foi possível ler o ficheiro'));
+            reader.onload = () => { img.src = reader.result; };
+            img.onerror = () => reject(new Error('Imagem inválida'));
+            img.onload = () => {
+                const scale = Math.min(1, maxWidth / img.width);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async _confirmPayWithdrawal(wdId) {
+        const file = document.getElementById('wdReceiptFile')?.files?.[0];
+        if (!file) { this._notify('❌ Anexe o print da transferência M-Pesa', 'error'); return; }
+        this.closeModal();
+        this._notify('⏳ A processar pagamento…', 'info');
+        try {
+            const receiptBase64 = await this._compressImageToBase64(file);
+            const token = await this._getAdminToken();
+            const res = await fetch('/api/admin/affiliates', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'process_withdrawal', withdrawal_id: wdId, status: 'completed', receipt_image_base64: receiptBase64 }),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || `Erro ${res.status}`);
+            this._notify(`✅ Pago! Recibo ${d.receipt_number || ''} gerado e disponível ao afiliado.`, 'success');
+            this._loadWithdrawals('pending');
+        } catch (err) {
+            this._notify('❌ ' + err.message, 'error');
+        }
     }
 
     // ── FRAUDE ADMIN ──────────────────────────────────────────────────────
@@ -3986,12 +4053,15 @@ USING (EXISTS (
         const le = document.getElementById('ledgerEndDate');   if (le && !le.value) le.value = todayStr;
         const rs = document.getElementById('reportStartDate'); if (rs && !rs.value) rs.value = monthStart;
         const re = document.getElementById('reportEndDate');   if (re && !re.value) re.value = todayStr;
+        const ps = document.getElementById('payoutsStartDate'); if (ps && !ps.value) ps.value = monthStart;
+        const pe = document.getElementById('payoutsEndDate');   if (pe && !pe.value) pe.value = todayStr;
 
         await Promise.all([
             this._loadFinanceSummary(),
             this._loadFinanceExpenses(),
             this._loadFinanceWithdrawals(),
             this._loadTransactionLedger(),
+            this._loadAffiliatePayouts(),
         ]);
     }
 
@@ -4296,6 +4366,8 @@ USING (EXISTS (
                         ${catRows}
                         <div style="display:flex;justify-content:space-between;padding:4px 0;margin-top:4px;"><span style="font-weight:700">Total despesas</span><strong>${fmt(d.expenses.total_mzn)} MZN</strong></div>
                     </div>
+                    <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:13px;"><span>🤝 Comissões pagas a afiliados (${d.affiliate_payouts.count})</span><strong>${fmt(d.affiliate_payouts.total_mzn)} MZN</strong></div>
+                    <div style="display:flex;justify-content:space-between;padding:2px 0 8px;font-size:13px;"><span>🎨 Royalties pagos a criadores de templates (${d.template_royalties.count})</span><strong>${fmt(d.template_royalties.total_mzn)} MZN</strong></div>
                     <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Resultado líquido do período</span><strong style="color:${d.net_result_mzn >= 0 ? '#16a34a' : '#dc2626'}">${fmt(d.net_result_mzn)} MZN</strong></div>
                     <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#94a3b8;"><span>Levantamentos do dono no período</span><span>${fmt(d.withdrawals.total_mzn)} MZN</span></div>
                     <div style="font-size:11px;color:#94a3b8;margin-top:8px;">Gerado em ${new Date(d.generated_at).toLocaleString('pt-MZ')}</div>
@@ -4350,7 +4422,7 @@ USING (EXISTS (
                 return `<tr>
                     <td style="font-size:12px;color:#64748b;">${when}</td>
                     <td style="font-size:12px;">${user.full_name || '—'}</td>
-                    <td style="font-size:12px;">${t.user_phone || '—'}</td>
+                    <td style="font-size:12px;">${t.phone_number || '—'}</td>
                     <td style="font-size:12px;">${(t.package_id || '—').toUpperCase()}</td>
                     <td style="font-size:12px;"><strong>${(t.amount ?? 0).toLocaleString('pt-MZ')}</strong></td>
                     <td>${statusBadge[t.status] || t.status}</td>
@@ -4359,6 +4431,42 @@ USING (EXISTS (
             }).join('');
         } catch (err) {
             tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:16px;color:#ef4444;">Erro: ${err.message}</td></tr>`;
+        }
+    }
+
+    async _loadAffiliatePayouts() {
+        const tbody = document.getElementById('affPayoutsTable');
+        if (!tbody) return;
+        const start = document.getElementById('payoutsStartDate')?.value;
+        const end   = document.getElementById('payoutsEndDate')?.value;
+        const params = new URLSearchParams({ sub: 'affiliate-payouts' });
+        if (start) params.set('start', start);
+        if (end)   params.set('end', end);
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:#94a3b8;">A carregar…</td></tr>';
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch(`/api/admin/finance?${params.toString()}`, { headers: { Authorization: 'Bearer ' + token } });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro');
+            this._affiliatePayouts = d.payouts || [];
+            if (!this._affiliatePayouts.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:#94a3b8;">Sem pagamentos a afiliados neste intervalo.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = this._affiliatePayouts.map(p => {
+                const user = p.profiles || {};
+                const when = p.processed_at ? new Date(p.processed_at).toLocaleString('pt-MZ', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+                return `<tr>
+                    <td style="font-size:12px;color:#64748b;">${when}</td>
+                    <td style="font-size:12px;">${user.full_name || '—'}</td>
+                    <td style="font-size:12px;"><strong>${(p.amount ?? 0).toLocaleString('pt-MZ')}</strong></td>
+                    <td style="font-size:12px;">${p.mpesa_phone || '—'}</td>
+                    <td style="font-size:11px;font-family:monospace;">${p.receipt_number || '—'}</td>
+                    <td>${p.receipt_screenshot_url ? `<a href="${p.receipt_screenshot_url}" target="_blank" rel="noopener" style="font-size:12px;color:#2563eb;font-weight:700;">👁️ Ver</a>` : '—'}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:16px;color:#ef4444;">Erro: ${err.message}</td></tr>`;
         }
     }
 
@@ -4383,11 +4491,21 @@ USING (EXISTS (
                 const user = t.profiles || {};
                 return [
                     t.created_at ? new Date(t.created_at).toLocaleString('pt-MZ') : '',
-                    user.full_name || '', t.user_phone || '', (t.package_id || '').toUpperCase(),
+                    user.full_name || '', t.phone_number || '', (t.package_id || '').toUpperCase(),
                     t.amount ?? 0, t.status || '', t.mpesa_receipt || '',
                 ];
             });
             this._exportMenu('livro-transacoes', 'Livro de Transacções — MzDocs Pro', headers, rows);
+        } else if (type === 'affiliate-payouts') {
+            const headers = ['Data', 'Afiliado', 'Valor (MZN)', 'Telefone M-Pesa', 'Nº Recibo', 'Link Comprovativo'];
+            const rows = (this._affiliatePayouts || []).map(p => {
+                const user = p.profiles || {};
+                return [
+                    p.processed_at ? new Date(p.processed_at).toLocaleString('pt-MZ') : '',
+                    user.full_name || '', p.amount ?? 0, p.mpesa_phone || '', p.receipt_number || '', p.receipt_screenshot_url || '',
+                ];
+            });
+            this._exportMenu('pagamentos-afiliados', 'Pagamentos a Afiliados — MzDocs Pro', headers, rows);
         }
     }
 
