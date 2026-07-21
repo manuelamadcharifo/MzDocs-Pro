@@ -1130,7 +1130,11 @@
           </div>
           <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem" onclick="adminApp._addFinanceExpense()">➕ Registar Despesa</button>
 
-          <div id="financeExpensesList" style="margin-top:14px;max-height:220px;overflow-y:auto;font-size:.8rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
+            <span style="font-size:.75rem;font-weight:700;color:#0f172a;">Histórico</span>
+            <button type="button" onclick="adminApp._exportFinanceCsv('expenses')" style="font-size:11px;padding:4px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;cursor:pointer">📥 CSV</button>
+          </div>
+          <div id="financeExpensesList" style="margin-top:6px;max-height:220px;overflow-y:auto;font-size:.8rem">
             <div style="color:#94a3b8;text-align:center;padding:12px 0">A carregar…</div>
           </div>
         </div>
@@ -1153,11 +1157,116 @@
           </div>
           <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem" onclick="adminApp._addFinanceWithdrawal()">💸 Registar Levantamento</button>
 
-          <div id="financeWithdrawalsList" style="margin-top:14px;max-height:220px;overflow-y:auto;font-size:.8rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
+            <span style="font-size:.75rem;font-weight:700;color:#0f172a;">Histórico</span>
+            <button type="button" onclick="adminApp._exportFinanceCsv('withdrawals')" style="font-size:11px;padding:4px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;cursor:pointer">📥 CSV</button>
+          </div>
+          <div id="financeWithdrawalsList" style="margin-top:6px;max-height:220px;overflow-y:auto;font-size:.8rem">
             <div style="color:#94a3b8;text-align:center;padding:12px 0">A carregar…</div>
           </div>
         </div>
 
+        <!-- Dados fiscais da empresa — cabeçalho dos relatórios para o Fisco -->
+        <div class="settings-card">
+          <h3>🧾 Dados Fiscais da Empresa</h3>
+          <p style="font-size:.8rem;color:#64748b;margin-bottom:10px">
+            Usados no cabeçalho dos relatórios de período e das exportações para o contabilista — preencha uma vez.
+          </p>
+          <form id="fiscalConfigForm">
+            <div class="form-row">
+              <label>Nome legal/comercial</label>
+              <input type="text" id="fis_company_name" placeholder="Ex: MzDocs Pro, Lda"/>
+            </div>
+            <div class="form-row">
+              <label>NUIT</label>
+              <input type="text" id="fis_nuit" placeholder="Ex: 123456789"/>
+            </div>
+            <div class="form-row">
+              <label>Morada fiscal</label>
+              <input type="text" id="fis_address" placeholder="Ex: Maputo, Moçambique"/>
+            </div>
+            <div class="form-row">
+              <label>Regime fiscal</label>
+              <select id="fis_regime">
+                <option value="">— Seleccionar —</option>
+                <option value="Regime Simplificado">Regime Simplificado</option>
+                <option value="Regime Normal de IVA">Regime Normal de IVA</option>
+                <option value="Isento de IVA">Isento de IVA</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Início do exercício fiscal</label>
+              <input type="date" id="fis_year_start"/>
+            </div>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem" onclick="adminApp._saveFiscalConfig()">💾 Guardar Dados Fiscais</button>
+          </form>
+        </div>
+
+      </div>
+
+      <!-- Relatório de período — para IVA mensal / declaração anual / inspecção -->
+      <div class="settings-card" style="margin-top:16px">
+        <h3>📊 Relatório de Período (para o Fisco)</h3>
+        <p style="font-size:.8rem;color:#64748b;margin-bottom:10px">
+          Escolha um intervalo (mês, trimestre, ano ou personalizado) para gerar um resumo pronto a entregar ao contabilista ou a apresentar numa inspecção: receita confirmada, despesas por categoria e resultado líquido do período.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button type="button" onclick="adminApp._setReportPreset('month')" style="font-size:12px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;cursor:pointer">Este Mês</button>
+          <button type="button" onclick="adminApp._setReportPreset('quarter')" style="font-size:12px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;cursor:pointer">Este Trimestre</button>
+          <button type="button" onclick="adminApp._setReportPreset('year')" style="font-size:12px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;cursor:pointer">Este Ano</button>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-row" style="margin:0;">
+            <label>De</label>
+            <input type="date" id="reportStartDate"/>
+          </div>
+          <div class="form-row" style="margin:0;">
+            <label>Até</label>
+            <input type="date" id="reportEndDate"/>
+          </div>
+          <button type="button" class="btn-primary" style="padding:10px 18px" onclick="adminApp._generatePeriodReport()">📊 Gerar Relatório</button>
+        </div>
+        <div id="periodReportOutput" style="margin-top:16px;"></div>
+      </div>
+
+      <!-- Livro de transacções (receita) — base para o contabilista -->
+      <div class="settings-card" style="margin-top:16px">
+        <h3>📖 Livro de Transacções (Receita)</h3>
+        <p style="font-size:.8rem;color:#64748b;margin-bottom:10px">
+          Todos os pagamentos processados pela plataforma. O número do comprovativo M-Pesa serve de prova de pagamento perante o Fisco. Filtre por data/estado e exporte para dar ao contabilista.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+          <div class="form-row" style="margin:0;">
+            <label>De</label>
+            <input type="date" id="ledgerStartDate"/>
+          </div>
+          <div class="form-row" style="margin:0;">
+            <label>Até</label>
+            <input type="date" id="ledgerEndDate"/>
+          </div>
+          <div class="form-row" style="margin:0;">
+            <label>Estado</label>
+            <select id="ledgerStatus">
+              <option value="completed">Confirmadas (legais)</option>
+              <option value="all">Todas</option>
+              <option value="pending">Pendentes</option>
+              <option value="failed">Falhadas</option>
+            </select>
+          </div>
+          <button type="button" onclick="adminApp._loadTransactionLedger()" style="padding:9px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔍 Filtrar</button>
+          <button type="button" onclick="adminApp._exportFinanceCsv('transactions')" style="padding:9px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">📥 Exportar CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Data</th><th>Cliente</th><th>Telefone</th><th>Pacote</th><th>Valor (MZN)</th><th>Estado</th><th>Comprovativo M-Pesa</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTransactionsTable"><tr><td colspan="7" style="text-align:center;padding:16px;color:#94a3b8;">A carregar…</td></tr></tbody>
+          </table>
+        </div>
+        <p style="font-size:.7rem;color:#94a3b8;margin-top:8px;">Mostra até 2000 linhas mais recentes do intervalo escolhido. Para exportações maiores, reduza o intervalo de datas.</p>
       </div>
     </section>
 
