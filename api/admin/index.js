@@ -718,7 +718,7 @@ async function handleFinance(req, res) {
     // mensal ou de uma declaração anual (IRPC/IRPS simplificado).
     if (req.method === 'GET' && q.sub === 'transactions') {
       let query = supabase.from('transactions')
-        .select('id, user_phone, package_id, amount, credits, status, provider, mpesa_receipt, created_at, completed_at, profiles!transactions_user_id_fkey(full_name, email)')
+        .select('id, phone_number, package_id, amount, credits, status, mpesa_receipt, reference_id, created_at, confirmed_at, profiles!transactions_user_id_fkey(full_name, email)')
         .order('created_at', { ascending: false }).limit(2000);
       if (q.status && q.status !== 'all') query = query.eq('status', q.status);
       if (q.start) query = query.gte('created_at', `${q.start}T00:00:00.000Z`);
@@ -729,7 +729,7 @@ async function handleFinance(req, res) {
         // de perfil em vez de rebentar o livro de transacções inteiro.
         console.warn('[admin/finance] Join com profiles falhou, a tentar sem join:', error.message);
         let fallback = supabase.from('transactions')
-          .select('id, user_phone, package_id, amount, credits, status, provider, mpesa_receipt, created_at, completed_at')
+          .select('id, phone_number, package_id, amount, credits, status, mpesa_receipt, reference_id, created_at, confirmed_at')
           .order('created_at', { ascending: false }).limit(2000);
         if (q.status && q.status !== 'all') fallback = fallback.eq('status', q.status);
         if (q.start) fallback = fallback.gte('created_at', `${q.start}T00:00:00.000Z`);
@@ -739,6 +739,41 @@ async function handleFinance(req, res) {
         data = r2.data;
       }
       return res.status(200).json({ success: true, transactions: data || [] });
+    }
+
+    // ── GET: livro de pagamentos a afiliados (comissões já pagas) ─────
+    // Cada linha tem o número de recibo e o link do print M-Pesa anexado
+    // pelo admin ao marcar "✅ Pagar" (ver handleAffiliates →
+    // process_withdrawal). Não entra na subtracção do "Valor Levantável"
+    // porque essa já é feita via aff_balance/pending — isto é só o livro
+    // de consulta para o contabilista ver o que já foi efectivamente pago.
+    if (req.method === 'GET' && q.sub === 'affiliate-payouts') {
+      let query = supabase.from('affiliate_withdrawals')
+        .select('id, affiliate_id, amount, mpesa_phone, receipt_number, receipt_screenshot_url, processed_at, created_at, profiles!affiliate_withdrawals_affiliate_id_fkey(full_name, email)')
+        .eq('status', 'completed')
+        .order('processed_at', { ascending: false }).limit(2000);
+      if (q.start) query = query.gte('processed_at', `${q.start}T00:00:00.000Z`);
+      if (q.end)   query = query.lte('processed_at', `${q.end}T23:59:59.999Z`);
+      let { data, error } = await query;
+      if (error) {
+        console.warn('[admin/finance] Join com profiles falhou (affiliate-payouts), a tentar sem join:', error.message);
+        let fallback = supabase.from('affiliate_withdrawals')
+          .select('id, affiliate_id, amount, mpesa_phone, receipt_number, receipt_screenshot_url, processed_at, created_at')
+          .eq('status', 'completed').order('processed_at', { ascending: false }).limit(2000);
+        if (q.start) fallback = fallback.gte('processed_at', `${q.start}T00:00:00.000Z`);
+        if (q.end)   fallback = fallback.lte('processed_at', `${q.end}T23:59:59.999Z`);
+        const r2 = await fallback;
+        if (r2.error) throw r2.error;
+        data = r2.data;
+        // Enriquecer manualmente sem depender do embed do PostgREST
+        const ids = [...new Set((data || []).map(w => w.affiliate_id))];
+        if (ids.length) {
+          const { data: pnames } = await supabase.from('profiles').select('id, full_name, email').in('id', ids);
+          const pm = {}; (pnames || []).forEach(p => { pm[p.id] = p; });
+          data = data.map(w => ({ ...w, profiles: pm[w.affiliate_id] || {} }));
+        }
+      }
+      return res.status(200).json({ success: true, payouts: data || [] });
     }
 
     // ── GET: dados fiscais da empresa (cabeçalho dos relatórios) ──────
@@ -771,6 +806,8 @@ async function handleFinance(req, res) {
         { data: revenueRows, error: revErr },
         { data: expenseRows, error: expErr },
         { data: withdrawalRows, error: wdErr },
+        { data: affPayoutRows, error: affErr },
+        { data: tplPayoutRows, error: tplErr },
         { data: fiscalRows },
       ] = await Promise.all([
         supabase.from('transactions').select('amount, created_at')
@@ -779,9 +816,17 @@ async function handleFinance(req, res) {
           .gte('occurred_at', q.start).lte('occurred_at', q.end),
         supabase.from('finance_withdrawals').select('amount_mzn, withdrawn_at')
           .gte('withdrawn_at', q.start).lte('withdrawn_at', q.end),
+        // Comissões de afiliados efectivamente pagas no período — custo
+        // operacional dedutível, tal como as despesas de domínio/hosting/IA.
+        supabase.from('affiliate_withdrawals').select('amount, processed_at')
+          .eq('status', 'completed').gte('processed_at', `${q.start}T00:00:00.000Z`).lte('processed_at', `${q.end}T23:59:59.999Z`),
+        // Royalties de criadores de templates (v38) efectivamente pagos.
+        supabase.from('template_withdrawals').select('amount, processed_at')
+          .eq('status', 'completed').gte('processed_at', `${q.start}T00:00:00.000Z`).lte('processed_at', `${q.end}T23:59:59.999Z`),
         supabase.from('system_settings').select('key, value').in('key', FISCAL_SETTINGS_KEYS),
       ]);
       if (revErr) throw revErr; if (expErr) throw expErr; if (wdErr) throw wdErr;
+      if (affErr) throw affErr; if (tplErr) throw tplErr;
 
       const fiscalCfg = {};
       (fiscalRows || []).forEach(r => { fiscalCfg[r.key] = r.value; });
@@ -793,7 +838,15 @@ async function handleFinance(req, res) {
         expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + (e.amount_mzn || 0);
         expensesTotal += (e.amount_mzn || 0);
       });
-      const withdrawalsTotal = (withdrawalRows || []).reduce((s, w) => s + (w.amount_mzn || 0), 0);
+      const withdrawalsTotal    = (withdrawalRows || []).reduce((s, w) => s + (w.amount_mzn || 0), 0);
+      const affiliatePayoutsTotal = (affPayoutRows || []).reduce((s, w) => s + (w.amount || 0), 0);
+      const templateRoyaltiesTotal = (tplPayoutRows || []).reduce((s, w) => s + (w.amount || 0), 0);
+
+      // Resultado líquido "real": receita bruta menos TODOS os custos
+      // dedutíveis do período — incluindo comissões de afiliados e
+      // royalties de templates, que são despesa operacional tanto quanto
+      // o domínio ou o Vercel, mesmo não vivendo em finance_expenses.
+      const netResult = revenueTotal - expensesTotal - affiliatePayoutsTotal - templateRoyaltiesTotal;
 
       return res.status(200).json({
         success: true,
@@ -806,8 +859,10 @@ async function handleFinance(req, res) {
         },
         revenue: { total_mzn: round2(revenueTotal), transaction_count: (revenueRows || []).length },
         expenses: { total_mzn: round2(expensesTotal), by_category: expensesByCategory, entry_count: (expenseRows || []).length },
+        affiliate_payouts: { total_mzn: round2(affiliatePayoutsTotal), count: (affPayoutRows || []).length },
+        template_royalties: { total_mzn: round2(templateRoyaltiesTotal), count: (tplPayoutRows || []).length },
         withdrawals: { total_mzn: round2(withdrawalsTotal) },
-        net_result_mzn: round2(revenueTotal - expensesTotal),
+        net_result_mzn: round2(netResult),
         generated_at: new Date().toISOString(),
       });
     }
@@ -2587,8 +2642,39 @@ async function handleAffiliates(req, res) {
           .select('affiliate_id,amount,status').eq('id', withdrawal_id).single();
         if (wErr || !wd) return res.status(404).json({ error: 'Levantamento não encontrado' });
         if (wd.status !== 'pending') return res.status(400).json({ error: 'Levantamento não está pendente' });
+
+        // Pagar exige sempre o print da transferência M-Pesa — é a prova
+        // que sustenta o recibo entregue ao afiliado e o registo contabilístico.
+        let receiptUrl = null;
+        let receiptNumber = null;
+        if (newStatus === 'completed') {
+          const shot = body.receipt_image_base64;
+          if (!shot || typeof shot !== 'string') {
+            return res.status(400).json({ error: 'É obrigatório anexar o print/screenshot da transferência M-Pesa para marcar como pago.' });
+          }
+          const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(shot);
+          if (!match) return res.status(400).json({ error: 'Imagem inválida — use JPEG, PNG ou WEBP.' });
+          const [, mime, base64Data] = match;
+          const ext = mime.split('/')[1];
+          const buffer = Buffer.from(base64Data, 'base64');
+          // Vercel limita o corpo do pedido a ~4.5 MB; em base64 isso são
+          // cerca de 3 MB de imagem original — por isso o tecto aqui é
+          // mais apertado que o do bucket (5 MB) definido na migration_v43.
+          if (buffer.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'Imagem demasiado grande (máx. 3 MB) — tire o print em qualidade normal, não a resolução máxima do ecrã.' });
+
+          receiptNumber = `REC-${withdrawal_id.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+          const path = `${withdrawal_id}.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from('affiliate-receipts')
+            .upload(path, buffer, { contentType: mime, upsert: true });
+          if (upErr) return res.status(500).json({ error: 'Falha ao guardar o comprovativo: ' + upErr.message });
+          const { data: pub } = supabase.storage.from('affiliate-receipts').getPublicUrl(path);
+          receiptUrl = pub?.publicUrl || null;
+        }
+
         const { error } = await supabase.from('affiliate_withdrawals').update({
           status: newStatus, admin_note: note || null, processed_at: new Date().toISOString(),
+          ...(receiptUrl ? { receipt_screenshot_url: receiptUrl, receipt_number: receiptNumber } : {}),
         }).eq('id', withdrawal_id);
         if (error) throw error;
         // Se rejeitado: devolver saldo
@@ -2602,11 +2688,11 @@ async function handleAffiliates(req, res) {
             affiliate_id: wd.affiliate_id, type: 'withdrawal',
             title: newStatus === 'completed' ? '✅ Levantamento Pago!' : '❌ Levantamento Rejeitado',
             body: newStatus === 'completed'
-              ? `O seu levantamento de ${wd.amount} MZN foi processado via M-Pesa.`
+              ? `O seu levantamento de ${wd.amount} MZN foi processado via M-Pesa. O recibo (${receiptNumber}) já está disponível para download.`
               : `O seu pedido de ${wd.amount} MZN foi rejeitado. ${note ? 'Motivo: ' + note : 'Contacte o suporte.'}`,
           });
         } catch (_) { /* notificação é best-effort */ }
-        return res.status(200).json({ success: true, message: 'Levantamento actualizado.' });
+        return res.status(200).json({ success: true, message: 'Levantamento actualizado.', receipt_number: receiptNumber, receipt_screenshot_url: receiptUrl });
       }
 
       // Resolver flag de fraude
