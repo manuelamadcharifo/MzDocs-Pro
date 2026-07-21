@@ -667,6 +667,15 @@ const FINANCE_SETTINGS_KEYS = [
   'finance_ai_monthly_usd', 'finance_other_monthly_mzn',
 ];
 
+// Identidade fiscal da empresa — impressa no cabeçalho dos relatórios de
+// período (sub=period-report) e nas exportações CSV, para que o
+// contabilista/o Fisco vejam sempre a que entidade os números pertencem.
+// Editável no cartão "🧾 Contabilidade / Dados Fiscais" do separador Finanças.
+const FISCAL_SETTINGS_KEYS = [
+  'fiscal_company_name', 'fiscal_nuit', 'fiscal_address',
+  'fiscal_regime', 'fiscal_year_start',
+];
+
 async function handleFinance(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
@@ -677,22 +686,130 @@ async function handleFinance(req, res) {
 
     const q = req.query || {};
 
-    // ── GET: histórico de despesas operacionais ───────────────────────
+    // ── GET: histórico de despesas operacionais (para contabilidade) ──
     if (req.method === 'GET' && q.sub === 'expenses') {
-      const { data, error } = await supabase.from('finance_expenses')
+      let query = supabase.from('finance_expenses')
         .select('id, category, description, amount_mzn, is_recurring, occurred_at, created_at')
-        .order('occurred_at', { ascending: false }).limit(200);
+        .order('occurred_at', { ascending: false }).limit(2000);
+      if (q.start) query = query.gte('occurred_at', q.start);
+      if (q.end)   query = query.lte('occurred_at', q.end);
+      const { data, error } = await query;
       if (error) throw error;
       return res.status(200).json({ success: true, expenses: data || [] });
     }
 
     // ── GET: histórico de levantamentos do dono da plataforma ─────────
     if (req.method === 'GET' && q.sub === 'withdrawals') {
-      const { data, error } = await supabase.from('finance_withdrawals')
+      let query = supabase.from('finance_withdrawals')
         .select('id, amount_mzn, note, withdrawn_at, created_at')
-        .order('withdrawn_at', { ascending: false }).limit(200);
+        .order('withdrawn_at', { ascending: false }).limit(2000);
+      if (q.start) query = query.gte('withdrawn_at', q.start);
+      if (q.end)   query = query.lte('withdrawn_at', q.end);
+      const { data, error } = await query;
       if (error) throw error;
       return res.status(200).json({ success: true, withdrawals: data || [] });
+    }
+
+    // ── GET: livro de transacções (receita) — base para o contabilista ─
+    // Cada linha corresponde a um pagamento processado pelo M-Pesa; o
+    // "mpesa_receipt" funciona como o número de comprovativo de pagamento
+    // para efeitos de prova perante o Fisco. Filtros por data/estado
+    // permitem ao contabilista isolar exactamente o período de um IVA
+    // mensal ou de uma declaração anual (IRPC/IRPS simplificado).
+    if (req.method === 'GET' && q.sub === 'transactions') {
+      let query = supabase.from('transactions')
+        .select('id, user_phone, package_id, amount, credits, status, provider, mpesa_receipt, created_at, completed_at, profiles!transactions_user_id_fkey(full_name, email)')
+        .order('created_at', { ascending: false }).limit(2000);
+      if (q.status && q.status !== 'all') query = query.eq('status', q.status);
+      if (q.start) query = query.gte('created_at', `${q.start}T00:00:00.000Z`);
+      if (q.end)   query = query.lte('created_at', `${q.end}T23:59:59.999Z`);
+      let { data, error } = await query;
+      if (error) {
+        // Se o join à FK falhar por qualquer razão, devolver sem os dados
+        // de perfil em vez de rebentar o livro de transacções inteiro.
+        console.warn('[admin/finance] Join com profiles falhou, a tentar sem join:', error.message);
+        let fallback = supabase.from('transactions')
+          .select('id, user_phone, package_id, amount, credits, status, provider, mpesa_receipt, created_at, completed_at')
+          .order('created_at', { ascending: false }).limit(2000);
+        if (q.status && q.status !== 'all') fallback = fallback.eq('status', q.status);
+        if (q.start) fallback = fallback.gte('created_at', `${q.start}T00:00:00.000Z`);
+        if (q.end)   fallback = fallback.lte('created_at', `${q.end}T23:59:59.999Z`);
+        const r2 = await fallback;
+        if (r2.error) throw r2.error;
+        data = r2.data;
+      }
+      return res.status(200).json({ success: true, transactions: data || [] });
+    }
+
+    // ── GET: dados fiscais da empresa (cabeçalho dos relatórios) ──────
+    if (req.method === 'GET' && q.sub === 'fiscal-config') {
+      const { data, error } = await supabase.from('system_settings')
+        .select('key, value').in('key', FISCAL_SETTINGS_KEYS);
+      if (error) throw error;
+      const cfg = {};
+      (data || []).forEach(r => { cfg[r.key] = r.value; });
+      return res.status(200).json({
+        success: true,
+        company_name: cfg.fiscal_company_name || '',
+        nuit:         cfg.fiscal_nuit || '',
+        address:      cfg.fiscal_address || '',
+        regime:       cfg.fiscal_regime || '',
+        year_start:   cfg.fiscal_year_start || '',
+      });
+    }
+
+    // ── GET: relatório agregado de um período (mês/trimestre/ano) ─────
+    // Pensado para a época de declaração de impostos ou para uma
+    // inspecção: soma a receita confirmada, agrupa as despesas por
+    // categoria e mostra o resultado líquido do intervalo escolhido —
+    // sem misturar com o saldo reservado para afiliados/templates, que é
+    // um conceito de tesouraria e não de contabilidade fiscal.
+    if (req.method === 'GET' && q.sub === 'period-report') {
+      if (!q.start || !q.end) return res.status(400).json({ error: 'start e end (AAAA-MM-DD) são obrigatórios' });
+
+      const [
+        { data: revenueRows, error: revErr },
+        { data: expenseRows, error: expErr },
+        { data: withdrawalRows, error: wdErr },
+        { data: fiscalRows },
+      ] = await Promise.all([
+        supabase.from('transactions').select('amount, created_at')
+          .eq('status', 'completed').gte('created_at', `${q.start}T00:00:00.000Z`).lte('created_at', `${q.end}T23:59:59.999Z`),
+        supabase.from('finance_expenses').select('category, amount_mzn, description, occurred_at')
+          .gte('occurred_at', q.start).lte('occurred_at', q.end),
+        supabase.from('finance_withdrawals').select('amount_mzn, withdrawn_at')
+          .gte('withdrawn_at', q.start).lte('withdrawn_at', q.end),
+        supabase.from('system_settings').select('key, value').in('key', FISCAL_SETTINGS_KEYS),
+      ]);
+      if (revErr) throw revErr; if (expErr) throw expErr; if (wdErr) throw wdErr;
+
+      const fiscalCfg = {};
+      (fiscalRows || []).forEach(r => { fiscalCfg[r.key] = r.value; });
+
+      const revenueTotal = (revenueRows || []).reduce((s, t) => s + (t.amount || 0), 0);
+      const expensesByCategory = {};
+      let expensesTotal = 0;
+      (expenseRows || []).forEach(e => {
+        expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + (e.amount_mzn || 0);
+        expensesTotal += (e.amount_mzn || 0);
+      });
+      const withdrawalsTotal = (withdrawalRows || []).reduce((s, w) => s + (w.amount_mzn || 0), 0);
+
+      return res.status(200).json({
+        success: true,
+        period: { start: q.start, end: q.end },
+        company: {
+          name:   fiscalCfg.fiscal_company_name || '(nome não configurado)',
+          nuit:   fiscalCfg.fiscal_nuit || '(NUIT não configurado)',
+          address: fiscalCfg.fiscal_address || '',
+          regime: fiscalCfg.fiscal_regime || '',
+        },
+        revenue: { total_mzn: round2(revenueTotal), transaction_count: (revenueRows || []).length },
+        expenses: { total_mzn: round2(expensesTotal), by_category: expensesByCategory, entry_count: (expenseRows || []).length },
+        withdrawals: { total_mzn: round2(withdrawalsTotal) },
+        net_result_mzn: round2(revenueTotal - expensesTotal),
+        generated_at: new Date().toISOString(),
+      });
     }
 
     // ── GET: resumo financeiro completo (dashboard + separador Finanças) ─
@@ -706,6 +823,7 @@ async function handleFinance(req, res) {
         { data: tplPendingWithdrawals },
         { data: expenseRows },
         { data: withdrawalRows },
+        { data: fiscalRows },
       ] = await Promise.all([
         supabase.from('system_settings').select('key, value').in('key', FINANCE_SETTINGS_KEYS),
         supabase.from('transactions').select('amount').eq('status', 'completed'),
@@ -721,10 +839,13 @@ async function handleFinance(req, res) {
         supabase.from('template_withdrawals').select('amount').eq('status', 'pending'),
         supabase.from('finance_expenses').select('amount_mzn'),
         supabase.from('finance_withdrawals').select('amount_mzn'),
+        supabase.from('system_settings').select('key, value').in('key', FISCAL_SETTINGS_KEYS),
       ]);
 
       const cfg = {};
       (settingsRows || []).forEach(r => { cfg[r.key] = r.value; });
+      const fiscalCfg = {};
+      (fiscalRows || []).forEach(r => { fiscalCfg[r.key] = r.value; });
       const num = (v, def = 0) => { const n = parseFloat(v); return Number.isFinite(n) ? n : def; };
 
       const domainProvider    = cfg.finance_domain_provider || 'mozdomains.co.mz';
@@ -780,6 +901,13 @@ async function handleFinance(req, res) {
           },
           other: { monthly_mzn: otherMonthlyMzn },
           total_monthly_mzn: round2(totalMonthlyCostMzn),
+        },
+        fiscal_config: {
+          company_name: fiscalCfg.fiscal_company_name || '',
+          nuit:         fiscalCfg.fiscal_nuit || '',
+          address:      fiscalCfg.fiscal_address || '',
+          regime:       fiscalCfg.fiscal_regime || '',
+          year_start:   fiscalCfg.fiscal_year_start || '',
         },
       });
     }
@@ -863,7 +991,25 @@ async function handleFinance(req, res) {
         return res.status(200).json({ success: true, updated: rows.length });
       }
 
-      return res.status(400).json({ error: 'op desconhecida (esperado: add-expense, delete-expense, add-withdrawal, delete-withdrawal, save-config)' });
+      if (op === 'save-fiscal-config') {
+        const updates = {};
+        FISCAL_SETTINGS_KEYS.forEach(k => {
+          if (body[k] !== undefined) updates[k] = String(body[k]);
+        });
+        if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nenhum campo para guardar' });
+        const rows = Object.entries(updates).map(([key, value]) => ({
+          key, value, updated_by: auth.user.id, updated_at: now,
+        }));
+        const { error } = await supabase.from('system_settings').upsert(rows, { onConflict: 'key' });
+        if (error) throw error;
+        await supabase.from('admin_logs').insert({
+          admin_id: auth.user.id, action: 'finance_save_fiscal_config',
+          target_type: 'system_settings', details: updates, created_at: now,
+        });
+        return res.status(200).json({ success: true, updated: rows.length });
+      }
+
+      return res.status(400).json({ error: 'op desconhecida (esperado: add-expense, delete-expense, add-withdrawal, delete-withdrawal, save-config, save-fiscal-config)' });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
