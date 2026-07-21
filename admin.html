@@ -1268,6 +1268,36 @@
         </div>
         <p style="font-size:.7rem;color:#94a3b8;margin-top:8px;">Mostra até 2000 linhas mais recentes do intervalo escolhido. Para exportações maiores, reduza o intervalo de datas.</p>
       </div>
+
+      <!-- Livro de pagamentos a afiliados — comissões já pagas, com recibo -->
+      <div class="settings-card" style="margin-top:16px">
+        <h3>📑 Pagamentos a Afiliados (Comissões Pagas)</h3>
+        <p style="font-size:.8rem;color:#64748b;margin-bottom:10px">
+          Levantamentos de afiliados já pagos, cada um com o número de recibo e o print M-Pesa anexado pelo admin ao confirmar o pagamento — a mesma prova que fica disponível ao afiliado para download.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+          <div class="form-row" style="margin:0;">
+            <label>De</label>
+            <input type="date" id="payoutsStartDate"/>
+          </div>
+          <div class="form-row" style="margin:0;">
+            <label>Até</label>
+            <input type="date" id="payoutsEndDate"/>
+          </div>
+          <button type="button" onclick="adminApp._loadAffiliatePayouts()" style="padding:9px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔍 Filtrar</button>
+          <button type="button" onclick="adminApp._exportFinanceCsv('affiliate-payouts')" style="padding:9px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">📥 Exportar CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Data</th><th>Afiliado</th><th>Valor (MZN)</th><th>M-Pesa</th><th>Nº Recibo</th><th>Comprovativo</th>
+              </tr>
+            </thead>
+            <tbody id="affPayoutsTable"><tr><td colspan="6" style="text-align:center;padding:16px;color:#94a3b8;">A carregar…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <section id="section-settings" class="admin-section">
