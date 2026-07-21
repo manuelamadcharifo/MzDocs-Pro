@@ -476,10 +476,10 @@
         <div class="tbl-wrap">
           <table class="tbl">
             <thead><tr>
-              <th>Data</th><th>Valor</th><th>M-Pesa</th><th>Estado</th>
+              <th>Data</th><th>Valor</th><th>M-Pesa</th><th>Estado</th><th>Recibo</th>
             </tr></thead>
             <tbody id="withdrawalsTable">
-              <tr><td colspan="4" class="empty">Nenhum levantamento ainda</td></tr>
+              <tr><td colspan="5" class="empty">Nenhum levantamento ainda</td></tr>
             </tbody>
           </table>
         </div>
@@ -662,8 +662,11 @@ function showDashboard(d) {
           <td style="font-weight:800">${(w.amount||0).toLocaleString('pt-MZ')} MZN</td>
           <td style="font-size:11px">${w.mpesa_phone}</td>
           <td><span class="badge badge-${w.status}">${statusLabel(w.status)}</span></td>
+          <td>${w.receipt_screenshot_url
+              ? `<a href="${w.receipt_screenshot_url}" target="_blank" rel="noopener" download style="font-size:11px;font-weight:700;color:var(--green);text-decoration:none;">📄 ${w.receipt_number || 'Baixar'}</a>`
+              : '<span style="font-size:11px;color:#94a3b8">—</span>'}</td>
         </tr>`).join('')
-    : '<tr><td colspan="4" class="empty">Nenhum levantamento ainda</td></tr>';
+    : '<tr><td colspan="5" class="empty">Nenhum levantamento ainda</td></tr>';
 
   // M-Pesa pre-fill
   if (p.mpesa_phone) {
