@@ -3976,11 +3976,22 @@ USING (EXISTS (
     }
 
     // ── FINANÇAS (v37) — Valor Levantável e despesas operacionais ────────
+    // (v42: + Contabilidade — dados fiscais, livro de transacções e
+    // relatório de período, para o contabilista/Fisco)
     async _loadFinance() {
+        const today = new Date();
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+        const todayStr = today.toISOString().slice(0, 10);
+        const ls = document.getElementById('ledgerStartDate'); if (ls && !ls.value) ls.value = monthStart;
+        const le = document.getElementById('ledgerEndDate');   if (le && !le.value) le.value = todayStr;
+        const rs = document.getElementById('reportStartDate'); if (rs && !rs.value) rs.value = monthStart;
+        const re = document.getElementById('reportEndDate');   if (re && !re.value) re.value = todayStr;
+
         await Promise.all([
             this._loadFinanceSummary(),
             this._loadFinanceExpenses(),
             this._loadFinanceWithdrawals(),
+            this._loadTransactionLedger(),
         ]);
     }
 
@@ -4024,6 +4035,14 @@ USING (EXISTS (
                     <div style="display:flex;justify-content:space-between;padding:6px 0 0;border-top:1px dashed #e2e8f0;margin-top:4px"><span style="font-weight:700">Total estimado</span><strong>${fmt(rc.total_monthly_mzn)} MZN/mês</strong></div>
                 `;
             }
+
+            // Preencher formulário de dados fiscais (Contabilidade)
+            const fc = d.fiscal_config || {};
+            if (e('fis_company_name')) e('fis_company_name').value = fc.company_name || '';
+            if (e('fis_nuit'))         e('fis_nuit').value         = fc.nuit || '';
+            if (e('fis_address'))      e('fis_address').value      = fc.address || '';
+            if (e('fis_regime'))       e('fis_regime').value       = fc.regime || '';
+            if (e('fis_year_start'))   e('fis_year_start').value   = fc.year_start || '';
         } catch (err) {
             console.error('[Admin] Finanças (resumo):', err.message);
             this._notify?.(`❌ ${err.message}`);
@@ -4067,6 +4086,7 @@ USING (EXISTS (
             const res   = await fetch('/api/admin/finance?sub=expenses', { headers: { Authorization: 'Bearer ' + token } });
             const d     = await res.json();
             if (!res.ok) throw new Error(d.error || 'Erro');
+            this._financeExpenses = d.expenses || [];
             const catLabel = { domain: '🌐 Domínio', hosting: '▲ Hosting', ai_providers: '🤖 IA', other: '➕ Outra' };
             list.innerHTML = (d.expenses || []).length
                 ? d.expenses.map(x => `
@@ -4136,6 +4156,7 @@ USING (EXISTS (
             const res   = await fetch('/api/admin/finance?sub=withdrawals', { headers: { Authorization: 'Bearer ' + token } });
             const d     = await res.json();
             if (!res.ok) throw new Error(d.error || 'Erro');
+            this._financeWithdrawals = d.withdrawals || [];
             list.innerHTML = (d.withdrawals || []).length
                 ? d.withdrawals.map(x => `
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9">
@@ -4192,6 +4213,181 @@ USING (EXISTS (
             await this._loadWithdrawableCard();
         } catch (err) {
             this._notify?.(`❌ ${err.message}`);
+        }
+    }
+
+    // ── CONTABILIDADE (v42) — dados fiscais, livro de transacções e ──────
+    // relatório de período, pensados para o contabilista da empresa e
+    // para uma eventual inspecção do Fisco moçambicano.
+    async _saveFiscalConfig() {
+        const get = id => document.getElementById(id)?.value?.trim() ?? '';
+        const body = {
+            op: 'save-fiscal-config',
+            fiscal_company_name: get('fis_company_name'),
+            fiscal_nuit:         get('fis_nuit'),
+            fiscal_address:      get('fis_address'),
+            fiscal_regime:       get('fis_regime'),
+            fiscal_year_start:   get('fis_year_start'),
+        };
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/finance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify(body),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao guardar');
+            this._notify?.('✅ Dados fiscais guardados!', 'success');
+        } catch (err) {
+            this._notify?.(`❌ ${err.message}`);
+        }
+    }
+
+    _setReportPreset(kind) {
+        const today = new Date();
+        let start, end;
+        if (kind === 'month') {
+            start = new Date(today.getFullYear(), today.getMonth(), 1);
+            end   = today;
+        } else if (kind === 'quarter') {
+            const q = Math.floor(today.getMonth() / 3);
+            start = new Date(today.getFullYear(), q * 3, 1);
+            end   = today;
+        } else { // year
+            start = new Date(today.getFullYear(), 0, 1);
+            end   = today;
+        }
+        const fmt = d => d.toISOString().slice(0, 10);
+        document.getElementById('reportStartDate').value = fmt(start);
+        document.getElementById('reportEndDate').value   = fmt(end);
+    }
+
+    async _generatePeriodReport() {
+        const start = document.getElementById('reportStartDate')?.value;
+        const end   = document.getElementById('reportEndDate')?.value;
+        const out   = document.getElementById('periodReportOutput');
+        if (!start || !end) { this._notify?.('❌ Escolha as duas datas'); return; }
+        if (out) out.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px 0">A gerar…</div>';
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch(`/api/admin/finance?sub=period-report&start=${start}&end=${end}`, {
+                headers: { Authorization: 'Bearer ' + token },
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao gerar relatório');
+            this._lastPeriodReport = d;
+
+            const fmt = n => (n ?? 0).toLocaleString('pt-MZ', { maximumFractionDigits: 2 });
+            const catLabel = { domain: '🌐 Domínio', hosting: '▲ Hosting', ai_providers: '🤖 IA', other: '➕ Outra' };
+            const catRows = Object.entries(d.expenses.by_category || {})
+                .map(([cat, v]) => `<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${catLabel[cat] || cat}</span><strong>${fmt(v)} MZN</strong></div>`)
+                .join('') || '<div style="color:#94a3b8">Sem despesas neste período.</div>';
+
+            if (out) out.innerHTML = `
+                <div id="periodReportPrintable" style="border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+                    <div style="font-weight:800;font-size:14px;color:#0f172a;">${d.company.name}</div>
+                    <div style="font-size:12px;color:#64748b;">NUIT: ${d.company.nuit}${d.company.regime ? ' · ' + d.company.regime : ''}</div>
+                    <div style="font-size:12px;color:#64748b;margin-bottom:10px;">${d.company.address || ''}</div>
+                    <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px;">Período: ${d.period.start} a ${d.period.end}</div>
+                    <div style="display:flex;justify-content:space-between;padding:4px 0"><span>💰 Receita confirmada (${d.revenue.transaction_count} transacções)</span><strong>${fmt(d.revenue.total_mzn)} MZN</strong></div>
+                    <div style="margin:8px 0;padding:8px 0;border-top:1px dashed #e2e8f0;border-bottom:1px dashed #e2e8f0;">
+                        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:4px;">🧾 Despesas por categoria (${d.expenses.entry_count} lançamentos)</div>
+                        ${catRows}
+                        <div style="display:flex;justify-content:space-between;padding:4px 0;margin-top:4px;"><span style="font-weight:700">Total despesas</span><strong>${fmt(d.expenses.total_mzn)} MZN</strong></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Resultado líquido do período</span><strong style="color:${d.net_result_mzn >= 0 ? '#16a34a' : '#dc2626'}">${fmt(d.net_result_mzn)} MZN</strong></div>
+                    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#94a3b8;"><span>Levantamentos do dono no período</span><span>${fmt(d.withdrawals.total_mzn)} MZN</span></div>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:8px;">Gerado em ${new Date(d.generated_at).toLocaleString('pt-MZ')}</div>
+                </div>
+                <button type="button" onclick="adminApp._printPeriodReport()" style="margin-top:10px;padding:8px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button>
+            `;
+        } catch (err) {
+            if (out) out.innerHTML = `<div style="color:#dc2626;text-align:center;padding:16px 0">Erro: ${err.message}</div>`;
+        }
+    }
+
+    _printPeriodReport() {
+        const html = document.getElementById('periodReportPrintable')?.outerHTML;
+        if (!html) return;
+        const w = window.open('', '_blank');
+        w.document.write(`<html><head><title>Relatório de Período — MzDocs Pro</title>
+            <meta charset="utf-8"><style>body{font-family:Arial,sans-serif;padding:24px;}</style>
+            </head><body>${html}</body></html>`);
+        w.document.close();
+        w.focus();
+        setTimeout(() => w.print(), 300);
+    }
+
+    async _loadTransactionLedger() {
+        const tbody = document.getElementById('ledgerTransactionsTable');
+        if (!tbody) return;
+        const start  = document.getElementById('ledgerStartDate')?.value;
+        const end    = document.getElementById('ledgerEndDate')?.value;
+        const status = document.getElementById('ledgerStatus')?.value || 'completed';
+        const params = new URLSearchParams({ sub: 'transactions', status });
+        if (start) params.set('start', start);
+        if (end)   params.set('end', end);
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:16px;color:#94a3b8;">A carregar…</td></tr>';
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch(`/api/admin/finance?${params.toString()}`, { headers: { Authorization: 'Bearer ' + token } });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro');
+            this._ledgerTransactions = d.transactions || [];
+            const statusBadge = {
+                completed: '<span style="background:#ECFDF5;color:#065F46;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">✅ Confirmada</span>',
+                pending:   '<span style="background:#FEF9C3;color:#713F12;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">⏳ Pendente</span>',
+                failed:    '<span style="background:#FEE2E2;color:#991B1B;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">❌ Falhou</span>',
+            };
+            if (!this._ledgerTransactions.length) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:16px;color:#94a3b8;">Sem transacções neste intervalo.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = this._ledgerTransactions.map(t => {
+                const user = t.profiles || {};
+                const when = t.created_at ? new Date(t.created_at).toLocaleString('pt-MZ', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+                return `<tr>
+                    <td style="font-size:12px;color:#64748b;">${when}</td>
+                    <td style="font-size:12px;">${user.full_name || '—'}</td>
+                    <td style="font-size:12px;">${t.user_phone || '—'}</td>
+                    <td style="font-size:12px;">${(t.package_id || '—').toUpperCase()}</td>
+                    <td style="font-size:12px;"><strong>${(t.amount ?? 0).toLocaleString('pt-MZ')}</strong></td>
+                    <td>${statusBadge[t.status] || t.status}</td>
+                    <td style="font-size:11px;color:#64748b;">${t.mpesa_receipt || '—'}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:16px;color:#ef4444;">Erro: ${err.message}</td></tr>`;
+        }
+    }
+
+    // Exportação (CSV/Excel/PDF, reaproveitando o menu genérico) dos três
+    // livros de contabilidade — dados já carregados em memória, nunca faz
+    // um novo pedido só para exportar.
+    _exportFinanceCsv(type) {
+        if (type === 'expenses') {
+            const headers = ['Categoria', 'Descrição', 'Valor (MZN)', 'Data', 'Recorrente'];
+            const catLabel = { domain: 'Domínio', hosting: 'Hosting', ai_providers: 'Providers de IA', other: 'Outra' };
+            const rows = (this._financeExpenses || []).map(x => [
+                catLabel[x.category] || x.category, x.description || '', x.amount_mzn ?? 0, x.occurred_at || '', x.is_recurring ? 'Sim' : 'Não',
+            ]);
+            this._exportMenu('despesas', 'Despesas Operacionais — MzDocs Pro', headers, rows);
+        } else if (type === 'withdrawals') {
+            const headers = ['Valor (MZN)', 'Nota', 'Data'];
+            const rows = (this._financeWithdrawals || []).map(x => [x.amount_mzn ?? 0, x.note || '', x.withdrawn_at || '']);
+            this._exportMenu('levantamentos', 'Levantamentos do Dono — MzDocs Pro', headers, rows);
+        } else if (type === 'transactions') {
+            const headers = ['Data', 'Cliente', 'Telefone', 'Pacote', 'Valor (MZN)', 'Estado', 'Comprovativo M-Pesa'];
+            const rows = (this._ledgerTransactions || []).map(t => {
+                const user = t.profiles || {};
+                return [
+                    t.created_at ? new Date(t.created_at).toLocaleString('pt-MZ') : '',
+                    user.full_name || '', t.user_phone || '', (t.package_id || '').toUpperCase(),
+                    t.amount ?? 0, t.status || '', t.mpesa_receipt || '',
+                ];
+            });
+            this._exportMenu('livro-transacoes', 'Livro de Transacções — MzDocs Pro', headers, rows);
         }
     }
 
