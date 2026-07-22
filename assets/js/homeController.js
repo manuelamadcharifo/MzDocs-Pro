@@ -213,9 +213,7 @@ async function _loadRealReviews() {
       clearInterval(poll);
       const starsEl = document.getElementById('hspStars');
       if (starsEl && summary && summary.count > 0) {
-        const fullStars = Math.max(1, Math.min(5, Math.round(summary.avg)));
-        const starIcons = '⭐'.repeat(fullStars);
-        starsEl.textContent = `${starIcons} ${summary.avg} (${summary.count} avaliaç${summary.count === 1 ? 'ão' : 'ões'})`;
+        starsEl.textContent = `⭐ ${summary.avg} (${summary.count} avaliaç${summary.count === 1 ? 'ão' : 'ões'})`;
         starsEl.style.display = '';
       }
       // Se ainda não há avaliações, o elemento fica escondido — em vez de
