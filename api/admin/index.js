@@ -16,6 +16,8 @@ const { ACTIVE_PROVIDERS, RESERVE_PROVIDERS, TIER_LABELS } = require('../_lib/ai
 const { sendPushToSubscriptions } = require('../_lib/webpush');
 const { restRequest: pushRestRequest } = require('../_lib/supabaseAdmin');
 const { loadPackagesFromSettings, estimateMznPerCredit } = require('../_lib/packages');
+const { moderateComment, approvalStatusFor } = require('../_lib/contentModeration');
+const { checkRateLimit } = require('../_lib/rateLimit');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
@@ -44,6 +46,7 @@ module.exports = async function handler(req, res) {
     case 'delete-user':       return handleDeleteUser(req, res);
     case 'analytics':         return handleAnalytics(req, res);
     case 'feedback':          return handleFeedback(req, res);
+    case 'reviews':           return handleReviews(req, res);
     case 'static-pages':      return handleStaticPages(req, res);
     case 'delete-document':   return handleDeleteDocument(req, res);
     case 'documents':         return handleDocuments(req, res);
@@ -1782,10 +1785,16 @@ async function handleFeedback(req, res) {
 
   const body = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body inválido' });
-  let { service, rating, comment, session_id } = body;
+  let { service, rating, comment, session_id, display_name } = body;
   if (!service || !rating || rating < 1 || rating > 5) {
     return res.status(400).json({ error: 'service e rating (1-5) são obrigatórios' });
   }
+
+  // Rate limit por IP — uma avaliação genuína não precisa de ser enviada
+  // mais de algumas vezes por hora, mesmo por engano/duplo-clique.
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+  const allowed = await checkRateLimit('feedback', ip, { limit: 8, windowSec: 3600 });
+  if (!allowed) return res.status(429).json({ error: 'Demasiadas avaliações enviadas. Tente novamente mais tarde.' });
 
   if (typeof service === 'object') {
     service = service.key || service.id || 'geral';
@@ -1793,6 +1802,21 @@ async function handleFeedback(req, res) {
     try { const p = JSON.parse(service); service = p.key || p.id || p.title || 'geral'; } catch (_) { service = 'geral'; }
   }
   service = String(service).slice(0, 50).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+  const cleanComment = (comment || '').trim().slice(0, 500);
+  const moderation = moderateComment(cleanComment);
+  if (moderation === 'blocked') {
+    // Conteúdo abusivo/spam nunca chega a ser gravado — nem sequer entra
+    // na fila de moderação. O utilizador recebe uma resposta genérica,
+    // sem revelar qual regra foi accionada.
+    return res.status(400).json({ error: 'Não foi possível guardar o comentário. Reformule sem linguagem ofensiva.' });
+  }
+  const status = approvalStatusFor(moderation, parseInt(rating), cleanComment.length > 0);
+
+  // Nome curto opcional a mostrar publicamente junto ao comentário (ex:
+  // "Sofia M.") — nunca o telefone, nunca o nome completo do perfil sem
+  // consentimento explícito neste campo.
+  const cleanDisplayName = String(display_name || '').trim().slice(0, 40).replace(/[<>]/g, '') || null;
 
   try {
     const supabase = await getAdminClient();
@@ -1803,13 +1827,74 @@ async function handleFeedback(req, res) {
       userId = user?.id || null;
     }
     await supabase.from('user_feedback').insert({
-      service, rating: parseInt(rating), comment: (comment || '').slice(0, 500),
+      service, rating: parseInt(rating), comment: cleanComment,
       user_id: userId, session_id: session_id || null, created_at: new Date().toISOString(),
+      status, display_name: cleanDisplayName,
     });
-    return res.status(200).json({ success: true });
+    return res.status(200).json({
+      success: true,
+      // O frontend usa isto para dizer "obrigado, já está visível" vs.
+      // "obrigado, a nossa equipa vai rever antes de publicar" — nunca
+      // finge que ficou pública se ainda está pendente.
+      published: status === 'approved',
+    });
   } catch (err) {
     console.error('[feedback]', err);
     return res.status(500).json({ error: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REVIEWS (moderação de avaliações públicas — v44)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleReviews(req, res) {
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ error: 'Token em falta' });
+
+  try {
+    const supabase = await getAdminClient();
+    const auth     = await validateAdmin(supabase, token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    if (req.method === 'GET') {
+      const status = req.query?.status || 'pending';
+      let query = supabase.from('user_feedback')
+        .select('id, service, rating, comment, display_name, status, user_id, session_id, created_at, reviewed_at')
+        .order('created_at', { ascending: false }).limit(200);
+      if (status !== 'all') query = query.eq('status', status);
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const userIds = [...new Set((data || []).map(r => r.user_id).filter(Boolean))];
+      const userMap = {};
+      if (userIds.length) {
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', userIds);
+        (profiles || []).forEach(p => { userMap[p.id] = p; });
+      }
+      const reviews = (data || []).map(r => ({
+        ...r,
+        user_name: r.user_id ? (userMap[r.user_id]?.full_name || 'Utilizador') : 'Visitante',
+      }));
+      return res.status(200).json({ success: true, reviews });
+    }
+
+    if (req.method === 'POST') {
+      const { id, status: newStatus } = parseBody(req) || {};
+      if (!id || !['approved', 'rejected'].includes(newStatus)) {
+        return res.status(400).json({ error: 'id e status (approved|rejected) são obrigatórios' });
+      }
+      const { error } = await supabase.from('user_feedback').update({
+        status: newStatus, reviewed_by: auth.user.id, reviewed_at: new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw error;
+      return res.status(200).json({ success: true });
+    }
+
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  } catch (err) {
+    console.error('[admin/reviews]', err.message);
+    return res.status(500).json({ error: err.message || 'Erro interno' });
   }
 }
 
