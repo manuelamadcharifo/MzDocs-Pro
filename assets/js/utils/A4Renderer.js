@@ -118,6 +118,19 @@ function _parseMarkdownTable(lines, startIdx) {
   const headHtml = `<thead><tr>${td(headerCells, 'th')}</tr></thead>`;
   const bodyHtml = `<tbody>${bodyRows.map(r => `<tr>${td(r, 'td')}</tr>`).join('')}</tbody>`;
 
+  // Tabela "cabeçalho apenas" (sem nenhuma linha de dados) — na prática isto
+  // é quase sempre a IA a tentar "destacar" um único campo (ex: o email ou o
+  // nome da instituição) usando sintaxe de tabela markdown, não uma tabela
+  // real. Renderizá-la como <table> produz uma caixa azul-marinho isolada à
+  // volta de uma única linha de texto, o que confunde mais do que ajuda.
+  // Em vez disso devolvemos o conteúdo como texto simples, consumindo as
+  // duas linhas (cabeçalho + separador) para não deixar "|" ou "---"
+  // sobrando à mostra no documento.
+  if (bodyRows.length === 0) {
+    const plainText = headerCells.map(c => _inlineMd(c)).join(' &nbsp; ');
+    return { html: `<p>${plainText}</p>`, consumed: 2 };
+  }
+
   return { html: `<table>${headHtml}${bodyHtml}</table>`, consumed: i - startIdx };
 }
 
