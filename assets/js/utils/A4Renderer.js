@@ -347,11 +347,13 @@ export function renderA4Pages(container, content, opts = {}) {
   if (!container) return { pages: [], rescale: () => {} };
 
   const {
-    css            = '',
-    isRawHTML      = false,
-    rawHtmlPages   = null,
-    showPageLabel  = true,
-    onPageRendered = null,
+    css               = '',
+    isRawHTML         = false,
+    rawHtmlPages      = null,
+    showPageLabel     = true,
+    onPageRendered    = null,
+    maxWidth          = null,  // usado pela vista maximizada — folhas maiores que o preview normal
+    hideMaximizeButton = false, // evita recursão quando o próprio overlay maximizado chama isto
   } = opts;
 
   container.innerHTML = '';
@@ -363,6 +365,34 @@ export function renderA4Pages(container, content, opts = {}) {
     pageMarkdowns = content.length ? content : [' '];
   } else {
     pageMarkdowns = splitIntoPages(content);
+  }
+
+  // ── Botão "maximizar" — abre a MESMA paginação numa vista de ecrã inteiro,
+  // maior e com scroll livre, para uma leitura completa do documento. Um
+  // único ponto de código porque renderA4Pages() é o motor único partilhado
+  // pelo preview do resultado, pelo editor e pelo TemplatePicker — este
+  // botão aparece automaticamente nos três, sem repetir lógica em cada um.
+  if (!hideMaximizeButton) {
+    const maxBtn = document.createElement('button');
+    maxBtn.type = 'button';
+    maxBtn.setAttribute('aria-label', 'Maximizar — ver documento completo');
+    maxBtn.title = 'Ver documento completo';
+    maxBtn.textContent = '⛶';
+    maxBtn.style.cssText = [
+      'position:sticky', 'top:8px', 'align-self:flex-end', 'margin:0 2px 0 0',
+      'width:38px', 'height:38px', 'border-radius:50%', 'border:none',
+      'background:rgba(15,23,42,.75)', 'color:#fff', 'font-size:18px', 'line-height:1',
+      'display:flex', 'align-items:center', 'justify-content:center', 'cursor:pointer',
+      'z-index:30', 'box-shadow:0 2px 10px rgba(0,0,0,.4)', 'flex-shrink:0',
+      'transition:background .15s',
+    ].join(';');
+    maxBtn.addEventListener('mouseenter', () => { maxBtn.style.background = 'rgba(15,23,42,.92)'; });
+    maxBtn.addEventListener('mouseleave', () => { maxBtn.style.background = 'rgba(15,23,42,.75)'; });
+    maxBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openFullscreenA4Preview(pageMarkdowns, { css, isRawHTML, showPageLabel });
+    });
+    container.appendChild(maxBtn);
   }
 
   const pageEls = [];
@@ -378,6 +408,7 @@ export function renderA4Pages(container, content, opts = {}) {
 
     const pageEl = document.createElement('div');
     pageEl.className = 'a4-page';
+    if (maxWidth) pageEl.style.maxWidth = maxWidth + 'px';
 
     const iframe = document.createElement('iframe');
     iframe.title = `Página ${idx + 1}`;
@@ -439,6 +470,94 @@ export function renderA4Pages(container, content, opts = {}) {
   }
 
   return { pages: pageEls, rescale };
+}
+
+/**
+ * Abre uma vista de ecrã inteiro com o documento completo — mesma paginação
+ * exacta do preview normal (mesmas folhas, mesmo ---PAGE_BREAK---), só que
+ * maior e com scroll livre para leitura completa. Chamado pelo botão "⛶"
+ * que renderA4Pages() já insere sozinho em todos os previews (resultado,
+ * editor, TemplatePicker) — não precisa de ser chamado directamente.
+ *
+ * @param {string[]} pageMarkdowns  páginas já divididas (markdown ou HTML)
+ * @param {object} opts             { css, isRawHTML, showPageLabel }
+ */
+export function openFullscreenA4Preview(pageMarkdowns, opts = {}) {
+  // Remove qualquer overlay anterior (não deveria haver, mas por segurança)
+  document.getElementById('a4FullscreenOverlay')?.remove();
+
+  // Garantir CSS partilhado das folhas A4 — o TemplatePicker.js tem a sua
+  // própria folha de estilo e nunca injecta A4_PAGES_CONTAINER_CSS; sem isto,
+  // abrir a vista maximizada a partir dele ficaria sem o layout flex/gap.
+  if (!document.getElementById('a4PagesSharedStyle')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'a4PagesSharedStyle';
+    styleEl.textContent = A4_PAGES_CONTAINER_CSS;
+    document.head.appendChild(styleEl);
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'a4FullscreenOverlay';
+  overlay.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:99999', 'background:rgba(15,23,42,.96)',
+    'overflow-y:auto', '-webkit-overflow-scrolling:touch',
+  ].join(';');
+
+  const header = document.createElement('div');
+  header.style.cssText = [
+    'position:sticky', 'top:0', 'z-index:2', 'display:flex', 'align-items:center',
+    'justify-content:space-between', 'padding:12px 16px',
+    'background:rgba(15,23,42,.92)', 'backdrop-filter:blur(6px)',
+    'border-bottom:1px solid rgba(255,255,255,.1)',
+  ].join(';');
+  header.innerHTML = `<span style="color:#fff;font-size:13px;font-weight:700;">📄 Documento completo</span>`;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', 'Fechar vista completa');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = [
+    'width:34px', 'height:34px', 'border-radius:50%', 'border:none',
+    'background:rgba(255,255,255,.12)', 'color:#fff', 'font-size:16px',
+    'cursor:pointer', 'display:flex', 'align-items:center', 'justify-content:center',
+  ].join(';');
+
+  const prevBodyOverflow = document.body.style.overflow;
+  const close = () => {
+    overlay.remove();
+    document.body.style.overflow = prevBodyOverflow || '';
+    document.removeEventListener('keydown', onKeydown);
+  };
+  const onKeydown = (e) => { if (e.key === 'Escape') close(); };
+
+  closeBtn.addEventListener('click', close);
+  header.appendChild(closeBtn);
+  overlay.appendChild(header);
+
+  const inner = document.createElement('div');
+  inner.id = 'a4FullscreenInner';
+  inner.className = 'a4-pages-outer';
+  inner.style.cssText = 'max-width:900px;margin:0 auto;padding:20px 16px 60px;background:transparent;';
+  overlay.appendChild(inner);
+
+  // Clicar no fundo escuro (fora do conteúdo) também fecha
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  document.body.style.overflow = 'hidden';
+  document.addEventListener('keydown', onKeydown);
+
+  document.body.appendChild(overlay);
+
+  // Reaproveita o motor de renderização — mesma paginação, maior e sem
+  // limite de largura de 560px (até 900px de largura do overlay).
+  renderA4Pages(inner, pageMarkdowns, {
+    css: opts.css || '',
+    isRawHTML: !!opts.isRawHTML,
+    rawHtmlPages: opts.isRawHTML ? pageMarkdowns : null,
+    showPageLabel: opts.showPageLabel !== false,
+    maxWidth: 900,
+    hideMaximizeButton: true,
+  });
 }
 
 // ── CSS partilhado das folhas A4 (sombra, espaçamento, separador) ──────────
