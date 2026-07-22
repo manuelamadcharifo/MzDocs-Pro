@@ -470,6 +470,24 @@
         <div id="feedbackList" style="padding:.25rem 0;"></div>
       </div>
 
+      <!-- Moderação de avaliações públicas (v44) — pendentes precisam de
+           acção humana antes de aparecerem no site; aprovadas/rejeitadas
+           ficam consultáveis para auditoria. -->
+      <div class="chart-card" style="margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <h3 class="chart-title" style="margin:0;">🛡️ Moderação de Avaliações Públicas</h3>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn-sm btn-primary" id="revTabPending" data-status="pending" onclick="adminApp._loadReviewsModeration('pending', this)">⏳ Pendentes</button>
+            <button type="button" class="btn-sm" id="revTabApproved" data-status="approved" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0" onclick="adminApp._loadReviewsModeration('approved', this)">✅ Aprovadas</button>
+            <button type="button" class="btn-sm" id="revTabRejected" data-status="rejected" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca" onclick="adminApp._loadReviewsModeration('rejected', this)">❌ Rejeitadas</button>
+          </div>
+        </div>
+        <p style="font-size:12px;color:#64748b;margin:0 0 10px;">
+          Comentários com linguagem duvidosa ou notas baixas ficam aqui à espera de revisão antes de aparecerem no site — conteúdo claramente abusivo já é bloqueado automaticamente e nunca chega a esta lista.
+        </p>
+        <div id="reviewsModerationList"><div style="text-align:center;padding:16px;color:#94a3b8;">A carregar…</div></div>
+      </div>
+
       <!-- NOVO (auditoria de analytics): detalhe de páginas, blog, novos clientes e afiliados -->
       <div class="charts-row" style="margin-top:12px;">
         <div class="chart-card">
