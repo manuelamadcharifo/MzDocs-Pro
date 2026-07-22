@@ -1299,7 +1299,14 @@ export class DocumentController {
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
      this._maybeShowRatingPrompt();
    } else {
-     const content = this.docModel.content;
+     // CORRIGIDO (bug: "1 página na app, 3 no download"): calcular a
+     // paginação REAL antes de exportar — medindo no browser, com as
+     // mesmas margens/tipografia do preview, onde uma folha A4 termina —
+     // e usar esse conteúdo (já com ---PAGE_BREAK--- reais) no PDF. Assim
+     // o jsPDF já não decide a paginação sozinho: só obedece às quebras
+     // que vêm prontas, garantindo o MESMO nº de páginas mostrado no ecrã.
+     const { getPaginatedContent } = await import('../utils/Paginator.js');
+     const content = await getPaginatedContent(this.docModel.content);
      const { PDFExporter } = await import('../components/PDFExporter.js');
      await new PDFExporter().export(content, `${filename}.pdf`, this._buildExportMetadata(svc));
      NotificationView.success('✅ PDF descarregado!');
@@ -1331,9 +1338,11 @@ export class DocumentController {
      return;
  }
 
+ const { getPaginatedContent } = await import('../utils/Paginator.js');
+ const content = await getPaginatedContent(this.docModel.content);
  const { WordExporter } = await import('../components/WordExporter.js');
  await new WordExporter().export(
-  this.docModel.content,
+  content,
   `${filename}.docx`,
   this._buildExportMetadata(svc)
  );
