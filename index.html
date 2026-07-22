@@ -114,8 +114,8 @@
   <div class="hero-inner">
   <div class="hero-body">
     <div class="hero-eye">🇲🇿 &nbsp;Para Moçambique · Simples e Seguro</div>
-    <h1 class="hero-h1">Documentos<br/><em>organizados,</em><br/>entregue rápido</h1>
-    <p class="hero-p">Escolha o tipo → preencha os dados → receba o documento pronto.<br/>Tudo automatizado, seguro e sem complicação.</p>
+    <h1 class="hero-h1">O seu documento,<br/><em>pronto</em><br/>antes do café arrefecer</h1>
+    <p class="hero-p">CV, procuração, contrato, requerimento — o que precisar, com a linguagem certa para Moçambique.<br/>Sem filas, sem advogado, sem esperar até amanhã.</p>
     <div class="chips">
       <span class="chip gr">⚡ Entrega Imediata</span>
       <span class="chip">📷 Digitalizar</span>
@@ -130,7 +130,7 @@
       </button>
       <div class="hero-social-proof">
         <span class="hsp-counter" id="hspCounter">📄 <strong id="heroDocCount">…</strong> documentos gerados em Moçambique 🇲🇿</span>
-        <span class="hsp-stars">⭐ 4.9 (128 avaliações)</span>
+        <span class="hsp-stars" id="hspStars" style="display:none;"></span>
       </div>
     </div>
   </div><!-- /.hero-body -->
@@ -421,6 +421,15 @@
 <!-- FAB Logout — só visível em mobile quando autenticado -->
 <button class="fab fab-logout" id="fabLogout" title="Terminar sessão" style="display:none;">🚪</button>
 
+
+<!-- AVALIAÇÕES REAIS — só aparece quando há testemunhos aprovados de
+     verdade (ver /api/misc?action=public-reviews). homeController.js
+     esconde a secção inteira se ainda não houver nenhuma, em vez de
+     mostrar um espaço vazio ou inventar conteúdo. -->
+<section id="testimonialsSection" style="display:none;padding:32px 16px 8px;">
+  <p class="how-title" style="text-align:center;">O QUE DIZEM OS UTILIZADORES</p>
+  <div id="testimonialsGrid" style="display:flex;gap:12px;overflow-x:auto;padding:8px 4px 12px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;"></div>
+</section>
 
 <!-- FOOTER LEGAL -->
 <footer id="siteFooter" style="background:#07101F;padding:20px 16px;text-align:center;margin-top:8px;">
