@@ -154,7 +154,7 @@ class AdminApp {
         if (section === 'documents')    this._loadDocuments();
         if (section === 'blog')         { this._loadBlog(); this._loadStaticPages(); }
         if (section === 'settings')     this._loadSettings();
-        if (section === 'analytics')    this._loadAnalytics();
+        if (section === 'analytics')    { this._loadAnalytics(); this._loadReviewsModeration('pending'); }
         if (section === 'affiliates')   this._loadAffiliates();
         if (section === 'templates')    { this._loadTemplates('pending'); this._loadTemplateWithdrawals(); }
         if (section === 'ai-providers') this._loadAiProviders();
@@ -2136,6 +2136,78 @@ USING (EXISTS (
                 </div>
             </div>`
         );
+    }
+
+    // ── Moderação de avaliações públicas (v44) ────────────────────────────
+    async _loadReviewsModeration(status, btnEl) {
+        const listEl = document.getElementById('reviewsModerationList');
+        if (!listEl) return;
+
+        // Alterna o destaque visual da aba activa, se veio de um clique.
+        ['revTabPending', 'revTabApproved', 'revTabRejected'].forEach(id => {
+            const b = document.getElementById(id);
+            if (!b) return;
+            const isActive = b.dataset.status === status;
+            if (b.dataset.status === 'pending') {
+                b.className = isActive ? 'btn-sm btn-primary' : 'btn-sm';
+                if (!isActive) b.style.cssText = 'background:#fef9c3;color:#854d0e;border:1px solid #fde68a';
+            } else {
+                b.style.opacity = isActive ? '1' : '.55';
+            }
+        });
+
+        listEl.innerHTML = '<div style="text-align:center;padding:16px;color:#94a3b8;">A carregar…</div>';
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch(`/api/admin?action=reviews&status=${status}`, { headers: { Authorization: 'Bearer ' + token } });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro');
+            this._reviewsModerationCache = d.reviews || [];
+
+            if (!this._reviewsModerationCache.length) {
+                listEl.innerHTML = `<div style="text-align:center;padding:16px;color:#94a3b8;">${status === 'pending' ? 'Sem avaliações pendentes de revisão. 🎉' : 'Nada aqui ainda.'}</div>`;
+                return;
+            }
+
+            const starHtml = n => '⭐'.repeat(Math.max(1, Math.min(5, n || 0)));
+            const fmtDate = dt => dt ? new Date(dt).toLocaleString('pt-MZ', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+
+            listEl.innerHTML = this._reviewsModerationCache.map(r => `
+                <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+                        <div>
+                            <div style="font-size:13px;font-weight:700;color:#0f172a;">${starHtml(r.rating)} <span style="color:#64748b;font-weight:400;">· ${r.user_name}${r.display_name ? ' (mostra como "' + r.display_name.replace(/</g,'&lt;') + '")' : ''}</span></div>
+                            <div style="font-size:11px;color:#94a3b8;">${r.service || 'geral'} · ${fmtDate(r.created_at)}</div>
+                        </div>
+                        ${status === 'pending' ? `
+                            <div style="display:flex;gap:6px;">
+                                <button type="button" onclick="adminApp._moderateReview('${r.id}','approved')" style="background:#dcfce7;color:#166534;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">✅ Aprovar</button>
+                                <button type="button" onclick="adminApp._moderateReview('${r.id}','rejected')" style="background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">❌ Rejeitar</button>
+                            </div>` : ''}
+                    </div>
+                    ${r.comment ? `<p style="font-size:13px;color:#334155;margin:8px 0 0;">${r.comment.replace(/</g,'&lt;')}</p>` : '<p style="font-size:12px;color:#cbd5e1;margin:8px 0 0;">Sem comentário — só estrelas.</p>'}
+                </div>
+            `).join('');
+        } catch (err) {
+            listEl.innerHTML = `<div style="text-align:center;padding:16px;color:#ef4444;">Erro: ${err.message}</div>`;
+        }
+    }
+
+    async _moderateReview(id, newStatus) {
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch('/api/admin?action=reviews', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify({ id, status: newStatus }),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro');
+            this._notify?.(newStatus === 'approved' ? '✅ Avaliação aprovada — já pode aparecer no site.' : '❌ Avaliação rejeitada.', 'success');
+            this._loadReviewsModeration('pending');
+        } catch (err) {
+            this._notify?.('❌ ' + err.message);
+        }
     }
 
     _filterFeedback(service) {
