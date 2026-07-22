@@ -88,6 +88,82 @@ export class PDFExporter {
             doc.line(ML, y, W - MR, y);
         };
 
+        // ── Ícones de contacto (vectores, não texto) ───────────────────────
+        // CORRIGIDO (bug: "os ícones não aparecem no documento baixado"):
+        // antes, o emojiMap mais abaixo convertia 📞/✉️/📍 em texto simples
+        // ("Tel." "Email:" "Local:"), porque as fontes core do jsPDF (times/
+        // helvetica) não sabem desenhar emoji — mostravam "Ø=ÛÞ". Isso fazia
+        // o PDF exibir palavras que NUNCA estiveram no documento tal como
+        // visto no preview da webapp (que é HTML normal e mostra o emoji
+        // sem problema). Em vez de substituir por texto, desenhamos os 3
+        // ícones como pequenas formas vectoriais — o mesmo resultado visual
+        // que o preview, sem depender de nenhuma fonte de emoji.
+        const CONTACT_ICON_RX = /^(📞|☎|📱|📧|✉️|✉|📍|📌)\s*/;
+        const contactIconType = (ch) => {
+            if (ch === '📞' || ch === '☎' || ch === '📱') return 'phone';
+            if (ch === '📧' || ch === '✉️' || ch === '✉') return 'mail';
+            if (ch === '📍' || ch === '📌') return 'pin';
+            return null;
+        };
+        const drawContactIcon = (type, cx, cy, s, color) => {
+            doc.setDrawColor(...color);
+            doc.setFillColor(...color);
+            doc.setLineWidth(Math.max(0.25, s * 0.28));
+            if (type === 'phone') {
+                doc.line(cx - s * 0.4, cy + s * 0.4, cx + s * 0.4, cy - s * 0.4);
+                doc.circle(cx - s * 0.4, cy + s * 0.4, s * 0.16, 'F');
+                doc.circle(cx + s * 0.4, cy - s * 0.4, s * 0.16, 'F');
+            } else if (type === 'mail') {
+                const w2 = s * 1.2, h2 = s * 0.86, x0 = cx - w2 / 2, y0 = cy - h2 / 2;
+                doc.rect(x0, y0, w2, h2);
+                doc.line(x0, y0, cx, y0 + h2 * 0.58);
+                doc.line(cx, y0 + h2 * 0.58, x0 + w2, y0);
+            } else if (type === 'pin') {
+                doc.circle(cx, cy - s * 0.14, s * 0.32, 'F');
+                doc.triangle(cx - s * 0.22, cy + s * 0.04, cx + s * 0.22, cy + s * 0.04, cx, cy + s * 0.52, 'F');
+                doc.setFillColor(255, 255, 255);
+                doc.circle(cx, cy - s * 0.14, s * 0.12, 'F');
+            }
+        };
+        // Desenha uma linha "📞 X | ✉️ Y | 📍 Z" com ícones reais entre os
+        // segmentos, preservando a mesma disposição do preview. Se a linha
+        // não couber na largura útil (CW), devolve false e o chamador cai
+        // para o parágrafo normal (com o fallback de texto do emojiMap).
+        const writeContactLine = (rawLine, size = 12, color = [20,20,20]) => {
+            const parts = rawLine.split('|').map(s => s.trim()).filter(Boolean);
+            setFont(false, false, size, color);
+            const iconS = size * 0.11; // ~mm, proporcional ao tamanho do texto
+            // Pré-calcular a largura total para decidir se cabe numa linha
+            let total = 0;
+            const segs = parts.map((part, idx) => {
+                const m = part.match(CONTACT_ICON_RX);
+                const type = m ? contactIconType(m[1]) : null;
+                const text = this._cleanInlinePDF(type ? part.slice(m[0].length).trim() : part);
+                const w = (type ? iconS * 1.6 + 1.4 : 0) + doc.getTextWidth(text) + (idx > 0 ? doc.getTextWidth('|') + 3.2 : 0);
+                total += w;
+                return { type, text };
+            });
+            if (total > CW) return false;
+
+            checkY(LEAD);
+            let x = ML;
+            segs.forEach((seg, idx) => {
+                if (idx > 0) {
+                    doc.text('|', x, y);
+                    x += doc.getTextWidth('|') + 1.6;
+                }
+                if (seg.type) {
+                    drawContactIcon(seg.type, x + iconS * 0.6, y - size * 0.09, iconS * 1.6, color);
+                    x += iconS * 1.6 + 1.4;
+                }
+                doc.text(seg.text, x, y);
+                x += doc.getTextWidth(seg.text) + 1.6;
+            });
+            y += LEAD;
+            gap(3);
+            return true;
+        };
+
         // ── Limpeza de texto markdown inline ─────────────────
         // CORRIGIDO: remover emojis/unicode que o jsPDF renderiza como 'Ø=ÛÞ'.
         const emojiMap = {
@@ -363,9 +439,27 @@ export class PDFExporter {
 
             // ── Separador horizontal --- ─────────────────────────────────
             if (/^---+$/.test(line) || /^\*\*\*+$/.test(line)) {
-                gap(3);
-                hRule();
-                gap(4);
+                // CORRIGIDO (bug: "linhas extras" e espaçamento grande a mais
+                // no download): a IA insere sempre um "---" antes de CADA
+                // título de secção (## ...). O título já desenha o seu
+                // próprio sublinhado logo a seguir (ver bloco H2 abaixo), por
+                // isso desenhar aqui TAMBÉM uma hRule de largura total criava
+                // 2 linhas seguidas (uma cheia + uma curta) e ~7mm de espaço
+                // extra em CADA secção — algo que não corresponde ao que o
+                // preview mostra. Só desenhamos esta régua quando o "---" não
+                // está colado a um título, ou seja, quando é mesmo um
+                // separador de conteúdo e não apenas o traço decorativo antes
+                // do cabeçalho seguinte.
+                let j = i + 1;
+                while (j < lines.length && lines[j].trim() === '') j++;
+                const nextIsHeading = /^#{1,4}\s+/.test(lines[j]?.trim() || '');
+                if (!nextIsHeading) {
+                    // Espaçamento equivalente ao CSS do preview (hr{margin:10pt 0}).
+                    const HR_MARGIN = Math.round(10 * PT_TO_MM * 100) / 100; // ≈3.53mm
+                    gap(HR_MARGIN);
+                    hRule();
+                    gap(HR_MARGIN);
+                }
                 i++; continue;
             }
 
@@ -567,6 +661,11 @@ export class PDFExporter {
                     doc.text(nl, ML + 9, y);
                     y += LEAD;
                 });
+                i++; continue;
+            }
+
+            // ── Linha de contacto com ícones (📞 / ✉️ / 📍) ───────────────
+            if (/(📞|☎|📱|📧|✉️|✉|📍|📌)/.test(line) && writeContactLine(line)) {
                 i++; continue;
             }
 
