@@ -1,5 +1,6 @@
 // views/NotificationView.js — Sistema de notificações em pilha
 import { renderA4Pages, A4_PAGES_CONTAINER_CSS, scalePage } from '../utils/A4Renderer.js';
+import { getPaginatedContent } from '../utils/Paginator.js';
 
 export const NotificationView = {
   _stack: document.getElementById('notifStack'),
@@ -328,6 +329,8 @@ export const DocumentView = {
     }
 
     const words = safeContent.trim().split(/\s+/).length;
+    // Estimativa rápida (instantânea) — substituída pelo nº REAL de páginas
+    // assim que a paginação (medida no browser) estiver pronta, ver abaixo.
     const pages = Math.max(1, Math.ceil(safeContent.length / 2800));
 
     // Injectar CSS partilhado das folhas A4 uma única vez (idempotente)
@@ -383,9 +386,47 @@ export const DocumentView = {
       btn.addEventListener('click', () => {
         previewContainer.querySelectorAll('.res-tab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        this._renderResultFrame(btn.dataset.rfmt, safeContent);
+        const contentToShow = (this._resultPaginationSource === safeContent && this._resultPaginatedContent)
+          ? this._resultPaginatedContent
+          : safeContent;
+        this._renderResultFrame(btn.dataset.rfmt, contentToShow);
       });
     });
+
+    // CORRIGIDO (bug: "1 página na app, 3 no download"): calcular a
+    // paginação REAL em segundo plano — mesmo motor partilhado usado no
+    // download (assets/js/utils/Paginator.js) — e, assim que pronta,
+    // actualizar o contador "~N pág." para o valor real e redesenhar o
+    // preview já com as mesmas quebras que o PDF/Word vão respeitar.
+    // Sem isto, "~N pág." era só uma estimativa por nº de caracteres,
+    // sem qualquer relação com a paginação real do ficheiro exportado.
+    this._scheduleResultPagination(safeContent, words);
+  },
+
+  async _scheduleResultPagination(safeContent, words) {
+    if (!safeContent || safeContent.trimStart().startsWith('<')) return; // HTML de template pagina-se a si próprio
+
+    const token = Symbol('result-pagination');
+    this._resultPaginationToken = token;
+    try {
+      const paginated = await getPaginatedContent(safeContent);
+      // Ignorar se entretanto o resultado mudou (novo documento gerado)
+      if (this._resultPaginationToken !== token) return;
+
+      this._resultPaginatedContent = paginated;
+      this._resultPaginationSource  = safeContent;
+
+      const realPages = (paginated.match(/---PAGE_BREAK---/g)?.length || 0) + 1;
+      const statsEl = document.querySelector('.res-preview-stats');
+      if (statsEl) statsEl.textContent = `${words} palavras · ${realPages} pág.`;
+
+      if (paginated !== safeContent) {
+        const activeTab = document.querySelector('.res-tab.active');
+        this._renderResultFrame(activeTab?.dataset.rfmt || 'pdf', paginated);
+      }
+    } catch (err) {
+      console.warn('[DocumentView] paginação real do resultado falhou, mantém estimativa:', err.message);
+    }
   },
 
   // ── Reescalar todas as folhas A4 do resultado (ao redimensionar a janela) ──
