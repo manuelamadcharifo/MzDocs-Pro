@@ -746,6 +746,40 @@ export class DocumentEditor {
           <code style="display:block;white-space:pre-wrap;word-break:break-word;background:#fff;border-radius:6px;padding:8px;margin-top:6px;font-size:11.5px;">${(err?.message || String(err)).replace(/</g,'&lt;')}</code>
         </div>`;
     }
+
+    // CORRIGIDO (bug: "app mostra 1 página, download sai com 3"): a
+    // renderização acima usa o conteúdo bruto (rápida, instantânea). Em
+    // paralelo, calculamos a paginação REAL — medindo no browser quanto
+    // conteúdo cabe mesmo numa folha A4 com as margens/tipografia reais —
+    // e assim que estiver pronta, o preview é refeito com os mesmos
+    // marcadores ---PAGE_BREAK--- que o PDF e o Word também vão respeitar
+    // (ver _downloadPDF/_downloadWord e assets/js/utils/Paginator.js).
+    // Isto garante que o nº de páginas mostrado aqui é o MESMO que sai no
+    // ficheiro descarregado — não uma estimativa.
+    this._schedulePagination(outer, format);
+  }
+
+  _schedulePagination(outer, format) {
+    if (this._templateHtml) return; // templates HTML paginam-se a si próprios
+    if (!this.content || this.content.trimStart().startsWith('<')) return;
+
+    const source = this.content;
+    if (this._paginationSource === source && this._paginatedContent) return; // já pronto
+
+    const token = Symbol('pagination');
+    this._paginationToken = token;
+    import('../utils/Paginator.js')
+      .then(({ getPaginatedContent }) => getPaginatedContent(source))
+      .then(paginated => {
+        // Ignorar resultado obsoleto — o conteúdo já mudou entretanto
+        if (this._paginationToken !== token || this.content !== source) return;
+        this._paginatedContent = paginated;
+        this._paginationSource = source;
+        if (paginated !== source && this.modal?.querySelector('#edA4Wrap') === outer) {
+          this._renderPreviewInner(outer, format);
+        }
+      })
+      .catch(err => console.warn('[DocumentEditor] paginação real falhou, mantém estimativa:', err.message));
   }
 
   _renderPreviewInner(outer, format) {
@@ -783,7 +817,12 @@ export class DocumentEditor {
     // Conteúdo markdown → renderA4Pages faz o split por ---PAGE_BREAK--- e a
     // conversão markdown→HTML internamente (com tabelas GFM reais incluídas,
     // corrigindo o bug do parser antigo _mdTableToHTML que perdia células vazias).
-    renderA4Pages(outer, this.content, { css, isRawHTML: false, showPageLabel: true });
+    // Usa o conteúdo já paginado (com quebras REAIS medidas no browser) quando
+    // disponível para o conteúdo actual — ver _schedulePagination() acima.
+    const contentForPreview = (this._paginationSource === this.content && this._paginatedContent)
+      ? this._paginatedContent
+      : this.content;
+    renderA4Pages(outer, contentForPreview, { css, isRawHTML: false, showPageLabel: true });
   }
 
   _getFormatCSS(format) {
@@ -866,6 +905,31 @@ export class DocumentEditor {
   }
 
   // ── Downloads ─────────────────────────────────────────────────
+  // CORRIGIDO: devolve o MESMO conteúdo (com as mesmas quebras ---PAGE_BREAK---
+  // reais, já medidas para o preview) para ser usado no PDF e no Word — em vez
+  // de cada exportador decidir a paginação sozinho com a sua própria métrica de
+  // fonte, o que era a causa do "1 página na app, 3 no download". Ver
+  // assets/js/utils/Paginator.js para o motor de medição partilhado.
+  async _getExportContent() {
+    if (this._templateHtml) return this.content; // templates HTML paginam-se a si próprios
+    if (!this.content || this.content.trimStart().startsWith('<')) return this.content;
+
+    // Reaproveita a paginação já calculada para o preview, se ainda válida
+    if (this._paginationSource === this.content && this._paginatedContent) {
+      return this._paginatedContent;
+    }
+    try {
+      const { getPaginatedContent } = await import('../utils/Paginator.js');
+      const paginated = await getPaginatedContent(this.content);
+      this._paginatedContent = paginated;
+      this._paginationSource = this.content;
+      return paginated;
+    } catch (err) {
+      console.warn('[DocumentEditor] paginação real falhou no download, a usar conteúdo bruto:', err.message);
+      return this.content;
+    }
+  }
+
   async _download() {
     const fmt = this._previewFmt;
     const btn = this.modal.querySelector('#edBtnDownload');
@@ -908,7 +972,8 @@ export class DocumentEditor {
     if (isRawHTML || templateCss) {
       try {
         const { HTMLPDFExporter } = await import('./HTMLPDFExporter.js');
-        new HTMLPDFExporter().export(this.content, `mzdocs-${this.serviceType}-${Date.now()}`, {
+        const exportContent = await this._getExportContent();
+        new HTMLPDFExporter().export(exportContent, `mzdocs-${this.serviceType}-${Date.now()}`, {
           templateCss: templateCss || null,
           title: this.serviceType || 'Documento MzDocs',
         });
@@ -931,8 +996,12 @@ export class DocumentEditor {
         cidade:  'Maputo',
         ano:     new Date().getFullYear(),
       };
+      // CORRIGIDO: exportar o conteúdo já paginado (mesmas quebras reais do
+      // preview) — não o markdown bruto — para o PDF sair com o MESMO número
+      // de páginas que o utilizador viu no editor.
+      const exportContent = await this._getExportContent();
       await new PDFExporter().export(
-        this.content,
+        exportContent,
         `mzdocs-${this.serviceType}-${Date.now()}.pdf`,
         metadata
       );
@@ -982,8 +1051,11 @@ export class DocumentEditor {
         cidade:  'Maputo',
         ano:     new Date().getFullYear(),
       };
+      // CORRIGIDO: mesmas quebras reais do preview (ver _getExportContent),
+      // para o Word sair com o mesmo nº de páginas mostrado no editor.
+      const exportContent = await this._getExportContent();
       await new WordExporter().export(
-        this.content,
+        exportContent,
         `mzdocs-${this.serviceType}-${Date.now()}.docx`,
         metadata
       );
