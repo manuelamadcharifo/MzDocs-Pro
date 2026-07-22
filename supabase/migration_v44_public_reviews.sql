@@ -35,5 +35,8 @@ CREATE INDEX IF NOT EXISTS idx_user_feedback_status
 -- Leitura pública (anónima) apenas de avaliações aprovadas — usada pelo
 -- endpoint GET /api/misc?action=public-reviews para alimentar o hero e a
 -- secção de testemunhos sem depender de service role no browser.
-CREATE POLICY IF NOT EXISTS "feedback_public_read_approved" ON user_feedback
+-- (O Postgres não suporta "CREATE POLICY IF NOT EXISTS" — por isso apaga-se
+-- primeiro, se já existir, e recria-se a seguir.)
+DROP POLICY IF EXISTS "feedback_public_read_approved" ON user_feedback;
+CREATE POLICY "feedback_public_read_approved" ON user_feedback
   FOR SELECT USING (status = 'approved');
