@@ -213,7 +213,9 @@ async function _loadRealReviews() {
       clearInterval(poll);
       const starsEl = document.getElementById('hspStars');
       if (starsEl && summary && summary.count > 0) {
-        starsEl.textContent = `⭐ ${summary.avg} (${summary.count} avaliaç${summary.count === 1 ? 'ão' : 'ões'})`;
+        const fullStars = Math.max(1, Math.min(5, Math.round(summary.avg)));
+        const starIcons = '⭐'.repeat(fullStars);
+        starsEl.textContent = `${starIcons} ${summary.avg} (${summary.count} avaliaç${summary.count === 1 ? 'ão' : 'ões'})`;
         starsEl.style.display = '';
       }
       // Se ainda não há avaliações, o elemento fica escondido — em vez de
@@ -237,7 +239,7 @@ async function _loadRealReviews() {
     ));
 
     grid.innerHTML = data.testimonials.map(t => `
-      <div style="flex:0 0 260px;scroll-snap-align:start;background:#0F1B2E;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;">
+      <div style="flex:1 1 240px;max-width:260px;background:#0F1B2E;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;">
         <div style="color:#FBBF24;font-size:14px;margin-bottom:8px;">${'⭐'.repeat(Math.max(1, Math.min(5, t.rating)))}</div>
         <p style="color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.5;margin:0 0 10px;">${escapeHtml(t.comment)}</p>
         <div style="color:rgba(255,255,255,.4);font-size:12px;">${escapeHtml(t.name)}</div>
