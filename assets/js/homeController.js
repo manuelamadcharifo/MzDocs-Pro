@@ -14,6 +14,7 @@ const FEATURES = {
   social_proof:    true,   // Contador animado de documentos gerados
   guest_cta:       true,   // Botão CTA + teaser para visitantes
   how_it_works:    true,   // Secção "Como funciona" visível a todos
+  real_reviews:    true,   // Estrelas reais no hero + testemunhos aprovados
 };
 
 // ─── initHome ─────────────────────────────────────────────────────────────────
@@ -28,6 +29,9 @@ export async function initHome() {
 
   // Contador social (independente de auth)
   if (FEATURES.social_proof) _animateSocialCounter();
+
+  // Estrelas reais no hero + testemunhos aprovados (independente de auth)
+  if (FEATURES.real_reviews) _loadRealReviews();
 }
 
 // ─── Visibilidade condicional ─────────────────────────────────────────────────
@@ -191,6 +195,59 @@ function _runCounter(el, target, formatFn) {
 export function scrollToServices() {
   const el = document.getElementById('servicesSection') || document.getElementById('svcGrid');
   if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ─── Avaliações reais (v44) ───────────────────────────────────────────────────
+// Substitui o antigo "⭐ 4.9 (128 avaliações)" fixo por um número real, e
+// preenche a secção "O que dizem os utilizadores" só quando há testemunhos
+// aprovados de verdade. Nunca inventa nem arredonda para cima na ausência
+// de dados — mesma filosofia honesta do contador de documentos acima.
+async function _loadRealReviews() {
+  // 1. Estrelas do hero — usa o resumo que já veio em /api/config (mesma
+  //    chamada que alimenta docsGenerated, sem pedido extra).
+  let attempts = 0;
+  const poll = setInterval(() => {
+    attempts++;
+    const summary = window._mzConfig?.reviewsSummary;
+    if (summary != null || attempts > 30) {
+      clearInterval(poll);
+      const starsEl = document.getElementById('hspStars');
+      if (starsEl && summary && summary.count > 0) {
+        starsEl.textContent = `⭐ ${summary.avg} (${summary.count} avaliaç${summary.count === 1 ? 'ão' : 'ões'})`;
+        starsEl.style.display = '';
+      }
+      // Se ainda não há avaliações, o elemento fica escondido — em vez de
+      // mostrar "0 avaliações", que passaria uma imagem pior do que não
+      // mostrar nada.
+    }
+  }, 200);
+
+  // 2. Testemunhos — pedido dedicado (lista completa, não vem em /api/config).
+  try {
+    const res  = await fetch('/api/misc?action=public-reviews');
+    const data = await res.json();
+    if (!data?.success || !Array.isArray(data.testimonials) || !data.testimonials.length) return;
+
+    const grid = document.getElementById('testimonialsGrid');
+    const section = document.getElementById('testimonialsSection');
+    if (!grid || !section) return;
+
+    const escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+
+    grid.innerHTML = data.testimonials.map(t => `
+      <div style="flex:0 0 260px;scroll-snap-align:start;background:#0F1B2E;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;">
+        <div style="color:#FBBF24;font-size:14px;margin-bottom:8px;">${'⭐'.repeat(Math.max(1, Math.min(5, t.rating)))}</div>
+        <p style="color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.5;margin:0 0 10px;">${escapeHtml(t.comment)}</p>
+        <div style="color:rgba(255,255,255,.4);font-size:12px;">${escapeHtml(t.name)}</div>
+      </div>
+    `).join('');
+
+    section.style.display = '';
+  } catch (err) {
+    console.warn('[homeController] _loadRealReviews testimonials:', err.message);
+  }
 }
 
 // ─── Abrir registo a partir do teaser ────────────────────────────────────────
