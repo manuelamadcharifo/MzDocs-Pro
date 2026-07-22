@@ -187,9 +187,11 @@ export class DocumentController {
     this._activeTemplate = { css: templateCss };
   }
 
-  // Actualizar no historial (usar historyId do evento ou do formData)
+  // Actualizar no historial (usar historyId do evento ou do formData) — só
+  // quando houve mesmo uma alteração real; fechar o editor sem clicar em
+  // "Guardar" (ou sem mexer em nada) nunca deve chamar o servidor.
   const hId = historyId || this.docModel.formData?._historyId;
-  if (hId && window.historyController?.updateDocumentContent) {
+  if (hId && hasRealChange && window.historyController?.updateDocumentContent) {
     window.historyController.updateDocumentContent(hId, content, templateHtml).catch(err => {
       console.warn('[DocumentController] editor:closed — updateDocumentContent falhou:', err.message);
     });
