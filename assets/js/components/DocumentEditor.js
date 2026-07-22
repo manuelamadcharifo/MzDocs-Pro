@@ -798,13 +798,27 @@ export class DocumentEditor {
     // célula em branco no meio da linha), fazendo cada linha da tabela ter um
     // número de colunas diferente do cabeçalho. Agora preserva todas as células,
     // mesmo vazias — igual ao parser GFM usado no resto da app (A4Renderer.js).
-    const allLines = tableStr.trim().split('\n');
+    //
+    // CORRIGIDO (bug: "o editor está a criar tabelas automaticamente sem eu
+    // acionar o mecanismo de criação de tabelas"): esta função era chamada
+    // para QUALQUER linha do tipo "| texto |", mesmo sem nenhuma linha
+    // separadora "|---|" a seguir — ou seja, mesmo sem ser realmente uma
+    // tabela markdown (GFM exige header + linha separadora). Isso fazia com
+    // que texto que a IA usa apenas para "destacar" um campo único (ex: o
+    // e-mail ou o nome da instituição, escrito como "| julia@x.com |") virasse
+    // uma <table> real de uma só célula dentro do editor — exactamente as
+    // caixas cinzentas indevidas vistas no telemóvel (e-mail, escola, etc.).
+    // O preview (A4Renderer.js) já tinha uma salvaguarda para tabela "só
+    // cabeçalho, sem linhas de dados"; agora aplicamos a MESMA regra aqui e,
+    // adicionalmente, exigimos uma linha separadora válida antes de sequer
+    // considerar o bloco uma tabela — sem separador não há tabela, é só texto.
+    const allLines = tableStr.trim().split('\n').filter(l => l.trim() !== '');
+    if (!allLines.length) return tableStr;
+
     // A linha separadora é "|---|:---:|---:|" — só "-", ":", "|" e espaços.
     const isSepLine = (l) => /^[\s|:-]+$/.test(l) && l.includes('-');
-    const rows = allLines.filter(l => !isSepLine(l));
-    if (!rows.length) return tableStr;
-
     const sepLine = allLines.find(isSepLine);
+
     const splitCells = (l) => {
       let t = l.trim();
       if (t.startsWith('|')) t = t.slice(1);
@@ -812,17 +826,33 @@ export class DocumentEditor {
       return t.split('|').map(c => c.trim());
     };
 
-    const aligns = sepLine ? splitCells(sepLine).map(c => {
+    // Sem linha separadora = não é uma tabela GFM válida (é apenas a IA a usar
+    // "|" para destacar texto). Devolver como texto simples, sem criar <table>.
+    if (!sepLine) {
+      return allLines.map(l => splitCells(l).join(' ')).join('<br>');
+    }
+
+    const rows = allLines.filter(l => !isSepLine(l));
+    if (!rows.length) return tableStr;
+
+    const aligns = splitCells(sepLine).map(c => {
       const left  = c.startsWith(':');
       const right = c.endsWith(':');
       if (left && right) return 'center';
       if (right) return 'right';
       if (left) return 'left';
       return '';
-    }) : [];
+    });
 
     const headerCells = splitCells(rows[0]);
     const bodyRows     = rows.slice(1).map(splitCells);
+
+    // Tabela "só cabeçalho" (com separador, mas sem nenhuma linha de dados) —
+    // mesma regra do A4Renderer.js: é quase sempre a IA a destacar um único
+    // campo, não uma tabela real. Devolver como texto simples.
+    if (!bodyRows.length) {
+      return headerCells.join(' &nbsp; ');
+    }
 
     const cellsHtml = (cells, tag) => cells.map((c, i) => {
       const al = aligns[i] ? ` style="text-align:${aligns[i]}"` : '';
