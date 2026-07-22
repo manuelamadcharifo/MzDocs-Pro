@@ -395,8 +395,15 @@ export class WordExporter {
                     i++; continue;
                 }
                 if (h2) {
-                    const isNumberedChapter = /^\d+[\.\)]\s/.test(h2[1]) ||
-                        /^(Introdução|Conclusão|Referências|Índice|Abstract|Resumo|Metodologia)/i.test(h2[1]);
+                    // CORRIGIDO (mesmo bug do PDFExporter.js): quebra de página forçada
+                    // antes de "Referências"/"Introdução"/etc. só faz sentido para
+                    // documentos académicos com capítulos ("trabalho"). Antes aplicava-se
+                    // a qualquer documento — um CV cuja última secção se chama
+                    // "Referências" ganhava uma página extra isolada, quase em branco.
+                    const isNumberedChapter = (docType === 'trabalho' || docType === 'academic') && (
+                        /^\d+[\.\)]\s/.test(h2[1]) ||
+                        /^(Introdução|Conclusão|Referências|Índice|Abstract|Resumo|Metodologia)/i.test(h2[1])
+                    );
                     children.push(new Paragraph({
                         heading: HeadingLevel.HEADING_2,
                         spacing: { ...lineSpace, before: 360, after: 180 },

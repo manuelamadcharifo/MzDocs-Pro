@@ -423,9 +423,19 @@ export class PDFExporter {
                 const text = prep(h2[1]);
 
                 // Capítulos numerados (ex: "1. Introdução", "2. Metodologia")
-                // SEMPRE começam numa nova página — é estrutura académica obrigatória
-                const isNumberedChapter = /^\d+[\.\)]\s/.test(text) ||
-                    /^(Introdução|Conclusão|Referências|Índice|Abstract|Resumo|Metodologia)/i.test(text);
+                // SEMPRE começam numa nova página — é estrutura académica obrigatória.
+                // CORRIGIDO (bug reportado: CV/currículo a ganhar uma 3ª página só com
+                // "Referências" isolada, com o resto da folha em branco): esta regra
+                // só faz sentido para documentos académicos com capítulos ("trabalho").
+                // Antes aplicava-se a QUALQUER documento — um CV, carta, recibo, etc.
+                // cuja secção final se chamasse "Referências" (comum em currículos:
+                // "Referências: Disponíveis mediante solicitação.") era
+                // automaticamente empurrada para uma página nova, mesmo havendo
+                // espaço de sobra na página anterior.
+                const isNumberedChapter = (docType === 'trabalho' || docType === 'academic') && (
+                    /^\d+[\.\)]\s/.test(text) ||
+                    /^(Introdução|Conclusão|Referências|Índice|Abstract|Resumo|Metodologia)/i.test(text)
+                );
 
                 if (isNumberedChapter) {
                     // Só adicionar nova página se já há conteúdo na página actual
