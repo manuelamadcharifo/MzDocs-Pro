@@ -16,6 +16,20 @@ export class PDFExporter {
         const MB  = 25;   // margem base      (2.5 cm)
         const CW  = W - ML - MR; // largura útil = 155 mm
 
+        // CORRIGIDO (bug: espaçamento grande a mais entre títulos/parágrafos no
+        // download, fazendo o documento "crescer" para mais páginas do que as
+        // que o preview mostra): esta é a MESMA conversão que o preview usa —
+        // DEFAULT_PAGE_CSS (A4Renderer.js) define corpo a 12pt com
+        // line-height:1.5, ou seja 18pt de altura de linha real por linha de
+        // texto. 18pt convertido para mm (1pt = 0.352778mm) dá ~6.35mm — não
+        // os 7mm fixos que este ficheiro usava em cada parágrafo/bullet/lista.
+        // Essa diferença de 0.65mm é pequena numa linha, mas um CV típico tem
+        // 30-40 linhas de texto corrido: 30 × 0.65mm ≈ 2cm de espaço a mais só
+        // aí, suficiente para empurrar o fim do documento para uma folha extra
+        // mesmo com os marcadores ---PAGE_BREAK--- já a ser respeitados.
+        const PT_TO_MM = 0.352778;
+        const LEAD     = Math.round(12 * 1.5 * PT_TO_MM * 100) / 100; // ≈6.35mm — altura de linha real do corpo de texto
+
         // ── Estado de paginação ────────────────────────────────────────────
         let y          = MT;
         let pageNum    = 0;
@@ -51,7 +65,7 @@ export class PDFExporter {
             const {
                 size = 12, bold = false, italic = false,
                 align = 'left', color = [0,0,0], indent = 0,
-                leading = 7, justify = false,
+                leading = LEAD, justify = false,
             } = opts;
             setFont(bold, italic, size, color);
             const x      = ML + indent;
@@ -387,8 +401,8 @@ export class PDFExporter {
                     const pText = this._cleanInlinePDF(prep(headerCells.join('   ')));
                     setFont(false, false, 12, [20,20,20]);
                     const pLines = doc.splitTextToSize(pText, CW);
-                    checkY(Math.min(2, pLines.length) * 7);
-                    pLines.forEach(pl => { checkY(7); doc.text(pl, ML, y); y += 7; });
+                    checkY(Math.min(2, pLines.length) * LEAD);
+                    pLines.forEach(pl => { checkY(LEAD); doc.text(pl, ML, y); y += LEAD; });
                     gap(3);
                     continue;
                 }
@@ -403,7 +417,10 @@ export class PDFExporter {
             if (h1) {
                 const text = prep(h1[1]);
                 checkHeading(22, 7); // título + mín. 2 linhas de parágrafo
-                gap(8);
+                // CORRIGIDO: CSS do preview não dá margem no topo do H1 (margin:0
+                // 0 8pt) — o gap(8) antigo só existia aqui, empurrando o título
+                // bem mais para baixo do que no preview a cada H1.
+                gap(2);
                 setFont(true, false, 18, [0,0,0]);
                 const h1Lines = doc.splitTextToSize(text, CW);
                 h1Lines.forEach(l => {
@@ -446,7 +463,11 @@ export class PDFExporter {
                 } else {
                     checkHeading(18, 7);
                 }
-                gap(7);
+                // CORRIGIDO: CSS do preview usa margin-top:14pt (≈4.94mm) no H2 —
+                // o gap(7) antigo era ~2mm a mais em CADA secção (Formação
+                // Académica, Experiência Profissional, etc.), somando vários
+                // milímetros extra num CV com várias secções.
+                gap(5);
                 setFont(true, false, 14, [0,0,0]);
                 const h2Lines = doc.splitTextToSize(text, CW);
                 h2Lines.forEach(l => {
@@ -469,10 +490,11 @@ export class PDFExporter {
                 const text = prep(h3[1]);
                 // H3 precisa de pelo menos: própria altura + 3 linhas de parágrafo abaixo
                 checkHeading(14, 21);
-                gap(5);
+                // CORRIGIDO: CSS margin-top do H3 é 10pt (≈3.53mm), não 5mm.
+                gap(3.5);
                 setFont(true, true, 12, [0,0,0]);
                 const h3Lines = doc.splitTextToSize(text, CW);
-                h3Lines.forEach(l => { checkY(8); doc.text(l, ML, y); y += 7; });
+                h3Lines.forEach(l => { checkY(LEAD); doc.text(l, ML, y); y += LEAD; });
                 gap(3);
                 i++; continue;
             }
@@ -484,7 +506,7 @@ export class PDFExporter {
                 checkHeading(10, 7);
                 gap(3);
                 setFont(true, false, 12, [40,40,40]);
-                doc.splitTextToSize(text, CW).forEach(l => { checkY(8); doc.text(l, ML, y); y += 7; });
+                doc.splitTextToSize(text, CW).forEach(l => { checkY(LEAD); doc.text(l, ML, y); y += LEAD; });
                 gap(2);
                 i++; continue;
             }
@@ -514,17 +536,17 @@ export class PDFExporter {
                 const txt    = prep(bullet[1]);
                 setFont(false, false, 12);
                 const bLines = doc.splitTextToSize(txt, CW - 9);
-                const needed = bLines.length * 7 + 2;
+                const needed = bLines.length * LEAD + 2;
                 checkY(needed);
                 bLines.forEach((bl, bi) => {
-                    checkY(7);
+                    checkY(LEAD);
                     if (bi === 0) {
                         doc.setFillColor(60, 100, 160);
                         doc.circle(ML + 3.5, y - 1.5, 1, 'F');
                     }
                     setFont(false, false, 12, [20,20,20]);
                     doc.text(bl, ML + 9, y);
-                    y += 7;
+                    y += LEAD;
                 });
                 i++; continue;
             }
@@ -535,15 +557,15 @@ export class PDFExporter {
                 const txt    = prep(num[2]);
                 setFont(false, false, 12);
                 const nLines = doc.splitTextToSize(txt, CW - 9);
-                const needed = nLines.length * 7 + 2;
+                const needed = nLines.length * LEAD + 2;
                 checkY(needed);
                 nLines.forEach((nl, ni) => {
-                    checkY(7);
+                    checkY(LEAD);
                     setFont(true, false, 11, [60,100,160]);
                     if (ni === 0) doc.text(`${num[1]}.`, ML + 1, y);
                     setFont(false, false, 12, [20,20,20]);
                     doc.text(nl, ML + 9, y);
-                    y += 7;
+                    y += LEAD;
                 });
                 i++; continue;
             }
@@ -554,8 +576,11 @@ export class PDFExporter {
             const pLines = doc.splitTextToSize(pText, CW);
             // Widow/orphan: não deixar parágrafo com 1 linha em nova página
             const firstChunk = Math.min(2, pLines.length);
-            checkY(firstChunk * 7);
-            pLines.forEach(pl => { checkY(7); doc.text(pl, ML, y); y += 7; });
+            checkY(firstChunk * LEAD);
+            // CORRIGIDO: LEAD (~6.35mm) em vez dos 7mm fixos — é o maior
+            // contribuinte cumulativo do "espaçamento a mais" reportado, por
+            // se repetir em CADA linha de texto corrido do documento inteiro.
+            pLines.forEach(pl => { checkY(LEAD); doc.text(pl, ML, y); y += LEAD; });
             gap(3);
             i++;
         }
