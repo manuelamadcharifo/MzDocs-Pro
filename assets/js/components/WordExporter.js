@@ -276,7 +276,7 @@ export class WordExporter {
                 .filter(l => !/^\|[-: ]+\|$/.test(l.trim()))
                 .map(l => l.split('|').map(c => c.trim()).filter((_, i, a) => i !== 0 && i !== a.length - 1));
 
-            if (!dataRows.length) return null;
+            if (dataRows.length <= 1) return null; // só cabeçalho, sem linhas de dados — não é uma tabela real
             const numCols = dataRows[0].length;
             const colW    = Math.floor(8640 / numCols);
             const border  = { style: BorderStyle.SINGLE, size: 4, color: 'AAAAAA' };
@@ -448,6 +448,24 @@ export class WordExporter {
                         children.push(new Paragraph({ children: [new TextRun('')], spacing: { before: 100, after: 100 } }));
                         children.push(table);
                         children.push(new Paragraph({ children: [new TextRun('')], spacing: { before: 100, after: 200 } }));
+                    } else {
+                        // Tabela "cabeçalho apenas" (sem linhas de dados) — quase
+                        // sempre a IA a tentar destacar um único campo (email,
+                        // instituição, etc.) com sintaxe de tabela markdown. Uma
+                        // caixa isolada à volta de uma linha de texto confunde
+                        // mais do que ajuda — trata-se antes como texto normal.
+                        const headerLine = tableLines.find(l => !/^\|[-: ]+\|$/.test(l)) || '';
+                        const headerText = headerLine.split('|').map(c => c.trim()).filter(Boolean).join('   ');
+                        if (headerText) {
+                            children.push(new Paragraph({
+                                style: 'Normal',
+                                alignment: AlignmentType.JUSTIFIED,
+                                spacing: { ...lineSpace, before: 0, after: 200 },
+                                indent: { firstLine: 720 },
+                                keepLines: true,
+                                children: inlineRuns(headerText)
+                            }));
+                        }
                     }
                     continue;
                 }

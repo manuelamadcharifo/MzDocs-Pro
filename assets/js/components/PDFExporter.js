@@ -372,9 +372,25 @@ export class PDFExporter {
                     tableLines.push(lines[i].trim());
                     i++;
                 }
+                const nonSepLines = tableLines.filter(l => !/^\|[-: ]+\|$/.test(l)).length; // inclui o cabeçalho
+                const pureDataRows = nonSepLines - 1; // exclui o cabeçalho
+                if (pureDataRows <= 0) {
+                    // Tabela "cabeçalho apenas" (sem linhas de dados) — quase
+                    // sempre a IA a tentar destacar um único campo (email,
+                    // instituição, etc.) com sintaxe de tabela markdown. Uma
+                    // caixa isolada à volta de uma linha de texto confunde
+                    // mais do que ajuda — trata-se antes como texto normal.
+                    const headerCells = tableLines[0].replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+                    const pText = this._cleanInlinePDF(prep(headerCells.join('   ')));
+                    setFont(false, false, 12, [20,20,20]);
+                    const pLines = doc.splitTextToSize(pText, CW);
+                    checkY(Math.min(2, pLines.length) * 7);
+                    pLines.forEach(pl => { checkY(7); doc.text(pl, ML, y); y += 7; });
+                    gap(3);
+                    continue;
+                }
                 this._drawTable(doc, tableLines, ML, y, CW, H, MB, MT, prep);
-                const dataRows = tableLines.filter(l => !/^\|[-: ]+\|$/.test(l)).length;
-                y += dataRows * 8 + 6;
+                y += nonSepLines * 8 + 6;
                 if (y > H - MB) newPage();
                 continue;
             }
