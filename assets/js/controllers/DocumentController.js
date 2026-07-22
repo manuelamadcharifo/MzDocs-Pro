@@ -632,6 +632,9 @@ export class DocumentController {
  ModalView.open('resultOverlay');
  DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
  this._bindEditBtn();
+ // Novo documento — permite mostrar o convite de avaliação de novo depois
+ // do download deste, mesmo que já tenha aparecido para um anterior.
+ this._ratingPromptShownFor = null;
 
  // Mostrar CTA de referral no painel de resultado
  this._showReferralCTA();
@@ -924,6 +927,97 @@ export class DocumentController {
  });
  }
 
+ // ── Avaliação real pós-download (v44) ────────────────────────────────────
+ // Aparece uma única vez por documento gerado (não por cada formato
+ // exportado), só depois de um download que realmente aconteceu — nunca
+ // antes. É discreto: uma faixa pequena dentro do próprio painel de
+ // resultado, nunca um modal que interrompa o utilizador, e sempre com
+ // saída fácil ("Agora não"). Se a pessoa já avaliou ou dispensou nas
+ // últimas 24h (noutro documento da mesma sessão), não volta a incomodar.
+ _maybeShowRatingPrompt() {
+   if (this._ratingPromptShownFor) return; // já mostrado para este documento
+   this._ratingPromptShownFor = true;
+
+   try {
+     const dismissedAt = parseInt(localStorage.getItem('mz_rating_dismissed_at') || '0', 10);
+     if (dismissedAt && (Date.now() - dismissedAt) < 24 * 60 * 60 * 1000) return;
+   } catch (_) {}
+
+   // Pequeno atraso para não competir com a notificação "descarregado!"
+   // que acabou de aparecer.
+   setTimeout(() => this._renderRatingWidget(), 1200);
+ }
+
+ _renderRatingWidget() {
+   const resActions = document.getElementById('resActions');
+   if (!resActions || !resActions.parentNode) return;
+   if (document.getElementById('ratingPromptCard')) return; // já existe
+
+   const card = document.createElement('div');
+   card.id = 'ratingPromptCard';
+   card.style.cssText = 'margin:10px 16px 4px;padding:14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;';
+   card.innerHTML = `
+     <div style="font-size:13px;font-weight:700;color:#0F172A;margin-bottom:8px;">Como foi a sua experiência com este documento?</div>
+     <div id="ratingStars" style="display:flex;gap:6px;margin-bottom:8px;">
+       ${[1,2,3,4,5].map(n => `<button type="button" class="rating-star" data-star="${n}" style="background:none;border:none;font-size:26px;cursor:pointer;padding:0;line-height:1;opacity:.35;">⭐</button>`).join('')}
+     </div>
+     <div id="ratingCommentWrap" style="display:none;">
+       <textarea id="ratingComment" maxlength="500" placeholder="Opcional — conte-nos o que achou (não publicamos comentários ofensivos)" style="width:100%;box-sizing:border-box;min-height:56px;font-size:13px;padding:8px;border:1px solid #E2E8F0;border-radius:8px;resize:vertical;font-family:inherit;"></textarea>
+       <div style="display:flex;gap:8px;margin-top:8px;">
+         <button type="button" id="ratingSubmitBtn" style="flex:1;background:#009A44;color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:700;cursor:pointer;">Enviar avaliação</button>
+         <button type="button" id="ratingSkipBtn" style="background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;padding:9px 6px;">Agora não</button>
+       </div>
+     </div>
+   `;
+   resActions.parentNode.insertBefore(card, resActions.nextSibling);
+
+   let selected = 0;
+   const stars = card.querySelectorAll('.rating-star');
+   const paint = (n) => stars.forEach(s => { s.style.opacity = parseInt(s.dataset.star) <= n ? '1' : '.35'; });
+   stars.forEach(s => {
+     s.addEventListener('mouseenter', () => paint(parseInt(s.dataset.star)));
+     s.addEventListener('mouseleave', () => paint(selected));
+     s.addEventListener('click', () => {
+       selected = parseInt(s.dataset.star);
+       paint(selected);
+       card.querySelector('#ratingCommentWrap').style.display = '';
+     });
+   });
+
+   card.querySelector('#ratingSkipBtn')?.addEventListener('click', () => {
+     try { localStorage.setItem('mz_rating_dismissed_at', String(Date.now())); } catch (_) {}
+     card.remove();
+   });
+
+   card.querySelector('#ratingSubmitBtn')?.addEventListener('click', async () => {
+     if (!selected) { NotificationView.warn('⚠️ Escolha de 1 a 5 estrelas.'); return; }
+     const commentEl = card.querySelector('#ratingComment');
+     const comment = (commentEl?.value || '').trim();
+     const btn = card.querySelector('#ratingSubmitBtn');
+     btn.disabled = true; btn.textContent = 'A enviar…';
+     try {
+       let sessionId = null;
+       try {
+         sessionId = localStorage.getItem('mz_review_session');
+         if (!sessionId) { sessionId = crypto.randomUUID(); localStorage.setItem('mz_review_session', sessionId); }
+       } catch (_) {}
+       const token = authManager?.session?.access_token || null;
+       const res = await fetch('/api/admin?action=feedback', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+         body: JSON.stringify({ service: this.docModel.service || 'geral', rating: selected, comment, session_id: sessionId }),
+       });
+       const d = await res.json();
+       if (!res.ok) throw new Error(d.error || 'Erro ao enviar');
+       card.innerHTML = `<div style="font-size:13px;color:#166534;font-weight:700;">✅ ${d.published ? 'Obrigado pela avaliação!' : 'Obrigado! A sua avaliação vai ser revista antes de aparecer publicamente.'}</div>`;
+       setTimeout(() => card.remove(), 2600);
+     } catch (err) {
+       NotificationView.error('❌ ' + err.message);
+       btn.disabled = false; btn.textContent = 'Enviar avaliação';
+     }
+   });
+ }
+
  downloadDoc() {
  this._showExportMenu();
  }
@@ -1191,6 +1285,7 @@ export class DocumentController {
        meta: this._buildExportMetadata(svc),
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
+     this._maybeShowRatingPrompt();
    } else if (activeCss) {
      const content = this.docModel.content;
      const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
@@ -1200,11 +1295,13 @@ export class DocumentController {
        meta: this._buildExportMetadata(svc),
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
+     this._maybeShowRatingPrompt();
    } else {
      const content = this.docModel.content;
      const { PDFExporter } = await import('../components/PDFExporter.js');
      await new PDFExporter().export(content, `${filename}.pdf`, this._buildExportMetadata(svc));
      NotificationView.success('✅ PDF descarregado!');
+     this._maybeShowRatingPrompt();
    }
  } catch (err) { NotificationView.error('❌ Erro PDF: ' + err.message); }
  }
@@ -1228,6 +1325,7 @@ export class DocumentController {
      // nunca aparecia no Word exportado.
      await new HTMLToDocxExporter().export(exportContent, tpl?.css || '', filename, this._buildExportMetadata(svc));
      NotificationView.success('✅ Word (.docx) descarregado!');
+     this._maybeShowRatingPrompt();
      return;
  }
 
@@ -1238,6 +1336,7 @@ export class DocumentController {
   this._buildExportMetadata(svc)
  );
  NotificationView.success('✅ Word descarregado!');
+ this._maybeShowRatingPrompt();
  } catch (err) { NotificationView.error('❌ Erro Word: ' + err.message); }
  }
 
@@ -1253,6 +1352,7 @@ export class DocumentController {
   { title: svc?.title || 'Documento' }
  );
  NotificationView.success('✅ Excel descarregado!');
+ this._maybeShowRatingPrompt();
  } catch (err) { NotificationView.error('❌ Erro Excel: ' + err.message); }
  }
 
