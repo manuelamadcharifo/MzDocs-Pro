@@ -119,6 +119,7 @@ module.exports = async function handler(req, res) {
   if (action === 'ocr-analyze')                         return handleOcrAnalyze(req, res);
   if (action === 'legal-search')                        return handleLegalSearch(req, res);
   if (action === 'config' || action === 'misc')         return handleConfig(req, res);
+  if (action === 'public-reviews')                       return handlePublicReviews(req, res);
   if (action === 'verify-receipt')                      return handleVerifyReceipt(req, res);
   if (action === 'blog-cron')                           return handleBlogCron(req, res);
   if (action === 'blog-list')                           return handleBlogList(req, res);
@@ -886,6 +887,21 @@ async function handleConfig(req, res) {
     }
   } catch (_) {}
 
+  // Resumo real de avaliações públicas (nunca inventado) — usado pelo hero
+  // em vez do "4.9 (128 avaliações)" fixo que lá estava antes. Só conta
+  // avaliações com status='approved' (ver migration_v44_public_reviews.sql
+  // e api/_lib/contentModeration.js): passaram pelo filtro automático de
+  // abuso/spam ou foram aprovadas manualmente por um admin.
+  let reviewsSummary = null;
+  try {
+    const rows = await restRequest('user_feedback?status=eq.approved&select=rating');
+    if (Array.isArray(rows) && rows.length > 0) {
+      const count = rows.length;
+      const avg   = rows.reduce((s, r) => s + (r.rating || 0), 0) / count;
+      reviewsSummary = { avg: Math.round(avg * 10) / 10, count };
+    }
+  } catch (_) {}
+
   // Pacotes (preços/créditos) — única fonte de verdade em system_settings,
   // via _lib/packages.js. Antes desta correcção, o frontend usava valores
   // hard-coded em PaymentService.js/PaymentController.js que nunca
@@ -928,6 +944,7 @@ async function handleConfig(req, res) {
     configured:    true,
     isSandbox,
     docsGenerated,
+    reviewsSummary,
     supabaseUrl,
     supabaseAnonKey,
     packages,
@@ -939,6 +956,58 @@ async function handleConfig(req, res) {
     // servidor (ver api/_lib/webpush.js).
     vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
   });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// AVALIAÇÕES PÚBLICAS (v44) — testemunhos reais, aprovados, para o hero e a
+// secção "O que dizem os utilizadores". Só devolve avaliações com
+// status='approved' (ver migration_v44_public_reviews.sql): passaram pelo
+// filtro automático de abuso/spam (api/_lib/contentModeration.js) ou foram
+// aprovadas manualmente por um admin em /api/admin?action=reviews. Nunca
+// inventa nem completa com dados fictícios — se não houver nenhuma ainda,
+// devolve uma lista vazia e o frontend trata isso de forma honesta.
+// ════════════════════════════════════════════════════════════════════════════
+async function handlePublicReviews(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', ORIGIN);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+
+  try {
+    // Só testemunhos com comentário real (não só estrelas) fazem sentido
+    // como citação pública; limitamos às 12 mais recentes por serviço
+    // variado, com comentário de pelo menos 8 caracteres para evitar
+    // "bom." como testemunho.
+    const rows = await restRequest(
+      `user_feedback?status=eq.approved&comment=not.is.null&order=created_at.desc&limit=40&select=service,rating,comment,display_name,created_at`
+    );
+    const withComment = (Array.isArray(rows) ? rows : [])
+      .filter(r => (r.comment || '').trim().length >= 8)
+      .slice(0, 12)
+      .map(r => ({
+        service: r.service,
+        rating: r.rating,
+        comment: r.comment,
+        // Nunca mostra publicamente o nome completo do perfil nem o
+        // telefone — só o display_name que a própria pessoa escolheu
+        // dar ao avaliar, ou "Utilizador" como alternativa neutra.
+        name: r.display_name || 'Utilizador',
+        created_at: r.created_at,
+      }));
+
+    // Resumo agregado (todas as aprovadas, não só as que têm comentário)
+    const allApproved = await restRequest('user_feedback?status=eq.approved&select=rating');
+    const count = Array.isArray(allApproved) ? allApproved.length : 0;
+    const avg   = count > 0
+      ? Math.round((allApproved.reduce((s, r) => s + (r.rating || 0), 0) / count) * 10) / 10
+      : null;
+
+    return res.status(200).json({ success: true, summary: { avg, count }, testimonials: withComment });
+  } catch (err) {
+    console.error('[public-reviews]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
