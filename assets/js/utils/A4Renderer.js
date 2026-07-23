@@ -40,7 +40,7 @@ body{
   padding:30mm 25mm 25mm 30mm;
 }
 h1{font-size:18pt;font-weight:700;text-align:center;margin:0 0 8pt;}
-h2{font-size:14pt;font-weight:700;margin:14pt 0 7pt;border-bottom:1px solid #888;padding-bottom:3pt;}
+h2{font-size:14pt;font-weight:700;margin:14pt 0 7pt;}
 h3{font-size:12pt;font-weight:700;font-style:italic;margin:10pt 0 5pt;}
 h4{font-size:12pt;font-weight:700;margin:8pt 0 4pt;color:#333;}
 p{margin:0 0 8pt;text-align:justify;}
