@@ -57,6 +57,7 @@ export class PDFExporter {
             if (pageNum > 0) doc.addPage();
             pageNum++;
             y = MT;
+            pendingMarginMM = 0;
         };
 
         // Verifica se há espaço; se não, nova página
@@ -100,7 +101,26 @@ export class PDFExporter {
             return lines.length * leading;
         };
 
+        // gap(mm)         — espaçamento imediato, para uso DENTRO de um único
+        //                   elemento (ex: entre o texto do H2 e o seu próprio
+        //                   sublinhado/padding-bottom). Comportamento igual a
+        //                   antes: soma logo a y.
+        // queueMargin(mm) — regista a margem-BASE do bloco que acabou de ser
+        //                   desenhado. NÃO mexe em y agora — fica pendente
+        //                   para colapsar com a margem-TOPO do próximo bloco.
+        // applyMargin(mm) — a desenhar-se um novo bloco com margem-topo mm:
+        //                   colapsa com qualquer margem pendente do bloco
+        //                   anterior usando o MAIOR dos dois (tal como o
+        //                   browser faz entre elementos block-level irmãos —
+        //                   nunca soma), aplica-a a y, e zera o pendente.
+        let pendingMarginMM = 0;
         const gap = (mm = 4) => { checkY(mm); y += mm; };
+        const queueMargin = (mm = 0) => { pendingMarginMM = Math.max(pendingMarginMM, mm); };
+        const applyMargin = (mm = 0) => {
+            const total = Math.max(pendingMarginMM, mm);
+            if (total > 0) { checkY(total); y += total; }
+            pendingMarginMM = 0;
+        };
 
         const hRule = (color = [170,170,170], w = 0.3) => { // #aaa — cor exacta do <hr> no CSS do preview (era 180,180,180)
             doc.setDrawColor(...color);
@@ -165,6 +185,7 @@ export class PDFExporter {
             });
             if (total > CW) return false;
 
+            applyMargin(0);
             checkY(LEAD);
             let x = ML;
             segs.forEach((seg, idx) => {
@@ -180,7 +201,7 @@ export class PDFExporter {
                 x += doc.getTextWidth(seg.text) + 1.6;
             });
             y += LEAD;
-            gap(3);
+            queueMargin(3);
             return true;
         };
 
@@ -491,9 +512,9 @@ export class PDFExporter {
                 // fim do parágrafo/lista da secção anterior — nunca por baixo
                 // do título — tal como no preview.
                 const HR_MARGIN = Math.round(10 * PT_TO_MM * 100) / 100; // ≈3.53mm — espaçamento igual ao CSS do preview (hr{margin:10pt 0})
-                gap(HR_MARGIN);
+                applyMargin(HR_MARGIN); // colapsa com a margem pendente do bloco anterior (nunca soma)
                 hRule();
-                gap(HR_MARGIN);
+                queueMargin(HR_MARGIN); // margem-baixo do hr, pendente para o próximo bloco
                 i++; continue;
             }
 
@@ -538,11 +559,13 @@ export class PDFExporter {
                     const pText = this._cleanInlinePDF(prep(headerCells.join('   ')));
                     setFont(false, false, 12, [17,24,39]); // #111827 — cor exacta do body no preview
                     const pLines = doc.splitTextToSize(pText, CW);
+                    applyMargin(0);
                     checkY(Math.min(2, pLines.length) * LEAD);
                     pLines.forEach(pl => { checkY(LEAD); doc.text(pl, ML, y); y += LEAD; });
-                    gap(3);
+                    queueMargin(3);
                     continue;
                 }
+                applyMargin(2.82); // ≈8pt — margem-topo da <table> no CSS do preview
                 this._drawTable(doc, tableLines, ML, y, CW, H, MB, MT, prep);
                 y += nonSepLines * 8 + 6;
                 if (y > H - MB) newPage();
@@ -557,7 +580,7 @@ export class PDFExporter {
                 // CORRIGIDO: CSS do preview não dá margem no topo do H1 (margin:0
                 // 0 8pt) — o gap(8) antigo só existia aqui, empurrando o título
                 // bem mais para baixo do que no preview a cada H1.
-                gap(2);
+                applyMargin(2);
                 setFont(true, false, 18, [17,24,39]); // #111827 — cor herdada do body no preview real, não preto puro
                 const h1Lines = doc.splitTextToSize(text, CW);
                 h1Lines.forEach(l => {
@@ -565,7 +588,7 @@ export class PDFExporter {
                     doc.text(l, W/2, y, { align: 'center' });
                     y += 10;
                 });
-                gap(4);
+                queueMargin(4);
                 // CORRIGIDO (fidelidade ao preview): removida a linha decorativa
                 // que era desenhada aqui, directamente sob o H1 (nome). No preview
                 // da webapp (A4Renderer.js DEFAULT_PAGE_CSS) o h1 NUNCA tem
@@ -607,7 +630,7 @@ export class PDFExporter {
                 // o gap(7) antigo era ~2mm a mais em CADA secção (Formação
                 // Académica, Experiência Profissional, etc.), somando vários
                 // milímetros extra num CV com várias secções.
-                gap(5);
+                applyMargin(5);
                 setFont(true, false, 14, [17,24,39]); // #111827 — cor herdada do body no preview real, não preto puro
                 const h2Lines = doc.splitTextToSize(text, CW);
                 h2Lines.forEach((l, li) => {
@@ -632,7 +655,7 @@ export class PDFExporter {
                 doc.setDrawColor(136, 136, 136); // #888
                 doc.setLineWidth(0.26); // ≈1px CSS
                 doc.line(ML, y, W - MR, y);
-                gap(4);
+                queueMargin(4);
                 i++; continue;
             }
 
@@ -643,11 +666,11 @@ export class PDFExporter {
                 // H3 precisa de pelo menos: própria altura + 3 linhas de parágrafo abaixo
                 checkHeading(14, 21);
                 // CORRIGIDO: CSS margin-top do H3 é 10pt (≈3.53mm), não 5mm.
-                gap(3.5);
+                applyMargin(3.5);
                 setFont(true, true, 12, [17,24,39]); // #111827 — igual ao h1/h2, não preto puro
                 const h3Lines = doc.splitTextToSize(text, CW);
                 h3Lines.forEach(l => { checkY(LEAD); doc.text(l, ML, y); y += LEAD; });
-                gap(3);
+                queueMargin(3);
                 i++; continue;
             }
 
@@ -656,10 +679,10 @@ export class PDFExporter {
             if (h4) {
                 const text = prep(h4[1]);
                 checkHeading(10, 7);
-                gap(3);
+                applyMargin(3);
                 setFont(true, false, 12, [51,51,51]); // #333 — cor exacta do h4 no CSS do preview
                 doc.splitTextToSize(text, CW).forEach(l => { checkY(LEAD); doc.text(l, ML, y); y += LEAD; });
-                gap(2);
+                queueMargin(2);
                 i++; continue;
             }
 
@@ -667,18 +690,19 @@ export class PDFExporter {
             const bq = line.match(/^>\s+(.+)/);
             if (bq) {
                 checkY(10);
-                gap(2);
-                doc.setFillColor(245, 245, 245);
+                applyMargin(2);
                 const bqText = prep(bq[1]);
                 const bqLines = doc.splitTextToSize(bqText, CW - 12);
                 const bqH = bqLines.length * 6.5 + 6;
                 checkY(bqH);
-                doc.rect(ML, y - 4, CW, bqH, 'F');
-                doc.setFillColor(60, 100, 160);
-                doc.rect(ML, y - 4, 1.5, bqH, 'F');
+                // Sem preenchimento de fundo: o CSS do preview não tem
+                // background na blockquote (fica transparente sobre a folha
+                // branca) — só o border-left de 3px #ccc.
+                doc.setFillColor(204, 204, 204); // #ccc — cor exacta do border-left no CSS do preview
+                doc.rect(ML, y - 4, 1, bqH, 'F');
                 setFont(false, true, 11, [68,68,68]); // #444 — cor exacta da blockquote no CSS do preview
                 bqLines.forEach(l => { doc.text(l, ML + 5, y); y += 6.5; });
-                gap(3);
+                queueMargin(3);
                 i++; continue;
             }
 
@@ -689,6 +713,11 @@ export class PDFExporter {
                 setFont(false, false, 12);
                 const bLines = doc.splitTextToSize(txt, CW - 9);
                 const needed = bLines.length * LEAD + 2;
+                // applyMargin(0): sem custo para o 2º+ item da mesma lista (não há
+                // margem pendente entre bullets); só tem efeito real no 1º item,
+                // fazendo colapsar a margem-baixo pendente do bloco anterior
+                // (título, parágrafo, hr) em vez de a lista "colar-se" a ele.
+                applyMargin(0);
                 checkY(needed);
                 bLines.forEach((bl, bi) => {
                     checkY(LEAD);
@@ -715,6 +744,7 @@ export class PDFExporter {
                 setFont(false, false, 12);
                 const nLines = doc.splitTextToSize(txt, CW - 9);
                 const needed = nLines.length * LEAD + 2;
+                applyMargin(0);
                 checkY(needed);
                 nLines.forEach((nl, ni) => {
                     checkY(LEAD);
@@ -736,6 +766,7 @@ export class PDFExporter {
             const pText  = this._cleanInlinePDF(prep(line));
             setFont(false, false, 12, [17,24,39]); // #111827 — cor exacta do body no preview
             const pLines = doc.splitTextToSize(pText, CW);
+            applyMargin(0);
             // Widow/orphan: não deixar parágrafo com 1 linha em nova página
             const firstChunk = Math.min(2, pLines.length);
             checkY(firstChunk * LEAD);
@@ -752,7 +783,7 @@ export class PDFExporter {
                 else doc.text(pl, ML, y);
                 y += LEAD;
             });
-            gap(3);
+            queueMargin(3);
             i++;
         }
 
