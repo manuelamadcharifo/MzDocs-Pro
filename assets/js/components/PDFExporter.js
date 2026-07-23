@@ -615,12 +615,20 @@ export class PDFExporter {
                     doc.text(l, ML, y);
                     y += 8;
                 });
-                // CORRIGIDO (fidelidade ao preview): removido o "sublinhado fino"
-                // que era desenhado aqui, directamente sob o título. No preview da
-                // webapp o h2 não tem border-bottom — a linha de separação de
-                // secção só aparece no FIM do parágrafo/lista da secção (via o
-                // "---" que a IA coloca antes do título seguinte, desenhado pelo
-                // bloco "Separador horizontal" acima), nunca colada ao título.
+                // CORRIGIDO (fidelidade ao preview): a correcção anterior aqui tinha
+                // removido o sublinhado do h2 partindo da premissa de que o preview
+                // da webapp não tem border-bottom no h2 — mas essa premissa foi
+                // verificada contra assets/js/components/A4Renderer.js, um ficheiro
+                // órfão que NUNCA é importado por nenhuma parte da app (confirmado:
+                // TemplatePicker.js, Views.js, DocumentEditor.js e Paginator.js
+                // importam todos de assets/js/utils/A4Renderer.js). O ficheiro
+                // realmente usado define h2{border-bottom:1px solid #888;
+                // padding-bottom:3pt}, i.e. o preview real TEM sublinhado sob cada
+                // título de secção. Repõe-se aqui, com a mesma cor/espessura.
+                doc.setDrawColor(136, 136, 136); // #888
+                doc.setLineWidth(0.26); // ≈1px CSS
+                doc.line(ML, y, W - MR, y);
+                gap(1.06); // padding-bottom:3pt ≈ 1.06mm, entre a linha e o corpo
                 gap(4);
                 i++; continue;
             }
