@@ -28,7 +28,7 @@ REGRAS OBRIGATÓRIAS:
 4. Formação: do mais recente para o mais antigo
 5. ${isPrimeiroEmprego ? 'PERFIL PRIMEIRO EMPREGO: enfatize formação, voluntariado, estágios, actividades extra-curriculares e potencial. Use secção "Experiências de Formação / Estágios / Voluntariado"' : 'PERFIL EXPERIENTE: cada cargo com bullets de realizações com impacto mensurável'}
 6. Línguas: inclua SEMPRE a secção de línguas com os níveis fornecidos
-7. A secção "Realização de destaque" deve ser usada literalmente com os factos concretos fornecidos
+7. A secção "Realização de destaque" deve ser usada literalmente com os factos concretos fornecidos${isPrimeiroEmprego && !temExperiencia ? ', mas SEMPRE precedida de uma indicação clara e breve do contexto onde ocorreu (ex.: "Durante o estágio em...", "Como voluntário em...", "No âmbito escolar/académico..."), para nunca contradizer a secção de Experiência — se o candidato não tem experiência profissional formal, a realização de destaque NUNCA pode soar como um cargo ou responsabilidade profissional' : ''}
 
 ESTRUTURA OBRIGATÓRIA:
 
@@ -54,7 +54,7 @@ ESTRUTURA OBRIGATÓRIA:
 ---
 
 ## Realização de Destaque
-[Expanda e estruture o seguinte exemplo fornecido pelo candidato: "${data.exemplo || 'a preencher'}"]
+[Expanda e estruture o seguinte exemplo fornecido pelo candidato: "${data.exemplo || 'a preencher'}"${isPrimeiroEmprego && !temExperiencia ? '. Comece a frase indicando claramente o contexto (escola, voluntariado, estágio, comunidade) — nunca dê a entender que foi um cargo profissional, pois o candidato não tem experiência formal' : ''}]
 
 ---
 
