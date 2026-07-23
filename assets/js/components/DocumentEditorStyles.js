@@ -31,7 +31,7 @@ export function getFormatCSS(format) {
         font-family:sans-serif;letter-spacing:.5px;
       }
       h1{font-size:16pt;font-weight:bold;text-align:center;margin-bottom:10pt;}
-      h2{font-size:12.5pt;font-weight:bold;margin-top:10pt;margin-bottom:5pt;border-bottom:1px solid #ccc;padding-bottom:2pt;}
+      h2{font-size:12.5pt;font-weight:bold;margin-top:10pt;margin-bottom:5pt;}
       h3{font-size:11.5pt;font-weight:bold;margin-top:7pt;margin-bottom:4pt;}
       h4{font-size:11pt;font-weight:bold;margin-top:6pt;margin-bottom:3pt;}
       p{margin-bottom:5pt;text-align:justify;}
@@ -47,7 +47,7 @@ export function getFormatCSS(format) {
     `;
     if (format === 'word') return base + `
       body,.doc-page{font-family:'Calibri','Segoe UI',Arial,sans-serif;font-size:11pt;}
-      h1{color:#2E74B5;font-size:16pt;}h2{color:#2E74B5;font-size:13pt;border-bottom-color:#2E74B5;}
+      h1{color:#2E74B5;font-size:16pt;}h2{color:#2E74B5;font-size:13pt;}
       td,th{border-color:#BFBFBF;}th{background:#D9E2F3;color:#1F3864;}
     `;
     if (format === 'excel') return `

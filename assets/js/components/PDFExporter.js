@@ -459,27 +459,21 @@ export class PDFExporter {
 
             // ── Separador horizontal --- ─────────────────────────────────
             if (/^---+$/.test(line) || /^\*\*\*+$/.test(line)) {
-                // CORRIGIDO (bug: "linhas extras" e espaçamento grande a mais
-                // no download): a IA insere sempre um "---" antes de CADA
-                // título de secção (## ...). O título já desenha o seu
-                // próprio sublinhado logo a seguir (ver bloco H2 abaixo), por
-                // isso desenhar aqui TAMBÉM uma hRule de largura total criava
-                // 2 linhas seguidas (uma cheia + uma curta) e ~7mm de espaço
-                // extra em CADA secção — algo que não corresponde ao que o
-                // preview mostra. Só desenhamos esta régua quando o "---" não
-                // está colado a um título, ou seja, quando é mesmo um
-                // separador de conteúdo e não apenas o traço decorativo antes
-                // do cabeçalho seguinte.
-                let j = i + 1;
-                while (j < lines.length && lines[j].trim() === '') j++;
-                const nextIsHeading = /^#{1,4}\s+/.test(lines[j]?.trim() || '');
-                if (!nextIsHeading) {
-                    // Espaçamento equivalente ao CSS do preview (hr{margin:10pt 0}).
-                    const HR_MARGIN = Math.round(10 * PT_TO_MM * 100) / 100; // ≈3.53mm
-                    gap(HR_MARGIN);
-                    hRule();
-                    gap(HR_MARGIN);
-                }
+                // CORRIGIDO (fidelidade ao preview da webapp): o "---" que a IA
+                // insere entre o cabeçalho (nome/cargo/contacto) e cada secção,
+                // e entre o conteúdo de uma secção e o título seguinte, É o
+                // único separador visual do documento — exactamente como no
+                // preview (A4Renderer.js: <hr> depois do parágrafo/lista,
+                // nunca colado ao título). Os títulos (H1/H2) já NÃO desenham
+                // o seu próprio sublinhado (ver blocos abaixo), por isso não
+                // há mais risco de "2 linhas seguidas": desenhamos esta régua
+                // sempre, sem excepção, para que a linha apareça sempre no
+                // fim do parágrafo/lista da secção anterior — nunca por baixo
+                // do título — tal como no preview.
+                const HR_MARGIN = Math.round(10 * PT_TO_MM * 100) / 100; // ≈3.53mm — espaçamento igual ao CSS do preview (hr{margin:10pt 0})
+                gap(HR_MARGIN);
+                hRule();
+                gap(HR_MARGIN);
                 i++; continue;
             }
 
@@ -543,11 +537,14 @@ export class PDFExporter {
                     y += 10;
                 });
                 gap(4);
-                // Linha decorativa sob H1
-                doc.setDrawColor(60,100,160);
-                doc.setLineWidth(0.5);
-                doc.line(ML + CW*0.15, y-2, W - MR - CW*0.15, y-2);
-                gap(4);
+                // CORRIGIDO (fidelidade ao preview): removida a linha decorativa
+                // que era desenhada aqui, directamente sob o H1 (nome). No preview
+                // da webapp (A4Renderer.js DEFAULT_PAGE_CSS) o h1 NUNCA tem
+                // border-bottom — a única linha que aparece no cabeçalho é a do
+                // separador "---" logo a seguir ao cargo/contacto/localização,
+                // desenhada pelo bloco "Separador horizontal" acima. Manter esta
+                // linha extra aqui fazia o PDF mostrar uma linha por baixo do
+                // nome que a webapp nunca mostra.
                 i++; continue;
             }
 
@@ -589,11 +586,12 @@ export class PDFExporter {
                     doc.text(l, ML, y);
                     y += 8;
                 });
-                // Sublinhado fino
-                doc.setDrawColor(80,80,80);
-                doc.setLineWidth(0.3);
-                const tw = Math.min(doc.getTextWidth(h2Lines[0] || text), CW);
-                doc.line(ML, y - 1, ML + tw, y - 1);
+                // CORRIGIDO (fidelidade ao preview): removido o "sublinhado fino"
+                // que era desenhado aqui, directamente sob o título. No preview da
+                // webapp o h2 não tem border-bottom — a linha de separação de
+                // secção só aparece no FIM do parágrafo/lista da secção (via o
+                // "---" que a IA coloca antes do título seguinte, desenhado pelo
+                // bloco "Separador horizontal" acima), nunca colada ao título.
                 gap(4);
                 i++; continue;
             }

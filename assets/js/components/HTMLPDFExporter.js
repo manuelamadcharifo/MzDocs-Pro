@@ -89,8 +89,7 @@ const DEFAULT_CSS = `
     padding: 20mm 25mm 20mm 30mm; margin: 0;
   }
   h1 { font-size: 17pt; text-align: center; font-weight: bold; margin-bottom: 14pt; }
-  h2 { font-size: 13pt; font-weight: bold; margin-top: 12pt; margin-bottom: 6pt;
-       border-bottom: 1px solid #bbb; padding-bottom: 2pt; }
+  h2 { font-size: 13pt; font-weight: bold; margin-top: 12pt; margin-bottom: 6pt; }
   h3 { font-size: 12pt; font-weight: bold; margin-top: 8pt; }
   p  { margin-bottom: 8pt; text-align: justify; }
   ul, ol { margin: 6pt 0 6pt 18pt; }
@@ -271,7 +270,7 @@ window.addEventListener('load', function() {
         print-color-adjust: exact !important;
       }
       h1{font-size:16pt;font-weight:bold;text-align:center;margin-bottom:10pt;}
-      h2{font-size:12.5pt;font-weight:bold;margin-top:10pt;margin-bottom:5pt;border-bottom:1px solid #ccc;padding-bottom:2pt;}
+      h2{font-size:12.5pt;font-weight:bold;margin-top:10pt;margin-bottom:5pt;}
       h3{font-size:11.5pt;font-weight:bold;margin-top:7pt;margin-bottom:4pt;}
       h4{font-size:11pt;font-weight:bold;margin-top:6pt;margin-bottom:3pt;}
       p{margin-bottom:5pt;text-align:justify;}
