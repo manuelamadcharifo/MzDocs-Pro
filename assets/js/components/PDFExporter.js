@@ -164,6 +164,26 @@ export class PDFExporter {
             return true;
         };
 
+        // ── Justificação de parágrafos ──────────────────────────────────────
+        // CORRIGIDO (bug: texto do PDF alinhado só à esquerda, com a margem
+        // direita irregular, enquanto o preview mostra texto justificado —
+        // CSS do preview tem p{text-align:justify}). Distribui o espaço extra
+        // de cada linha entre as palavras, tal como o browser faz, deixando
+        // apenas a ÚLTIMA linha do parágrafo alinhada à esquerda (é assim que
+        // justify se comporta em qualquer motor de texto, incl. o do preview).
+        const justifyLine = (text, x, yPos, width) => {
+            const words = text.split(' ').filter(Boolean);
+            if (words.length <= 1) { doc.text(text, x, yPos); return; }
+            const wordWidths = words.map(w => doc.getTextWidth(w));
+            const totalWordsWidth = wordWidths.reduce((a, b) => a + b, 0);
+            const spaceWidth = (width - totalWordsWidth) / (words.length - 1);
+            let cx = x;
+            words.forEach((w, idx) => {
+                doc.text(w, cx, yPos);
+                cx += wordWidths[idx] + spaceWidth;
+            });
+        };
+
         // ── Limpeza de texto markdown inline ─────────────────
         // CORRIGIDO: remover emojis/unicode que o jsPDF renderiza como 'Ø=ÛÞ'.
         const emojiMap = {
@@ -679,7 +699,16 @@ export class PDFExporter {
             // CORRIGIDO: LEAD (~6.35mm) em vez dos 7mm fixos — é o maior
             // contribuinte cumulativo do "espaçamento a mais" reportado, por
             // se repetir em CADA linha de texto corrido do documento inteiro.
-            pLines.forEach(pl => { checkY(LEAD); doc.text(pl, ML, y); y += LEAD; });
+            // CORRIGIDO: parágrafo agora justificado (ver justifyLine acima),
+            // tal como o CSS do preview (p{text-align:justify}) — só a última
+            // linha do parágrafo fica alinhada à esquerda, como em qualquer
+            // motor de texto justificado.
+            pLines.forEach((pl, plIdx) => {
+                checkY(LEAD);
+                if (plIdx < pLines.length - 1) justifyLine(pl, ML, y, CW);
+                else doc.text(pl, ML, y);
+                y += LEAD;
+            });
             gap(3);
             i++;
         }
