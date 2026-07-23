@@ -238,6 +238,16 @@ export class PDFExporter {
         const stripUnicode = (t = '') => {
             let r = t;
             for (const [emoji, sub] of Object.entries(emojiMap)) r = r.split(emoji).join(sub);
+            // CORRIGIDO (bug: "Português — Fluente" saía como "Português Fluente",
+            // "Ensino Médio Completo — Escola Secundária" saía como "...Completo
+            // Escola Secundária"): o traço em travessão "—" (em dash, U+2014) e o
+            // meio-travessão "–" (en dash, U+2013) ficam fora dos intervalos
+            // \x00-\xFF e \u0100-\u024F, por isso a regex de limpeza abaixo
+            // apagava-os silenciosamente — sem deixar qualquer separador visual
+            // entre as duas palavras, o que parecia texto corrido/com erro.
+            // Substituem-se por um hífen normal (dentro do intervalo ASCII, logo
+            // preservado) ANTES da limpeza, mantendo o separador visual.
+            r = r.replace(/[\u2012\u2013\u2014\u2015]/g, '-');
             return r.replace(/[^\x00-\xFF\u0100-\u024F]/g, '');
         };
         const clean = (t = '') => stripUnicode(t)
@@ -638,23 +648,20 @@ export class PDFExporter {
                     doc.text(l, ML, y);
                     if (li < h2Lines.length - 1) y += 8; // só avança entre linhas — a linha por baixo do título fica junto à última linha, não 8mm abaixo dela
                 });
-                // CORRIGIDO (fidelidade ao preview): a correcção anterior aqui tinha
-                // removido o sublinhado do h2 partindo da premissa de que o preview
-                // da webapp não tem border-bottom no h2 — mas essa premissa foi
-                // verificada contra assets/js/components/A4Renderer.js, um ficheiro
-                // órfão que NUNCA é importado por nenhuma parte da app (confirmado:
-                // TemplatePicker.js, Views.js, DocumentEditor.js e Paginator.js
-                // importam todos de assets/js/utils/A4Renderer.js). O ficheiro
-                // realmente usado define h2{border-bottom:1px solid #888;
-                // padding-bottom:3pt}, i.e. o preview real TEM sublinhado sob cada
-                // título de secção. Repõe-se aqui, com a mesma cor/espessura, e
-                // ENCOSTADA à última linha do título (bug anterior: a linha era
-                // desenhada depois do y+=8 do loop, ou seja ~8mm abaixo do título
-                // em vez de ~2mm — visualmente "distante" do texto).
-                gap(2.2); // ≈descendente + padding-bottom:3pt (1.06mm) do CSS
-                doc.setDrawColor(136, 136, 136); // #888
-                doc.setLineWidth(0.26); // ≈1px CSS
-                doc.line(ML, y, W - MR, y);
+                // CORRIGIDO: o sublinhado do h2 foi reposto aqui numa revisão
+                // anterior com base numa premissa incorrecta — a de que existiria
+                // um "assets/js/components/A4Renderer.js" órfão, diferente do
+                // ficheiro realmente importado. Não existe tal ficheiro: há um
+                // único A4Renderer.js em todo o projecto, em
+                // assets/js/utils/A4Renderer.js, e é exactamente esse que
+                // DocumentEditor.js, TemplatePicker.js, Views.js e Paginator.js
+                // importam — confirmado de novo agora. Esse ficheiro define
+                // h2 SEM border-bottom (só margin). O separador visual de secção
+                // é o "---" que a IA coloca no FIM do parágrafo/lista de cada
+                // secção (bloco "Separador horizontal" acima), nunca colado ao
+                // título. Repor aqui o sublinhado voltava a mostrar 2 linhas por
+                // secção (uma sob o título + a real, no fim do conteúdo) — o
+                // exacto bug que o utilizador reportou original. Removido de novo.
                 queueMargin(4);
                 i++; continue;
             }
