@@ -102,7 +102,7 @@ export class PDFExporter {
 
         const gap = (mm = 4) => { checkY(mm); y += mm; };
 
-        const hRule = (color = [180,180,180], w = 0.3) => {
+        const hRule = (color = [170,170,170], w = 0.3) => { // #aaa — cor exacta do <hr> no CSS do preview (era 180,180,180)
             doc.setDrawColor(...color);
             doc.setLineWidth(w);
             doc.line(ML, y, W - MR, y);
@@ -149,7 +149,7 @@ export class PDFExporter {
         // segmentos, preservando a mesma disposição do preview. Se a linha
         // não couber na largura útil (CW), devolve false e o chamador cai
         // para o parágrafo normal (com o fallback de texto do emojiMap).
-        const writeContactLine = (rawLine, size = 12, color = [20,20,20]) => {
+        const writeContactLine = (rawLine, size = 12, color = [17,24,39]) => { // #111827 — mesma cor do body/parágrafo no preview
             const parts = rawLine.split('|').map(s => s.trim()).filter(Boolean);
             setFont(false, false, size, color);
             const iconS = size * 0.11; // ~mm, proporcional ao tamanho do texto
@@ -536,7 +536,7 @@ export class PDFExporter {
                     // mais do que ajuda — trata-se antes como texto normal.
                     const headerCells = tableLines[0].replace(/^\||\|$/g, '').split('|').map(c => c.trim());
                     const pText = this._cleanInlinePDF(prep(headerCells.join('   ')));
-                    setFont(false, false, 12, [20,20,20]);
+                    setFont(false, false, 12, [17,24,39]); // #111827 — cor exacta do body no preview
                     const pLines = doc.splitTextToSize(pText, CW);
                     checkY(Math.min(2, pLines.length) * LEAD);
                     pLines.forEach(pl => { checkY(LEAD); doc.text(pl, ML, y); y += LEAD; });
@@ -558,7 +558,7 @@ export class PDFExporter {
                 // 0 8pt) — o gap(8) antigo só existia aqui, empurrando o título
                 // bem mais para baixo do que no preview a cada H1.
                 gap(2);
-                setFont(true, false, 18, [0,0,0]);
+                setFont(true, false, 18, [17,24,39]); // #111827 — cor herdada do body no preview real, não preto puro
                 const h1Lines = doc.splitTextToSize(text, CW);
                 h1Lines.forEach(l => {
                     checkY(11);
@@ -608,12 +608,12 @@ export class PDFExporter {
                 // Académica, Experiência Profissional, etc.), somando vários
                 // milímetros extra num CV com várias secções.
                 gap(5);
-                setFont(true, false, 14, [0,0,0]);
+                setFont(true, false, 14, [17,24,39]); // #111827 — cor herdada do body no preview real, não preto puro
                 const h2Lines = doc.splitTextToSize(text, CW);
-                h2Lines.forEach(l => {
+                h2Lines.forEach((l, li) => {
                     checkY(10);
                     doc.text(l, ML, y);
-                    y += 8;
+                    if (li < h2Lines.length - 1) y += 8; // só avança entre linhas — a linha por baixo do título fica junto à última linha, não 8mm abaixo dela
                 });
                 // CORRIGIDO (fidelidade ao preview): a correcção anterior aqui tinha
                 // removido o sublinhado do h2 partindo da premissa de que o preview
@@ -624,11 +624,14 @@ export class PDFExporter {
                 // importam todos de assets/js/utils/A4Renderer.js). O ficheiro
                 // realmente usado define h2{border-bottom:1px solid #888;
                 // padding-bottom:3pt}, i.e. o preview real TEM sublinhado sob cada
-                // título de secção. Repõe-se aqui, com a mesma cor/espessura.
+                // título de secção. Repõe-se aqui, com a mesma cor/espessura, e
+                // ENCOSTADA à última linha do título (bug anterior: a linha era
+                // desenhada depois do y+=8 do loop, ou seja ~8mm abaixo do título
+                // em vez de ~2mm — visualmente "distante" do texto).
+                gap(2.2); // ≈descendente + padding-bottom:3pt (1.06mm) do CSS
                 doc.setDrawColor(136, 136, 136); // #888
                 doc.setLineWidth(0.26); // ≈1px CSS
                 doc.line(ML, y, W - MR, y);
-                gap(1.06); // padding-bottom:3pt ≈ 1.06mm, entre a linha e o corpo
                 gap(4);
                 i++; continue;
             }
@@ -641,7 +644,7 @@ export class PDFExporter {
                 checkHeading(14, 21);
                 // CORRIGIDO: CSS margin-top do H3 é 10pt (≈3.53mm), não 5mm.
                 gap(3.5);
-                setFont(true, true, 12, [0,0,0]);
+                setFont(true, true, 12, [17,24,39]); // #111827 — igual ao h1/h2, não preto puro
                 const h3Lines = doc.splitTextToSize(text, CW);
                 h3Lines.forEach(l => { checkY(LEAD); doc.text(l, ML, y); y += LEAD; });
                 gap(3);
@@ -654,7 +657,7 @@ export class PDFExporter {
                 const text = prep(h4[1]);
                 checkHeading(10, 7);
                 gap(3);
-                setFont(true, false, 12, [40,40,40]);
+                setFont(true, false, 12, [51,51,51]); // #333 — cor exacta do h4 no CSS do preview
                 doc.splitTextToSize(text, CW).forEach(l => { checkY(LEAD); doc.text(l, ML, y); y += LEAD; });
                 gap(2);
                 i++; continue;
@@ -673,7 +676,7 @@ export class PDFExporter {
                 doc.rect(ML, y - 4, CW, bqH, 'F');
                 doc.setFillColor(60, 100, 160);
                 doc.rect(ML, y - 4, 1.5, bqH, 'F');
-                setFont(false, true, 11, [60,60,60]);
+                setFont(false, true, 11, [68,68,68]); // #444 — cor exacta da blockquote no CSS do preview
                 bqLines.forEach(l => { doc.text(l, ML + 5, y); y += 6.5; });
                 gap(3);
                 i++; continue;
@@ -690,10 +693,15 @@ export class PDFExporter {
                 bLines.forEach((bl, bi) => {
                     checkY(LEAD);
                     if (bi === 0) {
-                        doc.setFillColor(60, 100, 160);
+                        // CORRIGIDO (cor inconsistente com o preview): o CSS real
+                        // (utils/A4Renderer.js) não define cor própria para o marcador
+                        // de lista (ul/li sem ::marker/color), por isso o browser usa
+                        // currentColor — a mesma cor do texto (#111827) — e não o azul
+                        // que estava aqui.
+                        doc.setFillColor(17, 24, 39);
                         doc.circle(ML + 3.5, y - 1.5, 1, 'F');
                     }
-                    setFont(false, false, 12, [20,20,20]);
+                    setFont(false, false, 12, [17,24,39]); // #111827 — cor exacta do body no preview
                     doc.text(bl, ML + 9, y);
                     y += LEAD;
                 });
@@ -710,9 +718,9 @@ export class PDFExporter {
                 checkY(needed);
                 nLines.forEach((nl, ni) => {
                     checkY(LEAD);
-                    setFont(true, false, 11, [60,100,160]);
+                    setFont(true, false, 11, [17,24,39]); // #111827 — mesma correcção do marcador de bullet acima
                     if (ni === 0) doc.text(`${num[1]}.`, ML + 1, y);
-                    setFont(false, false, 12, [20,20,20]);
+                    setFont(false, false, 12, [17,24,39]);
                     doc.text(nl, ML + 9, y);
                     y += LEAD;
                 });
@@ -726,7 +734,7 @@ export class PDFExporter {
 
             // ── Parágrafo normal ─────────────────────────────────────────
             const pText  = this._cleanInlinePDF(prep(line));
-            setFont(false, false, 12, [20,20,20]);
+            setFont(false, false, 12, [17,24,39]); // #111827 — cor exacta do body no preview
             const pLines = doc.splitTextToSize(pText, CW);
             // Widow/orphan: não deixar parágrafo com 1 linha em nova página
             const firstChunk = Math.min(2, pLines.length);
