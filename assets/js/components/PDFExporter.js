@@ -35,6 +35,24 @@ export class PDFExporter {
         let pageNum    = 0;
         let firstPage  = true; // capa não conta
 
+        // CORRIGIDO (bug: página extra quase em branco a aparecer no download,
+        // logo no início de uma secção): quando o conteúdo já vem com
+        // ---PAGE_BREAK--- reais (inseridos por Paginator.js, que mede a
+        // altura VERDADEIRA no browser, com o mesmo CSS do preview), esses
+        // marcadores são a ÚNICA fonte de verdade sobre onde uma folha A4
+        // termina — o mesmo nº de páginas mostrado no preview. O jsPDF usa
+        // uma tipografia/métrica só aproximada (fontes "core" do jsPDF, não
+        // o motor do browser); se deixarmos checkY()/checkHeading() decidirem
+        // TAMBÉM por conta própria quando quebrar página, uma pequena
+        // diferença acumulada (ex: depois da correcção do "---" a desenhar
+        // sempre a linha real) pode fazer o jsPDF pensar que uma secção não
+        // cabe MOMENTOS antes do marcador real chegar — inserindo uma página
+        // extra, com muito pouco conteúdo, que o preview nunca mostra. Por
+        // isso: com marcadores reais presentes, a paginação automática por
+        // aproximação fica desligada — só os ---PAGE_BREAK--- (e a quebra
+        // interna de tabelas, que não cabem de forma nenhuma a meio) decidem.
+        const hasRealPageBreaks = /---PAGE_BREAK---/.test(markdownContent);
+
         const newPage = () => {
             if (pageNum > 0) doc.addPage();
             pageNum++;
@@ -44,12 +62,14 @@ export class PDFExporter {
         // Verifica se há espaço; se não, nova página
         // minAfter: linhas mínimas de conteúdo que devem caber após um título
         const checkY = (needed = 10, minAfter = 0) => {
+            if (hasRealPageBreaks) return false;
             if (y + needed + minAfter > H - MB) { newPage(); return true; }
             return false;
         };
 
         // Garante que um título e pelo menos 2 linhas de texto cabem juntos
         const checkHeading = (headingHeight, bodyLineH = 7) => {
+            if (hasRealPageBreaks) return;
             const minBlock = headingHeight + (bodyLineH * 2); // título + 2 linhas mínimo
             if (y + minBlock > H - MB) newPage();
         };
@@ -497,7 +517,16 @@ export class PDFExporter {
                     tableLines.push(lines[i].trim());
                     i++;
                 }
-                const nonSepLines = tableLines.filter(l => !/^\|[-: ]+\|$/.test(l)).length; // inclui o cabeçalho
+                // CORRIGIDO (bug: linha separadora "|---|---|" a aparecer como
+                // texto literal "--- ---" no PDF): a regex antiga /^\|[-: ]+\|$/
+                // só reconhecia separadores de 1 coluna (ex: "|---|"). Numa
+                // tabela normal de 2+ colunas o separador é "|---|---|" (tem um
+                // "|" a meio), que essa regex NUNCA reconhecia como separador —
+                // por isso a linha de traços era tratada como uma linha de
+                // dados real e impressa literalmente. Esta verificação nova
+                // aceita qualquer nº de colunas: só "|", "-", ":" e espaços.
+                const isSepRow = (l) => /^[|:\-\s]+$/.test(l) && l.includes('-');
+                const nonSepLines = tableLines.filter(l => !isSepRow(l)).length; // inclui o cabeçalho
                 const pureDataRows = nonSepLines - 1; // exclui o cabeçalho
                 if (pureDataRows <= 0) {
                     // Tabela "cabeçalho apenas" (sem linhas de dados) — quase
@@ -732,8 +761,10 @@ export class PDFExporter {
 
     // ── Tabela profissional ─────────────────────────────────────────────────
     _drawTable(doc, tableLines, x, startY, cw, H, MB, MT, prep) {
+        // CORRIGIDO (mesmo bug do bloco acima): reconhecer separadores de
+        // qualquer nº de colunas, não só "|---|" de 1 coluna.
         const dataRows = tableLines
-            .filter(l => !/^\|[-: ]+\|$/.test(l))
+            .filter(l => !(/^[|:\-\s]+$/.test(l) && l.includes('-')))
             .map(l => l.split('|').map(c => c.trim()).filter((_, i, a) => i !== 0 && i !== a.length - 1));
 
         if (!dataRows.length) return;
