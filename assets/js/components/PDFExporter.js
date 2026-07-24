@@ -4,10 +4,86 @@
 
 export class PDFExporter {
 
+    // CORRIGIDO (causa raiz de linhas/quebras a não baterem certo entre o
+    // preview e o PDF): o preview (assets/js/utils/A4Renderer.js) usa a
+    // fonte CSS 'Times New Roman', Times, serif — mas o PDFExporter usava a
+    // fonte "core" do jsPDF chamada 'times', que na verdade é a Times-Roman
+    // PostScript da Adobe: um desenho DIFERENTE, com métricas de largura de
+    // carácter diferentes das da Times New Roman real. Numa linha isso é
+    // impercetível; ao longo de um documento inteiro (uma frase por linha,
+    // várias secções), essa diferença acumula-se e faz o jsPDF quebrar as
+    // linhas em pontos diferentes dos que o browser usa para desenhar o
+    // preview — daí parágrafos com mais/menos linhas, secções que ficam
+    // maiores ou mais pequenas, e organização diferente dentro da página.
+    //
+    // Correcção: embutir a Liberation Serif (assets/fonts/), a fonte livre
+    // desenhada pela Red Hat/Ascender especificamente para ser métrica-
+    // -compatível com a Times New Roman — é a mesma fonte que o Linux e a
+    // maioria dos browsers Android usam como substituto real quando uma
+    // página pede 'Times New Roman' e essa fonte da Microsoft não está
+    // instalada no aparelho. Os ficheiros .ttf são carregados uma única vez
+    // (cache no módulo) e registados no jsPDF via addFileToVFS/addFont, para
+    // que doc.splitTextToSize()/getTextWidth() meçam o texto com a MESMA
+    // régua do preview em vez da régua do PostScript Times-Roman.
+    //
+    // Se o carregamento falhar (ex: sem rede, ficheiro em falta no deploy),
+    // cai-se de volta na fonte 'times' core do jsPDF — o documento continua
+    // a ser gerado, só que com a imprecisão de métricas de antes.
+    static _fontCache = null;
+
+    async _loadCustomFont(doc) {
+        const FAMILY = 'LiberationSerif';
+        if (PDFExporter._fontCache === null) {
+            try {
+                const files = {
+                    normal:     '/assets/fonts/LiberationSerif-Regular.ttf',
+                    bold:       '/assets/fonts/LiberationSerif-Bold.ttf',
+                    italic:     '/assets/fonts/LiberationSerif-Italic.ttf',
+                    bolditalic: '/assets/fonts/LiberationSerif-BoldItalic.ttf',
+                };
+                const entries = await Promise.all(
+                    Object.entries(files).map(async ([style, url]) => {
+                        const buf = await fetch(url).then(r => {
+                            if (!r.ok) throw new Error(`fetch ${url} -> ${r.status}`);
+                            return r.arrayBuffer();
+                        });
+                        let binary = '';
+                        const bytes = new Uint8Array(buf);
+                        const CHUNK = 0x8000;
+                        for (let i = 0; i < bytes.length; i += CHUNK) {
+                            binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+                        }
+                        return [style, btoa(binary)];
+                    })
+                );
+                PDFExporter._fontCache = Object.fromEntries(entries);
+            } catch (err) {
+                console.warn('PDFExporter: não foi possível carregar a Liberation Serif, a usar a fonte core "times" do jsPDF.', err);
+                PDFExporter._fontCache = false;
+            }
+        }
+
+        if (!PDFExporter._fontCache) return null; // fallback: usar 'times'
+
+        const vfsNames = {
+            normal:     'LiberationSerif-Regular.ttf',
+            bold:       'LiberationSerif-Bold.ttf',
+            italic:     'LiberationSerif-Italic.ttf',
+            bolditalic: 'LiberationSerif-BoldItalic.ttf',
+        };
+        for (const [style, vfsName] of Object.entries(vfsNames)) {
+            doc.addFileToVFS(vfsName, PDFExporter._fontCache[style]);
+            doc.addFont(vfsName, FAMILY, style);
+        }
+        return FAMILY;
+    }
+
     async export(markdownContent, filename, metadata = {}) {
         const { jsPDF } = await this._loadJsPDF();
 
         const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const FONT_FAMILY = (await this._loadCustomFont(doc)) || 'times';
+        doc._mzFontFamily = FONT_FAMILY; // acessível a métodos fora deste closure (ex: _drawTableRow)
         const W   = doc.internal.pageSize.getWidth();   // 210
         const H   = doc.internal.pageSize.getHeight();  // 297
         const ML  = 30;   // margem esquerda  (3 cm)
@@ -78,7 +154,7 @@ export class PDFExporter {
         // ── Helpers tipográficos ──────────────────────────────────────────
         const setFont = (bold, italic, size, color = [0,0,0]) => {
             doc.setFontSize(size);
-            doc.setFont('times', bold && italic ? 'bolditalic' : bold ? 'bold' : italic ? 'italic' : 'normal');
+            doc.setFont(FONT_FAMILY, bold && italic ? 'bolditalic' : bold ? 'bold' : italic ? 'italic' : 'normal');
             doc.setTextColor(...color);
         };
 
@@ -938,7 +1014,7 @@ export class PDFExporter {
 
         row.forEach((cell, ci) => {
             doc.setFontSize(9.5);
-            doc.setFont('times', isHeader ? 'bold' : 'normal');
+            doc.setFont(doc._mzFontFamily || 'times', isHeader ? 'bold' : 'normal');
             doc.setTextColor(...(isHeader ? [255,255,255] : [20,20,20]));
             const cx = x + ci * colW + 3;
             const cellW = colW - 6;
