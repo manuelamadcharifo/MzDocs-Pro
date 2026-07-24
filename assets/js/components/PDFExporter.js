@@ -283,6 +283,7 @@ export class PDFExporter {
         // e suprimi-la (a capa já é desenhada aqui)
         let i = 0;
         let coverDrawn = false;
+        let isFirstBreak = true;
 
         // Extrair metadata da capa em tabela se existir no markdown
         const coverMeta = { ...metadata };
@@ -318,17 +319,13 @@ export class PDFExporter {
 
             // ── PAGE_BREAK explícito ─────────────────────────────────────
             if (line === '---PAGE_BREAK---') {
-                // CORRIGIDO (bug: CV/carta/recibo a ganhar uma página extra quase em
-                // branco no download, apesar do preview mostrar o nº certo de páginas):
-                // este marcador vem sempre do Paginator.js — o MESMO motor que já
-                // decidiu, medindo no browser, onde cada folha A4 termina no preview.
-                // Tem de forçar SEMPRE uma nova página aqui, com ou sem capa desenhada;
-                // a condição antiga só disparava quando havia capa (coverDrawn=true),
-                // fazendo o jsPDF ignorar todos os breaks — e decidir a paginação
-                // sozinho, com métricas de linha diferentes das do preview — em
-                // qualquer documento sem capa (docType 'none': CV, carta, recibo,
-                // recomendação).
-                newPage();
+                if (isFirstBreak && coverDrawn) {
+                    // Primeiro break = depois da capa → nova página (índice ou conteúdo)
+                    isFirstBreak = false;
+                    newPage();
+                } else if (!isFirstBreak) {
+                    newPage();
+                }
                 // Look-ahead: se há parágrafos antes de um H2/H3 logo a seguir,
                 // saltar esses parágrafos "órfãos" que o LLM coloca por engano
                 // antes do título do capítulo (só salta 1 parágrafo no máximo)
@@ -562,11 +559,7 @@ export class PDFExporter {
 
         // ── Numeração de páginas ──────────────────────────────────────────
         const total   = doc.internal.getNumberOfPages();
-        // CORRIGIDO: só saltar a numeração da página 1 quando ela é mesmo uma capa
-        // (coverDrawn). Sem capa, a página 1 já é conteúdo real e deve começar em
-        // "— 1 —", tal como o preview — antes ficava sempre fixo em 2, fazendo a
-        // 2ª página mostrar "— 1 —" por engano em CV/carta/recibo/recomendação.
-        const startPg = coverDrawn ? 2 : 1;
+        const startPg = 2; // página 2 = primeira após a capa
         for (let p = startPg; p <= total; p++) {
             doc.setPage(p);
             setFont(false, false, 9, [140,140,140]);
