@@ -121,6 +121,16 @@ export class PDFExporter {
             if (total > 0) { checkY(total); y += total; }
             pendingMarginMM = 0;
         };
+        // advanceLine(lineHeightMM, isLast): avança y para a linha seguinte
+        // DENTRO do mesmo bloco de texto. Entre linhas do MESMO parágrafo/
+        // título/item, usa a altura de linha completa (correcto — é
+        // exactamente o que um browser faz). Mas na ÚLTIMA linha do bloco,
+        // só avança a parte residual abaixo do texto (≈32% da altura de
+        // linha — a "meia entrelinha" + descendente dos caracteres), tal
+        // como o browser: o resto do espaço até ao próximo bloco vem da
+        // margem (queueMargin/applyMargin), não de uma segunda linha
+        // inteira somada por cima da margem.
+        const advanceLine = (lineHeightMM, isLast) => { y += isLast ? lineHeightMM * 0.18 : lineHeightMM; };
 
         const hRule = (color = [170,170,170], w = 0.3) => { // #aaa — cor exacta do <hr> no CSS do preview (era 180,180,180)
             doc.setDrawColor(...color);
@@ -206,7 +216,7 @@ export class PDFExporter {
                 doc.text(seg.text, x, y);
                 x += doc.getTextWidth(seg.text) + 1.6;
             });
-            y += LEAD;
+            advanceLine(LEAD, true);
             queueMargin(3);
             return true;
         };
@@ -617,7 +627,7 @@ export class PDFExporter {
                     const pLines = doc.splitTextToSize(pText, CW);
                     applyMargin(0);
                     checkY(Math.min(2, pLines.length) * LEAD);
-                    pLines.forEach(pl => { checkY(LEAD); doc.text(pl, ML, y); y += LEAD; });
+                    pLines.forEach((pl, plIdx) => { checkY(LEAD); doc.text(pl, ML, y); advanceLine(LEAD, plIdx === pLines.length - 1); });
                     queueMargin(3);
                     continue;
                 }
@@ -639,10 +649,10 @@ export class PDFExporter {
                 applyMargin(2);
                 setFont(true, false, 18, [17,24,39]); // #111827 — cor herdada do body no preview real, não preto puro
                 const h1Lines = doc.splitTextToSize(text, CW);
-                h1Lines.forEach(l => {
+                h1Lines.forEach((l, li) => {
                     checkY(11);
                     doc.text(l, W/2, y, { align: 'center' });
-                    y += 10;
+                    advanceLine(10, li === h1Lines.length - 1);
                 });
                 queueMargin(4);
                 // CORRIGIDO (fidelidade ao preview): removida a linha decorativa
@@ -722,7 +732,7 @@ export class PDFExporter {
                 applyMargin(3.5);
                 setFont(true, true, 12, [17,24,39]); // #111827 — igual ao h1/h2, não preto puro
                 const h3Lines = doc.splitTextToSize(text, CW);
-                h3Lines.forEach(l => { checkY(LEAD); doc.text(l, ML, y); y += LEAD; });
+                h3Lines.forEach((l, li) => { checkY(LEAD); doc.text(l, ML, y); advanceLine(LEAD, li === h3Lines.length - 1); });
                 queueMargin(3);
                 i++; continue;
             }
@@ -734,7 +744,8 @@ export class PDFExporter {
                 checkHeading(10, 7);
                 applyMargin(3);
                 setFont(true, false, 12, [51,51,51]); // #333 — cor exacta do h4 no CSS do preview
-                doc.splitTextToSize(text, CW).forEach(l => { checkY(LEAD); doc.text(l, ML, y); y += LEAD; });
+                const h4Lines = doc.splitTextToSize(text, CW);
+                h4Lines.forEach((l, li) => { checkY(LEAD); doc.text(l, ML, y); advanceLine(LEAD, li === h4Lines.length - 1); });
                 queueMargin(2);
                 i++; continue;
             }
@@ -754,7 +765,7 @@ export class PDFExporter {
                 doc.setFillColor(204, 204, 204); // #ccc — cor exacta do border-left no CSS do preview
                 doc.rect(ML, y - 4, 1, bqH, 'F');
                 setFont(false, true, 11, [68,68,68]); // #444 — cor exacta da blockquote no CSS do preview
-                bqLines.forEach(l => { doc.text(l, ML + 5, y); y += 6.5; });
+                bqLines.forEach((l, li) => { doc.text(l, ML + 5, y); advanceLine(6.5, li === bqLines.length - 1); });
                 queueMargin(3);
                 i++; continue;
             }
@@ -772,6 +783,12 @@ export class PDFExporter {
                 // (título, parágrafo, hr) em vez de a lista "colar-se" a ele.
                 applyMargin(0);
                 checkY(needed);
+                // Só a ÚLTIMA linha do ÚLTIMO bullet da lista leva o avanço
+                // reduzido (ver advanceLine) — entre bullets (ou entre linhas
+                // do mesmo bullet, quando o texto quebra) mantém-se a altura
+                // de linha inteira, senão os itens da lista ficavam
+                // encavalitados uns nos outros.
+                const isLastBulletInList = !(lines[i + 1] && /^[-*]\s+/.test(lines[i + 1].trim()));
                 bLines.forEach((bl, bi) => {
                     checkY(LEAD);
                     if (bi === 0) {
@@ -785,7 +802,7 @@ export class PDFExporter {
                     }
                     setFont(false, false, 12, [17,24,39]); // #111827 — cor exacta do body no preview
                     doc.text(bl, ML + 9, y);
-                    y += LEAD;
+                    advanceLine(LEAD, isLastBulletInList && bi === bLines.length - 1);
                 });
                 i++; continue;
             }
@@ -799,13 +816,14 @@ export class PDFExporter {
                 const needed = nLines.length * LEAD + 2;
                 applyMargin(0);
                 checkY(needed);
+                const isLastNumInList = !(lines[i + 1] && /^\d+\.\s+/.test(lines[i + 1].trim()));
                 nLines.forEach((nl, ni) => {
                     checkY(LEAD);
                     setFont(true, false, 11, [17,24,39]); // #111827 — mesma correcção do marcador de bullet acima
                     if (ni === 0) doc.text(`${num[1]}.`, ML + 1, y);
                     setFont(false, false, 12, [17,24,39]);
                     doc.text(nl, ML + 9, y);
-                    y += LEAD;
+                    advanceLine(LEAD, isLastNumInList && ni === nLines.length - 1);
                 });
                 i++; continue;
             }
@@ -834,7 +852,7 @@ export class PDFExporter {
                 checkY(LEAD);
                 if (plIdx < pLines.length - 1) justifyLine(pl, ML, y, CW);
                 else doc.text(pl, ML, y);
-                y += LEAD;
+                advanceLine(LEAD, plIdx === pLines.length - 1);
             });
             queueMargin(3);
             i++;
