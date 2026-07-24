@@ -130,7 +130,7 @@ export class PDFExporter {
         // como o browser: o resto do espaço até ao próximo bloco vem da
         // margem (queueMargin/applyMargin), não de uma segunda linha
         // inteira somada por cima da margem.
-        const advanceLine = (lineHeightMM, isLast) => { y += isLast ? lineHeightMM * 0.18 : lineHeightMM; };
+        const advanceLine = (lineHeightMM, isLast) => { y += isLast ? lineHeightMM * 0.26 : lineHeightMM; };
 
         const hRule = (color = [170,170,170], w = 0.3) => { // #aaa — cor exacta do <hr> no CSS do preview (era 180,180,180)
             doc.setDrawColor(...color);
