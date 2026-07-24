@@ -4,10 +4,86 @@
 
 export class PDFExporter {
 
+    // CORRIGIDO (causa raiz de linhas/quebras a não baterem certo entre o
+    // preview e o PDF): o preview (assets/js/utils/A4Renderer.js) usa a
+    // fonte CSS 'Times New Roman', Times, serif — mas o PDFExporter usava a
+    // fonte "core" do jsPDF chamada 'times', que na verdade é a Times-Roman
+    // PostScript da Adobe: um desenho DIFERENTE, com métricas de largura de
+    // carácter diferentes das da Times New Roman real. Numa linha isso é
+    // impercetível; ao longo de um documento inteiro (uma frase por linha,
+    // várias secções), essa diferença acumula-se e faz o jsPDF quebrar as
+    // linhas em pontos diferentes dos que o browser usa para desenhar o
+    // preview — daí parágrafos com mais/menos linhas, secções que ficam
+    // maiores ou mais pequenas, e organização diferente dentro da página.
+    //
+    // Correcção: embutir a Liberation Serif (assets/fonts/), a fonte livre
+    // desenhada pela Red Hat/Ascender especificamente para ser métrica-
+    // -compatível com a Times New Roman — é a mesma fonte que o Linux e a
+    // maioria dos browsers Android usam como substituto real quando uma
+    // página pede 'Times New Roman' e essa fonte da Microsoft não está
+    // instalada no aparelho. Os ficheiros .ttf são carregados uma única vez
+    // (cache no módulo) e registados no jsPDF via addFileToVFS/addFont, para
+    // que doc.splitTextToSize()/getTextWidth() meçam o texto com a MESMA
+    // régua do preview em vez da régua do PostScript Times-Roman.
+    //
+    // Se o carregamento falhar (ex: sem rede, ficheiro em falta no deploy),
+    // cai-se de volta na fonte 'times' core do jsPDF — o documento continua
+    // a ser gerado, só que com a imprecisão de métricas de antes.
+    static _fontCache = null;
+
+    async _loadCustomFont(doc) {
+        const FAMILY = 'LiberationSerif';
+        if (PDFExporter._fontCache === null) {
+            try {
+                const files = {
+                    normal:     '/assets/fonts/LiberationSerif-Regular.ttf',
+                    bold:       '/assets/fonts/LiberationSerif-Bold.ttf',
+                    italic:     '/assets/fonts/LiberationSerif-Italic.ttf',
+                    bolditalic: '/assets/fonts/LiberationSerif-BoldItalic.ttf',
+                };
+                const entries = await Promise.all(
+                    Object.entries(files).map(async ([style, url]) => {
+                        const buf = await fetch(url).then(r => {
+                            if (!r.ok) throw new Error(`fetch ${url} -> ${r.status}`);
+                            return r.arrayBuffer();
+                        });
+                        let binary = '';
+                        const bytes = new Uint8Array(buf);
+                        const CHUNK = 0x8000;
+                        for (let i = 0; i < bytes.length; i += CHUNK) {
+                            binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+                        }
+                        return [style, btoa(binary)];
+                    })
+                );
+                PDFExporter._fontCache = Object.fromEntries(entries);
+            } catch (err) {
+                console.warn('PDFExporter: não foi possível carregar a Liberation Serif, a usar a fonte core "times" do jsPDF.', err);
+                PDFExporter._fontCache = false;
+            }
+        }
+
+        if (!PDFExporter._fontCache) return null; // fallback: usar 'times'
+
+        const vfsNames = {
+            normal:     'LiberationSerif-Regular.ttf',
+            bold:       'LiberationSerif-Bold.ttf',
+            italic:     'LiberationSerif-Italic.ttf',
+            bolditalic: 'LiberationSerif-BoldItalic.ttf',
+        };
+        for (const [style, vfsName] of Object.entries(vfsNames)) {
+            doc.addFileToVFS(vfsName, PDFExporter._fontCache[style]);
+            doc.addFont(vfsName, FAMILY, style);
+        }
+        return FAMILY;
+    }
+
     async export(markdownContent, filename, metadata = {}) {
         const { jsPDF } = await this._loadJsPDF();
 
         const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const FONT_FAMILY = (await this._loadCustomFont(doc)) || 'times';
+        doc._mzFontFamily = FONT_FAMILY; // acessível a métodos fora deste closure (ex: _drawTableRow)
         const W   = doc.internal.pageSize.getWidth();   // 210
         const H   = doc.internal.pageSize.getHeight();  // 297
         const ML  = 30;   // margem esquerda  (3 cm)
@@ -16,26 +92,61 @@ export class PDFExporter {
         const MB  = 25;   // margem base      (2.5 cm)
         const CW  = W - ML - MR; // largura útil = 155 mm
 
+        // CORRIGIDO (bug: espaçamento grande a mais entre títulos/parágrafos no
+        // download, fazendo o documento "crescer" para mais páginas do que as
+        // que o preview mostra): esta é a MESMA conversão que o preview usa —
+        // DEFAULT_PAGE_CSS (A4Renderer.js) define corpo a 12pt com
+        // line-height:1.5, ou seja 18pt de altura de linha real por linha de
+        // texto. 18pt convertido para mm (1pt = 0.352778mm) dá ~6.35mm — não
+        // os 7mm fixos que este ficheiro usava em cada parágrafo/bullet/lista.
+        // Essa diferença de 0.65mm é pequena numa linha, mas um CV típico tem
+        // 30-40 linhas de texto corrido: 30 × 0.65mm ≈ 2cm de espaço a mais só
+        // aí, suficiente para empurrar o fim do documento para uma folha extra
+        // mesmo com os marcadores ---PAGE_BREAK--- já a ser respeitados.
+        const PT_TO_MM = 0.352778;
+        const LEAD     = Math.round(12 * 1.5 * PT_TO_MM * 100) / 100; // ≈6.35mm — altura de linha real do corpo de texto
+
         // ── Estado de paginação ────────────────────────────────────────────
         let y          = MT;
         let pageNum    = 0;
         let firstPage  = true; // capa não conta
 
+        // CORRIGIDO (bug: página extra quase em branco a aparecer no download,
+        // logo no início de uma secção): quando o conteúdo já vem com
+        // ---PAGE_BREAK--- reais (inseridos por Paginator.js, que mede a
+        // altura VERDADEIRA no browser, com o mesmo CSS do preview), esses
+        // marcadores são a ÚNICA fonte de verdade sobre onde uma folha A4
+        // termina — o mesmo nº de páginas mostrado no preview. O jsPDF usa
+        // uma tipografia/métrica só aproximada (fontes "core" do jsPDF, não
+        // o motor do browser); se deixarmos checkY()/checkHeading() decidirem
+        // TAMBÉM por conta própria quando quebrar página, uma pequena
+        // diferença acumulada (ex: depois da correcção do "---" a desenhar
+        // sempre a linha real) pode fazer o jsPDF pensar que uma secção não
+        // cabe MOMENTOS antes do marcador real chegar — inserindo uma página
+        // extra, com muito pouco conteúdo, que o preview nunca mostra. Por
+        // isso: com marcadores reais presentes, a paginação automática por
+        // aproximação fica desligada — só os ---PAGE_BREAK--- (e a quebra
+        // interna de tabelas, que não cabem de forma nenhuma a meio) decidem.
+        const hasRealPageBreaks = /---PAGE_BREAK---/.test(markdownContent);
+
         const newPage = () => {
             if (pageNum > 0) doc.addPage();
             pageNum++;
             y = MT;
+            pendingMarginMM = 0;
         };
 
         // Verifica se há espaço; se não, nova página
         // minAfter: linhas mínimas de conteúdo que devem caber após um título
         const checkY = (needed = 10, minAfter = 0) => {
+            if (hasRealPageBreaks) return false;
             if (y + needed + minAfter > H - MB) { newPage(); return true; }
             return false;
         };
 
         // Garante que um título e pelo menos 2 linhas de texto cabem juntos
         const checkHeading = (headingHeight, bodyLineH = 7) => {
+            if (hasRealPageBreaks) return;
             const minBlock = headingHeight + (bodyLineH * 2); // título + 2 linhas mínimo
             if (y + minBlock > H - MB) newPage();
         };
@@ -43,7 +154,7 @@ export class PDFExporter {
         // ── Helpers tipográficos ──────────────────────────────────────────
         const setFont = (bold, italic, size, color = [0,0,0]) => {
             doc.setFontSize(size);
-            doc.setFont('times', bold && italic ? 'bolditalic' : bold ? 'bold' : italic ? 'italic' : 'normal');
+            doc.setFont(FONT_FAMILY, bold && italic ? 'bolditalic' : bold ? 'bold' : italic ? 'italic' : 'normal');
             doc.setTextColor(...color);
         };
 
@@ -51,7 +162,7 @@ export class PDFExporter {
             const {
                 size = 12, bold = false, italic = false,
                 align = 'left', color = [0,0,0], indent = 0,
-                leading = 7, justify = false,
+                leading = LEAD, justify = false,
             } = opts;
             setFont(bold, italic, size, color);
             const x      = ML + indent;
@@ -66,12 +177,144 @@ export class PDFExporter {
             return lines.length * leading;
         };
 
+        // gap(mm)         — espaçamento imediato, para uso DENTRO de um único
+        //                   elemento (ex: entre o texto do H2 e o seu próprio
+        //                   sublinhado/padding-bottom). Comportamento igual a
+        //                   antes: soma logo a y.
+        // queueMargin(mm) — regista a margem-BASE do bloco que acabou de ser
+        //                   desenhado. NÃO mexe em y agora — fica pendente
+        //                   para colapsar com a margem-TOPO do próximo bloco.
+        // applyMargin(mm) — a desenhar-se um novo bloco com margem-topo mm:
+        //                   colapsa com qualquer margem pendente do bloco
+        //                   anterior usando o MAIOR dos dois (tal como o
+        //                   browser faz entre elementos block-level irmãos —
+        //                   nunca soma), aplica-a a y, e zera o pendente.
+        let pendingMarginMM = 0;
         const gap = (mm = 4) => { checkY(mm); y += mm; };
+        const queueMargin = (mm = 0) => { pendingMarginMM = Math.max(pendingMarginMM, mm); };
+        const applyMargin = (mm = 0) => {
+            const total = Math.max(pendingMarginMM, mm);
+            if (total > 0) { checkY(total); y += total; }
+            pendingMarginMM = 0;
+        };
+        // advanceLine(lineHeightMM, isLast): avança y para a linha seguinte
+        // DENTRO do mesmo bloco de texto. Entre linhas do MESMO parágrafo/
+        // título/item, usa a altura de linha completa (correcto — é
+        // exactamente o que um browser faz). Mas na ÚLTIMA linha do bloco,
+        // só avança a parte residual abaixo do texto (≈32% da altura de
+        // linha — a "meia entrelinha" + descendente dos caracteres), tal
+        // como o browser: o resto do espaço até ao próximo bloco vem da
+        // margem (queueMargin/applyMargin), não de uma segunda linha
+        // inteira somada por cima da margem.
+        const advanceLine = (lineHeightMM, isLast) => { y += isLast ? lineHeightMM * 0.26 : lineHeightMM; };
 
-        const hRule = (color = [180,180,180], w = 0.3) => {
+        const hRule = (color = [170,170,170], w = 0.3) => { // #aaa — cor exacta do <hr> no CSS do preview (era 180,180,180)
             doc.setDrawColor(...color);
             doc.setLineWidth(w);
             doc.line(ML, y, W - MR, y);
+        };
+
+        // ── Ícones de contacto (vectores, não texto) ───────────────────────
+        // CORRIGIDO (bug: "os ícones não aparecem no documento baixado"):
+        // antes, o emojiMap mais abaixo convertia 📞/✉️/📍 em texto simples
+        // ("Tel." "Email:" "Local:"), porque as fontes core do jsPDF (times/
+        // helvetica) não sabem desenhar emoji — mostravam "Ø=ÛÞ". Isso fazia
+        // o PDF exibir palavras que NUNCA estiveram no documento tal como
+        // visto no preview da webapp (que é HTML normal e mostra o emoji
+        // sem problema). Em vez de substituir por texto, desenhamos os 3
+        // ícones como pequenas formas vectoriais — o mesmo resultado visual
+        // que o preview, sem depender de nenhuma fonte de emoji.
+        const CONTACT_ICON_RX = /^(📞|☎|📱|📧|✉️|✉|📍|📌)\s*/;
+        const contactIconType = (ch) => {
+            if (ch === '📞' || ch === '☎' || ch === '📱') return 'phone';
+            if (ch === '📧' || ch === '✉️' || ch === '✉') return 'mail';
+            if (ch === '📍' || ch === '📌') return 'pin';
+            return null;
+        };
+        const drawContactIcon = (type, cx, cy, s, color) => {
+            doc.setDrawColor(...color);
+            doc.setFillColor(...color);
+            doc.setLineWidth(Math.max(0.25, s * 0.28));
+            if (type === 'phone') {
+                doc.line(cx - s * 0.4, cy + s * 0.4, cx + s * 0.4, cy - s * 0.4);
+                doc.circle(cx - s * 0.4, cy + s * 0.4, s * 0.16, 'F');
+                doc.circle(cx + s * 0.4, cy - s * 0.4, s * 0.16, 'F');
+            } else if (type === 'mail') {
+                const w2 = s * 1.2, h2 = s * 0.86, x0 = cx - w2 / 2, y0 = cy - h2 / 2;
+                doc.rect(x0, y0, w2, h2);
+                doc.line(x0, y0, cx, y0 + h2 * 0.58);
+                doc.line(cx, y0 + h2 * 0.58, x0 + w2, y0);
+            } else if (type === 'pin') {
+                // #EA4335 — vermelho padrão do emoji 📍 em todas as plataformas
+                // (Apple/Google/Samsung/Microsoft). Ao contrário do telefone e
+                // do email, a cor vermelha é o que torna este ícone
+                // reconhecível — por isso não usa a cor do texto do corpo,
+                // ao contrário dos outros dois.
+                doc.setFillColor(234, 67, 53);
+                doc.circle(cx, cy - s * 0.14, s * 0.32, 'F');
+                doc.triangle(cx - s * 0.22, cy + s * 0.04, cx + s * 0.22, cy + s * 0.04, cx, cy + s * 0.52, 'F');
+                doc.setFillColor(255, 255, 255);
+                doc.circle(cx, cy - s * 0.14, s * 0.12, 'F');
+            }
+        };
+        // Desenha uma linha "📞 X | ✉️ Y | 📍 Z" com ícones reais entre os
+        // segmentos, preservando a mesma disposição do preview. Se a linha
+        // não couber na largura útil (CW), devolve false e o chamador cai
+        // para o parágrafo normal (com o fallback de texto do emojiMap).
+        const writeContactLine = (rawLine, size = 12, color = [17,24,39]) => { // #111827 — mesma cor do body/parágrafo no preview
+            const parts = rawLine.split('|').map(s => s.trim()).filter(Boolean);
+            setFont(false, false, size, color);
+            const iconS = size * 0.11; // ~mm, proporcional ao tamanho do texto
+            // Pré-calcular a largura total para decidir se cabe numa linha
+            let total = 0;
+            const segs = parts.map((part, idx) => {
+                const m = part.match(CONTACT_ICON_RX);
+                const type = m ? contactIconType(m[1]) : null;
+                const text = this._cleanInlinePDF(type ? part.slice(m[0].length).trim() : part);
+                const w = (type ? iconS * 1.6 + 1.4 : 0) + doc.getTextWidth(text) + (idx > 0 ? doc.getTextWidth('|') + 3.2 : 0);
+                total += w;
+                return { type, text };
+            });
+            if (total > CW) return false;
+
+            applyMargin(0);
+            checkY(LEAD);
+            let x = ML;
+            segs.forEach((seg, idx) => {
+                if (idx > 0) {
+                    doc.text('|', x, y);
+                    x += doc.getTextWidth('|') + 1.6;
+                }
+                if (seg.type) {
+                    drawContactIcon(seg.type, x + iconS * 0.6, y - size * 0.09, iconS * 1.6, color);
+                    x += iconS * 1.6 + 1.4;
+                }
+                doc.text(seg.text, x, y);
+                x += doc.getTextWidth(seg.text) + 1.6;
+            });
+            advanceLine(LEAD, true);
+            queueMargin(3);
+            return true;
+        };
+
+        // ── Justificação de parágrafos ──────────────────────────────────────
+        // CORRIGIDO (bug: texto do PDF alinhado só à esquerda, com a margem
+        // direita irregular, enquanto o preview mostra texto justificado —
+        // CSS do preview tem p{text-align:justify}). Distribui o espaço extra
+        // de cada linha entre as palavras, tal como o browser faz, deixando
+        // apenas a ÚLTIMA linha do parágrafo alinhada à esquerda (é assim que
+        // justify se comporta em qualquer motor de texto, incl. o do preview).
+        const justifyLine = (text, x, yPos, width) => {
+            const words = text.split(' ').filter(Boolean);
+            if (words.length <= 1) { doc.text(text, x, yPos); return; }
+            const wordWidths = words.map(w => doc.getTextWidth(w));
+            const totalWordsWidth = wordWidths.reduce((a, b) => a + b, 0);
+            const spaceWidth = (width - totalWordsWidth) / (words.length - 1);
+            let cx = x;
+            words.forEach((w, idx) => {
+                doc.text(w, cx, yPos);
+                cx += wordWidths[idx] + spaceWidth;
+            });
         };
 
         // ── Limpeza de texto markdown inline ─────────────────
@@ -87,6 +330,16 @@ export class PDFExporter {
         const stripUnicode = (t = '') => {
             let r = t;
             for (const [emoji, sub] of Object.entries(emojiMap)) r = r.split(emoji).join(sub);
+            // CORRIGIDO (bug: "Português — Fluente" saía como "Português Fluente",
+            // "Ensino Médio Completo — Escola Secundária" saía como "...Completo
+            // Escola Secundária"): o traço em travessão "—" (em dash, U+2014) e o
+            // meio-travessão "–" (en dash, U+2013) ficam fora dos intervalos
+            // \x00-\xFF e \u0100-\u024F, por isso a regex de limpeza abaixo
+            // apagava-os silenciosamente — sem deixar qualquer separador visual
+            // entre as duas palavras, o que parecia texto corrido/com erro.
+            // Substituem-se por um hífen normal (dentro do intervalo ASCII, logo
+            // preservado) ANTES da limpeza, mantendo o separador visual.
+            r = r.replace(/[\u2012\u2013\u2014\u2015]/g, '-');
             return r.replace(/[^\x00-\xFF\u0100-\u024F]/g, '');
         };
         const clean = (t = '') => stripUnicode(t)
@@ -277,13 +530,43 @@ export class PDFExporter {
                 // Duplo break acidental (colapsar em único)
                 .replace(/(---PAGE_BREAK---\s*){2,}/g, '---PAGE_BREAK---\n');
         };
-        const lines = normalizeContent(markdownContent).split('\n');
+        const lines0 = normalizeContent(markdownContent).split('\n');
+        // NORMALIZAÇÃO 2: reposicionar um "---" que a IA colocou logo A SEGUIR
+        // a um título (entre o título e o parágrafo/lista da própria secção),
+        // em vez de ANTES do título (a separar do conteúdo da secção anterior
+        // — o seu papel correcto, sempre). Isto acontece de forma inconsistente
+        // consoante a geração — mais frequentemente logo na 1ª secção, a
+        // seguir ao cabeçalho/contacto — e faz o separador aparecer "colado"
+        // ao sítio errado (entre o título e o parágrafo, deixando um vazio
+        // enorme e sem linha nenhuma entre o contacto e o título). O motor de
+        // desenho em si desenha sempre exactamente pela ordem do texto — por
+        // isso a correcção certa é normalizar essa ordem aqui, uma única vez,
+        // em vez de confiar que a IA acerta sempre a posição.
+        const normalizeHrPlacement = (arr) => {
+            const out = arr.slice();
+            let idx = 0;
+            while (idx < out.length) {
+                if (/^#{1,4}\s+/.test(out[idx].trim())) {
+                    let j = idx + 1;
+                    while (j < out.length && out[j].trim() === '') j++;
+                    if (j < out.length && /^-{3,}\s*$/.test(out[j].trim())) {
+                        const hrLine = out[j];
+                        out.splice(j, 1);
+                        out.splice(idx, 0, hrLine);
+                        idx += 2; // saltar o "---" e o título, já na ordem certa
+                        continue;
+                    }
+                }
+                idx++;
+            }
+            return out;
+        };
+        const lines = normalizeHrPlacement(lines0);
 
         // Detectar se o conteúdo começa com uma capa implícita (tabela)
         // e suprimi-la (a capa já é desenhada aqui)
         let i = 0;
         let coverDrawn = false;
-        let isFirstBreak = true;
 
         // Extrair metadata da capa em tabela se existir no markdown
         const coverMeta = { ...metadata };
@@ -319,13 +602,17 @@ export class PDFExporter {
 
             // ── PAGE_BREAK explícito ─────────────────────────────────────
             if (line === '---PAGE_BREAK---') {
-                if (isFirstBreak && coverDrawn) {
-                    // Primeiro break = depois da capa → nova página (índice ou conteúdo)
-                    isFirstBreak = false;
-                    newPage();
-                } else if (!isFirstBreak) {
-                    newPage();
-                }
+                // CORRIGIDO (bug: CV/carta/recibo a ganhar uma página extra quase em
+                // branco no download, apesar do preview mostrar o nº certo de páginas):
+                // este marcador vem sempre do Paginator.js — o MESMO motor que já
+                // decidiu, medindo no browser, onde cada folha A4 termina no preview.
+                // Tem de forçar SEMPRE uma nova página aqui, com ou sem capa desenhada;
+                // a condição antiga só disparava quando havia capa (coverDrawn=true),
+                // fazendo o jsPDF ignorar todos os breaks — e decidir a paginação
+                // sozinho, com métricas de linha diferentes das do preview — em
+                // qualquer documento sem capa (docType 'none': CV, carta, recibo,
+                // recomendação).
+                newPage();
                 // Look-ahead: se há parágrafos antes de um H2/H3 logo a seguir,
                 // saltar esses parágrafos "órfãos" que o LLM coloca por engano
                 // antes do título do capítulo (só salta 1 parágrafo no máximo)
@@ -346,14 +633,35 @@ export class PDFExporter {
 
             // ── Separador horizontal --- ─────────────────────────────────
             if (/^---+$/.test(line) || /^\*\*\*+$/.test(line)) {
-                gap(3);
+                // CORRIGIDO (fidelidade ao preview da webapp): o "---" que a IA
+                // insere entre o cabeçalho (nome/cargo/contacto) e cada secção,
+                // e entre o conteúdo de uma secção e o título seguinte, É o
+                // único separador visual do documento — exactamente como no
+                // preview (A4Renderer.js: <hr> depois do parágrafo/lista,
+                // nunca colado ao título). Os títulos (H1/H2) já NÃO desenham
+                // o seu próprio sublinhado (ver blocos abaixo), por isso não
+                // há mais risco de "2 linhas seguidas": desenhamos esta régua
+                // sempre, sem excepção, para que a linha apareça sempre no
+                // fim do parágrafo/lista da secção anterior — nunca por baixo
+                // do título — tal como no preview.
+                const HR_MARGIN = Math.round(10 * PT_TO_MM * 100) / 100; // ≈3.53mm — espaçamento igual ao CSS do preview (hr{margin:10pt 0})
+                applyMargin(HR_MARGIN); // colapsa com a margem pendente do bloco anterior (nunca soma)
                 hRule();
-                gap(4);
+                queueMargin(HR_MARGIN); // margem-baixo do hr, pendente para o próximo bloco
                 i++; continue;
             }
 
             // ── Linha vazia ──────────────────────────────────────────────
-            if (!line) { y += 3; i++; continue; }
+            // Uma linha em branco no markdown-fonte é apenas um separador
+            // entre blocos — tal como no browser, não tem nenhuma
+            // representação visual própria (não é um <br>, não é um
+            // elemento). Todo o espaço real entre blocos já vem das
+            // margens de cada um (colapsadas via applyMargin/queueMargin
+            // acima). Um "y += 3" aqui somava espaço fantasma que não
+            // existe no preview, e era a maior causa do vão a mais visto
+            // logo abaixo da linha de contacto (e, em menor grau, a seguir
+            // a qualquer bloco separado por linha em branco no documento).
+            if (!line) { i++; continue; }
 
             // ── Tabela de capa (suprimir — já renderizada como capa) ─────
             // Detecta tabela de capa: começa com | e tem ** nos cabeçalhos
@@ -372,7 +680,16 @@ export class PDFExporter {
                     tableLines.push(lines[i].trim());
                     i++;
                 }
-                const nonSepLines = tableLines.filter(l => !/^\|[-: ]+\|$/.test(l)).length; // inclui o cabeçalho
+                // CORRIGIDO (bug: linha separadora "|---|---|" a aparecer como
+                // texto literal "--- ---" no PDF): a regex antiga /^\|[-: ]+\|$/
+                // só reconhecia separadores de 1 coluna (ex: "|---|"). Numa
+                // tabela normal de 2+ colunas o separador é "|---|---|" (tem um
+                // "|" a meio), que essa regex NUNCA reconhecia como separador —
+                // por isso a linha de traços era tratada como uma linha de
+                // dados real e impressa literalmente. Esta verificação nova
+                // aceita qualquer nº de colunas: só "|", "-", ":" e espaços.
+                const isSepRow = (l) => /^[|:\-\s]+$/.test(l) && l.includes('-');
+                const nonSepLines = tableLines.filter(l => !isSepRow(l)).length; // inclui o cabeçalho
                 const pureDataRows = nonSepLines - 1; // exclui o cabeçalho
                 if (pureDataRows <= 0) {
                     // Tabela "cabeçalho apenas" (sem linhas de dados) — quase
@@ -382,13 +699,15 @@ export class PDFExporter {
                     // mais do que ajuda — trata-se antes como texto normal.
                     const headerCells = tableLines[0].replace(/^\||\|$/g, '').split('|').map(c => c.trim());
                     const pText = this._cleanInlinePDF(prep(headerCells.join('   ')));
-                    setFont(false, false, 12, [20,20,20]);
+                    setFont(false, false, 12, [17,24,39]); // #111827 — cor exacta do body no preview
                     const pLines = doc.splitTextToSize(pText, CW);
-                    checkY(Math.min(2, pLines.length) * 7);
-                    pLines.forEach(pl => { checkY(7); doc.text(pl, ML, y); y += 7; });
-                    gap(3);
+                    applyMargin(0);
+                    checkY(Math.min(2, pLines.length) * LEAD);
+                    pLines.forEach((pl, plIdx) => { checkY(LEAD); doc.text(pl, ML, y); advanceLine(LEAD, plIdx === pLines.length - 1); });
+                    queueMargin(3);
                     continue;
                 }
+                applyMargin(2.82); // ≈8pt — margem-topo da <table> no CSS do preview
                 this._drawTable(doc, tableLines, ML, y, CW, H, MB, MT, prep);
                 y += nonSepLines * 8 + 6;
                 if (y > H - MB) newPage();
@@ -400,20 +719,26 @@ export class PDFExporter {
             if (h1) {
                 const text = prep(h1[1]);
                 checkHeading(22, 7); // título + mín. 2 linhas de parágrafo
-                gap(8);
-                setFont(true, false, 18, [0,0,0]);
+                // CORRIGIDO: CSS do preview não dá margem no topo do H1 (margin:0
+                // 0 8pt) — o gap(8) antigo só existia aqui, empurrando o título
+                // bem mais para baixo do que no preview a cada H1.
+                applyMargin(2);
+                setFont(true, false, 18, [17,24,39]); // #111827 — cor herdada do body no preview real, não preto puro
                 const h1Lines = doc.splitTextToSize(text, CW);
-                h1Lines.forEach(l => {
+                h1Lines.forEach((l, li) => {
                     checkY(11);
                     doc.text(l, W/2, y, { align: 'center' });
-                    y += 10;
+                    advanceLine(10, li === h1Lines.length - 1);
                 });
-                gap(4);
-                // Linha decorativa sob H1
-                doc.setDrawColor(60,100,160);
-                doc.setLineWidth(0.5);
-                doc.line(ML + CW*0.15, y-2, W - MR - CW*0.15, y-2);
-                gap(4);
+                queueMargin(4);
+                // CORRIGIDO (fidelidade ao preview): removida a linha decorativa
+                // que era desenhada aqui, directamente sob o H1 (nome). No preview
+                // da webapp (A4Renderer.js DEFAULT_PAGE_CSS) o h1 NUNCA tem
+                // border-bottom — a única linha que aparece no cabeçalho é a do
+                // separador "---" logo a seguir ao cargo/contacto/localização,
+                // desenhada pelo bloco "Separador horizontal" acima. Manter esta
+                // linha extra aqui fazia o PDF mostrar uma linha por baixo do
+                // nome que a webapp nunca mostra.
                 i++; continue;
             }
 
@@ -443,20 +768,33 @@ export class PDFExporter {
                 } else {
                     checkHeading(18, 7);
                 }
-                gap(7);
-                setFont(true, false, 14, [0,0,0]);
+                // CORRIGIDO: CSS do preview usa margin-top:14pt (≈4.94mm) no H2 —
+                // o gap(7) antigo era ~2mm a mais em CADA secção (Formação
+                // Académica, Experiência Profissional, etc.), somando vários
+                // milímetros extra num CV com várias secções.
+                applyMargin(5);
+                setFont(true, false, 14, [17,24,39]); // #111827 — cor herdada do body no preview real, não preto puro
                 const h2Lines = doc.splitTextToSize(text, CW);
-                h2Lines.forEach(l => {
+                h2Lines.forEach((l, li) => {
                     checkY(10);
                     doc.text(l, ML, y);
-                    y += 8;
+                    if (li < h2Lines.length - 1) y += 8; // só avança entre linhas — a linha por baixo do título fica junto à última linha, não 8mm abaixo dela
                 });
-                // Sublinhado fino
-                doc.setDrawColor(80,80,80);
-                doc.setLineWidth(0.3);
-                const tw = Math.min(doc.getTextWidth(h2Lines[0] || text), CW);
-                doc.line(ML, y - 1, ML + tw, y - 1);
-                gap(4);
+                // CORRIGIDO: o sublinhado do h2 foi reposto aqui numa revisão
+                // anterior com base numa premissa incorrecta — a de que existiria
+                // um "assets/js/components/A4Renderer.js" órfão, diferente do
+                // ficheiro realmente importado. Não existe tal ficheiro: há um
+                // único A4Renderer.js em todo o projecto, em
+                // assets/js/utils/A4Renderer.js, e é exactamente esse que
+                // DocumentEditor.js, TemplatePicker.js, Views.js e Paginator.js
+                // importam — confirmado de novo agora. Esse ficheiro define
+                // h2 SEM border-bottom (só margin). O separador visual de secção
+                // é o "---" que a IA coloca no FIM do parágrafo/lista de cada
+                // secção (bloco "Separador horizontal" acima), nunca colado ao
+                // título. Repor aqui o sublinhado voltava a mostrar 2 linhas por
+                // secção (uma sob o título + a real, no fim do conteúdo) — o
+                // exacto bug que o utilizador reportou original. Removido de novo.
+                queueMargin(4);
                 i++; continue;
             }
 
@@ -466,11 +804,12 @@ export class PDFExporter {
                 const text = prep(h3[1]);
                 // H3 precisa de pelo menos: própria altura + 3 linhas de parágrafo abaixo
                 checkHeading(14, 21);
-                gap(5);
-                setFont(true, true, 12, [0,0,0]);
+                // CORRIGIDO: CSS margin-top do H3 é 10pt (≈3.53mm), não 5mm.
+                applyMargin(3.5);
+                setFont(true, true, 12, [17,24,39]); // #111827 — igual ao h1/h2, não preto puro
                 const h3Lines = doc.splitTextToSize(text, CW);
-                h3Lines.forEach(l => { checkY(8); doc.text(l, ML, y); y += 7; });
-                gap(3);
+                h3Lines.forEach((l, li) => { checkY(LEAD); doc.text(l, ML, y); advanceLine(LEAD, li === h3Lines.length - 1); });
+                queueMargin(3);
                 i++; continue;
             }
 
@@ -479,10 +818,11 @@ export class PDFExporter {
             if (h4) {
                 const text = prep(h4[1]);
                 checkHeading(10, 7);
-                gap(3);
-                setFont(true, false, 12, [40,40,40]);
-                doc.splitTextToSize(text, CW).forEach(l => { checkY(8); doc.text(l, ML, y); y += 7; });
-                gap(2);
+                applyMargin(3);
+                setFont(true, false, 12, [51,51,51]); // #333 — cor exacta do h4 no CSS do preview
+                const h4Lines = doc.splitTextToSize(text, CW);
+                h4Lines.forEach((l, li) => { checkY(LEAD); doc.text(l, ML, y); advanceLine(LEAD, li === h4Lines.length - 1); });
+                queueMargin(2);
                 i++; continue;
             }
 
@@ -490,18 +830,19 @@ export class PDFExporter {
             const bq = line.match(/^>\s+(.+)/);
             if (bq) {
                 checkY(10);
-                gap(2);
-                doc.setFillColor(245, 245, 245);
+                applyMargin(2);
                 const bqText = prep(bq[1]);
                 const bqLines = doc.splitTextToSize(bqText, CW - 12);
                 const bqH = bqLines.length * 6.5 + 6;
                 checkY(bqH);
-                doc.rect(ML, y - 4, CW, bqH, 'F');
-                doc.setFillColor(60, 100, 160);
-                doc.rect(ML, y - 4, 1.5, bqH, 'F');
-                setFont(false, true, 11, [60,60,60]);
-                bqLines.forEach(l => { doc.text(l, ML + 5, y); y += 6.5; });
-                gap(3);
+                // Sem preenchimento de fundo: o CSS do preview não tem
+                // background na blockquote (fica transparente sobre a folha
+                // branca) — só o border-left de 3px #ccc.
+                doc.setFillColor(204, 204, 204); // #ccc — cor exacta do border-left no CSS do preview
+                doc.rect(ML, y - 4, 1, bqH, 'F');
+                setFont(false, true, 11, [68,68,68]); // #444 — cor exacta da blockquote no CSS do preview
+                bqLines.forEach((l, li) => { doc.text(l, ML + 5, y); advanceLine(6.5, li === bqLines.length - 1); });
+                queueMargin(3);
                 i++; continue;
             }
 
@@ -511,17 +852,33 @@ export class PDFExporter {
                 const txt    = prep(bullet[1]);
                 setFont(false, false, 12);
                 const bLines = doc.splitTextToSize(txt, CW - 9);
-                const needed = bLines.length * 7 + 2;
+                const needed = bLines.length * LEAD + 2;
+                // applyMargin(0): sem custo para o 2º+ item da mesma lista (não há
+                // margem pendente entre bullets); só tem efeito real no 1º item,
+                // fazendo colapsar a margem-baixo pendente do bloco anterior
+                // (título, parágrafo, hr) em vez de a lista "colar-se" a ele.
+                applyMargin(0);
                 checkY(needed);
+                // Só a ÚLTIMA linha do ÚLTIMO bullet da lista leva o avanço
+                // reduzido (ver advanceLine) — entre bullets (ou entre linhas
+                // do mesmo bullet, quando o texto quebra) mantém-se a altura
+                // de linha inteira, senão os itens da lista ficavam
+                // encavalitados uns nos outros.
+                const isLastBulletInList = !(lines[i + 1] && /^[-*]\s+/.test(lines[i + 1].trim()));
                 bLines.forEach((bl, bi) => {
-                    checkY(7);
+                    checkY(LEAD);
                     if (bi === 0) {
-                        doc.setFillColor(60, 100, 160);
+                        // CORRIGIDO (cor inconsistente com o preview): o CSS real
+                        // (utils/A4Renderer.js) não define cor própria para o marcador
+                        // de lista (ul/li sem ::marker/color), por isso o browser usa
+                        // currentColor — a mesma cor do texto (#111827) — e não o azul
+                        // que estava aqui.
+                        doc.setFillColor(17, 24, 39);
                         doc.circle(ML + 3.5, y - 1.5, 1, 'F');
                     }
-                    setFont(false, false, 12, [20,20,20]);
+                    setFont(false, false, 12, [17,24,39]); // #111827 — cor exacta do body no preview
                     doc.text(bl, ML + 9, y);
-                    y += 7;
+                    advanceLine(LEAD, isLastBulletInList && bi === bLines.length - 1);
                 });
                 i++; continue;
             }
@@ -532,34 +889,58 @@ export class PDFExporter {
                 const txt    = prep(num[2]);
                 setFont(false, false, 12);
                 const nLines = doc.splitTextToSize(txt, CW - 9);
-                const needed = nLines.length * 7 + 2;
+                const needed = nLines.length * LEAD + 2;
+                applyMargin(0);
                 checkY(needed);
+                const isLastNumInList = !(lines[i + 1] && /^\d+\.\s+/.test(lines[i + 1].trim()));
                 nLines.forEach((nl, ni) => {
-                    checkY(7);
-                    setFont(true, false, 11, [60,100,160]);
+                    checkY(LEAD);
+                    setFont(true, false, 11, [17,24,39]); // #111827 — mesma correcção do marcador de bullet acima
                     if (ni === 0) doc.text(`${num[1]}.`, ML + 1, y);
-                    setFont(false, false, 12, [20,20,20]);
+                    setFont(false, false, 12, [17,24,39]);
                     doc.text(nl, ML + 9, y);
-                    y += 7;
+                    advanceLine(LEAD, isLastNumInList && ni === nLines.length - 1);
                 });
+                i++; continue;
+            }
+
+            // ── Linha de contacto com ícones (📞 / ✉️ / 📍) ───────────────
+            if (/(📞|☎|📱|📧|✉️|✉|📍|📌)/.test(line) && writeContactLine(line)) {
                 i++; continue;
             }
 
             // ── Parágrafo normal ─────────────────────────────────────────
             const pText  = this._cleanInlinePDF(prep(line));
-            setFont(false, false, 12, [20,20,20]);
+            setFont(false, false, 12, [17,24,39]); // #111827 — cor exacta do body no preview
             const pLines = doc.splitTextToSize(pText, CW);
+            applyMargin(0);
             // Widow/orphan: não deixar parágrafo com 1 linha em nova página
             const firstChunk = Math.min(2, pLines.length);
-            checkY(firstChunk * 7);
-            pLines.forEach(pl => { checkY(7); doc.text(pl, ML, y); y += 7; });
-            gap(3);
+            checkY(firstChunk * LEAD);
+            // CORRIGIDO: LEAD (~6.35mm) em vez dos 7mm fixos — é o maior
+            // contribuinte cumulativo do "espaçamento a mais" reportado, por
+            // se repetir em CADA linha de texto corrido do documento inteiro.
+            // CORRIGIDO: parágrafo agora justificado (ver justifyLine acima),
+            // tal como o CSS do preview (p{text-align:justify}) — só a última
+            // linha do parágrafo fica alinhada à esquerda, como em qualquer
+            // motor de texto justificado.
+            pLines.forEach((pl, plIdx) => {
+                checkY(LEAD);
+                if (plIdx < pLines.length - 1) justifyLine(pl, ML, y, CW);
+                else doc.text(pl, ML, y);
+                advanceLine(LEAD, plIdx === pLines.length - 1);
+            });
+            queueMargin(3);
             i++;
         }
 
         // ── Numeração de páginas ──────────────────────────────────────────
         const total   = doc.internal.getNumberOfPages();
-        const startPg = 2; // página 2 = primeira após a capa
+        // CORRIGIDO: só saltar a numeração da página 1 quando ela é mesmo uma capa
+        // (coverDrawn). Sem capa, a página 1 já é conteúdo real e deve começar em
+        // "— 1 —", tal como o preview — antes ficava sempre fixo em 2, fazendo a
+        // 2ª página mostrar "— 1 —" por engano em CV/carta/recibo/recomendação.
+        const startPg = coverDrawn ? 2 : 1;
         for (let p = startPg; p <= total; p++) {
             doc.setPage(p);
             setFont(false, false, 9, [140,140,140]);
@@ -574,8 +955,10 @@ export class PDFExporter {
 
     // ── Tabela profissional ─────────────────────────────────────────────────
     _drawTable(doc, tableLines, x, startY, cw, H, MB, MT, prep) {
+        // CORRIGIDO (mesmo bug do bloco acima): reconhecer separadores de
+        // qualquer nº de colunas, não só "|---|" de 1 coluna.
         const dataRows = tableLines
-            .filter(l => !/^\|[-: ]+\|$/.test(l))
+            .filter(l => !(/^[|:\-\s]+$/.test(l) && l.includes('-')))
             .map(l => l.split('|').map(c => c.trim()).filter((_, i, a) => i !== 0 && i !== a.length - 1));
 
         if (!dataRows.length) return;
@@ -631,7 +1014,7 @@ export class PDFExporter {
 
         row.forEach((cell, ci) => {
             doc.setFontSize(9.5);
-            doc.setFont('times', isHeader ? 'bold' : 'normal');
+            doc.setFont(doc._mzFontFamily || 'times', isHeader ? 'bold' : 'normal');
             doc.setTextColor(...(isHeader ? [255,255,255] : [20,20,20]));
             const cx = x + ci * colW + 3;
             const cellW = colW - 6;
