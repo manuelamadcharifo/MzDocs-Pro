@@ -213,7 +213,20 @@ export async function paginateMarkdown(rawContent) {
       const nextH = isHeadingBlock ? (heights[idx + 1] || 0) : 0;
       const neededNow = h + nextH;
 
-      if (current.length && (currentH + neededNow) > USABLE_HEIGHT_PX) {
+      // CORRIGIDO (bug: página a quebrar com ~10-20% de espaço por preencher,
+      // deixando um vazio grande no fim de uma folha e no topo da seguinte):
+      // reproduzido num browser real — o corte estava a acontecer por uma
+      // diferença de poucos píxeis (ex: 897px de orçamento, bloco a pedir
+      // 899px — 0.3% a mais), a mesma ordem de grandeza de arredondamentos
+      // normais de sub-pixel entre medições. Isto é ruído de medição, não
+      // overflow real — mas a comparação estrita "> USABLE_HEIGHT_PX" trata
+      // qualquer excesso, por mínimo que seja, como "não cabe", descartando
+      // o resto da folha inteira. ORPHAN_TOLERANCE_PX absorve essa margem
+      // (só se aplica a este teste de "título+bloco seguinte cabem juntos";
+      // o orçamento USABLE_HEIGHT_PX em si mantém-se inalterado, preservando
+      // a folga de 2% já pensada para o PDF/Word).
+      const ORPHAN_TOLERANCE_PX = 10;
+      if (current.length && (currentH + neededNow) > USABLE_HEIGHT_PX + ORPHAN_TOLERANCE_PX) {
         pages.push(current.join('\n\n'));
         current = [];
         currentH = 0;
