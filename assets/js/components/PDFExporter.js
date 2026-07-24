@@ -159,6 +159,12 @@ export class PDFExporter {
                 doc.line(x0, y0, cx, y0 + h2 * 0.58);
                 doc.line(cx, y0 + h2 * 0.58, x0 + w2, y0);
             } else if (type === 'pin') {
+                // #EA4335 — vermelho padrão do emoji 📍 em todas as plataformas
+                // (Apple/Google/Samsung/Microsoft). Ao contrário do telefone e
+                // do email, a cor vermelha é o que torna este ícone
+                // reconhecível — por isso não usa a cor do texto do corpo,
+                // ao contrário dos outros dois.
+                doc.setFillColor(234, 67, 53);
                 doc.circle(cx, cy - s * 0.14, s * 0.32, 'F');
                 doc.triangle(cx - s * 0.22, cy + s * 0.04, cx + s * 0.22, cy + s * 0.04, cx, cy + s * 0.52, 'F');
                 doc.setFillColor(255, 255, 255);
@@ -438,7 +444,38 @@ export class PDFExporter {
                 // Duplo break acidental (colapsar em único)
                 .replace(/(---PAGE_BREAK---\s*){2,}/g, '---PAGE_BREAK---\n');
         };
-        const lines = normalizeContent(markdownContent).split('\n');
+        const lines0 = normalizeContent(markdownContent).split('\n');
+        // NORMALIZAÇÃO 2: reposicionar um "---" que a IA colocou logo A SEGUIR
+        // a um título (entre o título e o parágrafo/lista da própria secção),
+        // em vez de ANTES do título (a separar do conteúdo da secção anterior
+        // — o seu papel correcto, sempre). Isto acontece de forma inconsistente
+        // consoante a geração — mais frequentemente logo na 1ª secção, a
+        // seguir ao cabeçalho/contacto — e faz o separador aparecer "colado"
+        // ao sítio errado (entre o título e o parágrafo, deixando um vazio
+        // enorme e sem linha nenhuma entre o contacto e o título). O motor de
+        // desenho em si desenha sempre exactamente pela ordem do texto — por
+        // isso a correcção certa é normalizar essa ordem aqui, uma única vez,
+        // em vez de confiar que a IA acerta sempre a posição.
+        const normalizeHrPlacement = (arr) => {
+            const out = arr.slice();
+            let idx = 0;
+            while (idx < out.length) {
+                if (/^#{1,4}\s+/.test(out[idx].trim())) {
+                    let j = idx + 1;
+                    while (j < out.length && out[j].trim() === '') j++;
+                    if (j < out.length && /^-{3,}\s*$/.test(out[j].trim())) {
+                        const hrLine = out[j];
+                        out.splice(j, 1);
+                        out.splice(idx, 0, hrLine);
+                        idx += 2; // saltar o "---" e o título, já na ordem certa
+                        continue;
+                    }
+                }
+                idx++;
+            }
+            return out;
+        };
+        const lines = normalizeHrPlacement(lines0);
 
         // Detectar se o conteúdo começa com uma capa implícita (tabela)
         // e suprimi-la (a capa já é desenhada aqui)
@@ -529,7 +566,16 @@ export class PDFExporter {
             }
 
             // ── Linha vazia ──────────────────────────────────────────────
-            if (!line) { y += 3; i++; continue; }
+            // Uma linha em branco no markdown-fonte é apenas um separador
+            // entre blocos — tal como no browser, não tem nenhuma
+            // representação visual própria (não é um <br>, não é um
+            // elemento). Todo o espaço real entre blocos já vem das
+            // margens de cada um (colapsadas via applyMargin/queueMargin
+            // acima). Um "y += 3" aqui somava espaço fantasma que não
+            // existe no preview, e era a maior causa do vão a mais visto
+            // logo abaixo da linha de contacto (e, em menor grau, a seguir
+            // a qualquer bloco separado por linha em branco no documento).
+            if (!line) { i++; continue; }
 
             // ── Tabela de capa (suprimir — já renderizada como capa) ─────
             // Detecta tabela de capa: começa com | e tem ** nos cabeçalhos
