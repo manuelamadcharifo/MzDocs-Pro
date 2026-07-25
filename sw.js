@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v28-20260725'; // CORRIGIDO: navigationHandler agora protege TAMBÉM as chamadas a caches.match() dentro do catch (podem rejeitar, não só devolver undefined) — fecha definitivamente o bug do ecrã nativo "ERR_FAILED" offline.
+const CACHE_VERSION = 'v29-20260725'; // CORRIGIDO (causa raiz real): NavigationRoute movido para ANTES de precacheAndRoute — a rota do precache para '/' (registada primeiro) sempre ganhava ao navigationHandler, por muito reforçado que este ficasse. Ver comentário completo mais abaixo.
 
 // CORRIGIDO (bug crítico — causa raiz de "a app não abre sem dados/internet"):
 // Antes, o Service Worker carregava o Workbox e o idb via importScripts a partir
@@ -26,9 +26,94 @@ importScripts('/assets/vendor/idb.umd.js');
 
 workbox.setConfig({ debug: false, modulePathPrefix: '/assets/vendor/workbox' });
 
+// ── OFFLINE FALLBACK PARA NAVEGAÇÃO (regista-se ANTES do precaching!) ──────
+// CORRIGIDO (causa raiz real do bug "ERR_FAILED" nativo do Chrome offline,
+// 20260725): esta secção existia mais abaixo no ficheiro, DEPOIS de
+// `workbox.precaching.precacheAndRoute([...])`. O manifest de precache
+// listava '/' como uma entrada própria (`{ url: '/', revision: ... }`), e
+// `precacheAndRoute()` regista automaticamente uma rota para cada URL exacto
+// do manifest. O Workbox verifica as rotas registadas PELA ORDEM em que
+// foram registadas e usa a PRIMEIRA que corresponder ao pedido — por isso,
+// como essa rota do precache para '/' era registada primeiro, TODOS os
+// pedidos de navegação para "/" (a página inicial — exactamente a que o
+// utilizador testava sempre) eram servidos por essa rota do precache, nunca
+// pelo navigationHandler abaixo, por muito que este fosse reforçado. Quando
+// essa cache do precache ficava incompleta/inconsistente (ex: logo a seguir
+// a um deploy, antes do novo precache acabar de descarregar, ou depois de o
+// utilizador limpar a cache manualmente), a rota do precache rejeitava sem
+// nenhum tratamento de erro próprio — daí o ecrã nativo "ERR_FAILED" do
+// Chrome, sempre, mesmo com as correcções anteriores.
+// Registar o NavigationRoute AQUI, antes do precacheAndRoute, garante que
+// TODOS os pedidos de navegação (mode:'navigate' — inclui "/", "/perfil.html",
+// "/?ref=XXX", etc.) passam sempre por este handler robusto primeiro. A
+// entrada '/' foi também removida do manifest de precache (mantém-se só
+// '/index.html', usado como app shell dentro do próprio navigationHandler).
+// 2 problemas adicionais que este handler já resolvia antes de se descobrir
+// esta causa raiz, e que continuam válidos:
+// 1. Sem networkTimeoutSeconds, o NetworkFirst esperava indefinidamente por
+//    uma rede instável (sinal fraco/sem dados mas com wi-fi "ligado" sem
+//    internet real) antes de desistir — parecia que a app tinha travado.
+// 2. Em falha, tenta primeiro a app shell precacheada ('/index.html'),
+//    depois '/offline.html', e só em último caso gera uma página inline —
+//    cobre QUALQUER pedido de navegação, não só "/".
+const navigationHandler = async (params) => {
+    try {
+        return await new workbox.strategies.NetworkFirst({
+            cacheName: `pages-${CACHE_VERSION}`,
+            networkTimeoutSeconds: 4,
+        }).handle(params);
+    } catch {
+        // CORRIGIDO (2ª parte do bug ERR_FAILED, 20260725): as chamadas a
+        // caches.match() abaixo não estavam dentro de nenhum try/catch.
+        // Cache Storage não só pode "não encontrar" (resolve para undefined)
+        // — também pode REJEITAR com uma excepção real se o armazenamento do
+        // site ficou num estado inconsistente (ex: depois de o utilizador
+        // limpar a cache manualmente, ou quota/disco cheio). Essa excepção
+        // não apanhada propagava-se para fora do fetch handler e o resultado
+        // era o MESMO ecrã nativo "ERR_FAILED" que esta correcção supostamente
+        // resolvia. Agora todo o percurso de recurso está protegido — a
+        // resposta inline no fundo é sempre alcançada, aconteça o que
+        // acontecer com a cache.
+        try {
+            const shell = await caches.match('/index.html');
+            if (shell) return shell;
+        } catch (_) { /* Cache Storage indisponível — continua para o próximo recurso */ }
+        try {
+            const fallback = await caches.match('/offline.html');
+            if (fallback) return fallback;
+        } catch (_) { /* idem */ }
+        // Último recurso: uma resposta HTML mínima, gerada aqui mesmo (não
+        // depende de nenhuma cache), para que o utilizador veja sempre algo
+        // da MzDocs Pro, nunca o ecrã cinzento do browser.
+        return new Response(
+            `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/>
+            <meta name="viewport" content="width=device-width,initial-scale=1"/>
+            <title>MzDocs Pro — Sem Ligação</title>
+            <style>body{font-family:-apple-system,sans-serif;background:#07101F;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center;margin:0}
+            .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:2.5rem 1.5rem;max-width:420px}
+            h1{font-size:1.5rem;margin:0 0 .75rem}p{color:#94a3b8;line-height:1.6;margin:0 0 1.5rem}
+            button{background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:12px;padding:.875rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;width:100%}</style>
+            </head><body><div class="card"><h1>📡 Sem Ligação à Internet</h1>
+            <p>Não foi possível carregar a página. Verifique a sua ligação de dados e tente novamente.</p>
+            <button onclick="location.reload()">🔄 Tentar Novamente</button></div></body></html>`,
+            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
+    }
+};
+workbox.routing.registerRoute(
+    new workbox.routing.NavigationRoute(navigationHandler, {
+        denylist: [/^\/admin\.html/]
+    })
+);
+
+// /admin.html — sempre da rede, nunca do cache
+workbox.routing.registerRoute(
+    ({ url }) => url.pathname === '/admin.html',
+    new workbox.strategies.NetworkOnly()
+);
+
 // ── PRECACHING ──────────────────────────────────────────────────────────────
 workbox.precaching.precacheAndRoute([
-    { url: '/',               revision: CACHE_VERSION },
     { url: '/index.html',     revision: CACHE_VERSION },
     { url: '/offline.html',   revision: CACHE_VERSION },
     { url: '/manifest.json',  revision: CACHE_VERSION },
@@ -197,74 +282,9 @@ workbox.routing.registerRoute(
     new workbox.strategies.NetworkOnly()
 );
 
-// ── OFFLINE FALLBACK PARA NAVEGAÇÃO ────────────────────────────────────────
-// CORRIGIDO: dois problemas que faziam a app "não abrir" sem dados/internet:
-// 1. Sem networkTimeoutSeconds, o NetworkFirst esperava indefinidamente por
-//    uma rede instável (sinal fraco/sem dados mas com wi-fi "ligado" sem
-//    internet real) antes de desistir — parecia que a app tinha travado.
-// 2. Em falha, ia direto para '/offline.html' sem primeiro tentar a app
-//    shell já precacheada ('/index.html'). Isso é irrelevante para o URL
-//    exacto "/" (que o precache já intercepta antes disto), mas afecta
-//    QUALQUER outro pedido de navegação — ex: "/?ref=MAN77831" (o link do
-//    panfleto com QR code), "/perfil.html", "/templates.html" — que nunca
-//    tinham sido visitados com rede nesta versão do cache. Agora, se a
-//    cache de páginas também falhar, tenta servir a app shell precacheada
-//    antes de desistir para offline.html.
-const navigationHandler = async (params) => {
-    try {
-        return await new workbox.strategies.NetworkFirst({
-            cacheName: `pages-${CACHE_VERSION}`,
-            networkTimeoutSeconds: 4,
-        }).handle(params);
-    } catch {
-        // CORRIGIDO (2ª parte do bug ERR_FAILED, 20260725): as chamadas a
-        // caches.match() abaixo não estavam dentro de nenhum try/catch.
-        // Cache Storage não só pode "não encontrar" (resolve para undefined)
-        // — também pode REJEITAR com uma excepção real se o armazenamento do
-        // site ficou num estado inconsistente (ex: depois de o utilizador
-        // limpar a cache manualmente, ou quota/disco cheio). Essa excepção
-        // não apanhada propagava-se para fora do fetch handler e o resultado
-        // era o MESMO ecrã nativo "ERR_FAILED" que esta correcção supostamente
-        // resolvia. Agora todo o percurso de recurso está protegido — a
-        // resposta inline no fundo é sempre alcançada, aconteça o que
-        // acontecer com a cache.
-        try {
-            const shell = await caches.match('/index.html');
-            if (shell) return shell;
-        } catch (_) { /* Cache Storage indisponível — continua para o próximo recurso */ }
-        try {
-            const fallback = await caches.match('/offline.html');
-            if (fallback) return fallback;
-        } catch (_) { /* idem */ }
-        // Último recurso: uma resposta HTML mínima, gerada aqui mesmo (não
-        // depende de nenhuma cache), para que o utilizador veja sempre algo
-        // da MzDocs Pro, nunca o ecrã cinzento do browser.
-        return new Response(
-            `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/>
-            <meta name="viewport" content="width=device-width,initial-scale=1"/>
-            <title>MzDocs Pro — Sem Ligação</title>
-            <style>body{font-family:-apple-system,sans-serif;background:#07101F;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center;margin:0}
-            .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:2.5rem 1.5rem;max-width:420px}
-            h1{font-size:1.5rem;margin:0 0 .75rem}p{color:#94a3b8;line-height:1.6;margin:0 0 1.5rem}
-            button{background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:12px;padding:.875rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;width:100%}</style>
-            </head><body><div class="card"><h1>📡 Sem Ligação à Internet</h1>
-            <p>Não foi possível carregar a página. Verifique a sua ligação de dados e tente novamente.</p>
-            <button onclick="location.reload()">🔄 Tentar Novamente</button></div></body></html>`,
-            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-        );
-    }
-};
-workbox.routing.registerRoute(
-    new workbox.routing.NavigationRoute(navigationHandler, {
-        denylist: [/^\/admin\.html/]
-    })
-);
-
-// /admin.html — sempre da rede, nunca do cache
-workbox.routing.registerRoute(
-    ({ url }) => url.pathname === '/admin.html',
-    new workbox.strategies.NetworkOnly()
-);
+// (bloco "OFFLINE FALLBACK PARA NAVEGAÇÃO", incluindo a rota /admin.html,
+// movido para cima, logo a seguir a workbox.setConfig — ver comentário lá
+// explicando porquê)
 
 // ── BACKGROUND SYNC ─────────────────────────────────────────────────────────
 self.addEventListener('sync', event => {
