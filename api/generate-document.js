@@ -1,38 +1,46 @@
-// api/generate-document.js — v2.2 (AMOSTRA GRÁTIS + CUSTO PROGRESSIVO + MONITORIZAÇÃO)
-// 5 providers em corrida paralela: Groq + Gemini + OpenRouter + Cerebras + NVIDIA NIM
-// Suporte a geração em cadeia (_planMode / _sectionMode) com rate-limit generoso
+// api/generate-document.js — v2.3 (AUTO-CURA DE PROVIDERS/MODELOS)
+// N providers em corrida paralela (todos os que tiverem env var configurada
+// na Vercel — ver api/_lib/aiProviderRegistry.js). Suporte a geração em
+// cadeia (_planMode / _sectionMode) com rate-limit generoso.
 //
 // CORREÇÕES v2.0:
 //  1. Removido @supabase/supabase-js + require('ws'). A verificação do JWT
 //     passou a usar api/_lib/supabaseAdmin.js (fetch puro contra /auth/v1/user).
-//  2. NOVO: reembolso automático de crédito quando TODOS os providers falham.
-//     O cliente envia `cost` (créditos debitados em /api/deduct-credit); se a
-//     geração falhar por completo, este endpoint chama a RPC `refund_credit`
-//     para devolver o crédito ao utilizador, evitando o cenário
-//     "consumiu crédito e não gerou documento".
+//  2. Reembolso automático de crédito quando TODOS os providers falham.
 //
-// NOVO v2.1 (Amostra grátis + custo progressivo):
-//  3. _previewMode: true — gera uma AMOSTRA curta e gratuita do documento
-//     (sem autenticação obrigatória, sem dedução de crédito) para o
-//     utilizador decidir se vale a pena gastar o crédito. Tem rate-limit
-//     próprio e mais restrito (ver checkRateLimit) e um maxTokens baixo
-//     fixo no servidor (PREVIEW_MAX_TOKENS) — o cliente não pode pedir
-//     mais do que isto, mesmo que tente.
-//  4. Endpoint reaproveitado (não foi criado nenhum novo ficheiro em /api,
-//     pois o projecto já está no limite de 12 functions do Vercel Hobby).
-//     O custo progressivo por tamanho gerado (ver LongDocumentEngine.js)
-//     também usa apenas os endpoints já existentes (/api/generate-document
-//     e /api/deduct-credit) — nenhuma function nova foi necessária.
+// v2.1 (Amostra grátis + custo progressivo):
+//  3. _previewMode: true — gera uma AMOSTRA curta e gratuita do documento.
+//  4. Endpoint reaproveitado (limite de 12 functions do Vercel Hobby).
 //
-// NOVO v2.2 (Monitorização dos providers):
-//  5. Cada tentativa (sucesso ou falha real) de cada provider é registada
-//     de forma assíncrona (fire-and-forget, nunca bloqueia a resposta) na
-//     tabela ai_provider_daily_usage via RPC record_ai_provider_usage.
-//     Isto alimenta a nova aba "IA Providers" em /admin.html.
+// v2.2 (Monitorização dos providers):
+//  5. Cada tentativa (sucesso ou falha) de cada provider é registada de
+//     forma assíncrona na tabela ai_provider_daily_usage — alimenta a aba
+//     "IA Providers" em /admin.html.
+//
+// NOVO v2.3 (auto-cura de providers/modelos — substituição automática):
+//  6. api/_lib/aiProviderRegistry.js passou a ser a FONTE ÚNICA de config
+//     de todos os providers (activos + reserva já ligados). Qualquer chave
+//     nova (MISTRAL_API_KEY, SAMBANOVA_API_KEY, TOGETHER_API_KEY,
+//     FIREWORKS_API_KEY, além das 5 originais) entra na corrida sozinha,
+//     assim que existir na Vercel — sem editar este ficheiro.
+//  7. api/_lib/modelDiscovery.js consulta o endpoint /models real de cada
+//     provider (com cache) e filtra a lista curada para os modelos que
+//     REALMENTE existem neste momento. Se o provider trocar o catálogo
+//     por completo (ex: Cerebras), o motor usa directamente os primeiros
+//     modelos devolvidos pela descoberta ao vivo — substituição automática
+//     sem deploy novo.
+//  8. api/_lib/modelHealth.js é um disjuntor por modelo: desactiva 7 dias
+//     um modelo com erro permanente ("decommissioned", "model not found",
+//     "no endpoints found"...) e desactiva temporariamente (10min→30min→2h)
+//     um modelo com falhas repetidas transitórias — sem gastar mais pedidos
+//     num modelo que se sabe estar avariado.
 
 const { getUserFromToken, rpc } = require('./_lib/supabaseAdmin');
+const { PROVIDERS }               = require('./_lib/aiProviderRegistry');
+const { isModelDisabled, recordModelResult } = require('./_lib/modelHealth');
+const { getAvailableModels }      = require('./_lib/modelDiscovery');
 
-// NOVO v2.2: regista (fire-and-forget) o uso de cada provider na tabela
+// Regista (fire-and-forget) o uso de cada provider na tabela
 // ai_provider_daily_usage — alimenta a aba "IA Providers" do painel admin
 // (tokens usados, pedidos ok/falha, online/offline). Nunca bloqueia nem
 // faz falhar a geração do documento: qualquer erro aqui é apenas logado.
@@ -57,52 +65,7 @@ Gere documentos COMPLETOS e prontos para uso em português (variante moçambican
 Use Markdown. Nunca use meta-comentários como "Aqui está o documento...".
 Nunca invente dados pessoais — use [PREENCHER]. Nunca corte o documento no meio.`;
 
-// ─── GROQ ──────────────────────────────────────────────────────────────────
-// Modelos ordenados: Llama 4 primeiro (sem limite diário), depois os clássicos como fallback
-const GROQ_BASE   = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODELS = [
-    'llama-3.3-70b-versatile',   // principal - 100K TPD
-    'llama-3.1-70b-versatile',   // fallback quando TPD esgotado
-    'llama-3.1-8b-instant',      // leve, sem limite diário
-    'gemma2-9b-it',              // Google Gemma
-    'mixtral-8x7b-32768',        // Mixtral - grande contexto
-];
-
-// ─── GEMINI ────────────────────────────────────────────────────────────────
-const GEMINI_BASE   = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-];
-
-// ─── OPENROUTER ────────────────────────────────────────────────────────────
-const OR_BASE   = 'https://openrouter.ai/api/v1/chat/completions';
-const OR_MODELS = [
-    'google/gemma-3-27b-it:free',             // estável e rápido
-    'google/gemma-3-12b-it:free',             // alternativa leve
-    'mistralai/mistral-7b-instruct:free',     // muito estável
-    'qwen/qwen3-8b:free',                     // Qwen3 grátis
-    'deepseek/deepseek-r1-0528-qwen3-8b:free', // DeepSeek R1
-];
-
-// ─── CEREBRAS ──────────────────────────────────────────────────────────────
-// 1.5M tokens/dia grátis, 2400 t/s. Signup: cerebras.ai
-const CEREBRAS_BASE   = 'https://api.cerebras.ai/v1/chat/completions';
-const CEREBRAS_MODELS = [
-    'llama3.3-70b',    // nome correcto na API Cerebras
-    'llama3.1-70b',    // fallback
-    'llama3.1-8b',     // leve
-];
-
-// ─── NVIDIA NIM ────────────────────────────────────────────────────────────
-// 40 req/min grátis. Signup: build.nvidia.com
-const NVIDIA_BASE   = 'https://integrate.api.nvidia.com/v1/chat/completions';
-const NVIDIA_MODELS = [
-    'meta/llama-3.3-70b-instruct',          // estável
-    'meta/llama-3.1-70b-instruct',          // fallback
-    'mistralai/mistral-7b-instruct-v0.3',   // leve e estável
-];
+const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
 // ─── RATE LIMIT (Upstash Redis — persiste entre instâncias Vercel) ──────────
 // Se UPSTASH_REDIS_REST_URL não estiver configurado, cai no Map local (sem persistência)
@@ -114,13 +77,9 @@ async function checkRateLimit(req, isChainCall, isPreview) {
     const mode = isPreview ? ':p' : (isChainCall ? ':c' : '');
     const key  = 'rl:' + (auth ? `u:${auth.slice(-16)}` : `i:${ip}`) + mode;
 
-    // Preview: limite curto e por IP/utilizador, pensado para impedir abuso
-    // (gerar "amostras" em loop como substituto da geração paga), mas generoso
-    // o suficiente para um utilizador real testar 2-3 serviços antes de decidir.
     const limit     = isPreview ? 4 : (isChainCall ? (auth ? 60 : 20) : (auth ? 20 : 8));
     const windowSec = isPreview ? 60 : (isChainCall ? 10 : 60);
 
-    // ── Upstash Redis (persistente entre instâncias) ──────────────────────────
     const redisUrl   = process.env.UPSTASH_REDIS_REST_URL;
     const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -130,23 +89,19 @@ async function checkRateLimit(req, isChainCall, isPreview) {
                 Authorization: `Bearer ${redisToken}`,
                 'Content-Type': 'application/json',
             };
-            // Pipeline: INCR + EXPIRE em duas chamadas (REST API Upstash)
             const incrRes  = await fetch(`${redisUrl}/incr/${encodeURIComponent(key)}`, { method: 'POST', headers });
             const incrData = await incrRes.json();
             const count    = incrData.result;
 
-            // Definir expiração só no primeiro request da janela (count === 1)
             if (count === 1) {
                 await fetch(`${redisUrl}/expire/${encodeURIComponent(key)}/${windowSec}`, { method: 'POST', headers });
             }
             return count <= limit;
         } catch (redisErr) {
-            // Redis indisponível — fallback para Map local com aviso
             console.warn('[rate-limit] Redis unavailable, using local Map:', redisErr.message);
         }
     }
 
-    // ── Fallback: Map local (sem persistência entre cold starts, mas funcional) ─
     const now   = Date.now();
     const entry = _localRateMap.get(key) || { count: 0, reset: now + windowSec * 1000 };
     if (now > entry.reset) { entry.count = 0; entry.reset = now + windowSec * 1000; }
@@ -155,10 +110,7 @@ async function checkRateLimit(req, isChainCall, isPreview) {
     return entry.count <= limit;
 }
 
-// Map local apenas como fallback quando Redis não está configurado
 const _localRateMap = new Map();
-
-const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
 module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', SITE_URL);
@@ -177,15 +129,11 @@ module.exports = async function handler(req, res) {
         _preferProvider,
         _planMode,    // planeamento (retorna JSON de secções)
         _sectionMode, // geração de uma secção individual
-        _previewMode, // NOVO v2.1: amostra grátis, sem dedução de crédito
-        // creditsRemaining enviado pelo cliente após /api/deduct-credit ter debitado com sucesso
+        _previewMode, // amostra grátis, sem dedução de crédito
         creditsRemaining: preDeductedCredits,
-        // cost: créditos já debitados para este pedido (usado para reembolso automático em caso de falha)
         cost: deductedCost,
     } = body;
 
-    // Chamadas de cadeia (_planMode ou _sectionMode) têm rate-limit próprio.
-    // _previewMode é mutuamente exclusivo com isso — uma amostra nunca encadeia.
     const isPreview   = !!_previewMode && !_planMode && !_sectionMode;
     const isChainCall = !isPreview && !!(_planMode || _sectionMode);
 
@@ -201,13 +149,16 @@ module.exports = async function handler(req, res) {
         });
     }
 
-    const GROQ_KEY     = process.env.GROQ_API_KEY;
-    const GEMINI_KEY   = process.env.GEMINI_API_KEY;
-    const OR_KEY       = process.env.OPENROUTER_API_KEY;
-    const CEREBRAS_KEY = process.env.CEREBRAS_API_KEY;
-    const NVIDIA_KEY   = process.env.NVIDIA_API_KEY;
+    // Constrói o mapa de chaves disponíveis a partir do REGISTO CENTRAL —
+    // qualquer provider listado em aiProviderRegistry.js entra aqui
+    // automaticamente assim que a sua env var existir na Vercel.
+    const apiKeys = {};
+    for (const p of PROVIDERS) {
+        const val = process.env[p.envVar];
+        if (val) apiKeys[p.id] = val;
+    }
 
-    if (!GROQ_KEY && !GEMINI_KEY && !OR_KEY && !CEREBRAS_KEY && !NVIDIA_KEY) {
+    if (Object.keys(apiKeys).length === 0) {
         return res.status(503).json({ error: 'Nenhuma API key configurada.' });
     }
 
@@ -218,17 +169,11 @@ module.exports = async function handler(req, res) {
 
     if (!finalPrompt) return res.status(400).json({ error: 'prompt obrigatório' });
 
-    // NOVO v2.1: em modo preview, instrui o modelo a escrever apenas a abertura
-    // do documento (cabeçalho + primeiro parágrafo/secção) e a parar de forma
-    // limpa — isto além do corte rígido de maxTokens (PREVIEW_MAX_TOKENS) que
-    // já impede uma resposta longa mesmo que o modelo ignore a instrução.
     if (isPreview) {
         finalPrompt = `${finalPrompt}\n\n---\nIMPORTANTE: Esta é apenas uma AMOSTRA GRÁTIS para o utilizador avaliar a qualidade antes de gerar o documento completo. Escreva APENAS o cabeçalho/título e a abertura do documento (primeiro parágrafo ou primeira secção, no máximo). Pare num ponto natural — não tente preencher o documento todo. Não escreva "[continua]" nem comentários meta.`;
     }
 
-    // CORRIGIDO (auditoria A-3): limite de tamanho do prompt — sem isto um
-    // pedido malicioso com 100.000+ caracteres consome tokens de todos os 5
-    // providers, pode causar timeout dos 60s da Vercel e ainda debitar crédito.
+    // CORRIGIDO (auditoria A-3): limite de tamanho do prompt.
     const MAX_PROMPT_LENGTH = 15000;
     if (finalPrompt.length > MAX_PROMPT_LENGTH) {
         return res.status(400).json({
@@ -238,13 +183,6 @@ module.exports = async function handler(req, res) {
     }
 
     // ── Autenticação ───────────────────────────────────────────────────────
-    // A DEDUÇÃO DE CRÉDITOS é feita ANTES desta chamada pelo cliente via /api/deduct-credit.
-    // Este endpoint apenas verifica o JWT (para logging) e gera o documento.
-    // Chamadas de cadeia interna (_planMode / _sectionMode) não requerem token.
-    // NOVO v2.1: chamadas de preview (_previewMode) também não exigem token —
-    // a amostra grátis deve funcionar mesmo para visitantes não autenticados,
-    // que é precisamente o público que precisa de ver qualidade antes de criar
-    // conta/comprar créditos. Não há dedução de crédito neste modo.
     let verifiedUserId = userId;
     if (!isChainCall && !isPreview) {
         const authHeader = req.headers['authorization'] || '';
@@ -269,8 +207,6 @@ module.exports = async function handler(req, res) {
             return res.status(401).json({ error: 'Erro ao verificar sessão.' });
         }
     } else if (isPreview) {
-        // Best-effort: se o visitante já tiver sessão, identificamo-lo nos logs,
-        // mas a ausência/invalidade do token NUNCA bloqueia o preview.
         const authHeader = req.headers['authorization'] || '';
         const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
         if (token) {
@@ -281,8 +217,6 @@ module.exports = async function handler(req, res) {
         }
     }
 
-    // creditsAfterDeduction: valor já debitado pelo /api/deduct-credit — apenas reenviado ao cliente
-    // Em modo preview isto é sempre null (nenhum crédito foi tocado).
     const creditsAfterDeduction = isPreview
         ? null
         : (typeof preDeductedCredits === 'number' ? preDeductedCredits : null);
@@ -292,9 +226,7 @@ module.exports = async function handler(req, res) {
         : (_sectionMode ? 8192 : (_planMode ? 1024 : 8192));
 
     try {
-        const result = await raceAllProviders(finalPrompt, {
-            GROQ_KEY, GEMINI_KEY, OR_KEY, CEREBRAS_KEY, NVIDIA_KEY,
-        }, _preferProvider, maxTokens);
+        const result = await raceAllProviders(finalPrompt, apiKeys, _preferProvider, maxTokens);
 
         if (!isChainCall) {
             console.log(JSON.stringify({
@@ -309,8 +241,6 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({
             document: result.content,
             model: `${result.provider} · ${result.model}`,
-            // creditsRemaining vem sempre do servidor — nunca calculado no cliente
-            // Em preview é sempre null: nenhum crédito foi tocado.
             creditsRemaining: creditsAfterDeduction,
             usage: result.usage,
             preview: isPreview || undefined,
@@ -319,10 +249,6 @@ module.exports = async function handler(req, res) {
     } catch (err) {
         console.error('[generate-document] Todos os providers falharam:', err?.message);
 
-        // NOVO v2.0: tentar reembolsar automaticamente o crédito já debitado.
-        // Só aplicável a chamadas normais (não-chain, não-preview), com utilizador
-        // autenticado e um custo válido informado pelo cliente. Em modo preview
-        // nunca há nada para reembolsar (nenhum crédito foi debitado).
         let refunded = false;
         let creditsAfterRefund = creditsAfterDeduction;
 
@@ -352,271 +278,157 @@ module.exports = async function handler(req, res) {
 }
 
 // ─── CORRIDA PARALELA com provider preferido ──────────────────────────────
-async function raceAllProviders(prompt, keys, preferProvider, maxTokens) {
-    const { GROQ_KEY, GEMINI_KEY, OR_KEY, CEREBRAS_KEY, NVIDIA_KEY } = keys;
+async function raceAllProviders(prompt, apiKeys, preferProvider, maxTokens) {
     const winner = new AbortController();
 
-    const makeRacer = async (name, fn) => {
+    const makeRacer = async (providerCfg, apiKey) => {
         try {
             const t0     = Date.now();
-            const result = await fn(prompt, winner.signal, maxTokens);
+            const result = await tryProviderChain(providerCfg, apiKey, prompt, winner.signal, maxTokens);
             winner.abort();
-            logProviderUsageAsync(name, true, result, null); // NOVO v2.2
+            logProviderUsageAsync(providerCfg.id, true, result, null);
             return { ...result, ms: Date.now() - t0 };
         } catch (err) {
             if (err.name === 'AbortError') throw new Error('cancelled');
-            logProviderUsageAsync(name, false, null, err); // NOVO v2.2
+            logProviderUsageAsync(providerCfg.id, false, null, err);
             throw err;
         }
     };
 
-    // Mapa de providers disponíveis
+    // avail: apenas os providers do registo central que têm chave configurada
     const avail = {};
-    if (GROQ_KEY)     avail.groq       = (p, s) => tryGroq(p, GROQ_KEY, s, maxTokens);
-    if (GEMINI_KEY)   avail.gemini     = (p, s) => tryGemini(p, GEMINI_KEY, s, maxTokens);
-    if (OR_KEY)       avail.openrouter = (p, s) => tryOpenRouter(p, OR_KEY, s, maxTokens);
-    if (CEREBRAS_KEY) avail.cerebras   = (p, s) => tryCerebras(p, CEREBRAS_KEY, s, maxTokens);
-    if (NVIDIA_KEY)   avail.nvidia     = (p, s) => tryNvidia(p, NVIDIA_KEY, s, maxTokens);
+    for (const providerCfg of PROVIDERS) {
+        if (apiKeys[providerCfg.id]) avail[providerCfg.id] = providerCfg;
+    }
 
     if (Object.keys(avail).length === 0) throw new Error('Nenhum provider disponível');
 
     // Provider preferido vai primeiro, os outros em paralelo atrás
-    const ordered = preferProvider && avail[preferProvider]
+    const orderedIds = preferProvider && avail[preferProvider]
         ? [preferProvider, ...Object.keys(avail).filter(k => k !== preferProvider)]
         : Object.keys(avail);
 
-    const racers = ordered.map(k => makeRacer(k, avail[k]));
+    const racers = orderedIds.map(id => makeRacer(avail[id], apiKeys[id]));
     return Promise.any(racers);
 }
 
-// ─── GROQ ──────────────────────────────────────────────────────────────────
-async function tryGroq(prompt, apiKey, signal, maxTokens) {
+// ─── CADEIA DE FALLBACK DENTRO DE UM PROVIDER ─────────────────────────────
+// Para cada provider: descobre ao vivo que modelos ele realmente tem agora
+// (best-effort), cruza com a lista curada, salta modelos desactivados pelo
+// disjuntor, e tenta cada candidato por ordem até um responder.
+async function tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens) {
     let lastErr;
-    for (const model of GROQ_MODELS) {
+
+    const discovered = await getAvailableModels(providerCfg, apiKey);
+    let candidates = discovered
+        ? providerCfg.models.filter(m => discovered.includes(m))
+        : providerCfg.models.slice();
+
+    // Se NENHUM dos modelos curados existir mais no catálogo real do
+    // provider (troca de catálogo completa, ex: Cerebras), usa directamente
+    // os primeiros modelos que a descoberta ao vivo devolveu — é isto que
+    // torna a substituição verdadeiramente automática, sem deploy novo.
+    if (discovered && candidates.length === 0) {
+        candidates = discovered.slice(0, 5);
+        console.warn(`[${providerCfg.name}] catálogo curado indisponível — a usar descoberta ao vivo:`, candidates);
+    }
+
+    for (const model of candidates) {
         if (signal.aborted) throw new DOMException('', 'AbortError');
+
+        if (await isModelDisabled(providerCfg.id, model)) {
+            continue; // desactivado pelo disjuntor — salta sem gastar um pedido
+        }
+
         try {
-            const res = await fetch(GROQ_BASE, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                signal,
-                body: JSON.stringify({
-                    model,
-                    messages: [
-                        { role: 'system', content: SYSTEM_PROMPT },
-                        { role: 'user',   content: prompt },
-                    ],
-                    max_tokens: Math.min(maxTokens, 8192),
-                    temperature: 0.7,
-                }),
-            });
-            if (!res.ok) {
-                const d = await res.json().catch(() => ({}));
-                const msg = d?.error?.message || `Groq HTTP ${res.status}`;
-                const e = new Error(msg);
-                e.status = res.status;
-                // Se for limite DIÁRIO (TPD), não adianta esperar — vai para o próximo modelo
-                if (res.status === 429 && msg.includes('per day')) {
-                    console.warn(`[Groq] TPD esgotado para ${model}, a saltar para próximo`);
-                    lastErr = e;
-                    continue; // salta imediatamente para o próximo modelo
-                }
-                // Limite por minuto (TPM) — vale a pena esperar um pouco
-                if (res.status === 429) await sleep(2000);
-                throw e;
-            }
-            const data    = await res.json();
-            const content = data.choices?.[0]?.message?.content?.trim() || '';
-            if (!content) throw new Error('Groq resposta vazia');
-            return { content, provider: 'Groq', model, usage: data.usage };
+            const result = providerCfg.kind === 'gemini'
+                ? await tryGeminiModel(providerCfg, model, apiKey, prompt, signal, maxTokens)
+                : await tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTokens);
+            recordModelResult(providerCfg.id, model, true, null); // fire-and-forget
+            return result;
         } catch (err) {
             if (err.name === 'AbortError') throw err;
-            console.warn(`[Groq] ${model} falhou:`, err.message);
+            console.warn(`[${providerCfg.name}] ${model} falhou:`, err.message);
+            recordModelResult(providerCfg.id, model, false, err); // fire-and-forget
+            if (err.status === 429 && !err._skipFast) await sleep(800);
             lastErr = err;
         }
     }
-    throw lastErr || new Error('Groq: todos os modelos falharam');
+    throw lastErr || new Error(`${providerCfg.name}: nenhum modelo disponível (todos desactivados ou catálogo vazio)`);
 }
 
-// ─── GEMINI ────────────────────────────────────────────────────────────────
-async function tryGemini(prompt, apiKey, signal, maxTokens) {
-    let lastErr;
-    for (const modelId of GEMINI_MODELS) {
-        if (signal.aborted) throw new DOMException('', 'AbortError');
-        try {
-            const res = await fetch(`${GEMINI_BASE}/${modelId}:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal,
-                body: JSON.stringify({
-                    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        maxOutputTokens: Math.min(maxTokens, 65536),
-                        temperature: 0.7, topP: 0.9,
-                    },
-                    safetySettings: [
-                        { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
-                        { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
-                        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-                    ],
-                }),
-            });
-            if (!res.ok) {
-                const d = await res.json().catch(() => ({}));
-                const msg = d?.error?.message || `Gemini HTTP ${res.status}`;
-                const e = new Error(msg);
-                e.status = res.status;
-                // Quota esgotada por minuto — salta imediatamente, não vale esperar
-                if (res.status === 429) {
-                    console.warn(`[Gemini] Quota RPM para ${modelId}, a saltar`);
-                    lastErr = e;
-                    continue;
-                }
-                throw e;
-            }
-            const data    = await res.json();
-            const content = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-            if (!content) throw new Error(`Gemini vazio (${data.candidates?.[0]?.finishReason})`);
-            return {
-                content, provider: 'Gemini', model: modelId,
-                usage: {
-                    prompt_tokens:     data.usageMetadata?.promptTokenCount     || 0,
-                    completion_tokens: data.usageMetadata?.candidatesTokenCount || 0,
-                },
-            };
-        } catch (err) {
-            if (err.name === 'AbortError') throw err;
-            console.warn(`[Gemini] ${modelId} falhou:`, err.message);
-            lastErr = err;
-        }
+// ─── Chamada genérica a um modelo OpenAI-compatible (Groq, Cerebras,
+//     OpenRouter, NVIDIA, Mistral, SambaNova, Together, Fireworks...) ──────
+async function tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTokens) {
+    const res = await fetch(providerCfg.chatUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...providerCfg.authHeader(apiKey) },
+        signal,
+        body: JSON.stringify({
+            model,
+            messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'user',   content: prompt },
+            ],
+            max_tokens: Math.min(maxTokens, providerCfg.maxTokensCap),
+            temperature: 0.7,
+        }),
+    });
+    if (!res.ok) {
+        const d   = await res.json().catch(() => ({}));
+        const msg = d?.error?.message || d?.message || `${providerCfg.name} HTTP ${res.status}`;
+        const e   = new Error(msg);
+        e.status  = res.status;
+        // Limite DIÁRIO esgotado — não vale a pena esperar, salta já para o próximo modelo
+        if (res.status === 429 && /per day|daily/i.test(msg)) e._skipFast = true;
+        throw e;
     }
-    throw lastErr || new Error('Gemini: todos os modelos falharam');
+    const data    = await res.json();
+    const content = data.choices?.[0]?.message?.content?.trim() || '';
+    if (!content) throw new Error(`${providerCfg.name} resposta vazia`);
+    return { content, provider: providerCfg.name, model: data.model || model, usage: data.usage };
 }
 
-// ─── OPENROUTER ────────────────────────────────────────────────────────────
-async function tryOpenRouter(prompt, apiKey, signal, maxTokens) {
-    let lastErr;
-    for (const model of OR_MODELS) {
-        if (signal.aborted) throw new DOMException('', 'AbortError');
-        try {
-            const res = await fetch(OR_BASE, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`,
-                    'HTTP-Referer': SITE_URL, 'X-Title': 'MzDocs Pro',
-                },
-                signal,
-                body: JSON.stringify({
-                    model,
-                    messages: [
-                        { role: 'system', content: SYSTEM_PROMPT },
-                        { role: 'user',   content: prompt },
-                    ],
-                    max_tokens: Math.min(maxTokens, 16384),
-                    temperature: 0.7,
-                }),
-            });
-            if (!res.ok) {
-                const d = await res.json().catch(() => ({}));
-                const e = new Error(d?.error?.message || `OR HTTP ${res.status}`);
-                e.status = res.status;
-                if (res.status === 429) await sleep(1000);
-                throw e;
-            }
-            const data    = await res.json();
-            const content = data.choices?.[0]?.message?.content?.trim() || '';
-            if (!content) throw new Error('OpenRouter resposta vazia');
-            return { content, provider: 'OpenRouter', model: data.model || model, usage: data.usage };
-        } catch (err) {
-            if (err.name === 'AbortError') throw err;
-            console.warn(`[OpenRouter] ${model} falhou:`, err.message);
-            lastErr = err;
-        }
+// ─── Chamada específica à API Gemini (formato próprio) ────────────────────
+async function tryGeminiModel(providerCfg, model, apiKey, prompt, signal, maxTokens) {
+    const res = await fetch(`${providerCfg.chatUrlBase}/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal,
+        body: JSON.stringify({
+            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+                maxOutputTokens: Math.min(maxTokens, providerCfg.maxTokensCap),
+                temperature: 0.7, topP: 0.9,
+            },
+            safetySettings: [
+                { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+            ],
+        }),
+    });
+    if (!res.ok) {
+        const d   = await res.json().catch(() => ({}));
+        const msg = d?.error?.message || `Gemini HTTP ${res.status}`;
+        const e   = new Error(msg);
+        e.status  = res.status;
+        // Quota esgotada por minuto — salta imediatamente, não vale esperar
+        if (res.status === 429) e._skipFast = true;
+        throw e;
     }
-    throw lastErr || new Error('OpenRouter: todos os modelos falharam');
-}
-
-// ─── CEREBRAS ──────────────────────────────────────────────────────────────
-async function tryCerebras(prompt, apiKey, signal, maxTokens) {
-    let lastErr;
-    for (const model of CEREBRAS_MODELS) {
-        if (signal.aborted) throw new DOMException('', 'AbortError');
-        try {
-            const res = await fetch(CEREBRAS_BASE, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                signal,
-                body: JSON.stringify({
-                    model,
-                    messages: [
-                        { role: 'system', content: SYSTEM_PROMPT },
-                        { role: 'user',   content: prompt },
-                    ],
-                    max_tokens: Math.min(maxTokens, 16000),
-                    temperature: 0.7,
-                }),
-            });
-            if (!res.ok) {
-                const d = await res.json().catch(() => ({}));
-                const e = new Error(d?.error?.message || `Cerebras HTTP ${res.status}`);
-                e.status = res.status;
-                if (res.status === 429) await sleep(800);
-                throw e;
-            }
-            const data    = await res.json();
-            const content = data.choices?.[0]?.message?.content?.trim() || '';
-            if (!content) throw new Error('Cerebras resposta vazia');
-            return { content, provider: 'Cerebras', model, usage: data.usage };
-        } catch (err) {
-            if (err.name === 'AbortError') throw err;
-            console.warn(`[Cerebras] ${model} falhou:`, err.message);
-            lastErr = err;
-        }
-    }
-    throw lastErr || new Error('Cerebras: todos os modelos falharam');
-}
-
-// ─── NVIDIA NIM ────────────────────────────────────────────────────────────
-async function tryNvidia(prompt, apiKey, signal, maxTokens) {
-    let lastErr;
-    for (const model of NVIDIA_MODELS) {
-        if (signal.aborted) throw new DOMException('', 'AbortError');
-        try {
-            const res = await fetch(NVIDIA_BASE, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                signal,
-                body: JSON.stringify({
-                    model,
-                    messages: [
-                        { role: 'system', content: SYSTEM_PROMPT },
-                        { role: 'user',   content: prompt },
-                    ],
-                    max_tokens: Math.min(maxTokens, 32768),
-                    temperature: 0.7, stream: false,
-                }),
-            });
-            if (!res.ok) {
-                const d = await res.json().catch(() => ({}));
-                const e = new Error(d?.error?.message || `NVIDIA HTTP ${res.status}`);
-                e.status = res.status;
-                if (res.status === 429) await sleep(1200);
-                throw e;
-            }
-            const data    = await res.json();
-            const content = data.choices?.[0]?.message?.content?.trim() || '';
-            if (!content) throw new Error('NVIDIA resposta vazia');
-            return { content, provider: 'NVIDIA NIM', model, usage: data.usage };
-        } catch (err) {
-            if (err.name === 'AbortError') throw err;
-            console.warn(`[NVIDIA] ${model} falhou:`, err.message);
-            lastErr = err;
-        }
-    }
-    throw lastErr || new Error('NVIDIA: todos os modelos falharam');
+    const data    = await res.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    if (!content) throw new Error(`Gemini vazio (${data.candidates?.[0]?.finishReason})`);
+    return {
+        content, provider: 'Gemini', model,
+        usage: {
+            prompt_tokens:     data.usageMetadata?.promptTokenCount     || 0,
+            completion_tokens: data.usageMetadata?.candidatesTokenCount || 0,
+        },
+    };
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
