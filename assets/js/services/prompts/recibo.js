@@ -56,7 +56,7 @@ DOCUMENTO COMPLETO:
 # ${tipoDoc.toUpperCase()}
 
 **N.º:** ${tipoDoc === 'Recibo Simples' ? 'REC' : tipoDoc === 'Factura' ? 'FT' : tipoDoc === 'Factura Proforma' ? 'FP' : 'ND'}/____/${hoje.getFullYear()}
-**Data:** ${data.local}
+**Data:** ${dataFmt}
 ${isProforma ? '**Válida até:** [calcular: ' + validadeProforma + ' dias após data acima]\n**Esta Proforma NÃO constitui cobrança fiscal — sujeita a confirmação de encomenda**' : ''}
 
 ---
