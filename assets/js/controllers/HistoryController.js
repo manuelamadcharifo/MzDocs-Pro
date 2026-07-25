@@ -107,7 +107,15 @@ export class HistoryController {
 
     // 2. Se autenticado, guardar também no Supabase
     const supabase = window.authManager?.supabase;
-    const userId   = window.authManager?.user?.id;
+    // CORRIGIDO (auditoria 2.5): mesma condição de corrida já resolvida em
+    // _loadDocuments() — um documento gerado logo após o login podia ler
+    // userId antes do authManager estar pronto e ficar só no dispositivo,
+    // sem subir à nuvem, até à próxima sincronização automática.
+    let userId = window.authManager?.user?.id;
+    if (!userId && window.authManager?.ready) {
+      try { await window.authManager.ready(); } catch (_) {}
+      userId = window.authManager?.user?.id;
+    }
     if (!supabase || !userId) return;
 
     try {
