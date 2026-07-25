@@ -108,7 +108,7 @@
     <p>Junte-se à rede MzDocs e receba pedidos de impressão e fotos para documentos de utilizadores próximos — sem comissão inicial.</p>
     <div class="hero-stats">
       <div class="hs"><div class="hs-val">Grátis</div><div class="hs-lbl">Para aderir</div></div>
-      <div class="hs"><div class="hs-val">5 km</div><div class="hs-lbl">Raio de visibilidade</div></div>
+      <div class="hs"><div class="hs-val">10 km</div><div class="hs-lbl">Raio de visibilidade</div></div>
       <div class="hs"><div class="hs-val">48h</div><div class="hs-lbl">Aprovação</div></div>
     </div>
   </div>
@@ -194,12 +194,16 @@
     <div class="fg-row">
       <div class="fg">
         <label>Telemóvel *</label>
-        <input type="tel" id="fPhone" placeholder="84 XXX XXXX" maxlength="20" inputmode="tel"/>
+        <input type="tel" id="fPhone" placeholder="84 XXX XXXX" maxlength="9" inputmode="tel" pattern="8[2-7][0-9]{7}"/>
         <small>Para contacto da equipa MzDocs</small>
       </div>
       <div class="fg">
         <label>WhatsApp *</label>
-        <input type="tel" id="fWhatsApp" placeholder="258 84 XXX XXXX" maxlength="20" inputmode="tel"/>
+        <!-- Este número alimenta directamente o link wa.me (ver NearbyPartners.js),
+             por isso precisa do prefixo internacional 258 para o "Contactar via
+             WhatsApp" funcionar — ao contrário do Telemóvel acima, que é só para
+             a equipa MzDocs ligar e não precisa do prefixo. -->
+        <input type="tel" id="fWhatsApp" placeholder="258 84 XXX XXXX" maxlength="12" inputmode="tel" pattern="258[8][2-7][0-9]{7}"/>
         <small>Número que recebe os pedidos</small>
       </div>
     </div>
@@ -329,6 +333,18 @@ async function submitForm() {
   if (!name || !ownerName || !phone || !whatsapp || !city || !address) {
     msgEl.className = 'msg error'; msgEl.textContent = '⚠️ Preencha todos os campos obrigatórios.'; return;
   }
+  // CORRIGIDO (auditoria 1.2): este formulário não está dentro de uma tag
+  // <form>, por isso o atributo HTML5 "pattern" nos campos nunca é
+  // validado automaticamente (não há evento de submit nativo). A validação
+  // tem de ser feita aqui, manualmente, com as mesmas regras dos campos.
+  const phoneDigits = phone.replace(/\D/g, '');
+  const waDigits     = whatsapp.replace(/\D/g, '');
+  if (!/^8[2-7][0-9]{7}$/.test(phoneDigits)) {
+    msgEl.className = 'msg error'; msgEl.textContent = '⚠️ Telemóvel inválido. Use o formato 8X XXX XXXX (ex: 84 123 4567).'; return;
+  }
+  if (!/^2588[2-7][0-9]{7}$/.test(waDigits)) {
+    msgEl.className = 'msg error'; msgEl.textContent = '⚠️ WhatsApp inválido. Use o formato 258 8X XXX XXXX (ex: 258 84 123 4567).'; return;
+  }
   if (!lat || !lng) {
     msgEl.className = 'msg error'; msgEl.textContent = '📍 Clique em "Obter localização actual" para capturar o GPS.'; return;
   }
@@ -343,7 +359,7 @@ async function submitForm() {
     const res = await fetch('/api/partners?action=register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, owner_name: ownerName, phone, whatsapp, city, address, lat, lng, services, hours }),
+      body: JSON.stringify({ name, owner_name: ownerName, phone: phoneDigits, whatsapp: waDigits, city, address, lat, lng, services, hours }),
     });
     const data = await res.json();
     if (data.ok) {
