@@ -12,14 +12,37 @@ export const Validator = {
     return validAmounts.includes(parseInt(val));
   },
   required(fields, data) {
+    // NOVO (correcção 2.4): agora tem em conta 'conditional'/'condValue'
+    // (campo escondido nunca é obrigatório) e 'requiredIf' (campo sempre
+    // visível, mas só obrigatório quando o campo-gatilho tiver um dos
+    // valores indicados) — antes só existia o 'required' estático, que não
+    // conseguia expressar "NUIT obrigatório só para Factura", por exemplo.
+    const check = (f) => {
+      if (f.conditional && f.condValue) {
+        const values = Array.isArray(f.condValue) ? f.condValue : [f.condValue];
+        const visible = values.includes(data[f.conditional]);
+        if (!visible) return null; // escondido — nunca bloqueia o envio
+        if (f.required && !data[f.id]?.trim()) return f.label;
+        return null;
+      }
+      if (f.requiredIf && f.requiredIf.field && Array.isArray(f.requiredIf.in)) {
+        const isRequired = f.requiredIf.in.includes(data[f.requiredIf.field]);
+        if (isRequired && !data[f.id]?.trim()) return f.label;
+        return null;
+      }
+      if (f.required && !data[f.id]?.trim()) return f.label;
+      return null;
+    };
     // Returns first missing label or null
     for (const f of fields) {
       if (f.row) {
         for (const fi of f.items) {
-          if (fi.required && !data[fi.id]?.trim()) return fi.label;
+          const miss = check(fi);
+          if (miss) return miss;
         }
-      } else if (f.required && !data[f.id]?.trim()) {
-        return f.label;
+      } else {
+        const miss = check(f);
+        if (miss) return miss;
       }
     }
     return null;
