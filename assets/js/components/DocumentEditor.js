@@ -1114,16 +1114,65 @@ export class DocumentEditor {
     window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(`📄 *${this.serviceType||'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`)}`, '_blank');
   }
 
+  // CORRIGIDO: prompt() nativo do browser mostrava o diálogo genérico
+  // "www.mzdocs.co.mz diz" em vez de um modal da própria app — além de
+  // feio, em alguns browsers/Android o prompt() nativo é bloqueado ou
+  // truncado. Substituído por um modal próprio, no mesmo estilo do
+  // modal de assinatura (_openSignature) já usado neste ficheiro.
   _reedit() {
-    const instruction = prompt('💡 O que deseja alterar no documento?\n\nExemplo: "Adicione mais detalhes na introdução"');
-    if (!instruction) return;
-    if (this.onReedit) {
-      this.onReedit({ currentContent: this.content, instruction, serviceType: this.serviceType });
-    } else {
-      document.dispatchEvent(new CustomEvent('document:reedit', {
-        detail: { currentContent: this.content, instruction, serviceType: this.serviceType }
-      }));
-    }
+    document.getElementById('reeditModal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'reeditModal';
+    modal.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:99999',
+      'background:rgba(0,0,0,0.7)', 'display:flex',
+      'align-items:center', 'justify-content:center', 'padding:20px',
+    ].join(';');
+
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:24px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <h3 style="font-size:16px;font-weight:700;color:#07101f;">🤖 Redigir com IA</h3>
+          <button id="reeditModalClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:4px;">✕</button>
+        </div>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:10px;">O que deseja alterar no documento?</p>
+        <textarea id="reeditInput" rows="3" placeholder='Exemplo: "Adicione mais detalhes na introdução"'
+          style="width:100%;box-sizing:border-box;border:1.5px solid #d1d5db;border-radius:8px;padding:10px 12px;font-size:13.5px;font-family:inherit;resize:vertical;color:#07101f;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button id="reeditCancel" style="flex:1;padding:10px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:#374151;">Cancelar</button>
+          <button id="reeditOk" style="flex:2;padding:10px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✅ Redigir (-1 cr.)</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const input = modal.querySelector('#reeditInput');
+    input.focus();
+
+    const cleanup = () => modal.remove();
+
+    const submit = () => {
+      const instruction = input.value.trim();
+      if (!instruction) { input.focus(); return; }
+      cleanup();
+      if (this.onReedit) {
+        this.onReedit({ currentContent: this.content, instruction, serviceType: this.serviceType });
+      } else {
+        document.dispatchEvent(new CustomEvent('document:reedit', {
+          detail: { currentContent: this.content, instruction, serviceType: this.serviceType }
+        }));
+      }
+    };
+
+    modal.querySelector('#reeditModalClose').addEventListener('click', cleanup);
+    modal.querySelector('#reeditCancel').addEventListener('click', cleanup);
+    modal.querySelector('#reeditOk').addEventListener('click', submit);
+    modal.addEventListener('click', e => { if (e.target === modal) cleanup(); });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submit();
+      if (e.key === 'Escape') cleanup();
+    });
   }
 
 
