@@ -317,6 +317,24 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
+/* NOVO (correcção 2.4): texto de apoio por campo (regras fiscais, formato
+   esperado, etc.) e asterisco dinâmico para campos "requiredIf" — cujo
+   carácter obrigatório depende do tipo de documento seleccionado
+   (ex.: NUIT obrigatório só para Factura/Proforma/Factura-Recibo/Nota de
+   Débito). Ver Views.js → _field() / bindConditionalFields(). */
+.form-body .field-hint {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  margin-top: -2px;
+}
+
+.form-body .req-mark {
+  color: #ef4444;
+  font-weight: 800;
+}
+
 /* LOADER STEPS */
 .loader-wrap{display:none;flex-direction:column;align-items:center;padding:24px 18px;gap:14px}
 .loader-wrap.show{display:flex;animation:fadeIn .2s}
