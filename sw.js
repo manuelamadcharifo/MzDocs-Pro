@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v24-20260711'; // Push notifications: notificationclick foca aba existente em vez de abrir sempre nova; vibrate/tag/renotify adicionados ao showNotification.
+const CACHE_VERSION = 'v25-20260725'; // CORRIGIDO: navigationHandler já não pode devolver 'undefined' quando a cache falta index.html/offline.html — evita o ecrã nativo "ERR_FAILED" do Chrome offline.
 
 // CORRIGIDO (bug crítico — causa raiz de "a app não abre sem dados/internet"):
 // Antes, o Service Worker carregava o Workbox e o idb via importScripts a partir
@@ -219,7 +219,32 @@ const navigationHandler = async (params) => {
     } catch {
         const shell = await caches.match('/index.html');
         if (shell) return shell;
-        return caches.match('/offline.html');
+        const fallback = await caches.match('/offline.html');
+        if (fallback) return fallback;
+        // CORRIGIDO (bug: ecrã nativo "ERR_FAILED" do Chrome em vez da app):
+        // se a cache foi parcialmente limpa (armazenamento do telemóvel a
+        // esvaziar-se, quota do browser excedida, ou o utilizador limpou
+        // "dados do site" sem apagar o registo do SW) e NENHUMA das duas
+        // páginas acima está na cache, os dois caches.match() acima devolvem
+        // undefined. Devolver 'undefined' a partir de um fetch handler faz o
+        // Chrome mostrar o SEU PRÓPRIO ecrã de erro nativo (ERR_FAILED) em vez
+        // de qualquer página do site — exactamente o ecrã que aparecia sem
+        // dados. Este é o último recurso: uma resposta HTML mínima, gerada
+        // aqui mesmo (não depende de nenhuma cache), para que o utilizador
+        // veja sempre algo da MzDocs Pro, nunca o ecrã cinzento do browser.
+        return new Response(
+            `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/>
+            <meta name="viewport" content="width=device-width,initial-scale=1"/>
+            <title>MzDocs Pro — Sem Ligação</title>
+            <style>body{font-family:-apple-system,sans-serif;background:#07101F;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center;margin:0}
+            .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:2.5rem 1.5rem;max-width:420px}
+            h1{font-size:1.5rem;margin:0 0 .75rem}p{color:#94a3b8;line-height:1.6;margin:0 0 1.5rem}
+            button{background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:12px;padding:.875rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;width:100%}</style>
+            </head><body><div class="card"><h1>📡 Sem Ligação à Internet</h1>
+            <p>Não foi possível carregar a página. Verifique a sua ligação de dados e tente novamente.</p>
+            <button onclick="location.reload()">🔄 Tentar Novamente</button></div></body></html>`,
+            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
     }
 };
 workbox.routing.registerRoute(
