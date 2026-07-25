@@ -72,7 +72,7 @@ DADOS:
 - Descrição: ${data.descricao}
 - Valor base: ${valorBruto.toLocaleString('pt-MZ')} MZN
 - IVA: ${comIVA ? 'Sim (16%)' : 'Não (regime simplificado / isento)'}
-- Forma de pagamento: ${data.pagamento}
+- Forma de pagamento: ${data.pagamento || (isNEncomenda ? 'a combinar (encomenda ainda não paga)' : 'não indicado')}
 - Conta/M-Pesa: ${data.contaBancaria || 'não indicado'}
 ${isProforma ? '- Validade da proforma: ' + validadeProforma + ' dias' : ''}
 - Local e data: ${data.local}${ocrBlock}
@@ -131,7 +131,7 @@ ${comIVA && !isProforma && !isNEncomenda ? `| | |
 
 ## CONDIÇÕES DE PAGAMENTO
 
-- **Forma:** ${data.pagamento}
+- **Forma:** ${data.pagamento || (isNEncomenda ? 'a combinar (encomenda ainda não paga)' : 'não indicado')}
 ${data.contaBancaria ? '- **Conta / M-Pesa:** ' + data.contaBancaria : ''}
 ${isProforma ? `- **Condições de entrega:** [definir: imediata / prazo / condições] \n- **Validade desta proforma:** ${validadeProforma} dias a contar da data acima` : ''}
 ${isNDebito ? '- **Prazo de pagamento:** ______ dias a contar da data deste documento' : ''}
