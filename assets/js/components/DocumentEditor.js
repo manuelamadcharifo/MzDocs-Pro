@@ -397,7 +397,14 @@ export class DocumentEditor {
       .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
       .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
       .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*')
-      .replace(/<u[^>]*>(.*?)<\/u>/gi, '_$1_')
+      // CORRIGIDO: '_texto_' não é sublinhado no parser Markdown da app
+      // (A4Renderer._inlineMd só trata **negrito**/*itálico*/`código`) — ou
+      // ficava com underscores literais à vista, ou era lido como itálico.
+      // Como Markdown puro não tem sintaxe própria para sublinhado, mantém-se
+      // o texto sem marcação em vez de introduzir uma marcação errada; a
+      // formatação de facto é preservada no caminho preferencial (HTML rico
+      // → GenericHtmlToDocxExporter/HTMLPDFExporter), que não passa por aqui.
+      .replace(/<u[^>]*>(.*?)<\/u>/gi, '$1')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n')
       .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
@@ -983,7 +990,34 @@ export class DocumentEditor {
       }
     }
 
-    // Use the full PDFExporter (same pipeline as original generation)
+    // CORRIGIDO (auditoria P0): se o documento foi editado no editor rich-text,
+    // this.content já não é o markdown original — é markdown RECONSTRUÍDO a
+    // partir do HTML (_richHTMLToMd), que não sabe converter <img>, <a href>,
+    // cor, tamanho de letra ou alinhamento. Exportar a partir de _richHTMLPages
+    // (o HTML tal como o utilizador o editou/viu) evita essa perda: usamos o
+    // mesmo HTMLPDFExporter (impressão do browser → PDF real, texto
+    // seleccionável) já usado para templates, com o CSS base partilhado do
+    // preview (DEFAULT_PAGE_CSS) para o resultado ficar visualmente igual ao
+    // que estava no editor.
+    if (this._richHTMLPages && this._richHTMLPages.length) {
+      try {
+        const { HTMLPDFExporter } = await import('./HTMLPDFExporter.js');
+        const joined = this._richHTMLPages
+          .map(html => String(html || ''))
+          .join('<div style="page-break-after:always"></div>');
+        new HTMLPDFExporter().export(joined, `mzdocs-${this.serviceType}-${Date.now()}`, {
+          templateCss: DEFAULT_PAGE_CSS,
+          title: this.serviceType || 'Documento MzDocs',
+        });
+        return;
+      } catch (err) {
+        console.error('[DocumentEditor] HTMLPDFExporter (rich HTML) falhou, a usar fallback markdown:', err.message);
+      }
+    }
+
+    // Fallback: PDFExporter clássico (jsPDF sobre markdown) — só chega aqui
+    // se não houver HTML rico guardado (ex: documento nunca aberto no modo
+    // "Editar") ou se o caminho acima falhar.
     try {
       const { PDFExporter } = await import('./PDFExporter.js');
       // Build metadata from docController if available, else use serviceType as fallback
@@ -1039,7 +1073,34 @@ export class DocumentEditor {
       }
     }
 
-    // Use the full WordExporter (same pipeline as original generation)
+    // CORRIGIDO (auditoria P0): mesma razão do PDF — this.content, depois de
+    // editado, é markdown reconstruído via _richHTMLToMd() e já não contém
+    // imagens, links, cor, tamanho de letra nem alinhamento definidos na
+    // toolbar do editor (e <u> vira "_texto_", que nem sequer é sublinhado no
+    // parser da app). GenericHtmlToDocxExporter converte o HTML rico
+    // (_richHTMLPages) directamente para OOXML, sem passar por Markdown,
+    // preservando essa formatação num .docx real e editável.
+    if (this._richHTMLPages && this._richHTMLPages.length) {
+      try {
+        const { GenericHtmlToDocxExporter } = await import('./GenericHtmlToDocxExporter.js');
+        const ctrl = this._docController || window.docController;
+        const svc  = ctrl?.docModel?.service
+          ? (await import('../services/ServiceDefinitions.js')).SERVICES[ctrl.docModel.service]
+          : null;
+        const metadata = ctrl && svc ? ctrl._buildExportMetadata(svc) : {};
+        await new GenericHtmlToDocxExporter().export(
+          this._richHTMLPages,
+          `mzdocs-${this.serviceType}-${Date.now()}`,
+          metadata
+        );
+        return;
+      } catch (err) {
+        console.error('[DocumentEditor] GenericHtmlToDocxExporter falhou, a usar fallback markdown:', err.message);
+      }
+    }
+
+    // Use the full WordExporter (same pipeline as original generation) —
+    // fallback quando não há HTML rico guardado ou o caminho acima falha.
     try {
       const { WordExporter } = await import('./WordExporter.js');
       const ctrl     = this._docController || window.docController;
