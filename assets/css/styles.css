@@ -335,6 +335,29 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
   font-weight: 800;
 }
 
+/* NOVO (correcção 2.5): caixa de dica dinâmica — texto muda consoante o
+   valor escolhido num select (ex.: Tipo de Documento no Recibo/Factura).
+   É a pista visual mais clara de que o formulário reage à selecção; ver
+   Views.js → _field() / bindDynamicHints(). Escondida por defeito (JS
+   mostra/actualiza no 'change'); .field-dynhint:empty cobre o caso raro
+   de o JS falhar a correr antes da primeira pintura. */
+.form-body .field-dynhint {
+  display: none;
+  margin-top: 4px;
+  padding: 9px 12px;
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: #1e40af;
+  animation: mzFadeIn .2s ease;
+}
+.form-body .field-dynhint:empty {
+  display: none;
+}
+
 /* LOADER STEPS */
 .loader-wrap{display:none;flex-direction:column;align-items:center;padding:24px 18px;gap:14px}
 .loader-wrap.show{display:flex;animation:fadeIn .2s}
