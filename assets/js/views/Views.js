@@ -107,7 +107,12 @@ export const DocumentView = {
   },
 
   _field(f) {
-    const req = f.required ? 'required' : '';
+    // NOVO (correcção 2.4): campos com 'requiredIf' calculam a obrigatoriedade
+    // dinamicamente (ver bindConditionalFields), por isso não recebem o
+    // atributo 'required' estático no HTML inicial — evita que o browser
+    // bloqueie o envio por um campo que, para o tipo escolhido, é opcional.
+    const hasRequiredIf = !!(f.requiredIf && f.requiredIf.field && Array.isArray(f.requiredIf.in));
+    const req = (!hasRequiredIf && f.required) ? 'required' : '';
     let input = '';
     if (f.type === 'select') {
       const opts = (f.opts || []).map(o => `<option value="${o}">${o}</option>`).join('');
@@ -128,32 +133,55 @@ export const DocumentView = {
       ].filter(Boolean).join(' ');
       input = `<input type="${f.type}" id="${f.id}" ${req} placeholder="${f.ph || ''}" ${extras} />`;
     }
-    // Conditional fields: hidden by default, shown when trigger field matches condValue
+    // Conditional fields: hidden by default, shown when trigger field matches
+    // one of condValue's values. condValue accepts a single string (legado)
+    // ou um array de strings (NOVO — vários tipos de documento podem exigir
+    // o mesmo campo). Os valores são serializados com o separador '|||'
+    // porque nenhuma opção do formulário usa essa sequência de caracteres.
     const isConditional = !!(f.conditional && f.condValue);
+    const conditionalValues = isConditional
+      ? (Array.isArray(f.condValue) ? f.condValue : [f.condValue])
+      : null;
     const conditionalAttrs = isConditional
-      ? `data-conditional="${f.conditional}" data-cond-value="${f.condValue}" style="display:none"`
+      ? `data-conditional="${f.conditional}" data-cond-value="${conditionalValues.join('|||')}" style="display:none"`
       : '';
+    // NOVO: requiredIf — campo permanece sempre visível, mas só se torna
+    // obrigatório quando o campo-gatilho (ex.: 'tipoDoc') tiver um dos
+    // valores listados. O asterisco (*) da label aparece/desaparece junto
+    // com a obrigatoriedade (ver bindConditionalFields).
+    const requiredIfAttrs = hasRequiredIf
+      ? `data-required-if="${f.requiredIf.field}" data-required-values="${f.requiredIf.in.join('|||')}"`
+      : '';
+    const asteriskHTML = hasRequiredIf
+      ? `<span class="req-mark" style="display:none"> *</span>`
+      : (f.required ? ' *' : '');
+    // NOVO: texto de apoio opcional por campo, para explicar regras fiscais
+    // ou formato esperado (ex.: "NUIT obrigatório para Factura…").
+    const hintHTML = f.hint ? `<small class="field-hint">${f.hint}</small>` : '';
     return `
-      <div class="field-group" ${conditionalAttrs}>
-        <label for="${f.id}">${f.label}${f.required ? ' *' : ''}</label>
+      <div class="field-group" ${conditionalAttrs} ${requiredIfAttrs}>
+        <label for="${f.id}">${f.label}${asteriskHTML}</label>
         ${input}
+        ${hintHTML}
       </div>
     `;
   },
 
-  // Call after rendering form to wire up conditional field visibility
+  // Call after rendering form to wire up conditional field visibility and
+  // dynamic (requiredIf) obrigatoriedade.
   bindConditionalFields(formEl) {
     if (!formEl) return;
     const conditionalGroups = formEl.querySelectorAll('[data-conditional]');
-    if (!conditionalGroups.length) return;
+    const requiredIfGroups  = formEl.querySelectorAll('[data-required-if]');
+    if (!conditionalGroups.length && !requiredIfGroups.length) return;
 
     const updateVisibility = () => {
       conditionalGroups.forEach(group => {
         const triggerFieldId = group.dataset.conditional;
-        const condValue      = group.dataset.condValue;
+        const condValues      = group.dataset.condValue.split('|||');
         const triggerEl      = formEl.querySelector(`#${triggerFieldId}`);
         if (!triggerEl) return;
-        const show = triggerEl.value === condValue;
+        const show = condValues.includes(triggerEl.value);
         group.style.display = show ? '' : 'none';
         // Remove required attr when hidden to avoid browser blocking submission
         const input = group.querySelector('input, select, textarea');
@@ -167,10 +195,31 @@ export const DocumentView = {
           }
         }
       });
+
+      // NOVO: campos requiredIf ficam sempre visíveis — só a obrigatoriedade
+      // (atributo required + asterisco na label) muda consoante o valor
+      // actual do campo-gatilho.
+      requiredIfGroups.forEach(group => {
+        const triggerFieldId = group.dataset.requiredIf;
+        const reqValues      = group.dataset.requiredValues.split('|||');
+        const triggerEl      = formEl.querySelector(`#${triggerFieldId}`);
+        if (!triggerEl) return;
+        const isRequired = reqValues.includes(triggerEl.value);
+        const input = group.querySelector('input, select, textarea');
+        const mark  = group.querySelector('.req-mark');
+        if (input) {
+          if (isRequired) input.setAttribute('required', '');
+          else input.removeAttribute('required');
+        }
+        if (mark) mark.style.display = isRequired ? '' : 'none';
+      });
     };
 
     // Collect unique trigger field IDs and attach listeners
-    const triggerIds = new Set([...conditionalGroups].map(g => g.dataset.conditional));
+    const triggerIds = new Set([
+      ...[...conditionalGroups].map(g => g.dataset.conditional),
+      ...[...requiredIfGroups].map(g => g.dataset.requiredIf),
+    ]);
     triggerIds.forEach(id => {
       const el = formEl.querySelector(`#${id}`);
       if (el) el.addEventListener('change', updateVisibility);
