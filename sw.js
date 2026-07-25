@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v27-20260725'; // CORRIGIDO: bump para forçar re-fetch de assets/js/controllers/HistoryController.js (merge de docs locais não sincronizados no arquivo) — soma-se ao fix anterior do IndexedDB.js.
+const CACHE_VERSION = 'v28-20260725'; // CORRIGIDO: navigationHandler agora protege TAMBÉM as chamadas a caches.match() dentro do catch (podem rejeitar, não só devolver undefined) — fecha definitivamente o bug do ecrã nativo "ERR_FAILED" offline.
 
 // CORRIGIDO (bug crítico — causa raiz de "a app não abre sem dados/internet"):
 // Antes, o Service Worker carregava o Workbox e o idb via importScripts a partir
@@ -217,21 +217,28 @@ const navigationHandler = async (params) => {
             networkTimeoutSeconds: 4,
         }).handle(params);
     } catch {
-        const shell = await caches.match('/index.html');
-        if (shell) return shell;
-        const fallback = await caches.match('/offline.html');
-        if (fallback) return fallback;
-        // CORRIGIDO (bug: ecrã nativo "ERR_FAILED" do Chrome em vez da app):
-        // se a cache foi parcialmente limpa (armazenamento do telemóvel a
-        // esvaziar-se, quota do browser excedida, ou o utilizador limpou
-        // "dados do site" sem apagar o registo do SW) e NENHUMA das duas
-        // páginas acima está na cache, os dois caches.match() acima devolvem
-        // undefined. Devolver 'undefined' a partir de um fetch handler faz o
-        // Chrome mostrar o SEU PRÓPRIO ecrã de erro nativo (ERR_FAILED) em vez
-        // de qualquer página do site — exactamente o ecrã que aparecia sem
-        // dados. Este é o último recurso: uma resposta HTML mínima, gerada
-        // aqui mesmo (não depende de nenhuma cache), para que o utilizador
-        // veja sempre algo da MzDocs Pro, nunca o ecrã cinzento do browser.
+        // CORRIGIDO (2ª parte do bug ERR_FAILED, 20260725): as chamadas a
+        // caches.match() abaixo não estavam dentro de nenhum try/catch.
+        // Cache Storage não só pode "não encontrar" (resolve para undefined)
+        // — também pode REJEITAR com uma excepção real se o armazenamento do
+        // site ficou num estado inconsistente (ex: depois de o utilizador
+        // limpar a cache manualmente, ou quota/disco cheio). Essa excepção
+        // não apanhada propagava-se para fora do fetch handler e o resultado
+        // era o MESMO ecrã nativo "ERR_FAILED" que esta correcção supostamente
+        // resolvia. Agora todo o percurso de recurso está protegido — a
+        // resposta inline no fundo é sempre alcançada, aconteça o que
+        // acontecer com a cache.
+        try {
+            const shell = await caches.match('/index.html');
+            if (shell) return shell;
+        } catch (_) { /* Cache Storage indisponível — continua para o próximo recurso */ }
+        try {
+            const fallback = await caches.match('/offline.html');
+            if (fallback) return fallback;
+        } catch (_) { /* idem */ }
+        // Último recurso: uma resposta HTML mínima, gerada aqui mesmo (não
+        // depende de nenhuma cache), para que o utilizador veja sempre algo
+        // da MzDocs Pro, nunca o ecrã cinzento do browser.
         return new Response(
             `<!DOCTYPE html><html lang="pt-MZ"><head><meta charset="UTF-8"/>
             <meta name="viewport" content="width=device-width,initial-scale=1"/>
