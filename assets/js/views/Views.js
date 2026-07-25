@@ -115,7 +115,17 @@ export const DocumentView = {
     } else if (f.type === 'textarea') {
       input = `<textarea id="${f.id}" ${req} placeholder="${f.ph || ''}" rows="4"></textarea>`;
     } else {
-      const extras = [f.min ? `min="${f.min}"` : '', f.max ? `max="${f.max}"` : '', f.val ? `value="${f.val}"` : ''].filter(Boolean).join(' ');
+      // CORRIGIDO (auditoria 2.3): campos como NUIT/telefone não tinham
+      // pattern/maxlength/inputmode — permitiam texto livre sem formato.
+      // Estes atributos são opcionais por campo (definidos em ServiceDefinitions.js).
+      const extras = [
+        f.min ? `min="${f.min}"` : '',
+        f.max ? `max="${f.max}"` : '',
+        f.val ? `value="${f.val}"` : '',
+        f.pattern ? `pattern="${f.pattern}"` : '',
+        f.maxlength ? `maxlength="${f.maxlength}"` : '',
+        f.inputmode ? `inputmode="${f.inputmode}"` : '',
+      ].filter(Boolean).join(' ');
       input = `<input type="${f.type}" id="${f.id}" ${req} placeholder="${f.ph || ''}" ${extras} />`;
     }
     // Conditional fields: hidden by default, shown when trigger field matches condValue
