@@ -449,19 +449,27 @@ export class SmartOCRService {
         { id:'penalidades',label:'Penalidades por incumprimento', type:'textarea' },
         { id:'local',      label:'Local e Data',          type:'text' },
       ],
-      // CORRIGIDO: 'nuitEmitente', 'enderecoEmitente', 'valor' e 'data' não
-      // existiam no formulário (os campos reais são 'nuit', 'total' e
-      // 'local' — não há campo de endereço separado). Adicionados
-      // 'tipoDoc' e 'pagamento', que existem no formulário.
+      // CORRIGIDO (2.4): ids alinhados com ServiceDefinitions.js → recibo.
+      // fields (nuitEmitente, enderecoEmitente, biCliente, valor, iva,
+      // contaBancaria, validadeProforma, numDoc) — antes usava 'nuit' e
+      // 'total', que já não existem no formulário, e faltavam vários
+      // campos (endereço, BI do cliente, IVA, conta/M-Pesa, validade da
+      // proforma, número do documento) que agora fazem parte dele.
       recibo:      [
-        { id:'tipoDoc',   label:'Tipo de Documento',       type:'select' },
-        { id:'emitente',  label:'Nome / Empresa Emitente', type:'text' },
-        { id:'nuit',      label:'NUIT (opcional)',         type:'text' },
-        { id:'cliente',   label:'Nome do Cliente',         type:'text' },
-        { id:'descricao', label:'Descrição dos Serviços / Produtos', type:'textarea' },
-        { id:'total',     label:'Valor Total (MZN)',       type:'number' },
-        { id:'pagamento', label:'Forma de Pagamento',      type:'select' },
-        { id:'local',     label:'Local e Data',            type:'text' },
+        { id:'tipoDoc',           label:'Tipo de Documento',              type:'select' },
+        { id:'emitente',          label:'Nome / Empresa Emitente',        type:'text' },
+        { id:'nuitEmitente',      label:'NUIT do Emitente',               type:'text' },
+        { id:'enderecoEmitente',  label:'Endereço / Contacto do Emitente',type:'text' },
+        { id:'cliente',           label:'Nome do Cliente',                type:'text' },
+        { id:'biCliente',         label:'BI / NUIT do Cliente',           type:'text' },
+        { id:'descricao',         label:'Descrição dos Serviços / Produtos', type:'textarea' },
+        { id:'valor',             label:'Valor Total (MZN)',              type:'number' },
+        { id:'pagamento',         label:'Forma de Pagamento',             type:'select' },
+        { id:'iva',               label:'Aplicar IVA (16%)?',             type:'select' },
+        { id:'contaBancaria',     label:'Conta / Referência M-Pesa',      type:'text' },
+        { id:'validadeProforma',  label:'Validade da Proforma (dias)',    type:'number' },
+        { id:'numDoc',            label:'N.º do Documento',               type:'text' },
+        { id:'local',             label:'Local e Data',                   type:'text' },
       ],
       // CORRIGIDO: este é o caso relatado pelo utilizador — só 'recomendador'
       // e 'cargoRec' batiam com o formulário (por coincidência), por isso
