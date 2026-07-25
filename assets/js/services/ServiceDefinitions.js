@@ -92,8 +92,17 @@ export const SERVICES = {
     sub:'Contrato legal para aluguer de casa ou loja conforme lei moçambicana', hasAI:true,
     category:'juridico', popularity:4,
     fields:[
+      // NOVO (correcção 2.5): mesmo padrão requiredIf/dynamicHint do Recibo/
+      // Factura, agora aplicado ao Arrendamento — pedido explícito na
+      // auditoria ("reutilizar o mecanismo em arrendamento, procuração,
+      // orçamento"). Um terreno normalmente não tem água/electricidade
+      // ligadas, por isso 'quemPagaServicos' abaixo deixa de ser obrigatório
+      // quando este campo tiver o valor 'Terreno'.
       { id:'tipoImovel', label:'Tipo de Imóvel', type:'select', required:true,
-        opts:['Casa Residencial','Apartamento','Loja Comercial','Escritório','Terreno'] },
+        opts:['Casa Residencial','Apartamento','Loja Comercial','Escritório','Terreno'],
+        dynamicHint:{
+          'Terreno':'🌍 Terreno: o campo "Água e Electricidade" abaixo torna-se opcional — normalmente um terreno não tem serviços ligados.',
+        } },
       { row:true, items:[
         { id:'proprietario', label:'Nome do Proprietário', type:'text', required:true, ph:'António Matola' },
         { id:'locatario',    label:'Nome do Locatário',    type:'text', required:true, ph:'Maria Tembe' },
@@ -111,8 +120,10 @@ export const SERVICES = {
       { id:'duracao',   label:'Duração do Contrato', type:'select', required:true,
         opts:['6 meses','12 meses','24 meses','36 meses','Indeterminado'] },
       { id:'caucao',    label:'Caução / Depósito',    type:'text', required:true, ph:'2 meses de renda adiantada' },
-      { id:'quemPagaServicos', label:'Água e Electricidade pagas por', type:'select', required:true,
-        opts:['Inquilino (separado da renda)','Incluídas na renda','Proprietário','A acordar'] },
+      { id:'quemPagaServicos', label:'Água e Electricidade pagas por', type:'select',
+        opts:['Inquilino (separado da renda)','Incluídas na renda','Proprietário','A acordar'],
+        requiredIf:{ field:'tipoImovel', in:['Casa Residencial','Apartamento','Loja Comercial','Escritório'] },
+        hint:'Não aplicável a Terreno — torna-se opcional quando não há serviços ligados.' },
       { id:'condicoes', label:'Condições Especiais',  type:'textarea', ph:'Animais permitidos? Reformas? Uso de espaço exterior?' },
     ],
     buildWA: null,
@@ -155,9 +166,30 @@ export const SERVICES = {
     // o formulário dinâmico — sem esconder o campo, apenas ajustando se é
     // obrigatório ou não consoante o 'Tipo de Documento' seleccionado.
     fields:[
+      // NOVO (correcção 2.5 — bug "formulário não muda dinamicamente"):
+      // 1) 'val' pré-selecciona 'Recibo Simples' em vez de deixar o select
+      //    em branco ("Selecione…") — o utilizador via sempre o MESMO
+      //    estado "nada seleccionado" ao abrir o formulário, que é visual-
+      //    mente idêntico ao estado de Recibo Simples, dando a impressão de
+      //    que nada muda. Agora o formulário já abre no estado de Recibo
+      //    Simples, e cada mudança de tipo dispara logo o 'change' inicial.
+      // 2) 'dynamicHint' mostra uma caixa azul, logo abaixo do select, com
+      //    um resumo em português do que aquele tipo de documento exige —
+      //    é a mudança mais visível de todas (ver Views.js → _field() /
+      //    bindDynamicHints()), pensada para o utilizador ver imediatamente
+      //    "algo mudou" mesmo que não repare no asterisco do NUIT.
       { id:'tipoDoc',    label:'Tipo de Documento', type:'select', required:true,
         opts:['Recibo Simples','Factura','Factura Proforma','Factura-Recibo','Nota de Encomenda','Nota de Débito'],
-        hint:'Os campos abaixo (NUIT, IVA, validade…) ajustam-se automaticamente ao tipo escolhido.' },
+        val:'Recibo Simples',
+        hint:'Os campos abaixo (NUIT, IVA, validade…) ajustam-se automaticamente ao tipo escolhido.',
+        dynamicHint:{
+          'Recibo Simples':   '🧾 Recibo Simples: documento informal de venda. NUIT e IVA são opcionais — ideal para pequenos negócios e vendedores informais.',
+          'Factura':          '🏢 Factura: exige NUIT do emitente (Lei n.º 32/2007). Indicada para empresas registadas que vendem produtos ou serviços.',
+          'Factura Proforma': '📝 Factura Proforma: um orçamento formal antes da venda — indique a validade da proposta abaixo. Exige NUIT do emitente.',
+          'Factura-Recibo':   '✅ Factura-Recibo: comprova a venda e o pagamento no mesmo documento. Exige NUIT do emitente.',
+          'Nota de Encomenda':'📦 Nota de Encomenda: regista um pedido/reserva antes da entrega — ainda não é comprovativo de pagamento. NUIT e forma de pagamento opcionais.',
+          'Nota de Débito':   '⚠️ Nota de Débito: usada para cobrar um valor adicional numa factura já emitida. Exige NUIT do emitente.',
+        } },
       { row:true, items:[
         { id:'emitente',      label:'Nome / Empresa Emitente', type:'text', required:true, ph:'João Comerciante / Charifo Tech Solutions' },
         { id:'nuitEmitente',  label:'NUIT do Emitente', type:'text', ph:'400123456', pattern:'[0-9]{9}', maxlength:'9', inputmode:'numeric',
@@ -174,14 +206,28 @@ export const SERVICES = {
         ph:'1x Reparação de telemóvel — 1500 MZN\n2x Capas protetoras — 300 MZN cada\n(uma linha por artigo ou serviço)' },
       { row:true, items:[
         { id:'valor',    label:'Valor Total (MZN)', type:'number', required:true, ph:'2100', min:'1' },
-        { id:'pagamento',label:'Forma de Pagamento', type:'select', required:true,
-          opts:['M-Pesa','Dinheiro','Transferência Bancária','E-mola','Mkesh','A definir'] },
+        // NOVO (correcção 2.5): 'Forma de Pagamento' deixou de ser sempre
+        // obrigatória — uma Nota de Encomenda regista um pedido, ainda sem
+        // pagamento associado, por isso usa o mesmo mecanismo requiredIf
+        // já usado no NUIT (reutilização pedida na auditoria).
+        { id:'pagamento',label:'Forma de Pagamento', type:'select',
+          opts:['M-Pesa','Dinheiro','Transferência Bancária','E-mola','Mkesh','A definir'],
+          requiredIf:{ field:'tipoDoc', in:['Recibo Simples','Factura','Factura Proforma','Factura-Recibo','Nota de Débito'] },
+          hint:'Não aplicável à Nota de Encomenda (é um pedido, ainda sem pagamento).' },
       ]},
       { row:true, items:[
         { id:'iva', label:'Aplicar IVA (16%)?', type:'select', required:true,
           opts:['Não (isento / regime simplificado)','Sim (regime normal — 16%)'],
           hint:'Micro/pequenos negócios no regime simplificado geralmente não cobram IVA (Lei n.º 5/2009).' },
-        { id:'contaBancaria', label:'Conta / Referência M-Pesa (opcional)', type:'text', ph:'84 XXX XXXX ou NIB' },
+        // NOVO (correcção 2.5): só faz sentido pedir a conta/referência de
+        // pagamento quando a forma de pagamento escolhida realmente usa
+        // uma conta (M-Pesa, banco, E-mola, Mkesh) — fica escondido para
+        // 'Dinheiro' e 'A definir'. Mesmo mecanismo 'conditional' já usado
+        // em 'validadeProforma', agora disparado por 'pagamento' em vez de
+        // 'tipoDoc' — prova de que o padrão é mesmo reutilizável por
+        // qualquer campo-gatilho, não só pelo tipo de documento.
+        { id:'contaBancaria', label:'Conta / Referência de Pagamento (opcional)', type:'text', ph:'84 XXX XXXX ou NIB',
+          conditional:'pagamento', condValue:['M-Pesa','Transferência Bancária','E-mola','Mkesh'] },
       ]},
       { id:'validadeProforma', label:'Validade da Proforma (dias)', type:'number', val:'30', min:'1', max:'180',
         conditional:'tipoDoc', condValue:['Factura Proforma'],
