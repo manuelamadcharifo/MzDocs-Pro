@@ -808,6 +808,24 @@ export class DocumentEditor {
       return;
     }
 
+    // CORRIGIDO (mesma causa do bug de exportação P0): até aqui este preview
+    // (incluindo a vista maximizada "Documento completo") reconvertia sempre
+    // para Markdown via this.content, que não tem sintaxe para cor, tamanho
+    // de letra nem alinhamento — por isso uma alteração feita na toolbar
+    // (ex: cor do texto) aparecia correctamente no PDF/Word exportado mas
+    // "desaparecia" aqui, no preview dentro da própria app. Usa-se
+    // _richHTMLPages (o HTML tal como foi editado) sempre que existir, para
+    // que preview, PDF e Word mostrem sempre a mesma formatação.
+    if (this._richHTMLPages && this._richHTMLPages.length) {
+      const css = this._templateCss
+        ? `*{box-sizing:border-box;}${this._templateCss}`
+        : DEFAULT_PAGE_CSS;
+      renderA4Pages(outer, this._richHTMLPages, {
+        css, isRawHTML: true, rawHtmlPages: this._richHTMLPages, showPageLabel: true,
+      });
+      return;
+    }
+
     // CORRIGIDO: se há templateCss activo, aplicá-lo mesmo para conteúdo markdown.
     // Bug original: o templateCss só era usado para HTML raw — para markdown usava sempre
     // _getFormatCSS() genérico, fazendo o editor mostrar um layout completamente diferente
