@@ -177,6 +177,25 @@ export class HistoryController {
           for (const doc of data) {
             await offlineDB.saveDocument({ ...doc, synced: true }).catch(() => {});
           }
+
+          // CORRIGIDO: antes, quando online+autenticado, o arquivo mostrava
+          // SÓ o resultado da nuvem — qualquer documento que tivesse ficado
+          // apenas no IndexedDB local (ex: o insert no Supabase falhou por
+          // qualquer motivo, como o bug de FK da migration_v40) ficava
+          // invisível no arquivo mesmo estando guardado no dispositivo.
+          // Agora junta-se também os documentos locais ainda não
+          // sincronizados (synced === false), para nunca "desaparecerem".
+          try {
+            const localDocs = await offlineDB.getDocuments(userId);
+            const pendingLocal = localDocs.filter(d => d.synced === false);
+            if (pendingLocal.length > 0) {
+              const cloudIds = new Set(data.map(d => d.id));
+              const merged = [...data, ...pendingLocal.filter(d => !cloudIds.has(d.id))];
+              merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              return { docs: merged, source: 'cloud' };
+            }
+          } catch (_) { /* ignora — mostra só o resultado da nuvem */ }
+
           return { docs: data, source: 'cloud' };
         }
       } catch (e) {
