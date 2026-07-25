@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v29-20260725'; // CORRIGIDO (causa raiz real): NavigationRoute movido para ANTES de precacheAndRoute — a rota do precache para '/' (registada primeiro) sempre ganhava ao navigationHandler, por muito reforçado que este ficasse. Ver comentário completo mais abaixo.
+const CACHE_VERSION = 'v30-20260725'; // CORRIGIDO: 'activate' apagava a cache REAL do precache (CSS/JS/imagens) a cada deploy, porque comparava com uma string literal errada em vez do nome real (workbox.core.cacheNames.precache). Por isso a app abria offline mas sem nenhum estilo.
 
 // CORRIGIDO (bug crítico — causa raiz de "a app não abre sem dados/internet"):
 // Antes, o Service Worker carregava o Workbox e o idb via importScripts a partir
@@ -358,9 +358,25 @@ self.addEventListener('activate', event => {
     event.waitUntil(
         Promise.all([
             // 1. Apagar caches antigos
+            // CORRIGIDO (bug: CSS/JS/imagens desapareciam sempre offline,
+            // logo a seguir a CADA deploy): esta condição comparava o nome da
+            // cache com a string literal 'workbox-precache-v2', mas o nome
+            // REAL que o Workbox usa para a cache de precache inclui o scope
+            // do site como sufixo (ex: 'workbox-precache-v2-https://www.
+            // mzdocs.co.mz/') — a comparação '!==' exigia igualdade exacta e
+            // NUNCA correspondia, por isso esta "protecção" não protegia
+            // nada: a cache real do precache (onde ficam styles.css,
+            // editor.css, auth.css, módulos JS, ícones, etc.) era apagada
+            // aqui mesmo, sempre que um novo Service Worker activava — ou
+            // seja, a cada deploy. O 'index.html' continuava a aparecer
+            // offline porque esse vem de uma cache DIFERENTE (a de páginas,
+            // criada pelo navigationHandler durante navegação normal), que
+            // essa sim batia certo com o filtro. Agora usa-se o nome real,
+            // calculado pelo próprio Workbox em tempo de execução, em vez de
+            // adivinhar uma string fixa.
             caches.keys().then(keys => Promise.all(
                 keys
-                    .filter(k => !k.endsWith(CACHE_VERSION) && k !== 'workbox-precache-v2')
+                    .filter(k => !k.endsWith(CACHE_VERSION) && k !== workbox.core.cacheNames.precache)
                     .map(k => {
                         console.log('[SW] A apagar cache antigo:', k);
                         return caches.delete(k);
