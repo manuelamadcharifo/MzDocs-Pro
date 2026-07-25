@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v25-20260725'; // CORRIGIDO: navigationHandler já não pode devolver 'undefined' quando a cache falta index.html/offline.html — evita o ecrã nativo "ERR_FAILED" do Chrome offline.
+const CACHE_VERSION = 'v26-20260725'; // CORRIGIDO: bump para forçar re-fetch de assets/js/utils/IndexedDB.js (DB_VERSION 1→2 — corrige documentos que não sincronizavam nem apareciam no arquivo).
 
 // CORRIGIDO (bug crítico — causa raiz de "a app não abre sem dados/internet"):
 // Antes, o Service Worker carregava o Workbox e o idb via importScripts a partir
