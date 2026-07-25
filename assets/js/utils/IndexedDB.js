@@ -2,7 +2,19 @@
 // Gestão de IndexedDB para offline-first
 
 const DB_NAME = 'mzdocs-offline';
-const DB_VERSION = 1;
+// CORRIGIDO: estava fixo em 1 desde sempre. Qualquer utilizador cujo browser
+// já tinha aberto esta IndexedDB ANTES de as object stores 'documents',
+// 'drafts' ou 'assets' terem sido adicionadas ao código fica com uma base
+// de dados local só com 'pending' — o onupgradeneeded nunca mais volta a
+// correr porque a versão nunca mudou, por isso store.transaction('documents', ...)
+// falha sempre (NotFoundError), silenciosamente engolido pelos try/catch em
+// HistoryController. Resultado: documentos gerados nunca ficam em IndexedDB
+// (nem por isso sobem ao Supabase pela lógica de sync offline→online) e o
+// arquivo aparece sempre vazio ou com erro para esses utilizadores. Subir a
+// versão força o upgrade a correr de novo em todos os browsers e a criar
+// (idempotentemente, graças aos checks contains() abaixo) qualquer store em
+// falta, sem apagar dados existentes.
+const DB_VERSION = 2;
 
 export class OfflineDB {
     constructor() {
