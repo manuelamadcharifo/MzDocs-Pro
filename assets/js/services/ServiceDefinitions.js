@@ -140,24 +140,56 @@ export const SERVICES = {
 
   recibo: {
     icon:'🧾', bg:'#FFEDD5', title:'Recibo / Factura',
-    sub:'Documento de venda para pequenos negócios e prestadores', hasAI:true,
+    sub:'Documento de venda para pequenos negócios e prestadores — os campos ajustam-se ao tipo escolhido', hasAI:true,
     category:'negocio', popularity:6,
+    // NOVO (correcção 2.4): os ids dos campos abaixo foram alinhados com as
+    // variáveis já usadas em services/prompts/recibo.js (data.nuitEmitente,
+    // data.enderecoEmitente, data.biCliente, data.valor, data.iva,
+    // data.contaBancaria, data.validadeProforma, data.numDoc). Antes os ids
+    // eram 'nuit' e 'total', que NUNCA batiam com o que o prompt lia —
+    // por isso o NUIT, endereço, BI do cliente e IVA nunca chegavam à IA,
+    // mesmo quando preenchidos. Também foram adicionados campos que a
+    // legislação fiscal moçambicana exige consoante o tipo de documento
+    // (NUIT obrigatório em Factura/Proforma/Factura-Recibo/Nota de Débito,
+    // validade em Factura Proforma, etc.) usando 'requiredIf' para tornar
+    // o formulário dinâmico — sem esconder o campo, apenas ajustando se é
+    // obrigatório ou não consoante o 'Tipo de Documento' seleccionado.
     fields:[
       { id:'tipoDoc',    label:'Tipo de Documento', type:'select', required:true,
-        opts:['Recibo Simples','Factura','Factura-Recibo','Nota de Encomenda','Nota de Débito'] },
+        opts:['Recibo Simples','Factura','Factura Proforma','Factura-Recibo','Nota de Encomenda','Nota de Débito'],
+        hint:'Os campos abaixo (NUIT, IVA, validade…) ajustam-se automaticamente ao tipo escolhido.' },
       { row:true, items:[
-        { id:'emitente',  label:'Nome / Empresa Emitente', type:'text', required:true, ph:'João Comerciante' },
-        { id:'nuit',      label:'NUIT (opcional)',          type:'text', ph:'400123456', pattern:'[0-9]{9}', maxlength:'9', inputmode:'numeric' },
+        { id:'emitente',      label:'Nome / Empresa Emitente', type:'text', required:true, ph:'João Comerciante / Charifo Tech Solutions' },
+        { id:'nuitEmitente',  label:'NUIT do Emitente', type:'text', ph:'400123456', pattern:'[0-9]{9}', maxlength:'9', inputmode:'numeric',
+          requiredIf:{ field:'tipoDoc', in:['Factura','Factura Proforma','Factura-Recibo','Nota de Débito'] },
+          hint:'Obrigatório para Factura, Factura Proforma, Factura-Recibo e Nota de Débito (Lei n.º 32/2007 — IVA). Opcional para Recibo Simples e Nota de Encomenda.' },
       ]},
-      { id:'cliente',    label:'Nome do Cliente',     type:'text', required:true, ph:'Maria Silva' },
+      { id:'enderecoEmitente', label:'Endereço / Contacto do Emitente (opcional)', type:'text',
+        ph:'Rua da Sé, n.º 123, Maputo · Tel: 84 211 2233' },
+      { row:true, items:[
+        { id:'cliente',    label:'Nome do Cliente', type:'text', required:true, ph:'Maria Silva' },
+        { id:'biCliente',  label:'BI / NUIT do Cliente (opcional)', type:'text', ph:'110100123456A ou 400987654', maxlength:'13' },
+      ]},
       { id:'descricao',  label:'Descrição dos Serviços / Produtos', type:'textarea', required:true,
-        ph:'1x Reparação de telemóvel — 1500 MZN\n2x Capas protetoras — 300 MZN cada' },
+        ph:'1x Reparação de telemóvel — 1500 MZN\n2x Capas protetoras — 300 MZN cada\n(uma linha por artigo ou serviço)' },
       { row:true, items:[
-        { id:'total',    label:'Valor Total (MZN)', type:'number', required:true, ph:'2100', min:'1' },
+        { id:'valor',    label:'Valor Total (MZN)', type:'number', required:true, ph:'2100', min:'1' },
         { id:'pagamento',label:'Forma de Pagamento', type:'select', required:true,
-          opts:['M-Pesa','Dinheiro','Transferência Bancária','E-mola','Mkesh'] },
+          opts:['M-Pesa','Dinheiro','Transferência Bancária','E-mola','Mkesh','A definir'] },
       ]},
-      { id:'local',      label:'Local e Data', type:'text', required:true, ph:'Maputo, 6 de Maio de 2026' },
+      { row:true, items:[
+        { id:'iva', label:'Aplicar IVA (16%)?', type:'select', required:true,
+          opts:['Não (isento / regime simplificado)','Sim (regime normal — 16%)'],
+          hint:'Micro/pequenos negócios no regime simplificado geralmente não cobram IVA (Lei n.º 5/2009).' },
+        { id:'contaBancaria', label:'Conta / Referência M-Pesa (opcional)', type:'text', ph:'84 XXX XXXX ou NIB' },
+      ]},
+      { id:'validadeProforma', label:'Validade da Proforma (dias)', type:'number', val:'30', min:'1', max:'180',
+        conditional:'tipoDoc', condValue:['Factura Proforma'],
+        hint:'Período durante o qual os preços apresentados na proforma se mantêm válidos.' },
+      { row:true, items:[
+        { id:'numDoc', label:'N.º do Documento (opcional)', type:'text', ph:'Ex: 001/2026 — em branco gera numeração automática' },
+        { id:'local',  label:'Local e Data', type:'text', required:true, ph:'Maputo, 6 de Maio de 2026' },
+      ]},
     ],
     buildWA: null,
   },
