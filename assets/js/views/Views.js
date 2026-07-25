@@ -69,6 +69,10 @@ export const DocumentView = {
   renderForm(svc, formBodyEl, formFootEl) {
     formBodyEl.innerHTML = this._buildFieldsHTML(svc.fields);
     this.bindConditionalFields(formBodyEl);
+    // NOVO (correcção 2.5): activa as caixas de dica dinâmica ("Tipo de
+    // Documento" no Recibo/Factura, "Tipo de Imóvel" no Arrendamento, etc.)
+    // — ver _field() e bindDynamicHints() abaixo.
+    this.bindDynamicHints(formBodyEl);
     if (svc.hasAI) {
       const cost = svc.cost || 1;
       const costLabel = cost === 1 ? '1 crédito' : `${cost} créditos`;
@@ -115,8 +119,14 @@ export const DocumentView = {
     const req = (!hasRequiredIf && f.required) ? 'required' : '';
     let input = '';
     if (f.type === 'select') {
-      const opts = (f.opts || []).map(o => `<option value="${o}">${o}</option>`).join('');
-      input = `<select id="${f.id}" ${req}><option value="" disabled selected>${f.ph || 'Selecione…'}</option>${opts}</select>`;
+      // NOVO (correcção 2.5): 'val' permite pré-seleccionar uma opção (ex.:
+      // 'Recibo Simples' no Tipo de Documento) em vez de abrir sempre em
+      // branco — sem isto, "nada seleccionado" e "Recibo Simples" pareciam
+      // visualmente o mesmo estado, dando a impressão de que a selecção
+      // nunca mudava nada.
+      const opts = (f.opts || []).map(o => `<option value="${o}" ${f.val === o ? 'selected' : ''}>${o}</option>`).join('');
+      const placeholderSelected = f.val ? '' : 'selected';
+      input = `<select id="${f.id}" ${req}><option value="" disabled ${placeholderSelected}>${f.ph || 'Selecione…'}</option>${opts}</select>`;
     } else if (f.type === 'textarea') {
       input = `<textarea id="${f.id}" ${req} placeholder="${f.ph || ''}" rows="4"></textarea>`;
     } else {
@@ -158,11 +168,20 @@ export const DocumentView = {
     // NOVO: texto de apoio opcional por campo, para explicar regras fiscais
     // ou formato esperado (ex.: "NUIT obrigatório para Factura…").
     const hintHTML = f.hint ? `<small class="field-hint">${f.hint}</small>` : '';
+    // NOVO (correcção 2.5): caixa de dica dinâmica — texto muda consoante o
+    // valor actual do próprio select (ex.: explica o Tipo de Documento
+    // escolhido). O mapa valor→texto vai serializado em JSON no atributo
+    // data-dynhint-map; aspas simples usadas para não colidir com aspas
+    // duplas do HTML, e o apóstrofo é escapado para não quebrar o atributo.
+    const dynHintHTML = (f.type === 'select' && f.dynamicHint)
+      ? `<div class="field-dynhint" data-dynhint-map='${JSON.stringify(f.dynamicHint).replace(/'/g, '&#39;')}'></div>`
+      : '';
     return `
       <div class="field-group" ${conditionalAttrs} ${requiredIfAttrs}>
         <label for="${f.id}">${f.label}${asteriskHTML}</label>
         ${input}
         ${hintHTML}
+        ${dynHintHTML}
       </div>
     `;
   },
@@ -227,6 +246,32 @@ export const DocumentView = {
 
     // Run once on load to set initial state
     updateVisibility();
+  },
+
+  // NOVO (correcção 2.5): liga as caixas de dica dinâmica (data-dynhint-map)
+  // ao respectivo <select> — é a mudança mais visível de todas quando o
+  // utilizador troca o Tipo de Documento (ou qualquer outro select com
+  // 'dynamicHint' definido em ServiceDefinitions.js), porque aparece/muda
+  // uma caixa azul de texto, em vez de uma alteração subtil como um
+  // asterisco. Reutilizável por qualquer serviço, sem depender de 'tipoDoc'.
+  bindDynamicHints(formEl) {
+    if (!formEl) return;
+    const hintEls = formEl.querySelectorAll('[data-dynhint-map]');
+    if (!hintEls.length) return;
+    hintEls.forEach(hintEl => {
+      const group  = hintEl.closest('.field-group');
+      const select = group?.querySelector('select');
+      if (!select) return;
+      let map = {};
+      try { map = JSON.parse(hintEl.dataset.dynhintMap); } catch (e) { map = {}; }
+      const update = () => {
+        const text = map[select.value];
+        hintEl.textContent = text || '';
+        hintEl.style.display = text ? 'block' : 'none';
+      };
+      select.addEventListener('change', update);
+      update(); // estado inicial (já reflecte o 'val' pré-seleccionado)
+    });
   },
 
   showLoader(steps = []) {
