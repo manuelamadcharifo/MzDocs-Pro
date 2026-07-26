@@ -252,9 +252,26 @@ export class DocumentModel {
         this.generatedAt = null;
     }
     setGenerated(content, model) {
-        this.content = content;
+        // NOVO (correcção 2.8 — "resultado final diferente do preview"): antes,
+        // "[PREENCHER ...]" só era trocado por uma linha em branco dentro de
+        // PDFExporter.js e WordExporter.js, no momento do download — a
+        // pré-visualização em ecrã ("Ver amostra grátis" / "Documento
+        // completo") continuava a mostrar o marcador tal como a IA o
+        // escreveu (ex.: "NE/[PREENCHER]/2026"), enquanto o PDF descarregado
+        // já vinha com "NE/____________________/2026". Sanitizar aqui, mal o
+        // conteúdo é gerado, garante que o ecrã e o ficheiro descarregado
+        // mostram sempre o mesmo texto — os exportadores continuam a correr
+        // a mesma limpeza como rede de segurança, mas deixa de fazer
+        // diferença visível.
+        this.content = DocumentModel.sanitizePlaceholders(content);
         this.model = model;
         this.generatedAt = new Date();
+    }
+    static sanitizePlaceholders(t = '') {
+        return String(t || '')
+            .replace(/\[PREENCHER[^\]]*\]/gi, '____________________')
+            .replace(/\[escrever[^\]]*\]/gi, '____________________')
+            .replace(/\[inserir[^\]]*\]/gi, '____________________');
     }
     get hasContent() { return !!this.content; }
 }
