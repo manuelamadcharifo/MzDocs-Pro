@@ -6,11 +6,27 @@
 // Esta classe abre uma janela com HTML+CSS do template e dispara window.print().
 // Em Android Chrome → "Guardar como PDF" no destino de impressão.
 
+// CORRIGIDO (auditoria P2): este ficheiro tinha o seu próprio parser
+// Markdown→HTML duplicado (mdToHtml, definido localmente), divergente do
+// parser "golden master" de A4Renderer.js — sem suporte real a tabelas
+// (linhas com "|" ficavam como texto simples) e com listas ordenadas a
+// perder a numeração (1. 2. 3. eram todas convertidas para o MESMO <ul>
+// com marcadores, não <ol>). Isso é um bug real e visível: um documento com
+// tabela ou lista numerada, exportado a partir de um template com CSS mas
+// SEM htmlTemplate (branch "else if (activeCss)" em
+// DocumentController._exportPDF), perdia a tabela/numeração no PDF mesmo
+// que o preview do editor as mostrasse correctamente. Reutiliza-se agora o
+// mesmo markdownToHtml()/splitIntoPages() de A4Renderer.js (sem alterar
+// A4Renderer.js) — mesma "verdade visual" em preview e PDF.
+import { markdownToHtml as _sharedMarkdownToHtml, splitIntoPages as _sharedSplitIntoPages } from '../utils/A4Renderer.js';
+
 // ── Markdown simples → HTML ──────────────────────────────────────────────
 function mdToHtml(md) {
   if (!md) return '';
 
   // Limpar caracteres corrompidos (artefactos de encoding do jsPDF, emojis inválidos)
+  // — mantido aqui porque é específico deste caminho de exportação, não da
+  // conversão Markdown→HTML em si.
   let t = md.replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\uD7FF\uE000-\uFFFD]/g, c => {
     const cp = c.codePointAt(0);
     // Preservar emojis válidos do BMP e plano suplementar
@@ -18,48 +34,12 @@ function mdToHtml(md) {
     return '';
   });
 
-  // Escaping HTML
-  t = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  // Headers
-  t = t.replace(/^#{6}\s+(.+)$/gm,'<h6>$1</h6>')
-       .replace(/^#{5}\s+(.+)$/gm,'<h5>$1</h5>')
-       .replace(/^#{4}\s+(.+)$/gm,'<h4>$1</h4>')
-       .replace(/^#{3}\s+(.+)$/gm,'<h3>$1</h3>')
-       .replace(/^#{2}\s+(.+)$/gm,'<h2>$1</h2>')
-       .replace(/^#{1}\s+(.+)$/gm,'<h1>$1</h1>');
-
-  // Bold + Italic
-  t = t.replace(/\*{3}(.+?)\*{3}/g,'<strong><em>$1</em></strong>')
-       .replace(/\*{2}(.+?)\*{2}/g,'<strong>$1</strong>')
-       .replace(/\*(.+?)\*/g,'<em>$1</em>');
-
-  // Code
-  t = t.replace(/`(.+?)`/g,'<code>$1</code>');
-
-  // Page break — normalizar variantes de "Nova Página" antes de substituir
-  t = t.replace(/^[ \t]*[—–-]{0,3}[ \t]*Nova P[aá]gina[ \t]*[—–-]{0,3}[ \t]*$/gim, '---PAGE_BREAK---');
-  t = t.replace(/\*{1,2}Nova P[aá]gina\*{1,2}/gi, '---PAGE_BREAK---');
-  t = t.replace(/---PAGE_BREAK---/g,'<div style="page-break-after:always"></div>');
-
-  // HR
-  t = t.replace(/^---+$/gm,'<hr>');
-
-  // Listas — agrupar li consecutivos em ul
-  t = t.replace(/^[ \t]*[-*+]\s+(.+)$/gm,'<li>$1</li>');
-  t = t.replace(/^[ \t]*\d+\.\s+(.+)$/gm,'<li>$1</li>');
-  t = t.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, m => '<ul>' + m + '</ul>');
-
-  // Parágrafos — blocos separados por linha vazia
-  const blockStart = /^<(h[1-6]|ul|ol|hr|div|blockquote|table)/;
-  t = t.split(/\n{2,}/).map(chunk => {
-    chunk = chunk.trim();
-    if (!chunk) return '';
-    if (blockStart.test(chunk)) return chunk;
-    return '<p>' + chunk.replace(/\n/g,'<br>') + '</p>';
-  }).join('\n');
-
-  return t;
+  // Divide pelo mesmo critério do preview (---PAGE_BREAK--- e variantes tipo
+  // "Nova Página") e converte cada página com o parser partilhado — tabelas
+  // GFM reais e listas ordenadas/não-ordenadas correctas, exactamente como
+  // no preview do editor.
+  const pages = _sharedSplitIntoPages(t);
+  return pages.map(_sharedMarkdownToHtml).join('\n<div style="page-break-after:always"></div>\n');
 }
 
 // ── Controlo de paginação (widow/orphan) ─────────────────────────────────
