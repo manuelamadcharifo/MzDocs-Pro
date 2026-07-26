@@ -2,10 +2,10 @@
 // ──────────────────────────────────────────────────────────────────────────
 // Gera um .docx REAL (OOXML verdadeiro, via docx-js) a partir de HTML rico
 // arbitrário — em particular o HTML produzido pelo editor WYSIWYG
-// (DocumentEditor.js → this._richHTMLPages), que pode conter:
-//   cor de texto, tamanho de letra, alinhamento, negrito/itálico/sublinhado,
-//   links (<a href>), imagens (<img>, ex: assinatura digital), tabelas,
-//   listas e headings.
+// (DocumentEditor.js → this._richHTMLPages) e, desde a correcção P1, também
+// o HTML+CSS dos templates de documento que NÃO são CVs (carta, requerimento,
+// procuração, recibo, recomendação, licença, orçamento, plano de negócio,
+// prestação, arrendamento, residência, trabalho, acta).
 //
 // PORQUÊ ESTE FICHEIRO EXISTE (P0 da auditoria de exportação):
 // Antes desta correcção, ao fechar o editor, DocumentEditor._syncContentFromEditor()
@@ -17,15 +17,23 @@
 // se perdiam, e <u> (sublinhado) era convertido para "_texto_", que nem é
 // interpretado como sublinhado pelo parser Markdown da app.
 //
-// Este exportador faz HTML → OOXML directamente (sem passar por Markdown),
-// preservando essas formatações. É usado apenas quando NÃO há template
-// visual estruturado activo (nesse caso HTMLToDocxExporter.js, específico
-// para templates de CV, continua a ser o caminho certo).
+// PORQUÊ FOI ESTENDIDO (P1 da auditoria de exportação):
+// HTMLToDocxExporter.js só tem tratamento verdadeiramente dedicado ao layout
+// de duas colunas dos templates de CV (.cv-sidebar/.cv-main) — para os
+// restantes ~13 categorias de template (que usam as SUAS PRÓPRIAS classes:
+// .carta-header, .req-title, etc., com cor/fundo definidos no CSS do
+// template, não inline), caía num "layout linear" com heurísticas afinadas
+// para CV (h1 = nome grande, .cv-cargo, .cv-name...) que não reconhece essas
+// classes — o Word resultante perdia cores/fundos que o PDF do mesmo
+// documento mostra correctamente. Este módulo agora também resolve regras
+// CSS por classe (não só style="" inline) e é reutilizado por
+// HTMLToDocxExporter.js para esse caminho "não-CV", em vez de duplicar lógica.
 //
 // Em caso de falha (ex: docx-js não carrega, HTML malformado), o chamador
-// (DocumentEditor._downloadWord) deve capturar o erro e recorrer ao
-// WordExporter.js (Markdown → OOXML) como rede de segurança — nunca deixar
-// o utilizador sem nenhum ficheiro.
+// deve capturar o erro e recorrer ao exportador clássico correspondente
+// (WordExporter.js para documentos sem template; a heurística antiga de
+// HTMLToDocxExporter.js para templates) — nunca deixar o utilizador sem
+// nenhum ficheiro.
 // ──────────────────────────────────────────────────────────────────────────
 
 const MM_TO_TWIP = 1440 / 25.4; // 1 polegada = 1440 twip; 1 polegada = 25.4mm
@@ -72,17 +80,20 @@ function toHex(color) {
   return named[color.toLowerCase()] || null;
 }
 
-// ── Lê um atributo style="..." e devolve flags de formatação relevantes ────
-function parseInlineStyle(styleStr) {
+// ── Lê uma lista de declarações "prop:val;prop:val" (de um style="" inline
+// OU do corpo de uma regra CSS ".classe{ prop:val; }") e devolve flags de
+// formatação relevantes. Partilhado entre estilo inline e estilo por classe. ──
+function parseDeclarations(text) {
   const out = {};
-  if (!styleStr) return out;
-  styleStr.split(';').forEach(decl => {
+  if (!text) return out;
+  text.split(';').forEach(decl => {
     const idx = decl.indexOf(':');
     if (idx === -1) return;
     const prop = decl.slice(0, idx).trim().toLowerCase();
     const val = decl.slice(idx + 1).trim();
     if (!prop || !val) return;
     if (prop === 'color') { const hex = toHex(val); if (hex) out.color = hex; }
+    if (prop === 'background-color' || prop === 'background') { const hex = toHex(val); if (hex) out.bg = hex; }
     if (prop === 'font-size') {
       const m = val.match(/([\d.]+)\s*(pt|px)/);
       if (m) {
@@ -97,6 +108,39 @@ function parseInlineStyle(styleStr) {
     if (prop === 'text-align' && /left|center|right|justify/.test(val)) out.align = val;
   });
   return out;
+}
+
+function parseInlineStyle(styleStr) { return parseDeclarations(styleStr); }
+
+// ── Extrai o corpo de UM selector simples ("tag", ".classe" ou "tag.classe")
+// de uma folha CSS em texto — primeira ocorrência apenas (aproximação
+// suficiente para os templates da app, que não têm cascata complexa). ──────
+function extractCssBlock(cssText, selector) {
+  if (!cssText) return '';
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rx = new RegExp(escaped + '\\s*\\{([^}]*)\\}', 'i');
+  const m = cssText.match(rx);
+  return m ? m[1] : '';
+}
+
+// ── Resolve o estilo "efectivo" de um elemento: selector de tag, depois cada
+// classe (por ordem no atributo class), depois style="" inline — cada nível
+// sobrepõe-se ao anterior, aproximando a cascata CSS real o suficiente para
+// templates simples (sem media queries/pseudo-classes). ────────────────────
+function resolveElementStyle(cssText, el) {
+  if (!el || !el.getAttribute) return {};
+  const tag = el.tagName ? el.tagName.toLowerCase() : '';
+  const classes = (el.getAttribute('class') || '').trim().split(/\s+/).filter(Boolean);
+  let merged = {};
+  if (cssText) {
+    if (tag) Object.assign(merged, parseDeclarations(extractCssBlock(cssText, tag)));
+    classes.forEach(c => {
+      Object.assign(merged, parseDeclarations(extractCssBlock(cssText, '.' + c)));
+      if (tag) Object.assign(merged, parseDeclarations(extractCssBlock(cssText, tag + '.' + c)));
+    });
+  }
+  Object.assign(merged, parseDeclarations(el.getAttribute('style')));
+  return merged;
 }
 
 function alignToDocx(align, AlignmentType) {
@@ -177,19 +221,19 @@ async function buildImageRun(docx, imgEl) {
 export class GenericHtmlToDocxExporter {
 
   /**
-   * @param {string[]} richHtmlPages  HTML de cada página (ex: DocumentEditor._richHTMLPages)
-   * @param {string} filename         nome sugerido (sem extensão)
-   * @param {object} [metadata]       { title, disciplina, nivel, aluno, turma, docente, instituicao }
+   * Constrói apenas o array de children (Paragraph/Table) do docx-js, sem
+   * criar o Document/Packer nem descarregar nada — permite a outros
+   * exportadores (ex: HTMLToDocxExporter.js, para templates não-CV)
+   * reaproveitar esta conversão dentro da SUA própria estrutura de página.
+   *
+   * @param {object} docx               window.docx já carregado
+   * @param {string[]} htmlPages        HTML de cada página
+   * @param {string} [templateCss]      CSS do template (regras por classe/tag) — opcional
+   * @param {object} [metadata]         bloco de identificação opcional (ver export())
    */
-  async export(richHtmlPages, filename, metadata = {}) {
-    if (!Array.isArray(richHtmlPages) || !richHtmlPages.length) {
-      throw new Error('Sem conteúdo HTML para exportar');
-    }
-
-    await loadDocxLib();
-    const docx = window.docx;
+  async _buildChildren(docx, htmlPages, templateCss = '', metadata = {}) {
     const {
-      Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
+      Paragraph, TextRun, HeadingLevel, AlignmentType,
       Table, TableRow, TableCell, WidthType, BorderStyle, PageBreak,
       ExternalHyperlink, ShadingType, convertMillimetersToTwip,
     } = docx;
@@ -200,6 +244,9 @@ export class GenericHtmlToDocxExporter {
 
     const FONT = 'Times New Roman';
     const BASE_SIZE = 24; // 12pt em meios-pontos
+    const cssText = templateCss || '';
+
+    const shadingFor = (bg) => (bg ? { fill: bg, type: ShadingType.CLEAR, color: 'auto' } : undefined);
 
     // ── Runs inline (texto + formatação), recursivo ────────────────────────
     const walkInline = (node, ctx, runs) => {
@@ -229,7 +276,7 @@ export class GenericHtmlToDocxExporter {
       if (tag === 'em' || tag === 'i') next.italic = true;
       if (tag === 'u') next.underline = true;
 
-      const st = parseInlineStyle(node.getAttribute && node.getAttribute('style'));
+      const st = resolveElementStyle(cssText, node);
       if (st.bold) next.bold = true;
       if (st.italic) next.italic = true;
       if (st.underline) next.underline = true;
@@ -255,14 +302,9 @@ export class GenericHtmlToDocxExporter {
       Array.from(node.childNodes).forEach(c => walkInline(c, next, runs));
     };
 
-    // ── Extrai texto simples (para decidir se um bloco está "vazio") ───────
     const isBlank = (node) => !node.textContent || !node.textContent.trim();
 
-    // ── Converte um elemento de bloco em 1+ Paragraph/Table (assíncrono
-    // por causa das imagens) ────────────────────────────────────────────────
-    const blockCounters = { ol: 0 };
-
-    const convertBlock = async (node, out, opts = {}) => {
+    const convertBlock = async (node, out) => {
       if (node.nodeType === 3) {
         if (!isBlank(node)) {
           out.push(new Paragraph({ children: [new TextRun({ text: node.textContent, font: FONT, size: BASE_SIZE })], alignment: AlignmentType.JUSTIFIED }));
@@ -272,15 +314,15 @@ export class GenericHtmlToDocxExporter {
       if (node.nodeType !== 1) return;
       const tag = node.tagName.toLowerCase();
 
-      // Headings
       const headingMap = { h1: HeadingLevel.HEADING_1, h2: HeadingLevel.HEADING_2, h3: HeadingLevel.HEADING_3, h4: HeadingLevel.HEADING_4, h5: HeadingLevel.HEADING_5, h6: HeadingLevel.HEADING_6 };
       if (headingMap[tag]) {
         const runs = [];
         walkInline(node, { bold: true }, runs);
-        const st = parseInlineStyle(node.getAttribute('style'));
+        const st = resolveElementStyle(cssText, node);
         out.push(new Paragraph({
           heading: headingMap[tag],
           alignment: alignToDocx(st.align, AlignmentType) || (tag === 'h1' ? AlignmentType.CENTER : AlignmentType.LEFT),
+          shading: shadingFor(st.bg),
           spacing: { before: 200, after: 120 },
           children: runs.length ? runs : [new TextRun({ text: '', font: FONT })],
         }));
@@ -336,11 +378,12 @@ export class GenericHtmlToDocxExporter {
           const cells = [];
           for (const cellEl of Array.from(tr.children)) {
             const isHeader = cellEl.tagName.toLowerCase() === 'th';
+            const cellSt = resolveElementStyle(cssText, cellEl);
             const runs = [];
             walkInline(cellEl, { bold: isHeader }, runs);
             cells.push(new TableCell({
               width: { size: 100 / Math.max(tr.children.length, 1), type: WidthType.PERCENTAGE },
-              shading: isHeader ? { fill: '28508C', type: ShadingType.CLEAR, color: 'auto' } : undefined,
+              shading: shadingFor(cellSt.bg) || (isHeader ? shadingFor('28508C') : undefined),
               children: [new Paragraph({ children: runs.length ? runs : [new TextRun({ text: '', font: FONT })] })],
             }));
           }
@@ -365,12 +408,12 @@ export class GenericHtmlToDocxExporter {
         return;
       }
 
-      if (tag === 'p' || tag === 'div' || tag === 'span' || tag === 'li') {
+      if (tag === 'p' || tag === 'div' || tag === 'span' || tag === 'li' || tag === 'header' || tag === 'section' || tag === 'footer' || tag === 'article') {
         // Se este bloco contém sub-blocos reais (outra tabela/lista/heading/div
         // com conteúdo próprio), processa-os individualmente em vez de os
         // achatar num único parágrafo — comum em HTML de contenteditable
-        // (cada linha vira uma <div>).
-        const blockChildTags = new Set(['p', 'div', 'table', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'hr']);
+        // (cada linha vira uma <div>) e em templates com secções aninhadas.
+        const blockChildTags = new Set(['p', 'div', 'table', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'hr', 'header', 'section', 'footer', 'article']);
         const hasBlockChildren = Array.from(node.children || []).some(c => blockChildTags.has(c.tagName.toLowerCase()));
 
         if (hasBlockChildren) {
@@ -383,12 +426,13 @@ export class GenericHtmlToDocxExporter {
         const imgs = node.querySelectorAll ? Array.from(node.querySelectorAll('img')) : [];
         if (isBlank(node) && !imgs.length) return; // linha vazia de contenteditable
 
-        const st = parseInlineStyle(node.getAttribute && node.getAttribute('style'));
+        const st = resolveElementStyle(cssText, node);
         const runs = [];
         walkInline(node, {}, runs);
         if (runs.length) {
           out.push(new Paragraph({
             alignment: alignToDocx(st.align, AlignmentType) || AlignmentType.JUSTIFIED,
+            shading: shadingFor(st.bg),
             spacing: { after: 100 },
             children: runs,
           }));
@@ -428,12 +472,12 @@ export class GenericHtmlToDocxExporter {
       }));
     }
 
-    for (let pageIdx = 0; pageIdx < richHtmlPages.length; pageIdx++) {
+    for (let pageIdx = 0; pageIdx < htmlPages.length; pageIdx++) {
       if (pageIdx > 0) {
         docChildren.push(new Paragraph({ children: [new PageBreak()] }));
       }
       const parser = new DOMParser();
-      const parsed = parser.parseFromString(`<div id="root">${richHtmlPages[pageIdx] || ''}</div>`, 'text/html');
+      const parsed = parser.parseFromString(`<div id="root">${htmlPages[pageIdx] || ''}</div>`, 'text/html');
       const root = parsed.getElementById('root');
       if (!root) continue;
       for (const child of Array.from(root.childNodes)) {
@@ -445,6 +489,30 @@ export class GenericHtmlToDocxExporter {
     if (!docChildren.length) {
       docChildren.push(new Paragraph({ children: [new TextRun({ text: '', font: FONT })] }));
     }
+
+    return docChildren;
+  }
+
+  /**
+   * @param {string[]} richHtmlPages  HTML de cada página (ex: DocumentEditor._richHTMLPages)
+   * @param {string} filename         nome sugerido (sem extensão)
+   * @param {object} [metadata]       { title, disciplina, nivel, aluno, turma, docente, instituicao }
+   * @param {string} [templateCss]    CSS do template, quando aplicável (regras por classe)
+   */
+  async export(richHtmlPages, filename, metadata = {}, templateCss = '') {
+    if (!Array.isArray(richHtmlPages) || !richHtmlPages.length) {
+      throw new Error('Sem conteúdo HTML para exportar');
+    }
+
+    await loadDocxLib();
+    const docx = window.docx;
+    const { Document, Packer } = docx;
+
+    const twip = (mm) => (typeof docx.convertMillimetersToTwip === 'function'
+      ? docx.convertMillimetersToTwip(mm)
+      : Math.round(mm * MM_TO_TWIP));
+
+    const docChildren = await this._buildChildren(docx, richHtmlPages, templateCss, metadata);
 
     const doc = new Document({
       sections: [{

@@ -234,7 +234,28 @@ export class HTMLToDocxExporter {
 
     } else {
       // ── Layout coluna única / top-bar ────────────────────────────────
-      children = this._buildLinearContent(root, A4_W);
+      // CORRIGIDO (auditoria P1): esta era a única heurística usada para
+      // TODOS os templates que não são CV (carta, requerimento, procuração,
+      // recibo, recomendação, licença, orçamento, plano de negócio,
+      // prestação, arrendamento, residência, trabalho, acta) — mas
+      // _buildLinearContent()/_buildMainContent() foram afinados para
+      // marcação de CV (.cv-name, .cv-cargo, h1/h2 como nome/secção) e não
+      // reconhecem as classes próprias desses outros templates (ex:
+      // .carta-header, .carta-empresa-nome), pelo que cor/fundo definidos
+      // no CSS do template (e correctamente mostrados no PDF do mesmo
+      // documento) desapareciam no Word. GenericHtmlToDocxExporter resolve
+      // classes do CSS do template de forma genérica (não específica de
+      // CV), preservando essa formatação. Mantém-se _buildLinearContent
+      // como rede de segurança caso o conversor genérico falhe.
+      try {
+        const { GenericHtmlToDocxExporter } = await import('./GenericHtmlToDocxExporter.js');
+        children = await new GenericHtmlToDocxExporter()._buildChildren(
+          window.docx, [templateHtml], this._css
+        );
+      } catch (err) {
+        console.error('[HTMLToDocxExporter] Conversor genérico falhou, a usar heurística clássica:', err.message);
+        children = this._buildLinearContent(root, A4_W);
+      }
       if (!children.length) children = [new Paragraph({ children: [new TextRun('')] })];
     }
 
