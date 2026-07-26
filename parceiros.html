@@ -4,8 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
   <meta name="robots" content="index,follow"/>
-  <title>Seja Parceiro MzDocs — Papelarias e Gráficas</title>
-  <meta name="description" content="Registe a sua papelaria ou gráfica como parceira MzDocs e receba pedidos de impressão de clientes próximos em Moçambique."/>
+  <title>Seja Parceiro MzDocs — Papelarias, Gráficas e Advogados</title>
+  <meta name="description" content="Registe a sua papelaria, gráfica ou escritório de advocacia como parceiro MzDocs e receba pedidos de clientes próximos em Moçambique."/>
   <link rel="icon" href="/assets/icons/icon.svg" type="image/svg+xml"/>
   <link rel="stylesheet" href="/assets/css/styles.css"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -66,6 +66,12 @@
     .fg small{font-size:11px;color:var(--muted)}
     .fg-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .services-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    /* NOVO — seletor de tipo de parceiro (papelaria/advogado) */
+    .type-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
+    .type-opt{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 10px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;background:var(--white);transition:border-color .2s,background .2s;-webkit-user-select:none;user-select:none}
+    .type-opt.active{border-color:var(--blue);background:#EFF6FF}
+    .type-opt-ico{font-size:22px}
+    .type-opt-lbl{font-size:12.5px;font-weight:800;color:var(--ink)}
     .svc-check{display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .2s,background .2s;-webkit-user-select:none;user-select:none}
     .svc-check input{display:none}
     .svc-check.checked{background:#EFF6FF;border-color:var(--blue)}
@@ -104,8 +110,8 @@
 <section class="hero">
   <div class="hero-inner">
     <div class="hero-tag">🤝 Programa de Parceiros</div>
-    <h1>A sua papelaria<br/>alcança mais <em>clientes</em></h1>
-    <p>Junte-se à rede MzDocs e receba pedidos de impressão e fotos para documentos de utilizadores próximos — sem comissão inicial.</p>
+    <h1>O seu negócio<br/>alcança mais <em>clientes</em></h1>
+    <p>Junte-se à rede MzDocs — papelaria, gráfica ou advogado — e receba pedidos de utilizadores próximos que geram documentos na plataforma, sem comissão inicial.</p>
     <div class="hero-stats">
       <div class="hs"><div class="hs-val">Grátis</div><div class="hs-lbl">Para aderir</div></div>
       <div class="hs"><div class="hs-val">10 km</div><div class="hs-lbl">Raio de visibilidade</div></div>
@@ -180,16 +186,38 @@
 <section class="section" style="padding-top:0;padding-bottom:60px">
   <p class="sec-label">Candidatura</p>
   <div class="form-card">
-    <div class="form-title">📋 Registar Papelaria / Gráfica</div>
+    <div class="form-title" id="formTitle">📋 Registar Parceiro</div>
     <div class="form-sub">Preencha os dados abaixo. Campos com * são obrigatórios.</div>
 
+    <!-- NOVO — tipo de parceiro -->
+    <div class="type-toggle" id="typeToggle">
+      <div class="type-opt active" data-type="papelaria" onclick="selectType('papelaria')">
+        <span class="type-opt-ico">🏪</span>
+        <span class="type-opt-lbl">Papelaria / Gráfica</span>
+      </div>
+      <div class="type-opt" data-type="advogado" onclick="selectType('advogado')">
+        <span class="type-opt-ico">⚖️</span>
+        <span class="type-opt-lbl">Advogado(a)</span>
+      </div>
+    </div>
+
     <div class="fg">
-      <label>Nome da Papelaria / Gráfica *</label>
+      <label id="lblName">Nome da Papelaria / Gráfica *</label>
       <input type="text" id="fName" placeholder="Ex: Papelaria Central Maputo" maxlength="100"/>
     </div>
     <div class="fg">
-      <label>Nome do Responsável *</label>
+      <label id="lblOwner">Nome do Responsável *</label>
       <input type="text" id="fOwner" placeholder="Ex: João Machel" maxlength="80"/>
+    </div>
+    <!-- NOVO — só visível quando type=advogado -->
+    <div class="fg" id="fgCredential" style="display:none">
+      <label>Nº de Inscrição na Ordem dos Advogados (OAM) *</label>
+      <input type="text" id="fCredential" placeholder="Ex: OAM 1234" maxlength="40"/>
+      <small>Confirmado manualmente pela nossa equipa antes da aprovação.</small>
+    </div>
+    <div class="fg" id="fgBio" style="display:none">
+      <label>Breve apresentação (opcional)</label>
+      <textarea id="fBio" placeholder="Ex: 8 anos de experiência em direito laboral e comercial…" maxlength="280"></textarea>
     </div>
     <div class="fg-row">
       <div class="fg">
@@ -229,10 +257,10 @@
       <small id="gpsStatus">Clique para detectar a localização da sua papelaria automaticamente</small>
     </div>
 
-    <!-- SERVIÇOS -->
-    <div class="fg">
+    <!-- SERVIÇOS — papelaria -->
+    <div class="fg" id="fgServicesPapelaria">
       <label>Serviços disponíveis *</label>
-      <div class="services-grid">
+      <div class="services-grid svc-group" data-group="papelaria">
         <label class="svc-check" data-val="impressao">
           <input type="checkbox" value="impressao"/>
           <span class="svc-check-ico">🖨️</span>
@@ -253,7 +281,53 @@
           <span class="svc-check-ico">📖</span>
           <span class="svc-check-lbl">Encadernação</span>
         </label>
+      </div>
+    </div>
 
+    <!-- SERVIÇOS — advogado (NOVO, oculto por omissão) -->
+    <div class="fg" id="fgServicesAdvogado" style="display:none">
+      <label>Áreas de atuação *</label>
+      <div class="services-grid svc-group" data-group="advogado">
+        <label class="svc-check" data-val="civil">
+          <input type="checkbox" value="civil"/>
+          <span class="svc-check-ico">⚖️</span>
+          <span class="svc-check-lbl">Civil</span>
+        </label>
+        <label class="svc-check" data-val="laboral">
+          <input type="checkbox" value="laboral"/>
+          <span class="svc-check-ico">💼</span>
+          <span class="svc-check-lbl">Laboral</span>
+        </label>
+        <label class="svc-check" data-val="comercial">
+          <input type="checkbox" value="comercial"/>
+          <span class="svc-check-ico">🏢</span>
+          <span class="svc-check-lbl">Comercial</span>
+        </label>
+        <label class="svc-check" data-val="familia">
+          <input type="checkbox" value="familia"/>
+          <span class="svc-check-ico">👨‍👩‍👧</span>
+          <span class="svc-check-lbl">Família</span>
+        </label>
+        <label class="svc-check" data-val="penal">
+          <input type="checkbox" value="penal"/>
+          <span class="svc-check-ico">🛡️</span>
+          <span class="svc-check-lbl">Penal</span>
+        </label>
+        <label class="svc-check" data-val="imobiliario">
+          <input type="checkbox" value="imobiliario"/>
+          <span class="svc-check-ico">🏠</span>
+          <span class="svc-check-lbl">Imobiliário</span>
+        </label>
+        <label class="svc-check" data-val="fiscal">
+          <input type="checkbox" value="fiscal"/>
+          <span class="svc-check-ico">🧾</span>
+          <span class="svc-check-lbl">Fiscal</span>
+        </label>
+        <label class="svc-check" data-val="sucessorio">
+          <input type="checkbox" value="sucessorio"/>
+          <span class="svc-check-ico">📜</span>
+          <span class="svc-check-lbl">Sucessório</span>
+        </label>
       </div>
     </div>
 
@@ -281,12 +355,32 @@
 // NOVO: pré-preenche a partir de afiliado.html (ver "ponte" na área de
 // Afiliados) — quem já deu o nome do negócio e o número de M-Pesa lá não
 // devia ter de os escrever outra vez aqui.
+let currentType = 'papelaria';
+
+// NOVO — alterna entre papelaria/advogado: labels, campos condicionais e
+// qual services-grid fica activo.
+function selectType(type) {
+  currentType = type;
+  document.querySelectorAll('.type-opt').forEach(el => el.classList.toggle('active', el.dataset.type === type));
+
+  const isLawyer = type === 'advogado';
+  document.getElementById('formTitle').textContent = isLawyer ? '⚖️ Registar Advogado(a)' : '📋 Registar Papelaria / Gráfica';
+  document.getElementById('lblName').textContent = isLawyer ? 'Nome do Escritório / Advogado(a) *' : 'Nome da Papelaria / Gráfica *';
+  document.getElementById('lblOwner').textContent = isLawyer ? 'Nome Completo *' : 'Nome do Responsável *';
+  document.getElementById('fgCredential').style.display = isLawyer ? '' : 'none';
+  document.getElementById('fgBio').style.display = isLawyer ? '' : 'none';
+  document.getElementById('fgServicesPapelaria').style.display = isLawyer ? 'none' : '';
+  document.getElementById('fgServicesAdvogado').style.display = isLawyer ? '' : 'none';
+}
+
 (function prefillFromQuery() {
   const params = new URLSearchParams(window.location.search);
   const nome = params.get('nome');
   const telefone = params.get('telefone');
+  const tipo = params.get('tipo');
   if (nome) document.getElementById('fName').value = nome;
   if (telefone) document.getElementById('fPhone').value = telefone.replace(/^258/, '').slice(-9);
+  if (tipo === 'advogado') selectType('advogado');
 })();
 
 // ── Checkboxes de serviços ────────────────────────────────────────────────
@@ -342,10 +436,17 @@ async function submitForm() {
   const lat       = document.getElementById('fLat').value;
   const lng       = document.getElementById('fLng').value;
   const hours     = document.getElementById('fHours').value.trim();
-  const services  = [...document.querySelectorAll('.svc-check input:checked')].map(c => c.value);
+  // NOVO — só conta os checkboxes do grupo activo (papelaria OU advogado),
+  // para não misturar os dois conjuntos de valores.
+  const services  = [...document.querySelectorAll(`.svc-group[data-group="${currentType}"] input:checked`)].map(c => c.value);
+  const credential = document.getElementById('fCredential').value.trim();
+  const bio         = document.getElementById('fBio').value.trim();
 
   if (!name || !ownerName || !phone || !whatsapp || !city || !address) {
     msgEl.className = 'msg error'; msgEl.textContent = '⚠️ Preencha todos os campos obrigatórios.'; return;
+  }
+  if (currentType === 'advogado' && !credential) {
+    msgEl.className = 'msg error'; msgEl.textContent = '⚠️ Indique o seu nº de inscrição na Ordem dos Advogados (OAM).'; return;
   }
   // CORRIGIDO (auditoria 1.2): este formulário não está dentro de uma tag
   // <form>, por isso o atributo HTML5 "pattern" nos campos nunca é
@@ -363,7 +464,9 @@ async function submitForm() {
     msgEl.className = 'msg error'; msgEl.textContent = '📍 Clique em "Obter localização actual" para capturar o GPS.'; return;
   }
   if (services.length === 0) {
-    msgEl.className = 'msg error'; msgEl.textContent = '⚠️ Seleccione pelo menos um serviço disponível.'; return;
+    msgEl.className = 'msg error';
+    msgEl.textContent = currentType === 'advogado' ? '⚠️ Seleccione pelo menos uma área de atuação.' : '⚠️ Seleccione pelo menos um serviço disponível.';
+    return;
   }
 
   btn.disabled = true;
@@ -373,7 +476,12 @@ async function submitForm() {
     const res = await fetch('/api/partners?action=register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, owner_name: ownerName, phone: phoneDigits, whatsapp: waDigits, city, address, lat, lng, services, hours }),
+      body: JSON.stringify({
+        name, owner_name: ownerName, phone: phoneDigits, whatsapp: waDigits, city, address, lat, lng, services, hours,
+        type: currentType,
+        credential_number: currentType === 'advogado' ? credential : undefined,
+        bio: currentType === 'advogado' ? bio : undefined,
+      }),
     });
     const data = await res.json();
     if (data.ok) {
@@ -381,7 +489,7 @@ async function submitForm() {
       msgEl.textContent = '✅ ' + data.message;
       btn.textContent = '✅ Candidatura enviada!';
       // Limpar form
-      ['fName','fOwner','fPhone','fWhatsApp','fCity','fAddress','fHours'].forEach(id => { document.getElementById(id).value = ''; });
+      ['fName','fOwner','fPhone','fWhatsApp','fCity','fAddress','fHours','fCredential','fBio'].forEach(id => { document.getElementById(id).value = ''; });
       document.getElementById('fLat').value = '';
       document.getElementById('fLng').value = '';
       document.querySelectorAll('.svc-check').forEach(l => { l.querySelector('input').checked = false; l.classList.remove('checked'); });
