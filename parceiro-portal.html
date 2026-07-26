@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="pt" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+  <meta name="robots" content="noindex,nofollow"/>
+  <title>Portal da Parceira — MzDocs Pro</title>
+  <link rel="icon" href="/assets/icons/icon.svg" type="image/svg+xml"/>
+  <link rel="stylesheet" href="/assets/css/styles.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--ink:#07101F;--muted:#64748B;--border:#E2E8F0;--surface:#F8FAFD;--white:#fff;--blue:#3B82F6;--green:#009A44;--gold:#F59E0B;--red:#EF4444;--r:16px;--sh:0 2px 12px rgba(7,16,31,.07)}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);color:var(--ink);min-height:100vh}
+
+    .hdr{background:var(--ink);padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+    .hdr-logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+    .hdr-badge{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#009A44);display:flex;align-items:center;justify-content:center;font-size:15px}
+    .hdr-name{font-size:15px;font-weight:800;color:#fff}
+    .hdr-name span{color:var(--gold)}
+    .btn-back{color:rgba(255,255,255,.6);font-size:13px;text-decoration:none;background:none;border:none;font-family:inherit;cursor:pointer}
+    .btn-back:hover{color:#fff}
+
+    .wrap{max-width:480px;margin:0 auto;padding:28px 16px 60px}
+
+    .fg{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+    .fg label{font-size:12.5px;font-weight:700;color:var(--ink)}
+    .inp,.txtarea{width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;outline:none;transition:border-color .2s;background:var(--white);color:var(--ink)}
+    .inp:focus,.txtarea:focus{border-color:var(--blue)}
+
+    .card{background:var(--white);border:1.5px solid var(--border);border-radius:20px;padding:22px 18px;box-shadow:var(--sh)}
+    .card + .card{margin-top:16px}
+
+    .btn{width:100%;padding:14px;border-radius:12px;border:none;font-family:inherit;font-size:14.5px;font-weight:800;cursor:pointer;transition:opacity .15s}
+    .btn:active{opacity:.75}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .btn-primary{background:linear-gradient(135deg,var(--blue),#1D4ED8);color:#fff}
+    .btn-outline{background:var(--white);border:1.5px solid var(--border);color:var(--ink)}
+
+    .svc-check{display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .2s,background .2s;user-select:none}
+    .svc-check input{display:none}
+    .svc-check.checked{background:#EFF6FF;border-color:var(--blue)}
+    .svc-check-lbl{font-size:12.5px;font-weight:700;color:var(--ink)}
+    .svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+
+    .loc-btn{width:100%;padding:13px;background:var(--surface);border:1.5px dashed var(--border);border-radius:10px;font-family:inherit;font-size:13.5px;font-weight:700;color:var(--blue);cursor:pointer;margin-bottom:14px}
+
+    .msg{display:none;padding:13px 15px;border-radius:12px;font-size:13.5px;font-weight:600;margin-top:14px;line-height:1.5}
+    .msg.ok{display:block;background:#DCFCE7;color:#166534}
+    .msg.error{display:block;background:#FEE2E2;color:#991B1B}
+
+    .title{font-size:18px;font-weight:800;margin-bottom:2px}
+    .sub{font-size:13px;color:var(--muted);margin-bottom:18px}
+
+    .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0}
+    .toggle-row-title{font-size:14px;font-weight:700}
+    .toggle-row-desc{font-size:12px;color:var(--muted);margin-top:2px}
+    .switch{position:relative;width:46px;height:26px;flex-shrink:0}
+    .switch input{opacity:0;width:0;height:0}
+    .slider{position:absolute;inset:0;background:#E2E8F0;border-radius:26px;cursor:pointer;transition:.2s}
+    .slider::before{content:'';position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+    .switch input:checked + .slider{background:var(--green)}
+    .switch input:checked + .slider::before{transform:translateX(20px)}
+
+    .rating-badge{display:inline-flex;align-items:center;gap:4px;background:#FEF9C3;color:#854D0E;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700}
+    #portalScreen{display:none}
+    .hint{font-size:11.5px;color:var(--muted);margin-top:-8px;margin-bottom:14px;line-height:1.5}
+  </style>
+</head>
+<body>
+
+<header class="hdr">
+  <a href="/" class="hdr-logo">
+    <div class="hdr-badge">📄</div>
+    <div class="hdr-name">Mz<span>Docs</span> Pro</div>
+  </a>
+  <button class="btn-back" id="btnLogout" style="display:none" onclick="doLogout()">🚪 Sair</button>
+</header>
+
+<div class="wrap">
+
+  <!-- LOGIN -->
+  <div id="loginScreen">
+    <div class="card">
+      <div class="title">🏪 Portal da Parceira</div>
+      <div class="sub">Entre com o número de telefone e o código de acesso que recebeu por WhatsApp quando foi aprovada.</div>
+
+      <div class="fg">
+        <label>Telefone</label>
+        <input class="inp" type="tel" id="lPhone" placeholder="84 XXX XXXX" maxlength="9" inputmode="tel"/>
+      </div>
+      <div class="fg">
+        <label>Código de acesso (6 dígitos)</label>
+        <input class="inp" type="text" id="lCode" placeholder="000000" maxlength="6" inputmode="numeric"/>
+      </div>
+      <button class="btn btn-primary" id="btnLogin" onclick="doLogin()">Entrar</button>
+      <div class="msg" id="loginMsg"></div>
+      <div class="hint">Ainda não é parceira? <a href="/parceiros.html">Candidate-se aqui</a>. Perdeu o código? Contacte o suporte MzDocs.</div>
+    </div>
+  </div>
+
+  <!-- PORTAL -->
+  <div id="portalScreen">
+    <div class="card">
+      <div class="title" id="pName">—</div>
+      <div class="sub" id="pStatusLine">—</div>
+
+      <div class="toggle-row" style="border-bottom:1px solid var(--border)">
+        <div>
+          <div class="toggle-row-title">Visível no mapa</div>
+          <div class="toggle-row-desc">Desligue temporariamente se estiver de férias ou sem stock.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="tActive" onchange="toggleActive()"/>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="title" style="font-size:15px">📍 Morada e Horário</div>
+      <div class="fg" style="margin-top:14px">
+        <label>Morada</label>
+        <input class="inp" type="text" id="pAddress" placeholder="Rua, bairro, referência"/>
+      </div>
+      <button class="loc-btn" id="btnGPS" onclick="getGPS()">📍 Actualizar a minha localização actual</button>
+      <div class="fg">
+        <label>Horário de funcionamento</label>
+        <input class="inp" type="text" id="pHours" placeholder="Seg-Sex 8h-17h, Sáb 8h-12h"/>
+      </div>
+      <div class="fg">
+        <label>WhatsApp de contacto</label>
+        <input class="inp" type="tel" id="pWhatsapp" placeholder="258 84 XXX XXXX" maxlength="12" inputmode="tel"/>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="title" style="font-size:15px">🛠️ Serviços que presta</div>
+      <div class="svc-grid" style="margin-top:14px">
+        <label class="svc-check"><input type="checkbox" value="impressao"/><span class="svc-check-lbl">🖨️ Impressão</span></label>
+        <label class="svc-check"><input type="checkbox" value="foto"/><span class="svc-check-lbl">📷 Foto</span></label>
+        <label class="svc-check"><input type="checkbox" value="plastificacao"/><span class="svc-check-lbl">🛡️ Plastificação</span></label>
+        <label class="svc-check"><input type="checkbox" value="encadernacao"/><span class="svc-check-lbl">📚 Encadernação</span></label>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btnSave" onclick="saveProfile()" style="margin-top:16px">💾 Guardar alterações</button>
+    <div class="msg" id="saveMsg"></div>
+  </div>
+
+</div>
+
+<script>
+let TOKEN = localStorage.getItem('mzd_partner_token') || '';
+let CURRENT_LAT = null, CURRENT_LNG = null;
+
+function showScreen() {
+  document.getElementById('loginScreen').style.display  = TOKEN ? 'none' : 'block';
+  document.getElementById('portalScreen').style.display = TOKEN ? 'block' : 'none';
+  document.getElementById('btnLogout').style.display    = TOKEN ? 'block' : 'none';
+}
+
+// ── LOGIN ────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const btn = document.getElementById('btnLogin');
+  const msgEl = document.getElementById('loginMsg');
+  msgEl.className = 'msg'; msgEl.textContent = '';
+
+  const phone = document.getElementById('lPhone').value.trim();
+  const code  = document.getElementById('lCode').value.trim();
+  if (!phone || !code) {
+    msgEl.className = 'msg error'; msgEl.textContent = '⚠️ Preencha telefone e código.'; return;
+  }
+
+  btn.disabled = true; btn.textContent = 'A entrar…';
+  try {
+    const res = await fetch('/api/partners?action=login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, access_code: code }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.token) throw new Error(data.error || 'Erro ao entrar');
+    TOKEN = data.token;
+    localStorage.setItem('mzd_partner_token', TOKEN);
+    showScreen();
+    await loadMe();
+  } catch (err) {
+    msgEl.className = 'msg error'; msgEl.textContent = '❌ ' + err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+
+function doLogout() {
+  if (!confirm('Terminar sessão?')) return;
+  localStorage.removeItem('mzd_partner_token');
+  TOKEN = '';
+  showScreen();
+}
+
+// ── CARREGAR DADOS PRÓPRIOS ──────────────────────────────────────────────────
+async function loadMe() {
+  try {
+    const res = await fetch('/api/partners?action=me', { headers: { Authorization: 'Bearer ' + TOKEN } });
+    if (!res.ok) throw new Error('sessão expirada');
+    const { partner: p } = await res.json();
+
+    document.getElementById('pName').textContent = p.name;
+    document.getElementById('pStatusLine').textContent = p.rating
+      ? `⭐ ${p.rating} de 5 · ${p.rating_count} avaliação(ões)`
+      : 'Ainda sem avaliações';
+    document.getElementById('tActive').checked = !!p.active;
+    document.getElementById('pAddress').value  = p.address || '';
+    document.getElementById('pHours').value    = p.hours || '';
+    document.getElementById('pWhatsapp').value = p.whatsapp || '';
+    CURRENT_LAT = p.lat; CURRENT_LNG = p.lng;
+
+    document.querySelectorAll('.svc-check').forEach(label => {
+      const cb = label.querySelector('input');
+      cb.checked = (p.services || []).includes(cb.value);
+      label.classList.toggle('checked', cb.checked);
+    });
+  } catch (err) {
+    // Sessão inválida/expirada — volta ao login.
+    localStorage.removeItem('mzd_partner_token');
+    TOKEN = '';
+    showScreen();
+  }
+}
+
+// ── TOGGLE VISÍVEL/INVISÍVEL (imediato, sem esperar por "Guardar") ──────────
+async function toggleActive() {
+  const active = document.getElementById('tActive').checked;
+  try {
+    await fetch('/api/partners?action=update-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+      body: JSON.stringify({ active }),
+    });
+  } catch (_) {}
+}
+
+// ── SERVICE CHECKBOXES ───────────────────────────────────────────────────────
+document.querySelectorAll('.svc-check').forEach(label => {
+  label.addEventListener('click', () => {
+    const cb = label.querySelector('input');
+    cb.checked = !cb.checked;
+    label.classList.toggle('checked', cb.checked);
+  });
+});
+
+// ── GPS (mesmo padrão de /parceiros.html) ───────────────────────────────────
+function getGPS() {
+  const btn = document.getElementById('btnGPS');
+  if (!navigator.geolocation) {
+    alert('Geolocalização não suportada neste dispositivo.'); return;
+  }
+  btn.textContent = '⏳ A detectar localização…';
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      CURRENT_LAT = pos.coords.latitude;
+      CURRENT_LNG = pos.coords.longitude;
+      btn.textContent = `✅ Localização actualizada (±${Math.round(pos.coords.accuracy)}m) — não esqueça de Guardar`;
+    },
+    () => { btn.textContent = '📍 Actualizar a minha localização actual'; alert('Não foi possível detectar. Active o GPS e tente novamente.'); },
+    { timeout: 10000, enableHighAccuracy: true }
+  );
+}
+
+// ── GUARDAR ──────────────────────────────────────────────────────────────────
+async function saveProfile() {
+  const btn = document.getElementById('btnSave');
+  const msgEl = document.getElementById('saveMsg');
+  msgEl.className = 'msg'; msgEl.textContent = '';
+
+  const services = [...document.querySelectorAll('.svc-check input:checked')].map(c => c.value);
+  const payload = {
+    address:  document.getElementById('pAddress').value.trim(),
+    hours:    document.getElementById('pHours').value.trim(),
+    whatsapp: document.getElementById('pWhatsapp').value.trim(),
+    services,
+  };
+  if (CURRENT_LAT && CURRENT_LNG) { payload.lat = CURRENT_LAT; payload.lng = CURRENT_LNG; }
+
+  btn.disabled = true; btn.textContent = 'A guardar…';
+  try {
+    const res = await fetch('/api/partners?action=update-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
+    msgEl.className = 'msg ok'; msgEl.textContent = '✅ Dados actualizados com sucesso!';
+  } catch (err) {
+    msgEl.className = 'msg error'; msgEl.textContent = '❌ ' + err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Guardar alterações';
+  }
+}
+
+showScreen();
+if (TOKEN) loadMe();
+</script>
+</body>
+</html>
