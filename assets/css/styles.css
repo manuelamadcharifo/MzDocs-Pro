@@ -882,6 +882,12 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .np-empty-ico{font-size:28px;margin-bottom:8px}
 .np-empty-text{font-size:12.5px;line-height:1.6}
 
+/* NOVO (v2.1) — cards de advogados: selo OAM, tags de área jurídica, aviso legal */
+.np-oam{font-size:11px;font-weight:700;color:#047857;margin-bottom:4px}
+.np-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.np-tag{background:#EEF2FF;color:#4338CA;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:8px}
+.np-disclaimer{font-size:10.5px;color:var(--muted);line-height:1.5;background:var(--surface);border:1px dashed var(--border);border-radius:10px;padding:8px 10px;margin-bottom:8px}
+
 /* ═══════════════════════════════════════════════════════
    CONVERSÃO DE FICHEIROS (convert modal)
    ═══════════════════════════════════════════════════════ */
