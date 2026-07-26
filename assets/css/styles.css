@@ -358,6 +358,106 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
   display: none;
 }
 
+/* NOVO (correcção 2.6): tabela de itens com cálculo automático — substitui
+   a antiga "Descrição" em texto livre no Recibo/Factura. Grid de 5 colunas
+   (descrição flexível + qtd/preço/subtotal fixos + botão remover). Em ecrãs
+   estreitos (telemóvel) reduz para 2 colunas e o subtotal passa para baixo,
+   para não espremer os campos numéricos. */
+.form-body .mz-itemtable {
+  border: 1.5px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  padding: 10px;
+  background: #f8fafc;
+}
+.form-body .mz-item-head {
+  display: grid;
+  grid-template-columns: 1fr 46px 76px 76px 26px;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  padding: 0 2px 4px;
+}
+.form-body .mz-item-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-body .mz-item-row {
+  display: grid;
+  grid-template-columns: 1fr 46px 76px 76px 26px;
+  gap: 6px;
+  align-items: center;
+}
+.form-body .mz-item-row input {
+  width: 100%;
+  min-width: 0;
+  border: 1.5px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 13px;
+  background: #fff;
+}
+.form-body .mz-item-subtotal {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: right;
+  padding-right: 2px;
+}
+.form-body .mz-item-remove {
+  border: none;
+  background: #fee2e2;
+  color: #b91c1c;
+  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+  cursor: pointer;
+  line-height: 1;
+}
+.form-body .mz-item-add {
+  margin-top: 8px;
+  border: 1.5px dashed #93c5fd;
+  background: #eff6ff;
+  color: #1e40af;
+  font-weight: 700;
+  font-size: 12.5px;
+  border-radius: 9px;
+  padding: 8px 10px;
+  width: 100%;
+  cursor: pointer;
+}
+.form-body .mz-item-total {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1.5px dashed var(--border, #e2e8f0);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  color: #0f172a;
+}
+.form-body input[readonly] {
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 700;
+}
+@media (max-width: 420px) {
+  .form-body .mz-item-head { display: none; }
+  .form-body .mz-item-row {
+    grid-template-columns: 1fr 1fr 26px;
+    grid-template-areas: "desc desc rm" "qtd preco ." "sub sub sub";
+  }
+  .form-body .mz-item-row .mz-item-desc  { grid-area: desc; }
+  .form-body .mz-item-row .mz-item-qtd   { grid-area: qtd; }
+  .form-body .mz-item-row .mz-item-preco { grid-area: preco; }
+  .form-body .mz-item-row .mz-item-remove{ grid-area: rm; }
+  .form-body .mz-item-row .mz-item-subtotal { grid-area: sub; text-align: left; }
+}
+
+
 /* LOADER STEPS */
 .loader-wrap{display:none;flex-direction:column;align-items:center;padding:24px 18px;gap:14px}
 .loader-wrap.show{display:flex;animation:fadeIn .2s}
