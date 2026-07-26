@@ -272,9 +272,23 @@
 <footer>
   <p>© 2026 MzDocs Pro · Moçambique 🇲🇿 &nbsp;|&nbsp; <a href="/legal.html">Termos & Privacidade</a></p>
   <p style="margin-top:6px">Dúvidas? <a href="mailto:suporte@mzdocs.mz">suporte@mzdocs.mz</a></p>
+  <!-- NOVO: já é parceira aprovada? Agora existe um portal próprio para
+       gerir os seus dados — antes não havia nenhuma porta de entrada aqui. -->
+  <p style="margin-top:6px">Já é parceira? <a href="/parceiro-portal.html">Aceda ao seu portal</a></p>
 </footer>
 
 <script>
+// NOVO: pré-preenche a partir de afiliado.html (ver "ponte" na área de
+// Afiliados) — quem já deu o nome do negócio e o número de M-Pesa lá não
+// devia ter de os escrever outra vez aqui.
+(function prefillFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+  const nome = params.get('nome');
+  const telefone = params.get('telefone');
+  if (nome) document.getElementById('fName').value = nome;
+  if (telefone) document.getElementById('fPhone').value = telefone.replace(/^258/, '').slice(-9);
+})();
+
 // ── Checkboxes de serviços ────────────────────────────────────────────────
 document.querySelectorAll('.svc-check').forEach(label => {
   label.addEventListener('click', () => {
