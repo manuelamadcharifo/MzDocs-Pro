@@ -464,7 +464,11 @@ export class DocumentController {
     throw new Error('A amostra ficou vazia. Tente novamente.');
    }
 
-   DocumentView.showPreviewPanel(result.document.trim());
+   // NOVO (correcção 2.8): mesma sanitização de marcadores [PREENCHER] usada
+   // em DocumentModel.setGenerated() — sem isto, a "Amostra grátis" também
+   // mostraria "[PREENCHER]" em vez da linha em branco que aparece depois
+   // no documento final gerado/descarregado.
+   DocumentView.showPreviewPanel(DocumentModel.sanitizePlaceholders(result.document.trim()));
    Analytics.trackPreviewGenerated(key);
 
   } catch (err) {
