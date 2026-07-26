@@ -54,6 +54,16 @@
         <span class="nav-icon">🤝</span><span class="nav-label">Afiliados</span>
         <span class="nav-badge" id="navBadgeAffiliates" style="background:#16a34a">0</span>
       </a>
+      <!-- CORRIGIDO (auditoria 3.1): admin-parceiros.html (aprovação de
+           candidaturas de papelarias) não tinha NENHUM link a partir daqui —
+           só era encontrável escrevendo o URL de cor. Este item não usa
+           data-section porque não é uma secção SPA desta página: é um link
+           real para outro ficheiro HTML (ver ajuste em _bindNav(), que agora
+           só faz preventDefault() em itens COM data-section). -->
+      <a class="nav-item" href="/admin-parceiros.html">
+        <span class="nav-icon">🏪</span><span class="nav-label">Parceiros</span>
+        <span class="nav-badge" id="navBadgePartners" style="background:#f59e0b;display:none">0</span>
+      </a>
       <a class="nav-item" data-section="marketing-kit">
         <span class="nav-icon">🖼️</span><span class="nav-label">Kit de Marketing</span>
       </a>
