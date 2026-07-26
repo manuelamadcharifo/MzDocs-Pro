@@ -290,6 +290,22 @@
     <!-- STATUS ALERT -->
     <div id="statusAlert" style="display:none"></div>
 
+    <!-- PONTE COM O MARKETPLACE DE PARCEIRAS -->
+    <!-- NOVO: quem se regista aqui como Papelaria/Cyber/Universidade ganha
+         comissão por referências, mas isso não tem NADA a ver com aparecer
+         no mapa "perto de si" para clientes que precisam de imprimir
+         fisicamente — são dois programas separados. Este banner avisa
+         quem tem um negócio físico de que também pode candidatar-se ao
+         outro programa, sem ter de descobrir isso sozinho. -->
+    <div id="partnerBridgeBanner" style="display:none;background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:16px;padding:16px;margin-bottom:16px">
+      <div style="font-weight:800;font-size:14px;margin-bottom:4px">🗺️ Também pode aparecer no mapa "Perto de Si"</div>
+      <div style="font-size:12.5px;color:#475569;line-height:1.5;margin-bottom:10px">
+        Isto é diferente da sua comissão de afiliado: clientes que precisam de imprimir podem encontrar o seu negócio directamente pelo mapa, sem precisarem do seu link.
+      </div>
+      <a id="partnerBridgeLink" href="/parceiros.html" style="display:inline-block;background:#3B82F6;color:#fff;text-decoration:none;font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:10px">Candidatar o meu negócio →</a>
+      <button onclick="dismissPartnerBridge()" style="background:none;border:none;color:#64748B;font-size:12px;font-weight:600;margin-left:8px;cursor:pointer">Já fiz isto</button>
+    </div>
+
     <!-- TIER PROGRESS -->
     <div class="tier-progress">
       <div class="tier-progress-label">
@@ -559,11 +575,53 @@ function showRegister() {
   setupRegister();
 }
 
+// NOVO: decide se mostra o convite "candidate o seu negócio ao mapa".
+// Só para segmentos com local físico (papelaria/cyber/universidade — os
+// mesmos que já ganham bónus de 3-5% no programa de afiliados); "individual",
+// "explicação" e "digitador" não têm morada fixa para mostrar num mapa.
+const PARTNER_BRIDGE_SEGMENTS = ['papelaria', 'cyber', 'universidade'];
+
+async function maybeShowPartnerBridge(segment, name, mpesaPhone) {
+  const banner = document.getElementById('partnerBridgeBanner');
+  if (!banner || !PARTNER_BRIDGE_SEGMENTS.includes(segment)) return;
+  if (localStorage.getItem('mzd_partner_bridge_dismissed') === '1') return;
+
+  // Se já tem candidatura (pendente, aprovada, ou até rejeitada — nesse
+  // caso o problema é outro, não falta de conhecimento), não repetir o
+  // convite. Usa o número de M-Pesa como melhor aproximação ao telefone,
+  // já que o formulário de afiliado não pede outro contacto.
+  const phoneDigits = String(mpesaPhone || '').replace(/\D/g, '');
+  if (phoneDigits) {
+    try {
+      const res = await fetch(`/api/partners?action=check&phone=${encodeURIComponent(phoneDigits)}`);
+      const data = await res.json();
+      if (data.exists) return; // já tratou disto — não incomodar
+    } catch (_) { /* se a verificação falhar, mostra o convite na mesma */ }
+  }
+
+  const link = document.getElementById('partnerBridgeLink');
+  const params = new URLSearchParams();
+  if (name) params.set('nome', name);
+  if (phoneDigits) params.set('telefone', phoneDigits);
+  link.href = '/parceiros.html' + (params.toString() ? '?' + params.toString() : '');
+  banner.style.display = 'block';
+}
+
+function dismissPartnerBridge() {
+  localStorage.setItem('mzd_partner_bridge_dismissed', '1');
+  document.getElementById('partnerBridgeBanner').style.display = 'none';
+}
+
 function showDashboard(d) {
   document.getElementById('dashboard').style.display = 'block';
   const p = d.profile;
   _affLink = p.link;
   _segment = p.segment || 'individual';
+
+  // NOVO: ponte com o marketplace de parceiras (ver comentário no HTML do
+  // banner). Só mostra a negócios com local físico, e só se ainda não se
+  // candidataram lá nem dispensaram o aviso.
+  maybeShowPartnerBridge(_segment, p.name, p.mpesa_phone);
 
   // Hero
   const name = document.getElementById('heroName');
