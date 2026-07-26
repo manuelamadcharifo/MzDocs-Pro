@@ -462,7 +462,13 @@ export class SmartOCRService {
         { id:'enderecoEmitente',  label:'Endereço / Contacto do Emitente',type:'text' },
         { id:'cliente',           label:'Nome do Cliente',                type:'text' },
         { id:'biCliente',         label:'BI / NUIT do Cliente',           type:'text' },
-        { id:'descricao',         label:'Descrição dos Serviços / Produtos', type:'textarea' },
+        // NOVO (correcção 2.6): 'descricao' deixou de existir no formulário
+        // do Recibo/Factura (agora é uma tabela de itens em 'itens', que o
+        // OCR ainda não sabe preencher linha a linha) — para não perder o
+        // texto extraído da foto, ele é aplicado ao campo "Observações
+        // adicionais" (id 'obs'), e a pessoa copia os valores para a
+        // tabela de itens manualmente.
+        { id:'obs',               label:'Observações adicionais',         type:'textarea' },
         { id:'valor',             label:'Valor Total (MZN)',              type:'number' },
         { id:'pagamento',         label:'Forma de Pagamento',             type:'select' },
         { id:'iva',               label:'Aplicar IVA (16%)?',             type:'select' },
