@@ -8,6 +8,14 @@ export function buildPrompt(data, ocrBlock, legalContext = null) {
         const dataFmt = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
         const pautaItems = data.pauta ? data.pauta.split(/\n|;/).map(p => p.trim()).filter(Boolean) : ['Ponto único'];
         const deliberacaoItems = data.deliberacoes ? data.deliberacoes.split(/\n|;/).map(d => d.trim()).filter(Boolean) : [];
+        // CORRIGIDO: totalMembros e quorumMinimo são campos OBRIGATÓRIOS do
+        // formulário (ServiceDefinitions.js → acta.fields) mas nunca eram
+        // lidos aqui — o documento saía sempre com "[N]" fixo no total de
+        // membros e no quórum, mesmo o utilizador tendo indicado os números
+        // reais. Passa-se agora os valores reais e pede-se à IA para contar
+        // os presentes na lista fornecida e calcular o quórum com base neles.
+        const totalMembros = data.totalMembros || '';
+        const quorumMinimo = data.quorumMinimo || '';
         return `Você é secretário jurídico experiente em organizações moçambicanas. Redija uma ACTA DE REUNIÃO formal, completa e juridicamente válida.
 
 ${legalContext?.texto || `BASE LEGAL (verificada contra fontes oficiais em Junho/2026 — ver /docs/legal/VERIFICACAO-LEGAL.md):
@@ -20,9 +28,16 @@ DADOS:
 - Organização: ${data.organizacao} | Tipo: ${data.tipoReuniao}
 - Data: ${data.data} às ${data.hora} | Local: ${data.local}
 - Presidente de mesa: ${data.presidente} | Secretário: ${data.secretario}
+- Total de membros da organização: ${totalMembros} | Quórum mínimo estatutário: ${quorumMinimo}%
 - Presentes: ${data.presentes}
 - Pauta: ${data.pauta}
 - Deliberações: ${data.deliberacoes}${ocrBlock}
+
+REGRA DE QUÓRUM: conte o número de nomes na lista de "Presentes" e calcule
+a percentagem sobre o total de membros (${totalMembros || '[total não indicado]'}).
+Se essa percentagem for ≥ ${quorumMinimo || '[quórum não indicado]'}%, escreva "Verificado";
+caso contrário, escreva "Não verificado". NUNCA deixe "[N]" no documento final —
+substitua sempre pelos números reais calculados.
 
 DOCUMENTO COMPLETO:
 
@@ -54,8 +69,10 @@ DOCUMENTO COMPLETO:
 
 ${data.presentes}
 
-**Total de membros presentes:** [N]
-**Quórum:** [Verificado / Não verificado] — [N] de [N total] membros, representando [%] do total, nos termos do artigo [X] dos Estatutos.
+**Total de membros da organização:** ${totalMembros}
+**Total de membros presentes:** [conte os nomes na lista acima]
+**Quórum mínimo estatutário:** ${quorumMinimo}%
+**Quórum:** [calcule conforme a REGRA DE QUÓRUM acima e escreva "Verificado" ou "Não verificado", com os números reais]
 
 ---
 
@@ -131,6 +148,7 @@ export function buildDataBlock(data) {
   return `- Organização: ${data.organizacao || ''}  |  Tipo: ${data.tipoReuniao || ''}
 - Data: ${data.data || ''}  |  Hora: ${data.hora || ''}  |  Local: ${data.local || ''}
 - Presidente: ${data.presidente || ''}  |  Secretário: ${data.secretario || ''}
+- Total de membros: ${data.totalMembros || ''}  |  Quórum mínimo: ${data.quorumMinimo || ''}%
 - Presentes: ${data.presentes || ''}
 - Pauta: ${data.pauta || ''}
 - Deliberações: ${data.deliberacoes || ''}
@@ -144,6 +162,8 @@ MAPEAMENTO DE PLACEHOLDERS:
 {{LOCAL}} = ${data.local || ''}
 {{PRESIDENTE}} = ${data.presidente || ''}
 {{SECRETARIO}} = ${data.secretario || ''}
+{{TOTAL_MEMBROS}} = ${data.totalMembros || ''}
+{{QUORUM_MINIMO}} = ${data.quorumMinimo || ''}%
 {{PRESENTES}} = ${data.presentes || ''}
 {{PAUTA}} = lista formatada dos pontos da ordem do dia: "${data.pauta || ''}"
            Formato: <p>1. Ponto um</p><p>2. Ponto dois</p>...
