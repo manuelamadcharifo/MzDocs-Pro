@@ -9,7 +9,7 @@ import { DocumentModel, QueueModel } from '../models/Models.js';
 import { DocumentView, ModalView, NotificationView } from '../views/Views.js';
 import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
-import { injectPartnersIntoModal } from '../partners/NearbyPartners.js';
+import { injectPartnersIntoModal, injectLawyersIntoModal } from '../partners/NearbyPartners.js';
 import { buildConverterHTML, initConverter } from '../convert/FileConverter.js';
 import { LongDocumentEngine } from '../services/LongDocumentEngine.js';
 import { Validator } from '../utils/Formatter.js';
@@ -18,6 +18,19 @@ import { Storage } from '../utils/Storage.js';
 import { offlineDB } from '../utils/IndexedDB.js';
 import { TemplateController } from './TemplateController.js';
 import { templatePicker } from '../marketplace/TemplatePicker.js';
+
+// NOVO (v2.1 — área jurídica): tipos de documento em que faz sentido
+// oferecer revisão de um advogado parceiro no ecrã de resultado. O valor é
+// a área jurídica (specialty) usada para filtrar api/partners?action=nearby
+// — '' significa "sem área específica", mostra advogados de qualquer área.
+const LEGAL_DOC_TYPES = {
+  procuracao:   'civil',
+  arrendamento: 'imobiliario',
+  prestacao:    'comercial',
+  requerimento: '',
+  trabalho:     'laboral',
+  acta:         'comercial',
+};
 import { academicUI } from '../academic/AcademicUI.js';
 import { AcademicEngine } from '../academic/AcademicEngine.js';
 import { getTemplates } from '../marketplace/TemplateLibrary.js';
@@ -644,6 +657,7 @@ export class DocumentController {
 
  // Mostrar CTA de referral no painel de resultado
  this._showReferralCTA();
+ this._showLawyerReferral(key);
 
  if (isLastCreditNormal) {
   const accountType = window.authManager?.profile?.account_type || 'standard';
@@ -765,6 +779,7 @@ export class DocumentController {
   DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
   this._bindEditBtn();
   this._showReferralCTA();
+  this._showLawyerReferral(key);
 
   const remaining = this.creditModel.value;
   if (remaining > 0) this._maybeShowUpsell(remaining, key, cost);
@@ -923,6 +938,30 @@ export class DocumentController {
      });
    } catch (err) {
      console.warn('[DocumentController] _showReferralCTA:', err.message);
+   }
+ }
+
+ // NOVO (v2.1 — área jurídica): oferece revisão de um advogado parceiro
+ // para tipos de documento onde isso faz sentido (ver LEGAL_DOC_TYPES).
+ // Mesmo padrão de injecção usado no formulário para papelarias — cria um
+ // contentor e delega em NearbyPartners.js para geolocalizar e buscar.
+ _showLawyerReferral(key) {
+   try {
+     if (!(key in LEGAL_DOC_TYPES)) return;
+
+     document.getElementById('mzLawyerBlock')?.remove();
+     const resActions = document.getElementById('resActions');
+     if (!resActions) return;
+
+     const block = document.createElement('div');
+     block.id = 'mzLawyerBlock';
+     block.className = 'np-wrap';
+     block.style.cssText = 'margin:12px 16px 4px;';
+     resActions.parentNode.insertBefore(block, resActions);
+
+     injectLawyersIntoModal('#mzLawyerBlock', LEGAL_DOC_TYPES[key]);
+   } catch (err) {
+     console.warn('[DocumentController] _showLawyerReferral:', err.message);
    }
  }
 
