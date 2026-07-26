@@ -21,6 +21,28 @@ function _tipoInfo(tipoDoc) {
   return prefixos[tipoDoc] || 'DOC';
 }
 
+// NOVO (correcção 2.6 — "sistema de cálculos automáticos"): o formulário
+// deixou de enviar 'descricao' como texto livre — agora envia 'itens' como
+// JSON estruturado (uma linha por artigo: desc/qtd/preco/subtotal), gerado
+// automaticamente pela tabela de itens em Views.js (bindItemTables). Isto
+// permite construir a tabela do documento com valores REAIS (qtd × preço
+// = subtotal), em vez de pedir à IA para "adivinhar" a partir de texto
+// livre — resultado mais fiável e sem risco de a IA inventar quantidades
+// ou preços que a pessoa nunca escreveu.
+function _parseItens(data) {
+  let itens = [];
+  try { itens = JSON.parse(data.itens || '[]'); } catch (e) { itens = []; }
+  if (!Array.isArray(itens)) itens = [];
+  return itens
+    .filter(it => it && (it.desc || it.qtd || it.preco))
+    .map(it => ({
+      desc: (it.desc || 'Item').trim(),
+      qtd: parseFloat(it.qtd) || 1,
+      preco: parseFloat(it.preco) || 0,
+      subtotal: typeof it.subtotal === 'number' ? it.subtotal : (parseFloat(it.qtd) || 1) * (parseFloat(it.preco) || 0),
+    }));
+}
+
 export function buildPrompt(data, ocrBlock) {
         const hoje = new Date();
         const dataFmt = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -52,6 +74,10 @@ export function buildPrompt(data, ocrBlock) {
         const validadeProforma = isProforma ? (data.validadeProforma || 30) : null;
         const prefixo = _tipoInfo(tipoDoc);
         const numDoc = (data.numDoc || '').trim() || `${prefixo}/____/${hoje.getFullYear()}`;
+        const itens = _parseItens(data);
+        const itensLinhas = itens.length
+          ? itens.map(it => `- ${it.qtd}x ${it.desc} — ${it.preco.toLocaleString('pt-MZ')} MZN cada — Subtotal: ${it.subtotal.toLocaleString('pt-MZ')} MZN`).join('\n')
+          : '- (sem itens detalhados — usar apenas o valor total indicado abaixo)';
 
         return `Você é contabilista especializado no regime fiscal moçambicano. Elabore um(a) ${tipoDoc.toUpperCase()} completo(a) e conforme a legislação tributária vigente.
 
@@ -69,7 +95,9 @@ DADOS:
 - Emitente: ${data.emitente} | NUIT: ${data.nuitEmitente || (nuitObrigatorio ? '[OBRIGATÓRIO — não fornecido]' : 'N/A')}
 - Endereço/contacto emitente: ${data.enderecoEmitente || '________________________________'}
 - Cliente: ${data.cliente} | BI/NUIT: ${data.biCliente || 'N/A'}
-- Descrição: ${data.descricao}
+- Itens/Serviços:
+${itensLinhas}
+${data.obs ? '- Observações: ' + data.obs : ''}
 - Valor base: ${valorBruto.toLocaleString('pt-MZ')} MZN
 - IVA: ${comIVA ? 'Sim (16%)' : 'Não (regime simplificado / isento)'}
 - Forma de pagamento: ${data.pagamento || (isNEncomenda ? 'a combinar (encomenda ainda não paga)' : 'não indicado')}
@@ -119,13 +147,13 @@ ${isNEncomenda ? '**Este documento é um pedido de encomenda — não constitui 
 
 ## DESCRIÇÃO ${isNDebito ? '(VALOR ADICIONAL — referente à Factura n.º _________)' : ''}
 
-| Descrição | ${comIVA && !isProforma && !isNEncomenda ? 'Valor Base (MZN)' : 'Valor (MZN)'} |
-|---|---|
-${data.descricao.split('\n').filter(Boolean).map(linha => `| ${linha.trim()} | |`).join('\n')}
-${comIVA && !isProforma && !isNEncomenda ? `| | |
-| **Subtotal (sem IVA):** | **${valorBruto.toLocaleString('pt-MZ')}** |
-| **IVA (16%):** | **${valorIVA.toLocaleString('pt-MZ')}** |
-| **TOTAL (com IVA):** | **${valorLiquido.toLocaleString('pt-MZ')} MZN** |` : `| **TOTAL:** | **${valorBruto.toLocaleString('pt-MZ')} MZN** |`}
+| Descrição | Qtd | Preço Unit. (MZN) | Subtotal (MZN) |
+|---|---|---|---|
+${itens.length
+  ? itens.map(it => `| ${it.desc} | ${it.qtd} | ${it.preco.toLocaleString('pt-MZ')} | ${it.subtotal.toLocaleString('pt-MZ')} |`).join('\n')
+  : `| ${(data.obs || 'Serviço/produto prestado').trim()} | 1 | ${valorBruto.toLocaleString('pt-MZ')} | ${valorBruto.toLocaleString('pt-MZ')} |`}
+${comIVA && !isProforma && !isNEncomenda ? `| | | **IVA (16%):** | **${valorIVA.toLocaleString('pt-MZ')}** |
+| | | **TOTAL (com IVA):** | **${valorLiquido.toLocaleString('pt-MZ')} MZN** |` : `| | | **TOTAL:** | **${valorBruto.toLocaleString('pt-MZ')} MZN** |`}
 
 ---
 
@@ -167,11 +195,22 @@ export function buildDataBlock(data) {
         const valorIva  = valorBase * taxaIva / 100;
         const valorTotal = valorBase + valorIva;
         const numDoc = (data.numDoc || '').trim() || `${_tipoInfo(tipoDoc)}/001/${new Date().getFullYear()}`;
+        // NOVO (correcção 2.6): 'itens' é agora JSON estruturado (qtd/preço
+        // reais), em vez de texto livre — dá para descrever o documento em
+        // texto e para montar as linhas <tr> de {{ITEMS_RECIBO}} sem pedir
+        // à IA para adivinhar quantidades/preços a partir de frases soltas.
+        const itens = _parseItens(data);
+        const descricaoTexto = itens.length
+          ? itens.map(it => `${it.qtd}x ${it.desc} — ${it.preco.toLocaleString('pt-MZ')} MZN/un (subtotal ${it.subtotal.toLocaleString('pt-MZ')} MZN)`).join('; ')
+          : (data.obs || '');
+        const itemsHtml = itens.length
+          ? itens.map(it => `<tr><td>${it.desc}</td><td>${it.qtd}</td><td>${it.preco.toLocaleString('pt-MZ')}</td><td>${it.subtotal.toLocaleString('pt-MZ')}</td></tr>`).join('')
+          : `<tr><td>${(data.obs || 'Item').trim()}</td><td>1</td><td>${valorBase.toLocaleString('pt-MZ')}</td><td>${valorBase.toLocaleString('pt-MZ')}</td></tr>`;
         return `- Tipo: ${tipoDoc}
 - N.º: ${numDoc}
 - Emitente: ${data.emitente || ''}  |  NUIT: ${data.nuitEmitente || 'N/A'}  |  Endereço: ${data.enderecoEmitente || 'N/A'}
 - Cliente: ${data.cliente || ''}  |  BI/NUIT: ${data.biCliente || ''}
-- Descrição: ${data.descricao || ''}
+- Itens: ${descricaoTexto}${data.obs && itens.length ? ' | Observações: ' + data.obs : ''}
 - Valor base: ${valorBase.toLocaleString('pt-MZ')} MZN | IVA: ${taxaIva}% | Total: ${valorTotal.toLocaleString('pt-MZ')} MZN
 - Pagamento: ${data.pagamento || ''}${data.contaBancaria ? ' | Conta/M-Pesa: ' + data.contaBancaria : ''}
 
@@ -181,11 +220,11 @@ MAPEAMENTO DE PLACEHOLDERS:
 {{ENDERECO_EMITENTE}} = ${data.enderecoEmitente || ''}
 {{CLIENTE}} = ${data.cliente || ''}
 {{BI_CLIENTE}} = ${data.biCliente || ''}
-{{DESCRICAO}} = ${data.descricao || ''}
+{{DESCRICAO}} = ${descricaoTexto}
 {{NUM_DOC}} = ${numDoc}
 {{DATA}} = data de hoje por extenso
 {{FORMA_PAGAMENTO}} = ${data.pagamento || 'Numerário'}
-{{ITEMS_RECIBO}} = gere 1-3 linhas <tr><td>descrição</td><td>qtd</td><td>preço unit</td><td>total</td></tr> para: "${data.descricao || ''}"
+{{ITEMS_RECIBO}} = ${itemsHtml}
 {{TAXA_IVA}} = ${taxaIva}
 {{VALOR_IVA}} = ${valorIva.toLocaleString('pt-MZ')} MZN
 {{SUBTOTAL}} = ${valorBase.toLocaleString('pt-MZ')} MZN
