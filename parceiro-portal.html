@@ -134,15 +134,32 @@
         <label>WhatsApp de contacto</label>
         <input class="inp" type="tel" id="pWhatsapp" placeholder="258 84 XXX XXXX" maxlength="12" inputmode="tel"/>
       </div>
+      <!-- NOVO — só aparece para type=advogado -->
+      <div class="fg" id="fgBio" style="display:none">
+        <label>Breve apresentação</label>
+        <textarea class="txtarea" id="pBio" rows="3" maxlength="280" placeholder="Ex: 8 anos de experiência em direito laboral e comercial…"></textarea>
+      </div>
     </div>
 
     <div class="card">
-      <div class="title" style="font-size:15px">🛠️ Serviços que presta</div>
-      <div class="svc-grid" style="margin-top:14px">
+      <div class="title" style="font-size:15px" id="svcCardTitle">🛠️ Serviços que presta</div>
+      <!-- NOVO — grupo de papelaria (services=impressao/foto/...) -->
+      <div class="svc-grid svc-group" data-group="papelaria" id="svcGridPapelaria" style="margin-top:14px">
         <label class="svc-check"><input type="checkbox" value="impressao"/><span class="svc-check-lbl">🖨️ Impressão</span></label>
         <label class="svc-check"><input type="checkbox" value="foto"/><span class="svc-check-lbl">📷 Foto</span></label>
         <label class="svc-check"><input type="checkbox" value="plastificacao"/><span class="svc-check-lbl">🛡️ Plastificação</span></label>
         <label class="svc-check"><input type="checkbox" value="encadernacao"/><span class="svc-check-lbl">📚 Encadernação</span></label>
+      </div>
+      <!-- NOVO — grupo de advogado (services=áreas jurídicas) -->
+      <div class="svc-grid svc-group" data-group="advogado" id="svcGridAdvogado" style="margin-top:14px;display:none">
+        <label class="svc-check"><input type="checkbox" value="civil"/><span class="svc-check-lbl">⚖️ Civil</span></label>
+        <label class="svc-check"><input type="checkbox" value="laboral"/><span class="svc-check-lbl">💼 Laboral</span></label>
+        <label class="svc-check"><input type="checkbox" value="comercial"/><span class="svc-check-lbl">🏢 Comercial</span></label>
+        <label class="svc-check"><input type="checkbox" value="familia"/><span class="svc-check-lbl">👨‍👩‍👧 Família</span></label>
+        <label class="svc-check"><input type="checkbox" value="penal"/><span class="svc-check-lbl">🛡️ Penal</span></label>
+        <label class="svc-check"><input type="checkbox" value="imobiliario"/><span class="svc-check-lbl">🏠 Imobiliário</span></label>
+        <label class="svc-check"><input type="checkbox" value="fiscal"/><span class="svc-check-lbl">🧾 Fiscal</span></label>
+        <label class="svc-check"><input type="checkbox" value="sucessorio"/><span class="svc-check-lbl">📜 Sucessório</span></label>
       </div>
     </div>
 
@@ -155,6 +172,7 @@
 <script>
 let TOKEN = localStorage.getItem('mzd_partner_token') || '';
 let CURRENT_LAT = null, CURRENT_LNG = null;
+let PARTNER_TYPE = 'papelaria'; // NOVO — vem de /api/partners?action=me
 
 function showScreen() {
   document.getElementById('loginScreen').style.display  = TOKEN ? 'none' : 'block';
@@ -218,7 +236,16 @@ async function loadMe() {
     document.getElementById('pWhatsapp').value = p.whatsapp || '';
     CURRENT_LAT = p.lat; CURRENT_LNG = p.lng;
 
-    document.querySelectorAll('.svc-check').forEach(label => {
+    // NOVO — mostra o cartão/grupo certo consoante o tipo de parceiro
+    PARTNER_TYPE = p.type === 'advogado' ? 'advogado' : 'papelaria';
+    const isLawyer = PARTNER_TYPE === 'advogado';
+    document.getElementById('svcCardTitle').textContent = isLawyer ? '⚖️ Áreas de atuação' : '🛠️ Serviços que presta';
+    document.getElementById('svcGridPapelaria').style.display = isLawyer ? 'none' : '';
+    document.getElementById('svcGridAdvogado').style.display  = isLawyer ? '' : 'none';
+    document.getElementById('fgBio').style.display = isLawyer ? '' : 'none';
+    if (isLawyer) document.getElementById('pBio').value = p.bio || '';
+
+    document.querySelectorAll(`.svc-group[data-group="${PARTNER_TYPE}"] .svc-check`).forEach(label => {
       const cb = label.querySelector('input');
       cb.checked = (p.services || []).includes(cb.value);
       label.classList.toggle('checked', cb.checked);
@@ -276,13 +303,15 @@ async function saveProfile() {
   const msgEl = document.getElementById('saveMsg');
   msgEl.className = 'msg'; msgEl.textContent = '';
 
-  const services = [...document.querySelectorAll('.svc-check input:checked')].map(c => c.value);
+  // NOVO — só lê os checkboxes do grupo do próprio tipo (papelaria OU advogado)
+  const services = [...document.querySelectorAll(`.svc-group[data-group="${PARTNER_TYPE}"] input:checked`)].map(c => c.value);
   const payload = {
     address:  document.getElementById('pAddress').value.trim(),
     hours:    document.getElementById('pHours').value.trim(),
     whatsapp: document.getElementById('pWhatsapp').value.trim(),
     services,
   };
+  if (PARTNER_TYPE === 'advogado') payload.bio = document.getElementById('pBio').value.trim();
   if (CURRENT_LAT && CURRENT_LNG) { payload.lat = CURRENT_LAT; payload.lng = CURRENT_LNG; }
 
   btn.disabled = true; btn.textContent = 'A guardar…';
