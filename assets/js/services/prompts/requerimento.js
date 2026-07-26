@@ -7,6 +7,20 @@ export function buildPrompt(data, ocrBlock, legalContext = null) {
         const hoje = new Date();
         const dataFormatada = hoje.toLocaleDateString('pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
         const entidade = data.entidade || 'Outra';
+        // CORRIGIDO (bug real): o requerimento é dirigido "Eu, undefined,
+        // portador(a) do BI..." — data.remetente nunca existiu no formulário
+        // (o campo real é "requerente"), e data.fundamento também nunca
+        // existiu (o campo real é "justificacao"). "endereco" não é
+        // recolhido pelo formulário de todo (só há "local", que é
+        // local+data de assinatura, não morada) — em vez de inventar ou
+        // deixar "undefined" como morada do requerente, omite-se essa
+        // frase quando não há endereço.
+        const requerente  = data.remetente  || data.requerente    || '';
+        const bi          = data.bi         || '';
+        const contacto    = data.contacto   || '';
+        const endereco    = data.endereco   || '';
+        const fundamento  = data.fundamento || data.justificacao  || '';
+        const local       = data.local      || '';
 
         const legalMapEntidade = {
           'Conservatória dos Registos': {
@@ -37,13 +51,26 @@ export function buildPrompt(data, ocrBlock, legalContext = null) {
             lei: 'Lei n.º 15/2002, de 26 de Junho (Lei de Bases do Sistema Tributário), e Decreto n.º 6/2006 (Regulamento da Autoridade Tributária)',
             cargo: 'Chefe da Repartição de Finanças',
           },
+          'Escola': {
+            lei: 'Lei n.º 6/92, de 6 de Maio (Lei do Sistema Nacional de Educação)',
+            cargo: 'Director(a) da Escola',
+          },
           'Outra': {
             lei: 'legislação moçambicana aplicável à matéria em causa',
             cargo: 'Responsável / Director(a) do Serviço',
           },
         };
 
-        const entInfo = legalMapEntidade[entidade] || legalMapEntidade['Outra'];
+        // CORRIGIDO: "entidade" no formulário é TEXTO LIVRE (ex: "Escola
+        // Secundária da Polana"), não uma das opções fixas deste mapa — por
+        // isso a correspondência exacta falhava quase sempre e caía sempre
+        // em "Outra", perdendo a base legal específica. Tenta agora uma
+        // correspondência aproximada (a entidade escrita CONTÉM uma das
+        // chaves conhecidas) antes de recorrer ao genérico.
+        const entKey = Object.keys(legalMapEntidade).find(k =>
+          k !== 'Outra' && entidade.toLowerCase().includes(k.toLowerCase())
+        ) || (/escola|instituto|colégio/i.test(entidade) ? 'Escola' : 'Outra');
+        const entInfo = legalMapEntidade[entKey];
 
         return `Redija um REQUERIMENTO OFICIAL completo, juridicamente fundamentado e estruturado, destinado à ${entidade} em Moçambique.
 
@@ -53,9 +80,9 @@ DADOS:
 - Entidade destinatária: ${entidade}
 - Cargo do responsável: ${entInfo.cargo}
 - Assunto: ${data.assunto}
-- Requerente: ${data.remetente} | BI n.º: ${data.bi} | Tel: ${data.contacto}
-- Endereço do requerente: ${data.endereco}
-- Fundamento do pedido: ${data.fundamento}
+- Requerente: ${requerente} | BI n.º: ${bi} | Tel: ${contacto}
+- Endereço do requerente: ${endereco || '[não indicado — omitir referência à morada]'}
+- Fundamento do pedido: ${fundamento}
 - Documentos anexos: ${data.anexos || 'Ver lista abaixo'}${ocrBlock}
 
 ESTRUTURA LEGAL MOÇAMBICANA OBRIGATÓRIA:
@@ -68,11 +95,11 @@ ${entidade}
 
 **N.º de Processo:** ___/____/____ *(a preencher pela repartição)*
 
-Eu, **${data.remetente}**, portador(a) do Bilhete de Identidade n.º **${data.bi}**, residente em **${data.endereco}**, contacto **${data.contacto}**, nos termos do disposto na ${entInfo.lei.split(',')[0]}, venho, respeitosamente, expor e requerer o seguinte:
+Eu, **${requerente}**, portador(a) do Bilhete de Identidade n.º **${bi}**${endereco ? `, residente em **${endereco}**` : ''}, contacto **${contacto}**, nos termos do disposto na ${entInfo.lei.split(',')[0]}, venho, respeitosamente, expor e requerer o seguinte:
 
 **I. EXPOSIÇÃO DOS FACTOS**
 
-[Parágrafo 1 — Contextualização (4-5 linhas): apresenta quem é o requerente, a sua situação actual e o contexto que motiva o pedido. Seja específico e factual, baseando-se em: "${data.fundamento}"]
+[Parágrafo 1 — Contextualização (4-5 linhas): apresenta quem é o requerente, a sua situação actual e o contexto que motiva o pedido. Seja específico e factual, baseando-se em: "${fundamento}"]
 
 [Parágrafo 2 — Necessidade e justificação (4-5 linhas): explica com precisão por que é necessário o que está a pedir, quais as consequências de não obter o pedido, e como isso afecta os direitos ou obrigações legais do requerente.]
 
@@ -84,7 +111,7 @@ Face ao exposto, e nos termos da ${entInfo.lei.split(',')[0]}, vem o(a) requeren
 
 1. [Pedido principal específico e concreto — use linguagem formal: "...determinar", "...autorizar", "...emitir", "...deferir" — baseado no assunto: "${data.assunto}"]
 2. [Pedido secundário, se aplicável]
-3. Que seja notificado(a) do resultado do presente requerimento através do contacto ${data.contacto} ou por escrito no endereço acima indicado, no prazo máximo de [30/60] dias.
+3. Que seja notificado(a) do resultado do presente requerimento através do contacto ${contacto}${endereco ? ' ou por escrito no endereço acima indicado' : ''}, no prazo máximo de [30/60] dias.
 
 **III. ANEXOS**
 
@@ -98,10 +125,10 @@ O(A) requerente declara, sob compromisso de honra, que todos os factos expostos 
 
 Pede deferimento.
 
-${data.endereco || 'Maputo'}, ${dataFormatada}
+${local || endereco || 'Maputo'}, ${dataFormatada}
 
 _________________________________________
-**${data.remetente}**
+**${requerente}**
 *(Assinatura)*
 
 ---
@@ -111,21 +138,23 @@ Data de entrada: ____/____/______ | N.º de Processo: _______ | Recebido por: __
 }
 
 export function buildDataBlock(data) {
+  const requerente = data.remetente || data.requerente || '';
+  const fundamento = data.fundamento || data.justificacao || '';
   return `- Entidade: ${data.entidade || ''}
-- Requerente: ${data.remetente || ''}  |  BI: ${data.bi || ''}  |  Contacto: ${data.contacto || ''}
+- Requerente: ${requerente}  |  BI: ${data.bi || ''}  |  Contacto: ${data.contacto || ''}
 - Endereço: ${data.endereco || ''}
 - Assunto: ${data.assunto || ''}
-- Fundamento: ${data.fundamento || ''}
+- Fundamento: ${fundamento}
 - Anexos: ${data.anexos || ''}
 
 MAPEAMENTO DE PLACEHOLDERS:
 {{ENTIDADE}} = ${data.entidade || ''}
-{{REQUERENTE}} = ${data.remetente || ''}
+{{REQUERENTE}} = ${requerente}
 {{BI}} = ${data.bi || ''}
 {{ENDERECO}} = ${data.endereco || ''}
 {{ASSUNTO}} = ${data.assunto || ''}
-{{LOCAL}} = Maputo
+{{LOCAL}} = ${data.local || 'Maputo'}
 {{DATA}} = data de hoje por extenso
-{{FUNDAMENTO}} = texto formal desenvolvendo: "${data.fundamento || ''}" (2-3 parágrafos com base legal quando aplicável)
+{{FUNDAMENTO}} = texto formal desenvolvendo: "${fundamento}" (2-3 parágrafos com base legal quando aplicável)
 {{CONTACTO}} = ${data.contacto || ''}`;
 }
