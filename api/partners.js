@@ -6,14 +6,20 @@
 //  3. Lógica de negócio 100% preservada.
 //
 // Rotas:
-//   POST /api/partners?action=register   — parceira submete candidatura
-//   GET  /api/partners?action=nearby     — utilizador busca parceiras próximas
-//   POST /api/partners?action=approve    — admin aprova parceira
-//   POST /api/partners?action=reject     — admin rejeita parceira
-//   GET  /api/partners?action=list       — admin lista todas
-//   POST /api/partners?action=toggle     — admin activa/desactiva
-//   POST /api/partners?action=rate       — utilizador avalia parceira
+//   POST /api/partners?action=register        — parceira submete candidatura
+//   GET  /api/partners?action=nearby          — utilizador busca parceiras próximas
+//   POST /api/partners?action=approve         — admin aprova parceira (gera access_code)
+//   POST /api/partners?action=reject          — admin rejeita parceira
+//   GET  /api/partners?action=list            — admin lista todas
+//   POST /api/partners?action=toggle          — admin activa/desactiva
+//   POST /api/partners?action=rate            — utilizador avalia parceira
+//   POST /api/partners?action=regenerate-code — admin gera novo código de acesso
+//   POST /api/partners?action=login           — NOVO: parceira entra no portal (telefone+código)
+//   GET  /api/partners?action=me              — NOVO: parceira vê os seus próprios dados
+//   POST /api/partners?action=update-profile  — NOVO: parceira edita os seus próprios dados
+//   GET  /api/partners?action=check           — NOVO: ponte com afiliados.html — "esta papelaria já se candidatou?"
 
+const crypto = require('crypto');
 const {
   getUserFromToken,
   selectOne,
@@ -60,6 +66,55 @@ async function isAdmin(req) {
   if (!user) return false;
   const profile = await selectOne('profiles', 'id', user.id, 'is_admin').catch(() => null);
   return profile?.is_admin === true;
+}
+
+// ── PORTAL DE PARCEIRAS — helpers ──────────────────────────────────────────
+// NOVO: código de acesso de 6 dígitos, gerado quando a parceira é aprovada.
+// Não é uma password que ela escolhe — é simples de ditar/enviar por
+// WhatsApp (o canal que já usam para tudo) e fácil de regenerar se perderem.
+function generateAccessCode() {
+  return String(crypto.randomInt(100000, 1000000)); // 6 dígitos, sempre
+}
+
+// NOVO: token de sessão assinado (HMAC), sem dependências novas — usa o
+// crypto nativo do Node, tal como o resto da api já faz (ver hashes em
+// misc.js/convert.js). O segredo é o SUPABASE_SERVICE_ROLE_KEY, que já é
+// obrigatório no servidor e nunca chega ao cliente — evita ter de pedir
+// mais uma variável de ambiente só para isto.
+const PARTNER_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
+
+function signPartnerToken(partnerId) {
+  const secret  = process.env.SUPABASE_SERVICE_ROLE_KEY || 'mzdocs-fallback';
+  const payload = Buffer.from(JSON.stringify({ pid: partnerId, exp: Date.now() + PARTNER_TOKEN_TTL_MS })).toString('base64url');
+  const sig     = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function verifyPartnerToken(token) {
+  try {
+    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'mzdocs-fallback';
+    const [payload, sig] = String(token || '').split('.');
+    if (!payload || !sig) return null;
+    const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+    // Comparação em tempo constante — evita timing attacks a adivinhar a assinatura.
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    if (!data.pid || !data.exp || Date.now() > data.exp) return null;
+    return data.pid;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function getPartnerFromRequest(req) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const pid = verifyPartnerToken(token);
+  if (!pid) return null;
+  const partner = await selectOne('partners', 'id', pid, 'id,status,active,name,owner_name,phone,whatsapp,city,address,lat,lng,services,hours,rating_sum,rating_count').catch(() => null);
+  if (!partner || partner.status !== 'approved') return null;
+  return partner;
 }
 
 // ── REGISTER ──────────────────────────────────────────────────────────────────
@@ -188,8 +243,25 @@ async function handleApprove(req, res) {
   const { id } = parseBody(req);
   if (!id) return res.status(400).json({ error: 'id obrigatório' });
   try {
-    await update('partners', 'id', id, { status: 'approved', active: true });
-    return res.status(200).json({ ok: true });
+    // NOVO: gera o código de acesso ao portal de self-service nesta altura
+    // — é o momento em que a parceira passa a ter algo próprio para gerir.
+    const access_code = generateAccessCode();
+    await update('partners', 'id', id, { status: 'approved', active: true, access_code });
+    return res.status(200).json({ ok: true, access_code });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+}
+
+// ── ADMIN: REGENERATE CODE ──────────────────────────────────────────────────
+// NOVO: para quando a parceira perde/esquece o código — o admin gera um novo
+// sem ter de rejeitar/reaprovar a parceira.
+async function handleRegenerateCode(req, res) {
+  if (!(await isAdmin(req))) return res.status(403).json({ error: 'Sem permissão' });
+  const { id } = parseBody(req);
+  if (!id) return res.status(400).json({ error: 'id obrigatório' });
+  try {
+    const access_code = generateAccessCode();
+    await update('partners', 'id', id, { access_code });
+    return res.status(200).json({ ok: true, access_code });
   } catch (err) { return res.status(500).json({ error: err.message }); }
 }
 
@@ -281,6 +353,127 @@ async function handleRate(req, res) {
   }
 }
 
+// ── PORTAL: LOGIN ────────────────────────────────────────────────────────────
+// NOVO: entrada com telefone + código de 6 dígitos (não é conta Supabase —
+// as parceiras nunca tiveram email/password, só telefone, desde sempre).
+async function handleLogin(req, res) {
+  // Rate limit apertado: é um PIN de 6 dígitos, tem de ser difícil de
+  // adivinhar por tentativa-erro. 8 tentativas/hora por IP chega para uso
+  // legítimo (a parceira só faz login de vez em quando) e torna inviável
+  // andar às cegas pelas 900 mil combinações possíveis.
+  const allowed = await checkRateLimit('partners-login', clientIp(req), { limit: 8, windowSec: 3600 }).catch(() => true);
+  if (!allowed) return res.status(429).json({ error: 'Demasiadas tentativas. Tente novamente mais tarde.' });
+
+  const b = parseBody(req);
+  const phoneDigits = onlyDigits(b.phone);
+  const code = String(b.access_code || '').trim();
+  if (!phoneDigits || !code) return res.status(400).json({ error: 'Telefone e código são obrigatórios' });
+
+  try {
+    const partner = await selectOne('partners', 'phone', phoneDigits, 'id,status,access_code,name').catch(() => null);
+    if (!partner || partner.status !== 'approved' || !partner.access_code) {
+      return res.status(401).json({ error: 'Telefone ou código incorrecto.' });
+    }
+    // Comparação em tempo constante, mesmo para um PIN curto — hábito seguro.
+    const a = Buffer.from(code.padEnd(6, ' '));
+    const b2 = Buffer.from(String(partner.access_code).padEnd(6, ' '));
+    if (a.length !== b2.length || !crypto.timingSafeEqual(a, b2)) {
+      return res.status(401).json({ error: 'Telefone ou código incorrecto.' });
+    }
+    const token = signPartnerToken(partner.id);
+    return res.status(200).json({ ok: true, token, name: partner.name });
+  } catch (err) {
+    console.error('[partners/login]', err.message);
+    return res.status(500).json({ error: 'Erro ao entrar. Tente novamente.' });
+  }
+}
+
+// ── PORTAL: ME ───────────────────────────────────────────────────────────────
+async function handleMe(req, res) {
+  const partner = await getPartnerFromRequest(req);
+  if (!partner) return res.status(401).json({ error: 'Sessão inválida ou expirada' });
+  return res.status(200).json({
+    ok: true,
+    partner: {
+      ...partner,
+      rating: partner.rating_count > 0 ? Math.round((partner.rating_sum / partner.rating_count) * 10) / 10 : null,
+    },
+  });
+}
+
+// ── PORTAL: UPDATE PROFILE ────────────────────────────────────────────────────
+// NOVO: a parceira só pode editar os campos que são seguros para self-service
+// (horário, morada/coordenadas, serviços, WhatsApp, ligar/desligar
+// visibilidade). 'phone' (é a própria credencial de login) e 'name'/
+// 'owner_name' ficam de fora — mudar isso continua a passar pelo admin, para
+// evitar confusão sobre quem é "dona" de uma candidatura já aprovada.
+async function handleUpdateProfile(req, res) {
+  const partner = await getPartnerFromRequest(req);
+  if (!partner) return res.status(401).json({ error: 'Sessão inválida ou expirada' });
+
+  const b = parseBody(req);
+  const patch = {};
+
+  if (b.hours !== undefined) patch.hours = String(b.hours).trim().slice(0, 100);
+  if (b.address !== undefined) {
+    const address = String(b.address).trim().slice(0, 200);
+    if (!address) return res.status(400).json({ error: 'Morada não pode ficar vazia' });
+    patch.address = address;
+  }
+  if (b.whatsapp !== undefined) {
+    const wa = onlyDigits(b.whatsapp);
+    if (!wa || wa.length < 9) return res.status(400).json({ error: 'WhatsApp inválido' });
+    patch.whatsapp = wa.slice(0, 20);
+  }
+  if (b.services !== undefined) {
+    const services = (Array.isArray(b.services) ? b.services : [b.services]).filter(s => VALID_SERVICES.includes(s));
+    if (services.length === 0) return res.status(400).json({ error: 'Escolha pelo menos um serviço' });
+    patch.services = services.slice(0, 8);
+  }
+  if (b.lat !== undefined && b.lng !== undefined) {
+    const lat = parseFloat(b.lat), lng = parseFloat(b.lng);
+    if (isNaN(lat) || isNaN(lng) || lat < -27 || lat > -10 || lng < 30 || lng > 41) {
+      return res.status(400).json({ error: 'Localização inválida' });
+    }
+    patch.lat = lat; patch.lng = lng;
+  }
+  if (b.active !== undefined) patch.active = !!b.active;
+
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'Nada para actualizar' });
+
+  try {
+    await update('partners', 'id', partner.id, patch);
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[partners/update-profile]', err.message);
+    return res.status(500).json({ error: 'Erro ao guardar. Tente novamente.' });
+  }
+}
+
+// ── PONTE COM O PROGRAMA DE AFILIADOS ────────────────────────────────────────
+// NOVO: quem se regista em afiliado.html com o segmento "Papelaria" (ou
+// Cyber/Universidade) ganha comissão por referências, mas isso é um
+// programa completamente diferente do marketplace de parceiras (mapa "perto
+// de si") — os dois nunca estiveram ligados. Este endpoint deixa
+// afiliado.html perguntar, sem expor dados sensíveis, "este número já
+// está candidato/aprovado no marketplace?", para só mostrar o convite a
+// quem ainda não avançou.
+async function handleCheck(req, res) {
+  // Rate limit: é público e sem autenticação — sem isto, dava para varrer
+  // números de telefone à procura de quem está registado.
+  const allowed = await checkRateLimit('partners-check', clientIp(req), { limit: 30, windowSec: 3600 }).catch(() => true);
+  if (!allowed) return res.status(429).json({ error: 'Demasiados pedidos.' });
+
+  const phoneDigits = onlyDigits(req.query?.phone);
+  if (!phoneDigits) return res.status(400).json({ error: 'phone obrigatório' });
+  try {
+    const partner = await selectOne('partners', 'phone', phoneDigits, 'status').catch(() => null);
+    return res.status(200).json({ exists: !!partner, status: partner?.status || null });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 module.exports = async function handler(req, res) {
   cors(res);
@@ -289,13 +482,18 @@ module.exports = async function handler(req, res) {
   const action = (req.query?.action || req.query?._a || '').toLowerCase();
 
   try {
-    if (req.method === 'GET'  && action === 'nearby')   return await handleNearby(req, res);
-    if (req.method === 'GET'  && action === 'list')     return await handleList(req, res);
-    if (req.method === 'POST' && action === 'register') return await handleRegister(req, res);
-    if (req.method === 'POST' && action === 'approve')  return await handleApprove(req, res);
-    if (req.method === 'POST' && action === 'reject')   return await handleReject(req, res);
-    if (req.method === 'POST' && action === 'toggle')   return await handleToggle(req, res);
-    if (req.method === 'POST' && action === 'rate')     return await handleRate(req, res);
+    if (req.method === 'GET'  && action === 'nearby')          return await handleNearby(req, res);
+    if (req.method === 'GET'  && action === 'list')            return await handleList(req, res);
+    if (req.method === 'POST' && action === 'register')        return await handleRegister(req, res);
+    if (req.method === 'POST' && action === 'approve')         return await handleApprove(req, res);
+    if (req.method === 'POST' && action === 'reject')          return await handleReject(req, res);
+    if (req.method === 'POST' && action === 'toggle')          return await handleToggle(req, res);
+    if (req.method === 'POST' && action === 'rate')            return await handleRate(req, res);
+    if (req.method === 'POST' && action === 'regenerate-code') return await handleRegenerateCode(req, res);
+    if (req.method === 'POST' && action === 'login')           return await handleLogin(req, res);
+    if (req.method === 'GET'  && action === 'me')              return await handleMe(req, res);
+    if (req.method === 'POST' && action === 'update-profile')  return await handleUpdateProfile(req, res);
+    if (req.method === 'GET'  && action === 'check')           return await handleCheck(req, res);
     return res.status(404).json({ error: `Acção desconhecida: ${action}` });
   } catch (err) {
     console.error('[partners] crash:', err.message);
