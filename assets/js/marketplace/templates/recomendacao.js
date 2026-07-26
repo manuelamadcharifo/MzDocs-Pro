@@ -18,7 +18,7 @@ export const TEMPLATES = [
     <p>Com os melhores cumprimentos,</p>
     <div style="margin-top:28pt;border-top:1px solid #000;width:160pt"></div>
     <p><strong>{{RECOMENDADOR}}</strong></p>
-    <p>{{CARGO_REC}} — {{ENTIDADE_REC}}</p>
+    <p>{{CARGO_REC}}</p>
   </div>
 </div>`,
       css: `body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;color:#000;padding:30mm 25mm}
