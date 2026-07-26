@@ -122,9 +122,17 @@ class AdminApp {
     _bindNav() {
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', e => {
-                e.preventDefault();
                 const sec = item.dataset.section;
-                if (sec) { this.nav(sec); this.closeSidebar(); }
+                // CORRIGIDO (auditoria 3.1): antes fazia e.preventDefault()
+                // incondicionalmente para QUALQUER .nav-item, mesmo os que
+                // são links reais para outra página (ex: /admin-parceiros.html,
+                // sem data-section) — o clique nunca navegava para lado
+                // nenhum. Agora só bloqueia o comportamento por omissão
+                // quando o item É uma secção interna (tem data-section);
+                // um link normal (href) navega normalmente.
+                if (!sec) return;
+                e.preventDefault();
+                this.nav(sec); this.closeSidebar();
             });
         });
     }
@@ -223,6 +231,13 @@ class AdminApp {
             if (e('navBadgeUsers'))   e('navBadgeUsers').textContent   = fmt(d.users?.total);
             if (e('navBadgePending')) e('navBadgePending').textContent  = fmt(d.pending);
 
+            // CORRIGIDO (auditoria 3.1): sem isto, um admin nunca sabia se
+            // havia papelarias à espera de aprovação — tinha de adivinhar
+            // que /admin-parceiros.html existia e ir lá verificar às cegas.
+            // Agora o badge mostra a contagem real, tal como já acontece
+            // com Utilizadores/Transações/Afiliados.
+            this._loadPendingPartnersBadge();
+
             // Charts só se Chart.js estiver disponível
             if (typeof Chart !== 'undefined') {
                 this._loadChartsFromData(d.chartData, d.topDocTypes).catch(() => {});
@@ -238,6 +253,29 @@ class AdminApp {
         // Card "Valor Levantável" — pedido à parte (acção 'finance') para
         // não atrasar o resto do dashboard caso o câmbio ao vivo demore.
         this._loadWithdrawableCard().catch(() => {});
+    }
+
+    // CORRIGIDO (auditoria 3.1): contagem de papelarias por aprovar, para o
+    // badge do item "Parceiros" no menu lateral. Pedido isolado, tal como
+    // _loadWithdrawableCard — se falhar, o badge fica simplesmente escondido
+    // em vez de partir o resto do dashboard.
+    async _loadPendingPartnersBadge() {
+        const badge = document.getElementById('navBadgePartners');
+        if (!badge) return;
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/partners?action=list&status=pending', {
+                headers: { Authorization: 'Bearer ' + token },
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const d = await res.json();
+            const count = Array.isArray(d.partners) ? d.partners.length : 0;
+            badge.textContent = count;
+            badge.style.display = count > 0 ? '' : 'none';
+        } catch (err) {
+            console.error('[Admin] Badge parceiros:', err.message);
+            badge.style.display = 'none';
+        }
     }
 
     async _loadWithdrawableCard() {
