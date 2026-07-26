@@ -192,9 +192,15 @@ export const SERVICES = {
         } },
       { row:true, items:[
         { id:'emitente',      label:'Nome / Empresa Emitente', type:'text', required:true, ph:'João Comerciante / Charifo Tech Solutions' },
-        { id:'nuitEmitente',  label:'NUIT do Emitente', type:'text', ph:'400123456', pattern:'[0-9]{9}', maxlength:'9', inputmode:'numeric',
-          requiredIf:{ field:'tipoDoc', in:['Factura','Factura Proforma','Factura-Recibo','Nota de Débito'] },
-          hint:'Obrigatório para Factura, Factura Proforma, Factura-Recibo e Nota de Débito (Lei n.º 32/2007 — IVA). Opcional para Recibo Simples e Nota de Encomenda.' },
+        // NOVO (correcção 2.7): antes o NUIT ficava sempre visível e só o
+        // asterisco/obrigatoriedade mudava (requiredIf) — mudança demasiado
+        // subtil, o utilizador via o formulário "sempre igual". Agora o
+        // campo fica mesmo ESCONDIDO para Recibo Simples/Nota de Encomenda
+        // (onde é opcional e raramente usado) e só aparece para os 4 tipos
+        // fiscais que o exigem — é uma diferença real e óbvia entre tipos.
+        { id:'nuitEmitente',  label:'NUIT do Emitente', type:'text', ph:'400123456', pattern:'[0-9]{9}', maxlength:'9', inputmode:'numeric', required:true,
+          conditional:'tipoDoc', condValue:['Factura','Factura Proforma','Factura-Recibo','Nota de Débito'],
+          hint:'Obrigatório por lei para este tipo de documento (Lei n.º 32/2007 — IVA).' },
       ]},
       { id:'enderecoEmitente', label:'Endereço / Contacto do Emitente (opcional)', type:'text',
         ph:'Rua da Sé, n.º 123, Maputo · Tel: 84 211 2233' },
@@ -226,9 +232,14 @@ export const SERVICES = {
           hint:'Não aplicável à Nota de Encomenda (é um pedido, ainda sem pagamento).' },
       ]},
       { row:true, items:[
+        // NOVO (correcção 2.7): "Aplicar IVA" fica escondido para Factura
+        // Proforma e Nota de Encomenda — nestes dois tipos o documento
+        // gerado já ignora esta escolha (não têm valor fiscal), por isso
+        // perguntá-la só confundia o utilizador.
         { id:'iva', label:'Aplicar IVA (16%)?', type:'select', required:true,
           opts:['Não (isento / regime simplificado)','Sim (regime normal — 16%)'],
-          hint:'Micro/pequenos negócios no regime simplificado geralmente não cobram IVA (Lei n.º 5/2009).' },
+          conditional:'tipoDoc', condValue:['Recibo Simples','Factura','Factura-Recibo','Nota de Débito'],
+          hint:'Micro/pequenos negócios no regime simplificado geralmente não cobram IVA (Lei n.º 5/2009). Não aplicável a Proforma nem Nota de Encomenda.' },
         // NOVO (correcção 2.5): só faz sentido pedir a conta/referência de
         // pagamento quando a forma de pagamento escolhida realmente usa
         // uma conta (M-Pesa, banco, E-mola, Mkesh) — fica escondido para
