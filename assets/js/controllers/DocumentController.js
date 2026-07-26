@@ -1303,18 +1303,38 @@ export class DocumentController {
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
      this._maybeShowRatingPrompt();
    } else {
-     // CORRIGIDO (bug: "1 página na app, 3 no download"): calcular a
-     // paginação REAL antes de exportar — medindo no browser, com as
-     // mesmas margens/tipografia do preview, onde uma folha A4 termina —
-     // e usar esse conteúdo (já com ---PAGE_BREAK--- reais) no PDF. Assim
-     // o jsPDF já não decide a paginação sozinho: só obedece às quebras
-     // que vêm prontas, garantindo o MESMO nº de páginas mostrado no ecrã.
+     // CORRIGIDO (correcção 2.9 — "PDF sai todo junto e confuso"): este
+     // caminho (sem template visual activo — o caso do Recibo/Factura, Nota
+     // de Encomenda, etc.) usava o PDFExporter clássico (jsPDF imperativo,
+     // que desenha texto e tabelas manualmente célula a célula) — motor que
+     // sobrepõe texto quando o conteúdo real não bate certo com a altura
+     // calculada à mão. O ecrã "Preview/Editar" (DocumentEditor._downloadPDF)
+     // já usa HTMLPDFExporter neste mesmo caso (impressão real do browser
+     // sobre HTML+CSS — a mesma "verdade visual" do preview em ecrã) e sai
+     // sempre correcto. Passa a ser o caminho por defeito aqui também, para
+     // o botão "Download" do resultado e o download dentro do editor
+     // produzirem sempre o MESMO PDF. PDFExporter só corre como rede de
+     // segurança se HTMLPDFExporter falhar (ex.: pop-up de impressão
+     // bloqueado pelo browser).
      const { getPaginatedContent } = await import('../utils/Paginator.js');
      const content = await getPaginatedContent(this.docModel.content);
-     const { PDFExporter } = await import('../components/PDFExporter.js');
-     await new PDFExporter().export(content, `${filename}.pdf`, this._buildExportMetadata(svc));
-     NotificationView.success('✅ PDF descarregado!');
-     this._maybeShowRatingPrompt();
+     try {
+       const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
+       const { DEFAULT_PAGE_CSS } = await import('../utils/A4Renderer.js');
+       new HTMLPDFExporter().export(content, filename, {
+         templateCss: DEFAULT_PAGE_CSS,
+         title: svc?.title || 'Documento MzDocs Pro',
+         meta: this._buildExportMetadata(svc),
+       });
+       NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
+       this._maybeShowRatingPrompt();
+     } catch (err) {
+       console.error('[DocumentController] HTMLPDFExporter falhou, a usar PDFExporter clássico:', err.message);
+       const { PDFExporter } = await import('../components/PDFExporter.js');
+       await new PDFExporter().export(content, `${filename}.pdf`, this._buildExportMetadata(svc));
+       NotificationView.success('✅ PDF descarregado!');
+       this._maybeShowRatingPrompt();
+     }
    }
  } catch (err) { NotificationView.error('❌ Erro PDF: ' + err.message); }
  }
