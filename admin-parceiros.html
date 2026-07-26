@@ -197,6 +197,8 @@ function renderPartners(partners, status) {
       actions = p.active
         ? `<button class="btn btn-toggle-on"  onclick="doToggle('${p.id}',false)">⏸️ Desactivar</button>`
         : `<button class="btn btn-toggle-off" onclick="doToggle('${p.id}',true)">▶️ Activar</button>`;
+      // NOVO: para quando a parceira perde/esquece o código do portal.
+      actions += `<button class="btn btn-toggle-on" onclick="doRegenerateCode('${p.id}')">🔑 Reenviar código</button>`;
       actions += `<a href="${waLink}" target="_blank" rel="noopener" class="btn btn-wa">WhatsApp</a>`;
     } else {
       actions = `<button class="btn btn-approve" onclick="doAction('approve','${p.id}')">↩️ Reactivar</button>`;
@@ -238,9 +240,49 @@ async function doAction(action, id) {
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error);
+    // NOVO: ao aprovar (ou reactivar), o backend gera um novo código de
+    // acesso ao portal de self-service — sem isto, a parceira nunca saberia
+    // que esse código existe nem qual é.
+    if (action === 'approve' && data.access_code) {
+      sendCodeViaWhatsApp(id, data.access_code);
+    }
     loadPartners(currentStatus);
   } catch (e) {
     alert('Erro: ' + e.message);
+    if (card) card.style.opacity = '1';
+  }
+}
+
+// NOVO: abre o WhatsApp da parceira com uma mensagem pronta a enviar,
+// contendo o código de acesso e o link do portal. O admin só confirma o
+// envio — não tem de compor a mensagem nem copiar/colar o código à mão.
+function sendCodeViaWhatsApp(id, code) {
+  const card = document.getElementById(`card-${id}`);
+  const phoneMatch = card?.querySelector('.card-info')?.textContent || '';
+  const waLink = card?.querySelector('.btn-wa')?.getAttribute('href') || '';
+  const base = waLink.split('?')[0] || '';
+  const msg = `Olá! A sua candidatura como parceira MzDocs Pro foi aprovada 🎉\n\nPara gerir os seus dados (horário, morada, serviços) aceda a:\nhttps://www.mzdocs.co.mz/parceiro-portal.html\n\nO seu código de acesso é: ${code}\n\nGuarde este código — vai precisar dele sempre que quiser entrar.`;
+  if (base) window.open(`${base}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+}
+
+// NOVO: gerar um novo código para uma parceira já aprovada que o perdeu,
+// e abrir logo o WhatsApp com a mensagem pronta.
+async function doRegenerateCode(id) {
+  if (!confirm('Gerar um novo código de acesso? O código antigo deixa de funcionar.')) return;
+  const card = document.getElementById(`card-${id}`);
+  if (card) card.style.opacity = '0.5';
+  try {
+    const res = await fetch('/api/partners?action=regenerate-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AUTH_TOKEN}` },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    sendCodeViaWhatsApp(id, data.access_code);
+  } catch (e) {
+    alert('Erro: ' + e.message);
+  } finally {
     if (card) card.style.opacity = '1';
   }
 }
