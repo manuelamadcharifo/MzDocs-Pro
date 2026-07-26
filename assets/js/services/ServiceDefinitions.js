@@ -202,10 +202,20 @@ export const SERVICES = {
         { id:'cliente',    label:'Nome do Cliente', type:'text', required:true, ph:'Maria Silva' },
         { id:'biCliente',  label:'BI / NUIT do Cliente (opcional)', type:'text', ph:'110100123456A ou 400987654', maxlength:'13' },
       ]},
-      { id:'descricao',  label:'Descrição dos Serviços / Produtos', type:'textarea', required:true,
-        ph:'1x Reparação de telemóvel — 1500 MZN\n2x Capas protetoras — 300 MZN cada\n(uma linha por artigo ou serviço)' },
+      // NOVO (correcção 2.6 — "sistema de cálculos automáticos", sugestão 2
+      // da auditoria): a "Descrição" em texto livre (uma linha por item, sem
+      // qtd/preço estruturados) foi substituída por uma tabela de itens real
+      // — cada linha tem descrição, quantidade e preço unitário; o subtotal
+      // de cada linha e o "Valor Total" abaixo calculam-se sozinhos. Ver
+      // Views.js → _field()/bindItemTables()/_itemTableRecalc().
+      { id:'itens', label:'Itens / Serviços', type:'itemtable', syncTotalTo:'valor',
+        hint:'Adicione uma linha por artigo ou serviço — o subtotal de cada linha e o "Valor Total" abaixo calculam-se automaticamente.' },
+      { id:'obs', label:'Observações adicionais (opcional)', type:'textarea',
+        ph:'Ex: garantia de 30 dias, entrega inclui instalação, desconto já aplicado…' },
       { row:true, items:[
-        { id:'valor',    label:'Valor Total (MZN)', type:'number', required:true, ph:'2100', min:'1' },
+        // 'valor' deixou de ser digitado à mão — é a soma automática dos
+        // subtotais da tabela de itens acima (campo só-de-leitura).
+        { id:'valor',    label:'Valor Total (MZN)', type:'number', required:true, readonly:true, ph:'Calculado automaticamente pelos itens acima' },
         // NOVO (correcção 2.5): 'Forma de Pagamento' deixou de ser sempre
         // obrigatória — uma Nota de Encomenda regista um pedido, ainda sem
         // pagamento associado, por isso usa o mesmo mecanismo requiredIf
