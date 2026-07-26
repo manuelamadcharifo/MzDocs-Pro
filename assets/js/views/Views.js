@@ -73,6 +73,9 @@ export const DocumentView = {
     // Documento" no Recibo/Factura, "Tipo de Imóvel" no Arrendamento, etc.)
     // — ver _field() e bindDynamicHints() abaixo.
     this.bindDynamicHints(formBodyEl);
+    // NOVO (correcção 2.6): inicializa qualquer tabela de itens do
+    // formulário (ex.: "Itens / Serviços" do Recibo/Factura).
+    this.bindItemTables(formBodyEl, svc.fields);
     if (svc.hasAI) {
       const cost = svc.cost || 1;
       const costLabel = cost === 1 ? '1 crédito' : `${cost} créditos`;
@@ -129,6 +132,25 @@ export const DocumentView = {
       input = `<select id="${f.id}" ${req}><option value="" disabled ${placeholderSelected}>${f.ph || 'Selecione…'}</option>${opts}</select>`;
     } else if (f.type === 'textarea') {
       input = `<textarea id="${f.id}" ${req} placeholder="${f.ph || ''}" rows="4"></textarea>`;
+    } else if (f.type === 'itemtable') {
+      // NOVO (correcção 2.6 — "sistema de cálculos automáticos"): tabela de
+      // itens real (descrição + quantidade + preço unitário por linha), com
+      // subtotal por linha e total geral calculados no browser, sem o
+      // utilizador fazer contas. O valor é guardado como JSON num <input
+      // type="hidden">, para se comportar como qualquer outro campo perante
+      // collectData()/collectAllFields()/restoreDraft(). Ver
+      // bindItemTables()/_itemTableAddRow()/_itemTableRecalc() abaixo.
+      input = `
+        <div class="mz-itemtable" id="${f.id}_wrap">
+          <div class="mz-item-head">
+            <span>Descrição</span><span>Qtd</span><span>Preço (MZN)</span><span>Subtotal</span><span></span>
+          </div>
+          <div class="mz-item-rows" id="${f.id}_rows"></div>
+          <button type="button" class="mz-item-add" id="${f.id}_add">➕ Adicionar linha</button>
+          <div class="mz-item-total">Total: <strong id="${f.id}_totalDisplay">0 MZN</strong></div>
+          <input type="hidden" id="${f.id}" value="[]" data-sync-total-to="${f.syncTotalTo || ''}" />
+        </div>
+      `;
     } else {
       // CORRIGIDO (auditoria 2.3): campos como NUIT/telefone não tinham
       // pattern/maxlength/inputmode — permitiam texto livre sem formato.
@@ -140,6 +162,10 @@ export const DocumentView = {
         f.pattern ? `pattern="${f.pattern}"` : '',
         f.maxlength ? `maxlength="${f.maxlength}"` : '',
         f.inputmode ? `inputmode="${f.inputmode}"` : '',
+        // NOVO (correcção 2.6): campos calculados automaticamente (ex.:
+        // "Valor Total" do Recibo) ficam só-de-leitura — o utilizador vê o
+        // resultado mas não pode escrever um valor divergente das linhas.
+        f.readonly ? 'readonly' : '',
       ].filter(Boolean).join(' ');
       input = `<input type="${f.type}" id="${f.id}" ${req} placeholder="${f.ph || ''}" ${extras} />`;
     }
@@ -272,6 +298,95 @@ export const DocumentView = {
       select.addEventListener('change', update);
       update(); // estado inicial (já reflecte o 'val' pré-seleccionado)
     });
+  },
+
+  // ── Tabela de itens com cálculo automático (correcção 2.6) ──────────────
+  // Formato de cada item guardado: { desc, qtd, preco, subtotal }.
+  // Tudo aqui é "stateless": encontra os elementos pelo id do campo sempre
+  // que é chamado, em vez de guardar referências, para funcionar tanto na
+  // criação inicial da linha como na reposição de um rascunho guardado.
+
+  // Cria uma linha da tabela (vazia, ou pré-preenchida com 'item') e liga os
+  // seus próprios listeners de recálculo/remoção.
+  _itemTableAddRow(fieldId, item) {
+    const rowsEl = document.getElementById(`${fieldId}_rows`);
+    if (!rowsEl) return;
+    const row = document.createElement('div');
+    row.className = 'mz-item-row';
+    const esc = (s) => String(s || '').replace(/"/g, '&quot;');
+    row.innerHTML = `
+      <input type="text" class="mz-item-desc" placeholder="Ex: Reparação de telemóvel" value="${esc(item?.desc)}" />
+      <input type="number" class="mz-item-qtd" min="0" step="1" value="${item?.qtd || 1}" />
+      <input type="number" class="mz-item-preco" min="0" step="0.01" placeholder="0" value="${item?.preco ?? ''}" />
+      <span class="mz-item-subtotal">0</span>
+      <button type="button" class="mz-item-remove" aria-label="Remover linha">✕</button>
+    `;
+    rowsEl.appendChild(row);
+    row.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => this._itemTableRecalc(fieldId)));
+    row.querySelector('.mz-item-remove').addEventListener('click', () => {
+      // Mantém sempre pelo menos 1 linha visível, para não ficar sem sítio
+      // para o utilizador escrever.
+      if (rowsEl.children.length > 1) { row.remove(); this._itemTableRecalc(fieldId); }
+    });
+  },
+
+  // Recalcula subtotais + total geral, grava o JSON no <input hidden> e
+  // actualiza o campo alvo (ex.: "Valor Total") se 'syncTotalTo' existir.
+  _itemTableRecalc(fieldId) {
+    const rowsEl   = document.getElementById(`${fieldId}_rows`);
+    const totalEl  = document.getElementById(`${fieldId}_totalDisplay`);
+    const hiddenEl = document.getElementById(fieldId);
+    if (!rowsEl || !hiddenEl) return;
+    const syncFieldId = hiddenEl.dataset.syncTotalTo;
+    const syncEl = syncFieldId ? document.getElementById(syncFieldId) : null;
+    let total = 0;
+    const items = [];
+    [...rowsEl.children].forEach(row => {
+      const desc  = row.querySelector('.mz-item-desc').value.trim();
+      const qtd   = parseFloat(row.querySelector('.mz-item-qtd').value) || 0;
+      const preco = parseFloat(row.querySelector('.mz-item-preco').value) || 0;
+      const sub   = qtd * preco;
+      row.querySelector('.mz-item-subtotal').textContent = sub ? sub.toLocaleString('pt-MZ', { maximumFractionDigits: 2 }) : '0';
+      if (desc || qtd || preco) items.push({ desc, qtd, preco, subtotal: Math.round(sub * 100) / 100 });
+      total += sub;
+    });
+    if (totalEl) totalEl.textContent = `${total.toLocaleString('pt-MZ', { maximumFractionDigits: 2 })} MZN`;
+    hiddenEl.value = JSON.stringify(items);
+    if (syncEl) {
+      syncEl.value = total ? String(Math.round(total * 100) / 100) : '';
+      // Campo é readonly mas 'required' continua a validar-se sobre .value —
+      // isto garante que "sem itens preenchidos" bloqueia o envio (Formatter.js).
+    }
+  },
+
+  // Chamado por renderForm(): cria a 1.ª linha vazia de cada tabela de itens
+  // do formulário e activa o botão "➕ Adicionar linha".
+  bindItemTables(formEl, fields) {
+    if (!formEl) return;
+    const flat = [];
+    (fields || []).forEach(f => f.row ? f.items.forEach(fi => flat.push(fi)) : flat.push(f));
+    flat.filter(f => f.type === 'itemtable').forEach(f => {
+      const wrap = formEl.querySelector(`#${f.id}_wrap`);
+      if (!wrap) return;
+      const addBtn = wrap.querySelector(`#${f.id}_add`);
+      addBtn?.addEventListener('click', () => { this._itemTableAddRow(f.id); this._itemTableRecalc(f.id); });
+      this._itemTableAddRow(f.id);
+      this._itemTableRecalc(f.id);
+    });
+  },
+
+  // Chamado por restoreDraft(): repõe as linhas guardadas de um rascunho
+  // (itemsJSON é a string JSON tal como veio de offlineDB).
+  setItemTableData(fieldId, itemsJSON) {
+    const rowsEl = document.getElementById(`${fieldId}_rows`);
+    if (!rowsEl) return;
+    let items = [];
+    try { items = JSON.parse(itemsJSON) || []; } catch (e) { items = []; }
+    if (!Array.isArray(items)) items = [];
+    rowsEl.innerHTML = '';
+    if (items.length) items.forEach(it => this._itemTableAddRow(fieldId, it));
+    else this._itemTableAddRow(fieldId);
+    this._itemTableRecalc(fieldId);
   },
 
   showLoader(steps = []) {
@@ -637,8 +752,16 @@ export const DocumentView = {
   restoreDraft(fields, draftData) {
     if (!draftData) return;
     const restore = f => {
+      if (!(f.id in draftData)) return;
+      // NOVO (correcção 2.6): campos 'itemtable' guardam JSON — reconstrói as
+      // linhas visíveis (desc/qtd/preço) em vez de só copiar a string para o
+      // <input hidden>, senão a tabela ficava vazia mesmo com dados no rascunho.
+      if (f.type === 'itemtable') {
+        this.setItemTableData(f.id, draftData[f.id]);
+        return;
+      }
       const el = document.getElementById(f.id);
-      if (!el || !(f.id in draftData)) return;
+      if (!el) return;
       el.value = draftData[f.id] ?? '';
     };
     fields.forEach(f => f.row ? f.items.forEach(restore) : restore(f));
