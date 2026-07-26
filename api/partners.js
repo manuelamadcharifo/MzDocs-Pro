@@ -1,9 +1,21 @@
-// api/partners.js — Rede de Parceiras (Papelarias / Gráficas)
+// api/partners.js — Rede de Parceiras (Papelarias / Gráficas / Advogados)
 // v2.0 (AUDITORIA Junho/2026)
+// v2.1 (Julho/2026) — adicionado suporte a `type` para acomodar a área
+// jurídica (advogados) na mesma tabela/endpoint, sem criar uma nova função
+// serverless (o projecto está no limite de 12 funções do plano Vercel Hobby).
 // ALTERAÇÕES v2.0:
 //  1. Removido @supabase/supabase-js + require('ws') — usa api/_lib/supabaseAdmin.js.
 //  2. isAdmin() passa a usar getUserFromToken() + selectOne() (fetch puro).
 //  3. Lógica de negócio 100% preservada.
+// ALTERAÇÕES v2.1:
+//  1. Nova coluna `type` ('papelaria' | 'advogado') — VALID_SERVICES passa a
+//     ser um mapa por tipo em vez de uma lista única.
+//  2. Novos campos exclusivos de advogado: `credential_number` (nº da Ordem
+//     dos Advogados de Moçambique — OAM) e `bio` (curta apresentação).
+//  3. `credential_number` é obrigatório no registo quando type='advogado' e
+//     NUNCA é auto-aprovado — não existe API pública da OAM para validar o
+//     número, por isso a candidatura fica sempre 'pending' até um admin
+//     confirmar manualmente (mesma máquina de aprovação já existente).
 //
 // Rotas:
 //   POST /api/partners?action=register        — parceira submete candidatura
@@ -18,6 +30,11 @@
 //   GET  /api/partners?action=me              — NOVO: parceira vê os seus próprios dados
 //   POST /api/partners?action=update-profile  — NOVO: parceira edita os seus próprios dados
 //   GET  /api/partners?action=check           — NOVO: ponte com afiliados.html — "esta papelaria já se candidatou?"
+//
+// Todas as rotas aceitam agora `type` ('papelaria' por omissão | 'advogado'):
+//   POST .../register?         body.type
+//   GET  .../nearby?type=advogado&specialty=laboral&lat=...&lng=...
+//   GET  .../list?type=advogado&status=pending   (admin)
 
 const crypto = require('crypto');
 const {
@@ -36,9 +53,21 @@ function clientIp(req) {
   return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
 }
 
-// Lista branca de serviços válidos — mesma usada no formulário de
-// parceiros.html e no filtro de NearbyPartners.js.
-const VALID_SERVICES = ['impressao', 'foto', 'plastificacao', 'encadernacao'];
+// Tipos de parceiro válidos.
+const VALID_TYPES = ['papelaria', 'advogado'];
+
+// Lista branca de serviços válidos, agora por tipo de parceiro — mesma usada
+// no formulário de parceiros.html e no filtro de NearbyPartners.js.
+// 'papelaria' mantém a lista original (nunca alterada). 'advogado' usa
+// `services` para guardar as ÁREAS DE ATUAÇÃO jurídica.
+const VALID_SERVICES = {
+  papelaria: ['impressao', 'foto', 'plastificacao', 'encadernacao'],
+  advogado:  ['civil', 'laboral', 'comercial', 'familia', 'penal', 'imobiliario', 'fiscal', 'sucessorio'],
+};
+
+function normalizeType(t) {
+  return VALID_TYPES.includes(t) ? t : 'papelaria';
+}
 
 // CORRIGIDO (auditoria 1.3): 'phone' era comparado/guardado exactamente como
 // escrito (com espaços/traços), enquanto 'whatsapp' já era normalizado só
@@ -112,7 +141,7 @@ async function getPartnerFromRequest(req) {
   const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
   const pid = verifyPartnerToken(token);
   if (!pid) return null;
-  const partner = await selectOne('partners', 'id', pid, 'id,status,active,name,owner_name,phone,whatsapp,city,address,lat,lng,services,hours,rating_sum,rating_count').catch(() => null);
+  const partner = await selectOne('partners', 'id', pid, 'id,status,active,name,owner_name,phone,whatsapp,city,address,lat,lng,type,services,hours,credential_number,bio,rating_sum,rating_count').catch(() => null);
   if (!partner || partner.status !== 'approved') return null;
   return partner;
 }
@@ -125,10 +154,23 @@ async function handleRegister(req, res) {
   if (!allowed) return res.status(429).json({ error: 'Demasiadas candidaturas. Tente novamente mais tarde.' });
 
   const b = parseBody(req);
+  const type = normalizeType(b.type);
   const required = ['name', 'owner_name', 'phone', 'whatsapp', 'city', 'address', 'lat', 'lng', 'services'];
   for (const f of required) {
     if (!b[f] || (Array.isArray(b[f]) && b[f].length === 0))
       return res.status(400).json({ error: `Campo obrigatório em falta: ${f}` });
+  }
+  // NOVO (v2.1): advogado tem de indicar o nº da Ordem dos Advogados de
+  // Moçambique (OAM). Não há forma de validar automaticamente — isto só
+  // impede submissões vazias; a verificação real é manual, feita pelo admin
+  // antes de aprovar (ver handleApprove).
+  if (type === 'advogado') {
+    const credential = String(b.credential_number || '').trim();
+    if (!credential) return res.status(400).json({ error: 'Nº de inscrição na Ordem dos Advogados (OAM) é obrigatório' });
+  }
+  const services = (Array.isArray(b.services) ? b.services : [b.services]).filter(s => VALID_SERVICES[type].includes(s));
+  if (services.length === 0) {
+    return res.status(400).json({ error: type === 'advogado' ? 'Escolha pelo menos uma área de atuação' : 'Escolha pelo menos um serviço' });
   }
   const lat = parseFloat(b.lat);
   const lng = parseFloat(b.lng);
@@ -150,7 +192,7 @@ async function handleRegister(req, res) {
   if (existing) {
     const msgs = {
       pending:  'O seu pedido já foi submetido e está em análise.',
-      approved: 'Esta papelaria já está registada.',
+      approved: 'Este número já está registado como parceiro.',
       rejected: 'Este número foi recusado. Contacte o suporte.',
     };
     return res.status(409).json({ error: msgs[existing.status] || 'Número já registado.' });
@@ -165,12 +207,18 @@ async function handleRegister(req, res) {
       city:       b.city.trim().slice(0, 60),
       address:    b.address.trim().slice(0, 200),
       lat, lng,
-      services:   (Array.isArray(b.services) ? b.services : [b.services]).slice(0, 8),
+      type:       type,
+      services:   services.slice(0, 8),
       hours:      (b.hours || '').trim().slice(0, 100),
+      credential_number: type === 'advogado' ? String(b.credential_number).trim().slice(0, 40) : null,
+      bio:        type === 'advogado' ? String(b.bio || '').trim().slice(0, 280) : null,
       status:     'pending',
       active:     false,
     });
-    return res.status(200).json({ ok: true, message: 'Candidatura recebida! Será contactado em até 48h após aprovação.' });
+    const msg = type === 'advogado'
+      ? 'Candidatura recebida! A nossa equipa confirma a sua inscrição na Ordem e contacta-o em até 48h.'
+      : 'Candidatura recebida! Será contactado em até 48h após aprovação.';
+    return res.status(200).json({ ok: true, message: msg });
   } catch (err) {
     console.error('[partners/register]', err.message);
     return res.status(500).json({ error: 'Erro ao registar. Tente novamente.' });
@@ -183,18 +231,18 @@ async function handleNearby(req, res) {
   const q   = req.query || {};
   const lat = parseFloat(q.lat);
   const lng = parseFloat(q.lng);
-  // CORRIGIDO (auditoria 1.7): 'service' vinha da query e era inserido
-  // directamente no filtro PostgREST sem confirmar que era um dos 4
-  // valores válidos — um valor inesperado podia partir o filtro e devolver
-  // um 500 em vez de uma lista vazia.
+  // NOVO (v2.1): 'type' escolhe o mapa de serviços válidos a usar na
+  // validação de 'service' abaixo — mantém o mesmo raciocínio da correcção
+  // 1.7 (nunca deixar entrar um valor não previsto no filtro PostgREST).
+  const type = normalizeType(q.type);
   const svcRaw = q.service || '';
-  const svc = VALID_SERVICES.includes(svcRaw) ? svcRaw : '';
+  const svc = VALID_SERVICES[type].includes(svcRaw) ? svcRaw : '';
   const km  = Math.min(parseFloat(q.km || '10'), 30);
 
   if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: 'lat e lng são obrigatórios' });
 
   const delta = km / 111;
-  let path = `partners?status=eq.approved&active=eq.true&lat=gte.${lat - delta}&lat=lte.${lat + delta}&lng=gte.${lng - delta}&lng=lte.${lng + delta}&select=id,name,owner_name,phone,whatsapp,city,address,lat,lng,services,hours,rating_sum,rating_count&limit=50`;
+  let path = `partners?status=eq.approved&active=eq.true&type=eq.${type}&lat=gte.${lat - delta}&lat=lte.${lat + delta}&lng=gte.${lng - delta}&lng=lte.${lng + delta}&select=id,name,owner_name,phone,whatsapp,city,address,lat,lng,type,services,hours,credential_number,bio,rating_sum,rating_count&limit=50`;
   if (svc) path += `&services=cs.{"${svc}"}`;
 
   try {
@@ -229,8 +277,12 @@ async function handleNearby(req, res) {
 async function handleList(req, res) {
   if (!(await isAdmin(req))) return res.status(403).json({ error: 'Sem permissão' });
   const status = (req.query?.status || 'pending').replace(/[^a-z]/g, '');
+  // NOVO (v2.1): filtro opcional por tipo — admin-parceiros.html passa a ter
+  // uma sub-aba Papelarias/Advogados dentro de cada estado.
+  const typeRaw = req.query?.type;
+  const typeFilter = typeRaw && VALID_TYPES.includes(typeRaw) ? `&type=eq.${typeRaw}` : '';
   try {
-    const data = await restRequest(`partners?status=eq.${status}&order=created_at.desc&limit=200`);
+    const data = await restRequest(`partners?status=eq.${status}${typeFilter}&order=created_at.desc&limit=200`);
     return res.status(200).json({ ok: true, partners: Array.isArray(data) ? data : [] });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -426,10 +478,14 @@ async function handleUpdateProfile(req, res) {
     patch.whatsapp = wa.slice(0, 20);
   }
   if (b.services !== undefined) {
-    const services = (Array.isArray(b.services) ? b.services : [b.services]).filter(s => VALID_SERVICES.includes(s));
-    if (services.length === 0) return res.status(400).json({ error: 'Escolha pelo menos um serviço' });
+    const services = (Array.isArray(b.services) ? b.services : [b.services]).filter(s => VALID_SERVICES[normalizeType(partner.type)].includes(s));
+    if (services.length === 0) return res.status(400).json({ error: partner.type === 'advogado' ? 'Escolha pelo menos uma área de atuação' : 'Escolha pelo menos um serviço' });
     patch.services = services.slice(0, 8);
   }
+  // NOVO (v2.1): bio só faz sentido para advogado, mas não há mal em aceitar
+  // de qualquer parceiro que a envie — o campo fica simplesmente sem uso na
+  // UI de papelaria.
+  if (b.bio !== undefined) patch.bio = String(b.bio).trim().slice(0, 280);
   if (b.lat !== undefined && b.lng !== undefined) {
     const lat = parseFloat(b.lat), lng = parseFloat(b.lng);
     if (isNaN(lat) || isNaN(lng) || lat < -27 || lat > -10 || lng < 30 || lng > 41) {
