@@ -62,7 +62,11 @@
     <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
     <div class="hdr-name" style="display:none">Mz<span>Docs</span> Pro · Admin Parceiros</div>
   </a>
-  <a href="/" class="btn-back" data-track-link>← Início</a>
+  <!-- CORRIGIDO (auditoria 3.1): antes ia para "/" (site público) — sem
+       nenhuma forma de voltar ao painel admin a partir daqui. Como esta
+       página só é usada por administradores (ver loginSection abaixo), o
+       "voltar" lógico é o painel admin, não o site público. -->
+  <a href="/admin.html" class="btn-back" data-track-link>← Painel Admin</a>
 </header>
 
 <!-- LOGIN -->
