@@ -1837,7 +1837,21 @@ USING (EXISTS (
             organic_baidu: '🔍 Baidu (orgânico)',
             social_facebook: '📘 Facebook/Instagram', social_tiktok: '🎵 TikTok', social_whatsapp: '💬 WhatsApp',
         };
-        return map[source] || source;
+        if (map[source]) return map[source];
+        // NOVO: cada post do blog passou a ter a sua própria origem
+        // (ex.: 'blog_nuit-como-obter-mocambique') em vez de cair genericamente
+        // em "blog" — e as páginas de guias/SEO (pages/*.html) em 'seo_...'.
+        // Formatamos ambos os prefixos para leitura, sem mapear cada página
+        // manualmente (novas páginas/posts já saem legíveis automaticamente).
+        if (typeof source === 'string' && source.startsWith('blog_')) {
+            const nice = source.slice(5).replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            return `📝 ${nice}`;
+        }
+        if (typeof source === 'string' && source.startsWith('seo_')) {
+            const nice = source.slice(4).replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            return `📄 ${nice}`;
+        }
+        return source;
     }
 
     async _loadAnalytics() {
