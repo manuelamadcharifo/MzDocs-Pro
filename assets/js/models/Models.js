@@ -124,6 +124,27 @@ export class CreditModel {
         }
     }
 
+    // NOVO: chamado pelos eventos mz:login/mz:signup em app.js — sem isto,
+    // o crédito ficava a mostrar 0 até um reload manual da página, porque
+    // o CreditModel só corre init() uma vez, no arranque, quando o
+    // utilizador ainda é visitante (sessão ainda não existe nesse momento).
+    // Não reutiliza init() directamente porque este começa sempre por pôr
+    // this.credits=0 e emitir — isso faria o saldo "piscar" para 0 logo
+    // a seguir à mensagem de boas-vindas, antes de mostrar o valor real.
+    async refreshAfterLogin() {
+        try {
+            const { authManager } = await import('../auth/AuthManager.js');
+            await authManager.ready();
+            if (!authManager.user?.id) return;
+            this.userId = authManager.user.id;
+            if (!this.supabase._ready) await this.supabase.init().catch(() => false);
+            await this._syncFromServer();
+            if (!this._syncTimer) this._startAutoSync();
+        } catch (err) {
+            console.warn('[CreditModel] refreshAfterLogin falhou:', err.message);
+        }
+    }
+
     async _syncFromServer() {
         // Guard: evitar execuções paralelas
         if (this._syncing) return;
@@ -147,6 +168,10 @@ export class CreditModel {
     }
 
     _startAutoSync() {
+        // CORRIGIDO: sem isto, chamar init() outra vez (ex: após login sem
+        // reload da página) empilhava um novo setInterval por cima do
+        // anterior a cada novo login/logout.
+        if (this._syncTimer) clearInterval(this._syncTimer);
         this._syncTimer = setInterval(() => this._syncFromServer(), 30000);
     }
 
