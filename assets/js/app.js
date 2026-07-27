@@ -118,6 +118,24 @@ async function bootstrap() {
   const fab = document.getElementById('fabWa');
   if (fab) fab.href = `https://wa.me/${userModel.WA_SUPPORT}`;
 
+  // NOVO — o FAB de WhatsApp ficava sempre fixo por cima do conteúdo,
+  // chegando a tapar os cartões de serviço ao percorrer a lista. Agora
+  // esconde-se enquanto se faz scroll para baixo e volta a aparecer ao
+  // parar ou ao subir — continua acessível sem ficar no caminho.
+  if (fab) {
+    let lastY = window.scrollY;
+    let hideTimer = null;
+    window.addEventListener('scroll', () => {
+      const y = window.scrollY;
+      const goingDown = y > lastY && y > 80;
+      fab.classList.toggle('fab-hidden', goingDown);
+      lastY = y;
+      clearTimeout(hideTimer);
+      // Parou de fazer scroll (mesmo a meio de um gesto para baixo) → mostrar de novo
+      hideTimer = setTimeout(() => fab.classList.remove('fab-hidden'), 900);
+    }, { passive: true });
+  }
+
   // NOTA: o contador de documentos gerados já é mostrado no hero (ver
   // homeController.js → _animateSocialCounter). Havia aqui um segundo
   // contador duplicado ("X documentos gerados por moçambicanos") logo
