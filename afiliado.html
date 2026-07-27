@@ -204,11 +204,32 @@
   </div>
 
   <!-- NÃO AUTENTICADO -->
-  <div id="notAuth" style="display:none;text-align:center;padding:60px 16px">
-    <div style="font-size:48px;margin-bottom:12px">🔒</div>
-    <h2 style="font-size:18px;font-weight:800;margin-bottom:8px">Necessário iniciar sessão</h2>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Aceda à sua conta MzDocs Pro para ver o painel de afiliado.</p>
-    <a href="/?auth=login" class="btn btn-green" style="text-decoration:none">Entrar na conta</a>
+  <!-- CORRIGIDO (auditoria 3.5): antes mostrava só um cadeado + "inicie
+       sessão", sem explicar o que é o programa — um visitante sem conta
+       não conseguia avaliar a oferta antes de se comprometer a registar-se.
+       Agora mostra a mesma pré-visualização pública (comissões por pacote)
+       que os utilizadores autenticados veem antes de aderir. -->
+  <div id="notAuth" style="display:none;text-align:center;padding:40px 16px 16px">
+    <div style="font-size:44px;margin-bottom:10px">🤝</div>
+    <h2 style="font-size:19px;font-weight:800;margin-bottom:8px">Torne-se Parceiro MzDocs Pro</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;max-width:420px;margin-left:auto;margin-right:auto">
+      Partilhe o seu link único e ganhe comissão em cada pagamento feito por quem se registar através de si. Pagamentos via M-Pesa, sem riscos.
+    </p>
+
+    <div class="card" style="text-align:left;margin-bottom:20px;max-width:420px;margin-left:auto;margin-right:auto">
+      <div class="card-title">💰 Comissões por Pacote</div>
+      <div class="rates-grid">
+        <div class="rate-pill"><div class="rate-pkg">Avulso</div><div class="rate-pct">10%</div><div class="rate-mzn">= 5 MZN</div></div>
+        <div class="rate-pill"><div class="rate-pkg">Starter</div><div class="rate-pct">15%</div><div class="rate-mzn">= 18 MZN</div></div>
+        <div class="rate-pill"><div class="rate-pkg">Básico</div><div class="rate-pct">15%</div><div class="rate-mzn">= 42 MZN</div></div>
+        <div class="rate-pill"><div class="rate-pkg">Pro</div><div class="rate-pct">20%</div><div class="rate-mzn">= 120 MZN</div></div>
+        <div class="rate-pill"><div class="rate-pkg">Empresa</div><div class="rate-pct">20%</div><div class="rate-mzn">= 300 MZN</div></div>
+      </div>
+      <p style="font-size:11px;color:var(--green);margin-top:10px;font-weight:700">✨ Papelarias, Cyber Cafés e Universidades ganham bónus extra de 3–5%</p>
+    </div>
+
+    <a href="/?auth=register" class="btn btn-green" style="text-decoration:none;margin-right:8px">Criar conta grátis</a>
+    <a href="/?auth=login" class="btn" style="text-decoration:none;border:1px solid var(--border)">Já tenho conta</a>
   </div>
 
   <!-- REGISTO -->
