@@ -641,6 +641,11 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 /* FAB */
 .fab{position:fixed;bottom:22px;right:18px;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,var(--wa),var(--wa-d));color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;text-decoration:none;box-shadow:0 4px 20px rgba(37,211,102,.5);z-index:80;transition:var(--t)}
 .fab:hover{transform:scale(1.1);box-shadow:0 6px 28px rgba(37,211,102,.6)}
+/* NOVO — esconde o FAB de WhatsApp enquanto se percorre a lista para baixo,
+   evitando que fique fixo por cima dos cartões de serviço; reaparece ao
+   parar ou ao subir. Não se aplica ao fab-logout (feedback de estado, não
+   um atalho de conveniência). */
+#fabWa.fab-hidden{transform:translateY(90px) scale(.9);opacity:0;pointer-events:none;box-shadow:none}
 /* FAB Logout — aparece só em mobile quando autenticado */
 .fab-logout{
   bottom:86px; /* acima do FAB WhatsApp */
