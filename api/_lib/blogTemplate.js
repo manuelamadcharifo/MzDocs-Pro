@@ -263,7 +263,7 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
         else if (/facebook\.|instagram\./.test(host)) source = 'social_facebook';
         else if (/tiktok\./.test(host))          source = 'social_tiktok';
         else if (/whatsapp\./.test(host))        source = 'social_whatsapp';
-        else                                     source = 'blog'; // sem referrer conhecido = chegou a um artigo (link partilhado, favorito, etc.)
+        else                                     source = 'blog_{{SLUG}}'; // sem referrer conhecido = chegou a um artigo (link partilhado, favorito, etc.) — um valor por post, não mais um "blog" genérico
       }
 
       if (source) {
