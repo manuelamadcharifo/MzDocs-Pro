@@ -115,19 +115,14 @@
   <div class="hero-glow"></div>
   <div class="hero-inner">
   <div class="hero-body">
-    <div class="hero-eye">🇲🇿 &nbsp;Para Moçambique · Simples e Seguro</div>
-    <h1 class="hero-h1">O seu documento,<br/><em>pronto</em><br/>antes do café arrefecer</h1>
-    <p class="hero-p">CV, procuração, contrato, requerimento — o que precisar, com a linguagem certa para Moçambique.<br/>Sem filas, sem advogado, sem esperar até amanhã.</p>
+    <div class="hero-eye">🇲🇿 &nbsp;Feito para Moçambique · Simples e Seguro</div>
+    <h1 class="hero-h1">Chega de perder<br/>a manhã <em>numa fila</em><br/>por causa de um documento</h1>
+    <p class="hero-p">CV, procuração, contrato, requerimento — pronto em minutos, com a linguagem formal certa para bancos, empresas e repartições.<br/>Sem filas, sem digitador, sem complicações.</p>
     <div class="chips">
       <span class="chip gr">⚡ Entrega Imediata</span>
       <span class="chip">📷 Digitalizar</span>
       <span class="chip">🔒 Arquivo Seguro</span>
       <span class="chip">🇲🇿 Feito para Moçambique</span>
-      <!-- CORRIGIDO (auditoria 3.3): templates.html (Galeria Comunitária) só
-           tinha link dentro do TemplatePicker, a meio do fluxo de criação —
-           um visitante que só quer ver modelos antes de se comprometer não
-           tinha forma de lá chegar a partir da homepage. -->
-      <a href="/templates.html" class="chip" style="text-decoration:none;">🖼️ Ver Modelos</a>
     </div>
 
     <!-- CTA + Prova Social (homeController.js controla estado) -->
@@ -139,6 +134,15 @@
         <span class="hsp-counter" id="hspCounter">📄 <strong id="heroDocCount">…</strong> documentos gerados em Moçambique 🇲🇿</span>
         <span class="hsp-stars" id="hspStars" style="display:none;"></span>
       </div>
+      <!-- CORRIGIDO (auditoria 3.3, revisto): "Ver Modelos" estava entre os
+           chips de confiança, com o mesmo peso do CTA principal — competia
+           pela atenção do visitante antes de ele sequer ver o pedido
+           principal. Movido para aqui: aparece só depois do CTA + prova
+           social, como saída secundária de baixo peso visual, não como
+           alternativa ao "Obter documento grátis". -->
+      <a href="/templates.html" style="display:block;text-align:center;margin-top:10px;font-size:12.5px;color:rgba(255,255,255,.45);text-decoration:none;">
+        🖼️ Prefere ver exemplos primeiro? <span style="text-decoration:underline;">Ver modelos →</span>
+      </a>
     </div>
   </div><!-- /.hero-body -->
   </div><!-- /.hero-inner -->
