@@ -5,7 +5,7 @@
 // com a app fechada, uma vez instalada como PWA).
 //
 // Requer três variáveis de ambiente na Vercel:
-//   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (ex: mailto:suporte@mzdocs.co.mz)
+//   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (ex: mailto:suporte.mzdocs@gmail.com)
 // Gerar um par de chaves novo com: npx web-push generate-vapid-keys
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -17,7 +17,7 @@ function ensureConfigured() {
   if (configured) return;
   const pub  = process.env.VAPID_PUBLIC_KEY;
   const priv = process.env.VAPID_PRIVATE_KEY;
-  const subj = process.env.VAPID_SUBJECT || 'mailto:suporte@mzdocs.co.mz';
+  const subj = process.env.VAPID_SUBJECT || 'mailto:suporte.mzdocs@gmail.com';
   if (!pub || !priv) {
     const err = new Error('VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY não configuradas no servidor.');
     err.code = 'VAPID_NOT_CONFIGURED';
