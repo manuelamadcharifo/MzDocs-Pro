@@ -212,12 +212,19 @@ async function bootstrap() {
     }
   }, 3000);
 
-  // ── Analytics: ouvir eventos globais de auth emitidos por AuthUI ──────
+  // ── Auth: ouvir eventos globais emitidos por AuthUI ────────────────────
+  // CORRIGIDO: antes só registávamos analytics aqui — o CreditModel nunca
+  // era re-sincronizado após um login/registo feito sem reload da página,
+  // por isso o utilizador ficava a ver "0" créditos (e qualquer serviço
+  // pedia pagamento) mesmo já tendo saldo — incluindo o crédito grátis de
+  // boas-vindas ou de referência de afiliado — até fazer reload manual.
   window.addEventListener('mz:signup', () => {
     Analytics.trackSignUp('email');
+    creditModel.refreshAfterLogin();
   });
   window.addEventListener('mz:login', () => {
     Analytics.trackLogin('email');
+    creditModel.refreshAfterLogin();
   });
 }
 
@@ -488,12 +495,18 @@ function _showOnboardingIfNeeded() {
   let currentStep = 0;
   let elapsed     = 0;
   let timer       = null;
+  // CORRIGIDO (auditoria 3.6): o onboarding avançava sozinho a cada ~3s
+  // mesmo que a pessoa ainda estivesse a ler — só havia "Saltar" como
+  // escape. Agora, tocar e segurar a caixa pausa o avanço automático
+  // (mesmo padrão do "stories" do Instagram), e solta para continuar.
+  let paused      = false;
 
   const dots    = overlay.querySelectorAll('.mzob-dot');
   const steps   = overlay.querySelectorAll('.mzob-step');
   const bar     = document.getElementById('mzobBar');
   const btnNext = document.getElementById('mzobNext');
   const btnSkip = document.getElementById('mzobSkip');
+  const box     = document.getElementById('mzOnboardBox');
 
   function goTo(idx) {
     steps.forEach((s,i)  => s.classList.toggle('active', i === idx));
@@ -506,6 +519,8 @@ function _showOnboardingIfNeeded() {
 
   function finish() {
     clearInterval(timer);
+    document.removeEventListener('pointerup', resume);
+    document.removeEventListener('pointercancel', resume);
     try { localStorage.setItem('mz_onboarded','1'); } catch(_) {}
     overlay.style.animation = 'none';
     overlay.style.opacity   = '0';
@@ -516,6 +531,7 @@ function _showOnboardingIfNeeded() {
   // Auto-advance timer
   const TICK = 100; // ms
   timer = setInterval(() => {
+    if (paused) return;
     elapsed += TICK;
     const totalElapsed = currentStep * step_ms + elapsed;
     if (bar) bar.style.width = Math.min(100, (totalElapsed / TOTAL_MS) * 100) + '%';
@@ -524,6 +540,14 @@ function _showOnboardingIfNeeded() {
       else finish();
     }
   }, TICK);
+
+  // Premir e segurar a caixa pausa o avanço automático; largar retoma.
+  if (box) {
+    box.addEventListener('pointerdown', () => { paused = true; if (bar) bar.style.transition = 'none'; });
+  }
+  const resume = () => { paused = false; if (bar) bar.style.transition = 'width .1s linear'; };
+  document.addEventListener('pointerup', resume);
+  document.addEventListener('pointercancel', resume);
 
   btnNext.addEventListener('click', () => {
     if (currentStep < STEPS.length - 1) goTo(currentStep + 1);
