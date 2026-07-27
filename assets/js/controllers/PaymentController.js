@@ -522,9 +522,13 @@ export class PaymentController {
               `✅ Pagamento confirmado! Conta criada automaticamente — <strong>${data.creditsAdded} créditos</strong> já disponíveis.`);
             NotificationView.success(`✅ Conta criada! +${data.creditsAdded} créditos disponíveis.`);
             this._sendPushNotification(`Conta criada e +${data.creditsAdded} créditos adicionados ao MzDocs Pro!`);
-            // Recarregar a app para reflectir o novo estado de sessão em toda a UI
-            // (cabeçalho, contador de créditos, geração de documentos, etc.)
-            setTimeout(() => window.location.reload(), 1800);
+            // CORRIGIDO: antes recarregava a app inteira só para o contador
+            // de créditos aparecer certo — o cabeçalho já se actualiza
+            // sozinho via authManager.onChange(); agora que o CreditModel
+            // sabe re-sincronizar-se após um login sem reload
+            // (refreshAfterLogin), o reload deixou de ser necessário aqui.
+            await this.creditModel.refreshAfterLogin();
+            setTimeout(() => this.close(), 2500);
             return;
           } catch (loginErr) {
             console.error('[PaymentController] auto-login falhou:', loginErr);
