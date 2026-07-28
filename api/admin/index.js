@@ -9,12 +9,26 @@
 //  7. validateAdmin: melhor logging de erros
 //  8. CORS: usa ALLOWED_ORIGIN consistente
 
-const { createClient } = require('@supabase/supabase-js');
-const ws = require('ws');
 const QRCode = require('qrcode');
 const { ACTIVE_PROVIDERS, RESERVE_PROVIDERS, TIER_LABELS } = require('../_lib/aiProvidersCatalog');
 const { sendPushToSubscriptions } = require('../_lib/webpush');
-const { restRequest: pushRestRequest } = require('../_lib/supabaseAdmin');
+const {
+  restRequest,
+  getUserFromToken,
+  selectOne,
+  insert,
+  update,
+  del,
+  upsert,
+  rpc,
+  countRows,
+  adminGetUserById,
+  adminUpdateUserById,
+  adminCreateUser,
+  adminDeleteUser,
+  storageUpload,
+  storageGetPublicUrl,
+} = require('../_lib/supabaseAdmin');
 const { loadPackagesFromSettings, estimateMznPerCredit } = require('../_lib/packages');
 const { moderateComment, approvalStatusFor } = require('../_lib/contentModeration');
 const { checkRateLimit } = require('../_lib/rateLimit');
@@ -87,21 +101,17 @@ module.exports = async function handler(req, res) {
 // Utilitários
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function getAdminClient() {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY)
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada — operações admin impossíveis');
-  if (!process.env.SUPABASE_URL)
-    throw new Error('SUPABASE_URL não configurada');
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    realtime: { transport: ws },
-  });
-}
+// NOTA (migração): antes existia getAdminClient(), que instanciava o SDK
+// @supabase/supabase-js com transporte 'ws' explícito só para esta função.
+// Já não é necessário — validateAdmin() e todos os handlers abaixo usam o
+// wrapper REST puro api/_lib/supabaseAdmin.js (mesmo padrão do resto do
+// projecto), pelo que getAdminClient() e o parâmetro `supabase` foram
+// removidos de todas as funções deste ficheiro.
 
-async function validateAdmin(supabase, token) {
+async function validateAdmin(token) {
   if (!token) return { error: 'Token obrigatório', status: 401 };
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+  const { user, error: authErr } = await getUserFromToken(token);
   if (authErr || !user) {
     console.error('[validateAdmin] getUser falhou:', authErr?.message);
     return { error: 'Token inválido ou expirado', status: 401 };
@@ -111,13 +121,10 @@ async function validateAdmin(supabase, token) {
   if (user.app_metadata?.is_admin === true) return { user };
 
   // 2ª verificação: query directa à tabela profiles com service role
-  const { data: profile, error: profileErr } = await supabase
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
-
-  if (profileErr) {
+  let profile;
+  try {
+    profile = await selectOne('profiles', 'id', user.id, 'is_admin');
+  } catch (profileErr) {
     console.error('[validateAdmin] Erro ao ler perfil:', profileErr.message);
     return { error: 'Erro ao verificar permissões', status: 500 };
   }
@@ -128,7 +135,7 @@ async function validateAdmin(supabase, token) {
   }
 
   // Sincronizar app_metadata (fire-and-forget)
-  supabase.auth.admin.updateUserById(user.id, {
+  adminUpdateUserById(user.id, {
     app_metadata: { ...user.app_metadata, is_admin: true },
   }).catch(e => console.warn('[validateAdmin] Falha ao sincronizar app_metadata:', e.message));
 
@@ -146,15 +153,16 @@ async function validateAdmin(supabase, token) {
   // erros do PostgREST (RLS, CHECK, etc.); devolve sempre {data, error}
   // normalmente. O try/catch nunca via o erro real, e o upsert continuava
   // a falhar silenciosamente (confirmado: admin_users ficou vazia mesmo
-  // depois desta "correcção"). Agora o resultado é verificado explicitamente.
-  const { error: adminUpsertError } = await supabase.from('admin_users').upsert(
-    { id: user.id, email: user.email || `${user.id}@sem-email.local`, full_name: user.user_metadata?.full_name || user.email || '', role: 'admin', is_active: true, last_login_at: new Date().toISOString() },
-    { onConflict: 'id', ignoreDuplicates: false }
-  );
-  if (adminUpsertError) {
+  // depois desta "correcção"). Agora o resultado é verificado explicitamente
+  // (o wrapper REST lança excepção em erro HTTP, por isso aqui basta o catch).
+  try {
+    await upsert('admin_users',
+      { id: user.id, email: user.email || `${user.id}@sem-email.local`, full_name: user.user_metadata?.full_name || user.email || '', role: 'admin', is_active: true, last_login_at: new Date().toISOString() },
+      'id'
+    );
+  } catch (adminUpsertError) {
     console.error('[validateAdmin] Falha ao sincronizar admin_users:', adminUpsertError.message, adminUpsertError.details || '');
   }
-
 
   return { user };
 }
@@ -185,18 +193,13 @@ async function handleConfirmPayment(req, res) {
   }
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     // Verificar que transação existe e está pendente
-    const { data: tx, error: txErr } = await supabase
-      .from('transactions')
-      .select('id, status, package_id, amount, user_id, visitor_id')
-      .eq('id', transactionId)
-      .single();
+    const tx = await selectOne('transactions', 'id', transactionId, 'id, status, package_id, amount, user_id, visitor_id');
 
-    if (txErr || !tx) return res.status(404).json({ error: 'Transação não encontrada' });
+    if (!tx) return res.status(404).json({ error: 'Transação não encontrada' });
     if (tx.status !== 'pending') return res.status(400).json({ error: `Transação já processada (status: ${tx.status})` });
 
     // Se userId não veio do frontend (join RLS bloqueou), usar o da transação
@@ -211,27 +214,27 @@ async function handleConfirmPayment(req, res) {
     // créditos duplicados. Agora o WHERE inclui "AND status = 'pending'",
     // tornando a transição pending→completed atómica a nível de base de
     // dados — só uma das chamadas concorrentes consegue actualizar 1 linha;
-    // a outra recebe count=0 e é rejeitada antes de creditar.
-    const { error: updateErr, count: updatedCount } = await supabase.from('transactions')
-      .update({
+    // a outra recebe 0 linhas devolvidas e é rejeitada antes de creditar.
+    let updatedRows;
+    try {
+      updatedRows = await update('transactions', 'id', transactionId, {
         status:       'completed',
         confirmed_by: auth.user.id,
         confirmed_at: new Date().toISOString(),
-      }, { count: 'exact' })
-      .eq('id', transactionId)
-      .eq('status', 'pending');
-    if (updateErr) throw updateErr;
-    if (!updatedCount) {
+      }, '&status=eq.pending');
+    } catch (updateErr) { throw updateErr; }
+    if (!updatedRows || !updatedRows.length) {
       return res.status(409).json({ error: 'Transação já foi processada por outro pedido em paralelo.' });
     }
 
     // Adicionar créditos ao utilizador
-    const { data: newCredits, error: rpcErr } = await supabase
-      .rpc('add_credits', { user_id: userId, amount: creditsInt });
-    if (rpcErr) throw rpcErr;
+    let newCredits;
+    try {
+      newCredits = await rpc('add_credits', { user_id: userId, amount: creditsInt });
+    } catch (rpcErr) { throw rpcErr; }
 
     // Registar em credit_logs
-    await supabase.from('credit_logs').insert({
+    await insert('credit_logs', {
       user_id:        userId,
       transaction_id: transactionId,
       action:         'purchase_confirmed',
@@ -240,7 +243,7 @@ async function handleConfirmPayment(req, res) {
     }).catch(e => console.warn('[confirm-payment] credit_logs falhou:', e.message));
 
     // Log de auditoria
-    await supabase.from('admin_logs').insert({
+    await insert('admin_logs', {
       admin_id:    auth.user.id,
       action:      'confirm_payment',
       target_type: 'transaction',
@@ -250,7 +253,7 @@ async function handleConfirmPayment(req, res) {
     });
 
     // Processar comissão de afiliado (fire-and-forget)
-    supabase.rpc('process_affiliate_commission_v2', {
+    rpc('process_affiliate_commission_v2', {
       p_transaction_id: transactionId,
       p_user_id:        tx.user_id || userId,
       p_package_id:     tx.package_id,
@@ -261,13 +264,13 @@ async function handleConfirmPayment(req, res) {
     // api/misc.js — só regista se a transacção tiver visitor_id (Fase 1 em
     // diante); transacções antigas ficam de fora, nunca inventamos origem.
     if (tx.visitor_id) {
-      supabase.from('marketing_events').insert({
+      insert('marketing_events', {
         visitor_id:    tx.visitor_id,
         user_id:       tx.user_id || userId,
         event:         'credit_purchase',
         value:         tx.amount,
         metadata:      { package_id: tx.package_id, credits: creditsInt, verification_method: 'manual' },
-      }).then(({ error }) => { if (error) console.warn('[confirm-payment] marketing_events falhou:', error.message); });
+      }).catch(error => console.warn('[confirm-payment] marketing_events falhou:', error.message));
     }
 
     return res.status(200).json({
@@ -308,8 +311,7 @@ async function handleConfirmAvulso(req, res) {
     if (!creditsInt || creditsInt <= 0) return res.status(400).json({ error: 'credits inválido' });
 
     try {
-      const supabase = await getAdminClient();
-      const auth     = await validateAdmin(supabase, token);
+      const auth = await validateAdmin(token);
       if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
       const ref        = (referenceId || ('MAN' + Date.now().toString().slice(-6))).toUpperCase();
@@ -318,32 +320,36 @@ async function handleConfirmAvulso(req, res) {
       const cleanPhone = phone.replace(/\D/g, '');
       const normPhone  = cleanPhone.startsWith('258') ? `+${cleanPhone}` : `+258${cleanPhone}`;
 
-      const { data: newUser, error: createErr } = await supabase.auth.admin.createUser({
-        email: tempEmail, password: tempPass, email_confirm: true,
-        user_metadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: normPhone },
-      });
-      if (createErr) throw new Error('Erro ao criar utilizador: ' + createErr.message);
+      let newUser;
+      try {
+        newUser = await adminCreateUser({
+          email: tempEmail, password: tempPass, emailConfirm: true,
+          userMetadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: normPhone },
+        });
+      } catch (createErr) { throw new Error('Erro ao criar utilizador: ' + createErr.message); }
 
-      const tempUserId = newUser.user.id;
+      const tempUserId = newUser.id;
 
-      const { error: profileErr } = await supabase.from('profiles').update({
-        is_temp: true, temp_ref: ref, temp_password: tempPass,
-        credits: creditsInt, plan: 'free', account_type: 'avulso',
-        full_name: `Avulso ${ref}`, phone: normPhone,
-        updated_at: new Date().toISOString(),
-      }).eq('id', tempUserId);
-      if (profileErr) throw profileErr;
+      try {
+        await update('profiles', 'id', tempUserId, {
+          is_temp: true, temp_ref: ref, temp_password: tempPass,
+          credits: creditsInt, plan: 'free', account_type: 'avulso',
+          full_name: `Avulso ${ref}`, phone: normPhone,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (profileErr) { throw profileErr; }
 
       // Registar transação para histórico
-      const { data: txData } = await supabase.from('transactions').insert({
+      const txRows = await insert('transactions', {
         user_id: tempUserId, package_id: 'avulso', amount: 0,
         credits: creditsInt, status: 'completed', payment_method: 'manual',
         reference_id: ref, phone_number: normPhone,
         confirmed_by: auth.user.id, confirmed_at: new Date().toISOString(),
-      }).select('id').single().catch(() => ({ data: null }));
+      }).catch(() => null);
+      const txData = txRows || null;
 
       // Registar em credit_logs
-      await supabase.from('credit_logs').insert({
+      await insert('credit_logs', {
         user_id:        tempUserId,
         transaction_id: txData?.id || null,
         action:         'purchase_confirmed',
@@ -375,15 +381,13 @@ async function handleConfirmAvulso(req, res) {
     return res.status(400).json({ error: 'transactionId ou referenceId obrigatório' });
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
-    let txQuery = supabase.from('transactions').select('*');
-    if (transactionId) txQuery = txQuery.eq('id', transactionId);
-    else               txQuery = txQuery.eq('reference_id', referenceId);
-    const { data: tx, error: txErr } = await txQuery.single();
-    if (txErr || !tx) return res.status(404).json({ error: 'Transação não encontrada' });
+    const filterCol = transactionId ? 'id' : 'reference_id';
+    const filterVal = transactionId || referenceId;
+    const tx = await selectOne('transactions', filterCol, filterVal, '*');
+    if (!tx) return res.status(404).json({ error: 'Transação não encontrada' });
     if (tx.status !== 'pending') return res.status(400).json({ error: 'Transação já processada' });
     if (tx.package_id !== 'avulso')
       return res.status(400).json({ error: 'Use /api/admin/confirm-payment para pacotes não avulsos' });
@@ -392,31 +396,34 @@ async function handleConfirmAvulso(req, res) {
     const tempEmail = `temp_${ref.toLowerCase()}@mzdocs.temp`;
     const tempPass  = _genPassword();
 
-    const { data: newUser, error: createErr } = await supabase.auth.admin.createUser({
-      email: tempEmail, password: tempPass, email_confirm: true,
-      user_metadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: tx.phone_number || '' },
-    });
-    if (createErr) throw new Error('Erro ao criar conta temp: ' + createErr.message);
+    let newUser;
+    try {
+      newUser = await adminCreateUser({
+        email: tempEmail, password: tempPass, emailConfirm: true,
+        userMetadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: tx.phone_number || '' },
+      });
+    } catch (createErr) { throw new Error('Erro ao criar conta temp: ' + createErr.message); }
 
-    const tempUserId = newUser.user.id;
+    const tempUserId = newUser.id;
 
-    const { error: profileErr } = await supabase.from('profiles').update({
-      is_temp: true, temp_ref: ref, temp_password: tempPass,
-      credits: tx.credits, plan: 'free', account_type: 'avulso',
-      full_name: `Avulso ${ref}`, phone: tx.phone_number || null,
-      updated_at: new Date().toISOString(),
-    }).eq('id', tempUserId);
-    if (profileErr) throw profileErr;
+    try {
+      await update('profiles', 'id', tempUserId, {
+        is_temp: true, temp_ref: ref, temp_password: tempPass,
+        credits: tx.credits, plan: 'free', account_type: 'avulso',
+        full_name: `Avulso ${ref}`, phone: tx.phone_number || null,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (profileErr) { throw profileErr; }
 
-    await supabase.from('transactions').update({
+    await update('transactions', 'id', tx.id, {
       user_id:      tempUserId,
       status:       'completed',
       confirmed_by: auth.user.id,
       confirmed_at: new Date().toISOString(),
-    }).eq('id', tx.id);
+    });
 
     // Registar em credit_logs
-    await supabase.from('credit_logs').insert({
+    await insert('credit_logs', {
       user_id:        tempUserId,
       transaction_id: tx.id,
       action:         'purchase_confirmed',
@@ -457,38 +464,37 @@ async function handleFixProfiles(req, res) {
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Método não permitido' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'GET') {
-      const { data: broken } = await supabase.from('profiles')
-        .select('id, email, phone, full_name, created_at')
-        .or('phone.is.null,phone.eq.')
-        .order('created_at', { ascending: false });
+      const broken = await restRequest(
+        `profiles?or=(phone.is.null,phone.eq.)&order=created_at.desc&select=id,email,phone,full_name,created_at`
+      );
       return res.status(200).json({
         total_broken: broken?.length || 0, profiles: broken || [],
         message: broken?.length ? `${broken.length} perfis sem telemóvel encontrados` : 'Todos os perfis têm telemóvel ✅',
       });
     }
 
-    const { data: toFix } = await supabase.from('profiles').select('id, email, phone').or('phone.is.null,phone.eq.');
+    const toFix = await restRequest(`profiles?or=(phone.is.null,phone.eq.)&select=id,email,phone`);
     if (!toFix?.length) return res.status(200).json({ message: 'Nenhum perfil para corrigir ✅', fixed: 0 });
 
     let fixed = 0, failed = 0;
     const errors = [];
     for (const profile of toFix) {
       try {
-        const { data: authUser } = await supabase.auth.admin.getUserById(profile.id);
-        const meta = authUser?.user?.user_metadata || {};
+        const authUser = await adminGetUserById(profile.id);
+        const meta = authUser?.user_metadata || {};
         const phoneFromMeta = meta.phone || meta.user_phone || null;
         if (phoneFromMeta) {
-          const { error } = await supabase.from('profiles').update({
-            phone: phoneFromMeta, full_name: meta.full_name || profile.full_name || '',
-            updated_at: new Date().toISOString(),
-          }).eq('id', profile.id);
-          if (error) { failed++; errors.push({ id: profile.id, error: error.message }); }
-          else fixed++;
+          try {
+            await update('profiles', 'id', profile.id, {
+              phone: phoneFromMeta, full_name: meta.full_name || profile.full_name || '',
+              updated_at: new Date().toISOString(),
+            });
+            fixed++;
+          } catch (error) { failed++; errors.push({ id: profile.id, error: error.message }); }
         } else {
           errors.push({ id: profile.id, note: 'sem phone no user_metadata' });
         }
@@ -508,8 +514,7 @@ async function handleStats(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const now        = new Date();
@@ -528,28 +533,26 @@ async function handleStats(req, res) {
     const weekStart     = new Date(now); weekStart.setDate(weekStart.getDate() - 7);
 
     const [
-      { count: totalUsers },
-      { count: newUsers24h },
-      { count: avulsoUsers },
-      { count: docsTotal },
-      { count: docsToday },
-      { count: pending },
-      { count: publishedPosts },
-      { data: typesRaw },
-      { data: revenueRaw },
-      { data: docsRaw },
+      totalUsers,
+      newUsers24h,
+      avulsoUsers,
+      docsTotal,
+      docsToday,
+      pending,
+      publishedPosts,
+      typesRaw,
+      revenueRaw,
+      docsRaw,
     ] = await Promise.all([
-      supabase.from('profiles').select('*', { count: 'exact', head: true }),
-      supabase.from('profiles').select('*', { count: 'exact', head: true })
-        .gte('created_at', new Date(Date.now() - 86400000).toISOString()),
+      countRows('profiles'),
+      countRows('profiles', `?created_at=gte.${encodeURIComponent(new Date(Date.now() - 86400000).toISOString())}`),
       // CORRIGIDO (v37): o painel mostrava sempre "0 normais · 0 avulso" e
       // "0 Contas Avulso Activas" porque este endpoint nunca calculava
       // users.normal/users.avulso, apesar do front-end (AdminApp.js) já
       // ler esses campos. A fonte de verdade é profiles.account_type
       // ('avulso' vs 'normal'/NULL), tal como usado em handleAffiliates
       // e na secção Utilizadores.
-      supabase.from('profiles').select('*', { count: 'exact', head: true })
-        .eq('account_type', 'avulso'),
+      countRows('profiles', '?account_type=eq.avulso'),
       // CORRIGIDO (auditoria de dados, v27): "Documentos Gerados" e o
       // gráfico "Documentos (7 dias)" liam de credit_usage_log, uma tabela
       // que NUNCA é escrita pelo código actual (api/deduct-credit.js só
@@ -558,21 +561,13 @@ async function handleStats(req, res) {
       // seria a única a popular credit_usage_log). Resultado: estes
       // contadores mostravam sempre 0, mesmo com documentos reais gerados.
       // A fonte de verdade real é credit_logs com action='consume'.
-      supabase.from('credit_logs').select('*', { count: 'exact', head: true })
-        .eq('action', 'consume'),
-      supabase.from('credit_logs').select('*', { count: 'exact', head: true })
-        .eq('action', 'consume').gte('created_at', todayStart),
-      supabase.from('transactions').select('*', { count: 'exact', head: true })
-        .eq('status', 'pending'),
-      supabase.from('blog_pages').select('*', { count: 'exact', head: true })
-        .eq('published', true),
-      supabase.from('credit_logs').select('document_type')
-        .eq('action', 'consume').gte('created_at', thirtyDaysAgo.toISOString()),
-      supabase.from('transactions').select('amount, created_at')
-        .eq('status', 'completed')
-        .gte('created_at', thirtyDaysAgo.toISOString()),
-      supabase.from('credit_logs').select('created_at')
-        .eq('action', 'consume').gte('created_at', thirtyDaysAgo.toISOString()),
+      countRows('credit_logs', '?action=eq.consume'),
+      countRows('credit_logs', `?action=eq.consume&created_at=gte.${encodeURIComponent(todayStart)}`),
+      countRows('transactions', '?status=eq.pending'),
+      countRows('blog_pages', '?published=eq.true'),
+      restRequest(`credit_logs?action=eq.consume&created_at=gte.${encodeURIComponent(thirtyDaysAgo.toISOString())}&select=document_type`),
+      restRequest(`transactions?status=eq.completed&created_at=gte.${encodeURIComponent(thirtyDaysAgo.toISOString())}&select=amount,created_at`),
+      restRequest(`credit_logs?action=eq.consume&created_at=gte.${encodeURIComponent(thirtyDaysAgo.toISOString())}&select=created_at`),
     ]);
 
     // Calcular receita/documentos por dia em JS para o gráfico de 7 dias
@@ -683,33 +678,28 @@ async function handleFinance(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const q = req.query || {};
 
     // ── GET: histórico de despesas operacionais (para contabilidade) ──
     if (req.method === 'GET' && q.sub === 'expenses') {
-      let query = supabase.from('finance_expenses')
-        .select('id, category, description, amount_mzn, is_recurring, occurred_at, created_at')
-        .order('occurred_at', { ascending: false }).limit(2000);
-      if (q.start) query = query.gte('occurred_at', q.start);
-      if (q.end)   query = query.lte('occurred_at', q.end);
-      const { data, error } = await query;
-      if (error) throw error;
+      let path = `finance_expenses?order=occurred_at.desc&limit=2000` +
+        `&select=id,category,description,amount_mzn,is_recurring,occurred_at,created_at`;
+      if (q.start) path += `&occurred_at=gte.${encodeURIComponent(q.start)}`;
+      if (q.end)   path += `&occurred_at=lte.${encodeURIComponent(q.end)}`;
+      const data = await restRequest(path);
       return res.status(200).json({ success: true, expenses: data || [] });
     }
 
     // ── GET: histórico de levantamentos do dono da plataforma ─────────
     if (req.method === 'GET' && q.sub === 'withdrawals') {
-      let query = supabase.from('finance_withdrawals')
-        .select('id, amount_mzn, note, withdrawn_at, created_at')
-        .order('withdrawn_at', { ascending: false }).limit(2000);
-      if (q.start) query = query.gte('withdrawn_at', q.start);
-      if (q.end)   query = query.lte('withdrawn_at', q.end);
-      const { data, error } = await query;
-      if (error) throw error;
+      let path = `finance_withdrawals?order=withdrawn_at.desc&limit=2000` +
+        `&select=id,amount_mzn,note,withdrawn_at,created_at`;
+      if (q.start) path += `&withdrawn_at=gte.${encodeURIComponent(q.start)}`;
+      if (q.end)   path += `&withdrawn_at=lte.${encodeURIComponent(q.end)}`;
+      const data = await restRequest(path);
       return res.status(200).json({ success: true, withdrawals: data || [] });
     }
 
@@ -720,26 +710,24 @@ async function handleFinance(req, res) {
     // permitem ao contabilista isolar exactamente o período de um IVA
     // mensal ou de uma declaração anual (IRPC/IRPS simplificado).
     if (req.method === 'GET' && q.sub === 'transactions') {
-      let query = supabase.from('transactions')
-        .select('id, phone_number, package_id, amount, credits, status, mpesa_receipt, reference_id, created_at, confirmed_at, profiles!transactions_user_id_fkey(full_name, email)')
-        .order('created_at', { ascending: false }).limit(2000);
-      if (q.status && q.status !== 'all') query = query.eq('status', q.status);
-      if (q.start) query = query.gte('created_at', `${q.start}T00:00:00.000Z`);
-      if (q.end)   query = query.lte('created_at', `${q.end}T23:59:59.999Z`);
-      let { data, error } = await query;
-      if (error) {
+      let path = `transactions?order=created_at.desc&limit=2000` +
+        `&select=id,phone_number,package_id,amount,credits,status,mpesa_receipt,reference_id,created_at,confirmed_at,profiles!transactions_user_id_fkey(full_name,email)`;
+      if (q.status && q.status !== 'all') path += `&status=eq.${encodeURIComponent(q.status)}`;
+      if (q.start) path += `&created_at=gte.${encodeURIComponent(q.start + 'T00:00:00.000Z')}`;
+      if (q.end)   path += `&created_at=lte.${encodeURIComponent(q.end + 'T23:59:59.999Z')}`;
+      let data;
+      try {
+        data = await restRequest(path);
+      } catch (error) {
         // Se o join à FK falhar por qualquer razão, devolver sem os dados
         // de perfil em vez de rebentar o livro de transacções inteiro.
         console.warn('[admin/finance] Join com profiles falhou, a tentar sem join:', error.message);
-        let fallback = supabase.from('transactions')
-          .select('id, phone_number, package_id, amount, credits, status, mpesa_receipt, reference_id, created_at, confirmed_at')
-          .order('created_at', { ascending: false }).limit(2000);
-        if (q.status && q.status !== 'all') fallback = fallback.eq('status', q.status);
-        if (q.start) fallback = fallback.gte('created_at', `${q.start}T00:00:00.000Z`);
-        if (q.end)   fallback = fallback.lte('created_at', `${q.end}T23:59:59.999Z`);
-        const r2 = await fallback;
-        if (r2.error) throw r2.error;
-        data = r2.data;
+        let fallbackPath = `transactions?order=created_at.desc&limit=2000` +
+          `&select=id,phone_number,package_id,amount,credits,status,mpesa_receipt,reference_id,created_at,confirmed_at`;
+        if (q.status && q.status !== 'all') fallbackPath += `&status=eq.${encodeURIComponent(q.status)}`;
+        if (q.start) fallbackPath += `&created_at=gte.${encodeURIComponent(q.start + 'T00:00:00.000Z')}`;
+        if (q.end)   fallbackPath += `&created_at=lte.${encodeURIComponent(q.end + 'T23:59:59.999Z')}`;
+        data = await restRequest(fallbackPath);
       }
       return res.status(200).json({ success: true, transactions: data || [] });
     }
@@ -751,27 +739,25 @@ async function handleFinance(req, res) {
     // porque essa já é feita via aff_balance/pending — isto é só o livro
     // de consulta para o contabilista ver o que já foi efectivamente pago.
     if (req.method === 'GET' && q.sub === 'affiliate-payouts') {
-      let query = supabase.from('affiliate_withdrawals')
-        .select('id, affiliate_id, amount, mpesa_phone, receipt_number, receipt_screenshot_url, processed_at, created_at, profiles!affiliate_withdrawals_affiliate_id_fkey(full_name, email)')
-        .eq('status', 'completed')
-        .order('processed_at', { ascending: false }).limit(2000);
-      if (q.start) query = query.gte('processed_at', `${q.start}T00:00:00.000Z`);
-      if (q.end)   query = query.lte('processed_at', `${q.end}T23:59:59.999Z`);
-      let { data, error } = await query;
-      if (error) {
+      let path = `affiliate_withdrawals?status=eq.completed&order=processed_at.desc&limit=2000` +
+        `&select=id,affiliate_id,amount,mpesa_phone,receipt_number,receipt_screenshot_url,processed_at,created_at,profiles!affiliate_withdrawals_affiliate_id_fkey(full_name,email)`;
+      if (q.start) path += `&processed_at=gte.${encodeURIComponent(q.start + 'T00:00:00.000Z')}`;
+      if (q.end)   path += `&processed_at=lte.${encodeURIComponent(q.end + 'T23:59:59.999Z')}`;
+      let data;
+      try {
+        data = await restRequest(path);
+      } catch (error) {
         console.warn('[admin/finance] Join com profiles falhou (affiliate-payouts), a tentar sem join:', error.message);
-        let fallback = supabase.from('affiliate_withdrawals')
-          .select('id, affiliate_id, amount, mpesa_phone, receipt_number, receipt_screenshot_url, processed_at, created_at')
-          .eq('status', 'completed').order('processed_at', { ascending: false }).limit(2000);
-        if (q.start) fallback = fallback.gte('processed_at', `${q.start}T00:00:00.000Z`);
-        if (q.end)   fallback = fallback.lte('processed_at', `${q.end}T23:59:59.999Z`);
-        const r2 = await fallback;
-        if (r2.error) throw r2.error;
-        data = r2.data;
+        let fallbackPath = `affiliate_withdrawals?status=eq.completed&order=processed_at.desc&limit=2000` +
+          `&select=id,affiliate_id,amount,mpesa_phone,receipt_number,receipt_screenshot_url,processed_at,created_at`;
+        if (q.start) fallbackPath += `&processed_at=gte.${encodeURIComponent(q.start + 'T00:00:00.000Z')}`;
+        if (q.end)   fallbackPath += `&processed_at=lte.${encodeURIComponent(q.end + 'T23:59:59.999Z')}`;
+        data = await restRequest(fallbackPath);
         // Enriquecer manualmente sem depender do embed do PostgREST
         const ids = [...new Set((data || []).map(w => w.affiliate_id))];
         if (ids.length) {
-          const { data: pnames } = await supabase.from('profiles').select('id, full_name, email').in('id', ids);
+          const idsList = ids.map(id => encodeURIComponent(id)).join(',');
+          const pnames = await restRequest(`profiles?id=in.(${idsList})&select=id,full_name,email`);
           const pm = {}; (pnames || []).forEach(p => { pm[p.id] = p; });
           data = data.map(w => ({ ...w, profiles: pm[w.affiliate_id] || {} }));
         }
@@ -781,9 +767,8 @@ async function handleFinance(req, res) {
 
     // ── GET: dados fiscais da empresa (cabeçalho dos relatórios) ──────
     if (req.method === 'GET' && q.sub === 'fiscal-config') {
-      const { data, error } = await supabase.from('system_settings')
-        .select('key, value').in('key', FISCAL_SETTINGS_KEYS);
-      if (error) throw error;
+      const fiscalKeys = FISCAL_SETTINGS_KEYS.map(k => encodeURIComponent(k)).join(',');
+      const data = await restRequest(`system_settings?key=in.(${fiscalKeys})&select=key,value`);
       const cfg = {};
       (data || []).forEach(r => { cfg[r.key] = r.value; });
       return res.status(200).json({
@@ -806,30 +791,23 @@ async function handleFinance(req, res) {
       if (!q.start || !q.end) return res.status(400).json({ error: 'start e end (AAAA-MM-DD) são obrigatórios' });
 
       const [
-        { data: revenueRows, error: revErr },
-        { data: expenseRows, error: expErr },
-        { data: withdrawalRows, error: wdErr },
-        { data: affPayoutRows, error: affErr },
-        { data: tplPayoutRows, error: tplErr },
-        { data: fiscalRows },
+        revenueRows,
+        expenseRows,
+        withdrawalRows,
+        affPayoutRows,
+        tplPayoutRows,
+        fiscalRows,
       ] = await Promise.all([
-        supabase.from('transactions').select('amount, created_at')
-          .eq('status', 'completed').gte('created_at', `${q.start}T00:00:00.000Z`).lte('created_at', `${q.end}T23:59:59.999Z`),
-        supabase.from('finance_expenses').select('category, amount_mzn, description, occurred_at')
-          .gte('occurred_at', q.start).lte('occurred_at', q.end),
-        supabase.from('finance_withdrawals').select('amount_mzn, withdrawn_at')
-          .gte('withdrawn_at', q.start).lte('withdrawn_at', q.end),
+        restRequest(`transactions?status=eq.completed&created_at=gte.${encodeURIComponent(q.start + 'T00:00:00.000Z')}&created_at=lte.${encodeURIComponent(q.end + 'T23:59:59.999Z')}&select=amount,created_at`),
+        restRequest(`finance_expenses?occurred_at=gte.${encodeURIComponent(q.start)}&occurred_at=lte.${encodeURIComponent(q.end)}&select=category,amount_mzn,description,occurred_at`),
+        restRequest(`finance_withdrawals?withdrawn_at=gte.${encodeURIComponent(q.start)}&withdrawn_at=lte.${encodeURIComponent(q.end)}&select=amount_mzn,withdrawn_at`),
         // Comissões de afiliados efectivamente pagas no período — custo
         // operacional dedutível, tal como as despesas de domínio/hosting/IA.
-        supabase.from('affiliate_withdrawals').select('amount, processed_at')
-          .eq('status', 'completed').gte('processed_at', `${q.start}T00:00:00.000Z`).lte('processed_at', `${q.end}T23:59:59.999Z`),
+        restRequest(`affiliate_withdrawals?status=eq.completed&processed_at=gte.${encodeURIComponent(q.start + 'T00:00:00.000Z')}&processed_at=lte.${encodeURIComponent(q.end + 'T23:59:59.999Z')}&select=amount,processed_at`),
         // Royalties de criadores de templates (v38) efectivamente pagos.
-        supabase.from('template_withdrawals').select('amount, processed_at')
-          .eq('status', 'completed').gte('processed_at', `${q.start}T00:00:00.000Z`).lte('processed_at', `${q.end}T23:59:59.999Z`),
-        supabase.from('system_settings').select('key, value').in('key', FISCAL_SETTINGS_KEYS),
+        restRequest(`template_withdrawals?status=eq.completed&processed_at=gte.${encodeURIComponent(q.start + 'T00:00:00.000Z')}&processed_at=lte.${encodeURIComponent(q.end + 'T23:59:59.999Z')}&select=amount,processed_at`),
+        restRequest(`system_settings?key=in.(${FISCAL_SETTINGS_KEYS.map(k => encodeURIComponent(k)).join(',')})&select=key,value`),
       ]);
-      if (revErr) throw revErr; if (expErr) throw expErr; if (wdErr) throw wdErr;
-      if (affErr) throw affErr; if (tplErr) throw tplErr;
 
       const fiscalCfg = {};
       (fiscalRows || []).forEach(r => { fiscalCfg[r.key] = r.value; });
@@ -873,31 +851,31 @@ async function handleFinance(req, res) {
     // ── GET: resumo financeiro completo (dashboard + separador Finanças) ─
     if (req.method === 'GET' && (!q.sub || q.sub === 'summary')) {
       const [
-        { data: settingsRows },
-        { data: revenueRows },
-        { data: affRows },
-        { data: affPendingWithdrawals },
-        { data: tplAuthorRows },
-        { data: tplPendingWithdrawals },
-        { data: expenseRows },
-        { data: withdrawalRows },
-        { data: fiscalRows },
+        settingsRows,
+        revenueRows,
+        affRows,
+        affPendingWithdrawals,
+        tplAuthorRows,
+        tplPendingWithdrawals,
+        expenseRows,
+        withdrawalRows,
+        fiscalRows,
       ] = await Promise.all([
-        supabase.from('system_settings').select('key, value').in('key', FINANCE_SETTINGS_KEYS),
-        supabase.from('transactions').select('amount').eq('status', 'completed'),
-        supabase.from('profiles').select('aff_balance').gt('aff_balance', 0),
+        restRequest(`system_settings?key=in.(${FINANCE_SETTINGS_KEYS.map(k => encodeURIComponent(k)).join(',')})&select=key,value`),
+        restRequest(`transactions?status=eq.completed&select=amount`),
+        restRequest(`profiles?aff_balance=gt.0&select=aff_balance`),
         // Levantamentos de afiliados já pedidos (o valor já saiu de
         // aff_balance nesse momento) mas ainda não pagos via M-Pesa —
         // continuam a ser dinheiro reservado, não disponível ao dono.
-        supabase.from('affiliate_withdrawals').select('amount').eq('status', 'pending'),
+        restRequest(`affiliate_withdrawals?status=eq.pending&select=amount`),
         // Royalties de criadores de templates (v38) — mesma lógica dos
         // afiliados: dinheiro já ganho por quem criou um template pago,
         // ainda não levantado, nunca entra no valor levantável do dono.
-        supabase.from('profiles').select('template_author_balance').gt('template_author_balance', 0),
-        supabase.from('template_withdrawals').select('amount').eq('status', 'pending'),
-        supabase.from('finance_expenses').select('amount_mzn'),
-        supabase.from('finance_withdrawals').select('amount_mzn'),
-        supabase.from('system_settings').select('key, value').in('key', FISCAL_SETTINGS_KEYS),
+        restRequest(`profiles?template_author_balance=gt.0&select=template_author_balance`),
+        restRequest(`template_withdrawals?status=eq.pending&select=amount`),
+        restRequest(`finance_expenses?select=amount_mzn`),
+        restRequest(`finance_withdrawals?select=amount_mzn`),
+        restRequest(`system_settings?key=in.(${FISCAL_SETTINGS_KEYS.map(k => encodeURIComponent(k)).join(',')})&select=key,value`),
       ]);
 
       const cfg = {};
@@ -982,16 +960,18 @@ async function handleFinance(req, res) {
         if (!body.category || !Number.isFinite(amount) || amount <= 0) {
           return res.status(400).json({ error: 'category e amount_mzn (> 0) são obrigatórios' });
         }
-        const { data, error } = await supabase.from('finance_expenses').insert({
-          category:     body.category,
-          description:  body.description || null,
-          amount_mzn:   amount,
-          is_recurring: !!body.is_recurring,
-          occurred_at:  body.occurred_at || now.split('T')[0],
-          created_by:   auth.user.id,
-        }).select().single();
-        if (error) throw error;
-        await supabase.from('admin_logs').insert({
+        let data;
+        try {
+          data = await insert('finance_expenses', {
+            category:     body.category,
+            description:  body.description || null,
+            amount_mzn:   amount,
+            is_recurring: !!body.is_recurring,
+            occurred_at:  body.occurred_at || now.split('T')[0],
+            created_by:   auth.user.id,
+          });
+        } catch (error) { throw error; }
+        await insert('admin_logs', {
           admin_id: auth.user.id, action: 'finance_add_expense',
           target_type: 'finance_expenses', target_id: data.id, details: body, created_at: now,
         });
@@ -1000,8 +980,7 @@ async function handleFinance(req, res) {
 
       if (op === 'delete-expense') {
         if (!body.id) return res.status(400).json({ error: 'id em falta' });
-        const { error } = await supabase.from('finance_expenses').delete().eq('id', body.id);
-        if (error) throw error;
+        await del('finance_expenses', 'id', body.id);
         return res.status(200).json({ success: true });
       }
 
@@ -1010,14 +989,16 @@ async function handleFinance(req, res) {
         if (!Number.isFinite(amount) || amount <= 0) {
           return res.status(400).json({ error: 'amount_mzn (> 0) é obrigatório' });
         }
-        const { data, error } = await supabase.from('finance_withdrawals').insert({
-          amount_mzn:   amount,
-          note:         body.note || null,
-          withdrawn_at: body.withdrawn_at || now.split('T')[0],
-          created_by:   auth.user.id,
-        }).select().single();
-        if (error) throw error;
-        await supabase.from('admin_logs').insert({
+        let data;
+        try {
+          data = await insert('finance_withdrawals', {
+            amount_mzn:   amount,
+            note:         body.note || null,
+            withdrawn_at: body.withdrawn_at || now.split('T')[0],
+            created_by:   auth.user.id,
+          });
+        } catch (error) { throw error; }
+        await insert('admin_logs', {
           admin_id: auth.user.id, action: 'finance_add_withdrawal',
           target_type: 'finance_withdrawals', target_id: data.id, details: body, created_at: now,
         });
@@ -1026,8 +1007,7 @@ async function handleFinance(req, res) {
 
       if (op === 'delete-withdrawal') {
         if (!body.id) return res.status(400).json({ error: 'id em falta' });
-        const { error } = await supabase.from('finance_withdrawals').delete().eq('id', body.id);
-        if (error) throw error;
+        await del('finance_withdrawals', 'id', body.id);
         return res.status(200).json({ success: true });
       }
 
@@ -1040,9 +1020,10 @@ async function handleFinance(req, res) {
         const rows = Object.entries(updates).map(([key, value]) => ({
           key, value, updated_by: auth.user.id, updated_at: now,
         }));
-        const { error } = await supabase.from('system_settings').upsert(rows, { onConflict: 'key' });
-        if (error) throw error;
-        await supabase.from('admin_logs').insert({
+        await restRequest('system_settings?on_conflict=key', {
+          method: 'POST', body: rows, prefer: 'resolution=merge-duplicates,return=representation',
+        });
+        await insert('admin_logs', {
           admin_id: auth.user.id, action: 'finance_save_config',
           target_type: 'system_settings', details: updates, created_at: now,
         });
@@ -1058,9 +1039,10 @@ async function handleFinance(req, res) {
         const rows = Object.entries(updates).map(([key, value]) => ({
           key, value, updated_by: auth.user.id, updated_at: now,
         }));
-        const { error } = await supabase.from('system_settings').upsert(rows, { onConflict: 'key' });
-        if (error) throw error;
-        await supabase.from('admin_logs').insert({
+        await restRequest('system_settings?on_conflict=key', {
+          method: 'POST', body: rows, prefer: 'resolution=merge-duplicates,return=representation',
+        });
+        await insert('admin_logs', {
           admin_id: auth.user.id, action: 'finance_save_fiscal_config',
           target_type: 'system_settings', details: updates, created_at: now,
         });
@@ -1086,18 +1068,15 @@ async function handleFinance(req, res) {
 async function handleTemplateWithdrawals(req, res) {
   const token = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'GET') {
       const status = (req.query?.status || 'pending').trim();
-      let q = supabase.from('template_withdrawals')
-        .select('id, author_id, amount, mpesa_phone, status, admin_note, processed_at, created_at, profiles(full_name, email, phone)')
-        .order('created_at', { ascending: false }).limit(100);
-      if (status !== 'all') q = q.eq('status', status);
-      const { data, error } = await q;
-      if (error) throw error;
+      let path = `template_withdrawals?order=created_at.desc&limit=100` +
+        `&select=id,author_id,amount,mpesa_phone,status,admin_note,processed_at,created_at,profiles(full_name,email,phone)`;
+      if (status !== 'all') path += `&status=eq.${encodeURIComponent(status)}`;
+      const data = await restRequest(path);
       return res.status(200).json({ success: true, withdrawals: data || [] });
     }
 
@@ -1107,26 +1086,21 @@ async function handleTemplateWithdrawals(req, res) {
       if (!withdrawal_id) return res.status(400).json({ error: 'withdrawal_id em falta' });
       if (!['completed', 'rejected'].includes(newStatus)) return res.status(400).json({ error: 'status inválido' });
 
-      const { data: wd, error: wErr } = await supabase.from('template_withdrawals')
-        .select('author_id, amount, status').eq('id', withdrawal_id).single();
-      if (wErr || !wd) return res.status(404).json({ error: 'Levantamento não encontrado' });
+      const wd = await selectOne('template_withdrawals', 'id', withdrawal_id, 'author_id, amount, status');
+      if (!wd) return res.status(404).json({ error: 'Levantamento não encontrado' });
       if (wd.status !== 'pending') return res.status(400).json({ error: 'Levantamento não está pendente' });
 
-      const { error } = await supabase.from('template_withdrawals').update({
+      await update('template_withdrawals', 'id', withdrawal_id, {
         status: newStatus, admin_note: note || null, processed_at: new Date().toISOString(),
-      }).eq('id', withdrawal_id);
-      if (error) throw error;
+      });
 
       // Se rejeitado: devolver saldo ao criador do template
       if (newStatus === 'rejected') {
-        const { data: prof } = await supabase.from('profiles')
-          .select('template_author_balance').eq('id', wd.author_id).single();
-        await supabase.from('profiles')
-          .update({ template_author_balance: (prof?.template_author_balance || 0) + wd.amount })
-          .eq('id', wd.author_id);
+        const prof = await selectOne('profiles', 'id', wd.author_id, 'template_author_balance');
+        await update('profiles', 'id', wd.author_id, { template_author_balance: (prof?.template_author_balance || 0) + wd.amount });
       }
 
-      await supabase.from('admin_logs').insert({
+      await insert('admin_logs', {
         admin_id: auth.user.id, action: 'process_template_withdrawal',
         target_type: 'template_withdrawals', target_id: withdrawal_id,
         details: { status: newStatus, note }, created_at: new Date().toISOString(),
@@ -1149,8 +1123,7 @@ async function handleTransactions(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const status = req.query?.status || 'all';
@@ -1158,50 +1131,30 @@ async function handleTransactions(req, res) {
     const limit  = Math.min(parseInt(req.query?.limit) || 50, 100);
     const offset = Math.max(parseInt(req.query?.offset) || 0, 0);
 
-    // Query principal — usa LEFT JOIN via Supabase syntax
-    // CORRIGIDO: usar alias correcto para FK (profiles!transactions_user_id_fkey)
-    let query = supabase.from('transactions').select(`
-      id,
-      user_id,
-      package_id,
-      amount,
-      credits,
-      status,
-      payment_method,
-      reference_id,
-      phone_number,
-      confirmed_by,
-      confirmed_at,
-      created_at,
-      receipt_hash,
-      receipt_verified,
-      receipt_confidence,
-      verification_method,
-      review_reason,
-      profiles!transactions_user_id_fkey(full_name, email, phone)
-    `, { count: 'exact' });
-
-    if (status !== 'all') query = query.eq('status', status);
+    // Query principal — via PostgREST embed (FK explícita)
+    let filters = '';
+    if (status !== 'all') filters += `&status=eq.${encodeURIComponent(status)}`;
     if (date) {
-      query = query
-        .gte('created_at', `${date}T00:00:00.000Z`)
-        .lte('created_at', `${date}T23:59:59.999Z`);
+      filters += `&created_at=gte.${encodeURIComponent(date + 'T00:00:00.000Z')}`;
+      filters += `&created_at=lte.${encodeURIComponent(date + 'T23:59:59.999Z')}`;
     }
 
-    const { data, error, count } = await query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const selectCols = 'id,user_id,package_id,amount,credits,status,payment_method,reference_id,phone_number,confirmed_by,confirmed_at,created_at,receipt_hash,receipt_verified,receipt_confidence,verification_method,review_reason';
 
-    if (error) {
+    let data, count;
+    try {
+      data = await restRequest(
+        `transactions?select=${selectCols},profiles!transactions_user_id_fkey(full_name,email,phone)${filters}` +
+        `&order=created_at.desc&limit=${limit}&offset=${offset}`
+      );
+      count = await countRows('transactions', `?${filters.replace(/^&/, '')}`);
+    } catch (error) {
       // Se o join falhar (FK não registada), tentar sem join
       console.warn('[admin/transactions] Join falhou, tentando sem join:', error.message);
-      const { data: simpleData, error: simpleErr, count: simpleCount } = await supabase
-        .from('transactions')
-        .select('id, user_id, package_id, amount, credits, status, payment_method, reference_id, phone_number, confirmed_by, confirmed_at, created_at', { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (simpleErr) throw simpleErr;
+      const simpleData = await restRequest(
+        `transactions?select=${selectCols}${filters}&order=created_at.desc&limit=${limit}&offset=${offset}`
+      );
+      const simpleCount = await countRows('transactions', `?${filters.replace(/^&/, '')}`);
       return res.status(200).json({ success: true, data: simpleData || [], total: simpleCount || 0, limit, offset, warning: 'Join com profiles falhou — dados de utilizador omitidos' });
     }
 
@@ -1218,16 +1171,11 @@ async function handleTransactions(req, res) {
 async function handleSettings(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'GET') {
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('key, value, description, updated_at')
-        .order('key');
-      if (error) throw error;
+      const data = await restRequest('system_settings?order=key&select=key,value,description,updated_at');
       const map = {};
       (data || []).forEach(r => { map[r.key] = r.value; });
       return res.status(200).json({ success: true, settings: data || [], map });
@@ -1243,9 +1191,10 @@ async function handleSettings(req, res) {
       const rows = Object.entries(updates).map(([key, value]) => ({
         key, value: String(value), updated_by: auth.user.id, updated_at: now,
       }));
-      const { error } = await supabase.from('system_settings').upsert(rows, { onConflict: 'key' });
-      if (error) throw error;
-      await supabase.from('admin_logs').insert({
+      await restRequest('system_settings?on_conflict=key', {
+        method: 'POST', body: rows, prefer: 'resolution=merge-duplicates,return=representation',
+      });
+      await insert('admin_logs', {
         admin_id:    auth.user.id,
         action:      'update_settings',
         target_type: 'system_settings',
@@ -1269,17 +1218,13 @@ async function handleAuditLog(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const limit = Math.min(parseInt(req.query?.limit || '50', 10), 200);
-    const { data, error } = await supabase
-      .from('admin_logs')
-      .select('id, action, target_type, target_id, details, created_at, admin_id')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) throw error;
+    const data = await restRequest(
+      `admin_logs?order=created_at.desc&limit=${limit}&select=id,action,target_type,target_id,details,created_at,admin_id`
+    );
     return res.status(200).json({ success: true, logs: data || [] });
   } catch (err) {
     console.error('[admin/audit-log]', err);
@@ -1299,27 +1244,27 @@ async function handleDeleteUser(req, res) {
   if (!userId) return res.status(400).json({ error: 'userId é obrigatório' });
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (auth.user.id === userId) return res.status(400).json({ error: 'Não pode eliminar a sua própria conta' });
 
     // Eliminar dados relacionados (FK)
-    await supabase.from('documents').delete().eq('user_id', userId);
-    await supabase.from('transactions').delete().eq('user_id', userId);
-    await supabase.from('credit_usage_log').delete().eq('user_id', userId);
-    await supabase.from('credit_logs').delete().eq('user_id', userId);          // NOVO
-    await supabase.from('affiliate_commissions').delete().eq('affiliate_id', userId); // NOVO
+    await del('documents', 'user_id', userId);
+    await del('transactions', 'user_id', userId);
+    await del('credit_usage_log', 'user_id', userId);
+    await del('credit_logs', 'user_id', userId);          // NOVO
+    await del('affiliate_commissions', 'affiliate_id', userId); // NOVO
 
-    await supabase.from('profiles').delete().eq('id', userId);
+    await del('profiles', 'id', userId);
 
-    const { error: authDelErr } = await supabase.auth.admin.deleteUser(userId);
-    if (authDelErr) {
+    try {
+      await adminDeleteUser(userId);
+    } catch (authDelErr) {
       console.warn('[delete-user] Auth delete falhou:', authDelErr.message);
     }
 
-    await supabase.from('admin_logs').insert({
+    await insert('admin_logs', {
       admin_id:    auth.user.id,
       action:      'delete_user',
       target_type: 'user',
@@ -1342,7 +1287,6 @@ async function handleAnalytics(req, res) {
 
   if (req.method === 'POST') {
     try {
-      const supabase = await getAdminClient();
       const body  = parseBody(req) || {};
       const page  = (body.page || '/').slice(0, 200);
       const today = new Date().toISOString().split('T')[0];
@@ -1351,16 +1295,14 @@ async function handleAnalytics(req, res) {
       const userId = body.user_id && typeof body.user_id === 'string' && body.user_id.length === 36
         ? body.user_id : null;
 
-      const { error: rpcErr } = await supabase
-        .rpc('increment_page_view', { p_page: page, p_date: today });
-
-      if (rpcErr) {
-        const { data: existing } = await supabase
-          .from('page_views').select('id, views').eq('page', page).eq('date', today).maybeSingle();
+      try {
+        await rpc('increment_page_view', { p_page: page, p_date: today });
+      } catch (rpcErr) {
+        const existing = await restRequest(`page_views?page=eq.${encodeURIComponent(page)}&date=eq.${today}&select=id,views&limit=1`).then(r => r?.[0] || null);
         if (existing) {
-          await supabase.from('page_views').update({ views: (existing.views || 0) + 1 }).eq('id', existing.id);
+          await update('page_views', 'id', existing.id, { views: (existing.views || 0) + 1 });
         } else {
-          await supabase.from('page_views').insert({ page, date: today, views: 1 });
+          await insert('page_views', { page, date: today, views: 1 });
         }
       }
 
@@ -1372,17 +1314,15 @@ async function handleAnalytics(req, res) {
       // para incluir o snippet abaixo em todo artigo novo).
       const blogSlugMatch = page.match(/^\/?blog\/([^/?#]+)/);
       if (blogSlugMatch) {
-        supabase.rpc('increment_page_views', { p_slug: blogSlugMatch[1] }).catch(() => {});
+        rpc('increment_page_views', { p_slug: blogSlugMatch[1] }).catch(() => {});
       }
 
       const sessionRow = { session_id: sid, page, updated_at: now };
       if (userId) sessionRow.user_id = userId;
-      await supabase.from('online_sessions')
-        .upsert(sessionRow, { onConflict: 'session_id', ignoreDuplicates: false })
-        ;
+      await upsert('online_sessions', sessionRow, 'session_id');
 
       const cutoff = new Date(Date.now() - 6 * 60 * 1000).toISOString();
-      supabase.from('online_sessions').delete().lt('updated_at', cutoff);
+      restRequest(`online_sessions?updated_at=lt.${encodeURIComponent(cutoff)}`, { method: 'DELETE' }).catch(() => {});
 
       return res.status(200).json({ ok: true });
     } catch (err) {
@@ -1394,34 +1334,30 @@ async function handleAnalytics(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const days  = parseInt(req.query?.days || '7', 10);
     const since = new Date(); since.setDate(since.getDate() - days);
 
-    const { data: pvData } = await supabase
-      .from('page_views').select('date, page, views')
-      .gte('date', since.toISOString().split('T')[0])
-      .order('date', { ascending: true });
+    const pvData = await restRequest(
+      `page_views?date=gte.${since.toISOString().split('T')[0]}&order=date.asc&select=date,page,views`
+    );
 
     const byDay = {};
     (pvData || []).forEach(r => { byDay[r.date] = (byDay[r.date] || 0) + (r.views || 0); });
 
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { count: onlineNow } = await supabase
-      .from('online_sessions').select('*', { count: 'exact', head: true }).gte('updated_at', fiveMinAgo);
+    const onlineNow = await countRows('online_sessions', `?updated_at=gte.${encodeURIComponent(fiveMinAgo)}`);
 
     const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30);
     // CORRIGIDO (auditoria de dados, v27): mesma tabela fantasma
     // credit_usage_log — nunca escrita pelo código actual. A fonte real
     // de consumo de créditos por tipo de documento é credit_logs
     // (action='consume'), a mesma usada em handleStats.
-    const { data: usageData } = await supabase
-      .from('credit_logs').select('document_type')
-      .eq('action', 'consume')
-      .gte('created_at', monthAgo.toISOString());
+    const usageData = await restRequest(
+      `credit_logs?action=eq.consume&created_at=gte.${encodeURIComponent(monthAgo.toISOString())}&select=document_type`
+    );
 
     const serviceCounts = {};
     (usageData || []).forEach(r => {
@@ -1432,17 +1368,16 @@ async function handleAnalytics(req, res) {
       .map(([name, count]) => ({ name, count }));
 
     const serviceFilter = req.query?.service || null;
-    let fbQuery = supabase.from('user_feedback')
-      .select('id, service, rating, comment, created_at, user_id, session_id')
-      .gte('created_at', monthAgo.toISOString())
-      .order('created_at', { ascending: false }).limit(100);
-    if (serviceFilter) fbQuery = fbQuery.eq('service', serviceFilter);
-    const { data: fbRows } = await fbQuery;
+    let fbPath = `user_feedback?created_at=gte.${encodeURIComponent(monthAgo.toISOString())}` +
+      `&order=created_at.desc&limit=100&select=id,service,rating,comment,created_at,user_id,session_id`;
+    if (serviceFilter) fbPath += `&service=eq.${encodeURIComponent(serviceFilter)}`;
+    const fbRows = await restRequest(fbPath);
 
     const userIds = [...new Set((fbRows || []).map(r => r.user_id).filter(Boolean))];
     const userMap = {};
     if (userIds.length) {
-      const { data: profiles } = await supabase.from('profiles').select('id, full_name, phone').in('id', userIds);
+      const idsList = userIds.map(id => encodeURIComponent(id)).join(',');
+      const profiles = await restRequest(`profiles?id=in.(${idsList})&select=id,full_name,phone`);
       (profiles || []).forEach(p => { userMap[p.id] = p; });
     }
 
@@ -1471,15 +1406,14 @@ async function handleAnalytics(req, res) {
     // novos e de onde vieram, e cliques de afiliados por segmento
     // (papelaria/cyber/universidade/etc). Antes só existia o total
     // agregado por dia (byDay), sem qualquer discriminação por página.
-    const { data: pvBreakdownRaw } = await supabase
-      .from('page_views').select('page, views')
-      .gte('date', since.toISOString().split('T')[0]);
+    const pvBreakdownRaw = await restRequest(
+      `page_views?date=gte.${since.toISOString().split('T')[0]}&select=page,views`
+    );
 
     const byPage = {};
     (pvBreakdownRaw || []).forEach(r => { byPage[r.page] = (byPage[r.page] || 0) + (r.views || 0); });
 
-    const { data: blogPagesRaw } = await supabase
-      .from('blog_pages').select('slug, title, views, published_at');
+    const blogPagesRaw = await restRequest('blog_pages?select=slug,title,views,published_at');
     const blogBySlug = {};
     (blogPagesRaw || []).forEach(p => { blogBySlug[p.slug] = p; });
 
@@ -1510,15 +1444,15 @@ async function handleAnalytics(req, res) {
 
     // Novos clientes no período + de onde vieram (afiliado vs orgânico),
     // e por segmento do afiliado que os referiu (papelaria/cyber/etc).
-    const { data: newProfilesRaw } = await supabase
-      .from('profiles').select('id, created_at, referred_by, account_type')
-      .gte('created_at', since.toISOString());
+    const newProfilesRaw = await restRequest(
+      `profiles?created_at=gte.${encodeURIComponent(since.toISOString())}&select=id,created_at,referred_by,account_type`
+    );
 
     const referrerIds = [...new Set((newProfilesRaw || []).map(p => p.referred_by).filter(Boolean))];
     const referrerSegmentMap = {};
     if (referrerIds.length) {
-      const { data: referrers } = await supabase
-        .from('profiles').select('id, aff_segment').in('id', referrerIds);
+      const idsList = referrerIds.map(id => encodeURIComponent(id)).join(',');
+      const referrers = await restRequest(`profiles?id=in.(${idsList})&select=id,aff_segment`);
       (referrers || []).forEach(r => { referrerSegmentMap[r.id] = r.aff_segment || 'individual'; });
     }
 
@@ -1536,15 +1470,16 @@ async function handleAnalytics(req, res) {
 
     // Cliques de afiliados por segmento (papelaria/cyber/universidade/
     // explicação/digitador/individual), com taxa de conversão.
-    const { data: clicksRaw } = await supabase
-      .from('affiliate_clicks').select('affiliate_id, converted, created_at')
-      .gte('created_at', since.toISOString());
+    const clicksRaw = await restRequest(
+      `affiliate_clicks?created_at=gte.${encodeURIComponent(since.toISOString())}&select=affiliate_id,converted,created_at`
+    );
 
     const clickAffIds = [...new Set((clicksRaw || []).map(c => c.affiliate_id).filter(Boolean))];
     const clickSegmentMap = { ...referrerSegmentMap };
     const missingIds = clickAffIds.filter(id => !clickSegmentMap[id]);
     if (missingIds.length) {
-      const { data: affs } = await supabase.from('profiles').select('id, aff_segment').in('id', missingIds);
+      const idsList = missingIds.map(id => encodeURIComponent(id)).join(',');
+      const affs = await restRequest(`profiles?id=in.(${idsList})&select=id,aff_segment`);
       (affs || []).forEach(a => { clickSegmentMap[a.id] = a.aff_segment || 'individual'; });
     }
 
@@ -1570,10 +1505,9 @@ async function handleAnalytics(req, res) {
     // continua a funcionar normalmente, em vez de a página inteira quebrar.
     let marketingSources = [];
     try {
-      const { data: mktRows } = await supabase
-        .from('marketing_source_daily')
-        .select('marketing_source, visits, unique_visitors, signups, buyers, revenue')
-        .gte('day', since.toISOString().split('T')[0]);
+      const mktRows = await restRequest(
+        `marketing_source_daily?day=gte.${since.toISOString().split('T')[0]}&select=marketing_source,visits,unique_visitors,signups,buyers,revenue`
+      );
       const bySource = {};
       (mktRows || []).forEach(r => {
         const s = bySource[r.marketing_source] || { source: r.marketing_source, visits: 0, unique_visitors: 0, signups: 0, buyers: 0, revenue: 0 };
@@ -1621,9 +1555,8 @@ async function handleFunnel(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const supabase = await getAdminClient();
-    const token    = (req.headers.authorization || '').replace('Bearer ', '').trim();
-    const auth     = await validateAdmin(supabase, token);
+    const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+    const auth  = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const days  = Math.min(Math.max(parseInt(req.query?.days || '30', 10) || 30, 1), 365);
@@ -1632,13 +1565,10 @@ async function handleFunnel(req, res) {
 
     let rows = [];
     try {
-      const { data, error } = await supabase
-        .from('marketing_funnel_daily')
-        .select('day, visits, unique_visitors, signups, doc_generators, buyers, revenue')
-        .gte('day', sinceStr)
-        .order('day', { ascending: true });
-      if (error) throw error;
-      rows = data || [];
+      rows = await restRequest(
+        `marketing_funnel_daily?day=gte.${sinceStr}&order=day.asc&select=day,visits,unique_visitors,signups,doc_generators,buyers,revenue`
+      );
+      rows = rows || [];
     } catch (viewErr) {
       // Degrada sem rebentar se a migration_v33 ainda não tiver sido
       // aplicada neste ambiente — mesmo padrão usado em marketing_source_daily.
@@ -1706,9 +1636,8 @@ async function handleUserTimeline(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const supabase = await getAdminClient();
-    const token    = (req.headers.authorization || '').replace('Bearer ', '').trim();
-    const auth     = await validateAdmin(supabase, token);
+    const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+    const auth  = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const userId = (req.query?.userId || '').toString().trim();
@@ -1716,13 +1645,10 @@ async function handleUserTimeline(req, res) {
       return res.status(400).json({ error: 'userId inválido' });
     }
 
-    const { data: profile, error: profileErr } = await supabase
-      .from('profiles')
-      .select('id, full_name, phone, email, created_at, visitor_id, credits, account_type, is_admin, is_blocked, referred_by, total_documents')
-      .eq('id', userId)
-      .single();
+    const profile = await selectOne('profiles', 'id', userId,
+      'id,full_name,phone,email,created_at,visitor_id,credits,account_type,is_admin,is_blocked,referred_by,total_documents');
 
-    if (profileErr || !profile) {
+    if (!profile) {
       return res.status(404).json({ error: 'Utilizador não encontrado' });
     }
 
@@ -1733,14 +1659,13 @@ async function handleUserTimeline(req, res) {
       ? `user_id.eq.${userId},visitor_id.eq.${profile.visitor_id}`
       : `user_id.eq.${userId}`;
 
-    const { data: events, error: evErr } = await supabase
-      .from('marketing_events')
-      .select('event, document_type, value, metadata, created_at, visitor_id, user_id')
-      .or(orFilter)
-      .order('created_at', { ascending: false })
-      .limit(200);
-
-    if (evErr) {
+    let events;
+    try {
+      events = await restRequest(
+        `marketing_events?or=(${orFilter})&order=created_at.desc&limit=200` +
+        `&select=event,document_type,value,metadata,created_at,visitor_id,user_id`
+      );
+    } catch (evErr) {
       console.error('[admin/user-timeline] eventos:', evErr.message);
       return res.status(500).json({ error: 'Erro ao carregar histórico' });
     }
@@ -1819,14 +1744,13 @@ async function handleFeedback(req, res) {
   const cleanDisplayName = String(display_name || '').trim().slice(0, 40).replace(/[<>]/g, '') || null;
 
   try {
-    const supabase = await getAdminClient();
     let userId = null;
     const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
     if (token) {
-      const { data: { user } } = await supabase.auth.getUser(token).catch(() => ({ data: {} }));
+      const { user } = await getUserFromToken(token).catch(() => ({ user: null }));
       userId = user?.id || null;
     }
-    await supabase.from('user_feedback').insert({
+    await insert('user_feedback', {
       service, rating: parseInt(rating), comment: cleanComment,
       user_id: userId, session_id: session_id || null, created_at: new Date().toISOString(),
       status, display_name: cleanDisplayName,
@@ -1853,23 +1777,21 @@ async function handleReviews(req, res) {
   if (!token) return res.status(401).json({ error: 'Token em falta' });
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'GET') {
       const status = req.query?.status || 'pending';
-      let query = supabase.from('user_feedback')
-        .select('id, service, rating, comment, display_name, status, user_id, session_id, created_at, reviewed_at')
-        .order('created_at', { ascending: false }).limit(200);
-      if (status !== 'all') query = query.eq('status', status);
-      const { data, error } = await query;
-      if (error) throw error;
+      let path = `user_feedback?order=created_at.desc&limit=200` +
+        `&select=id,service,rating,comment,display_name,status,user_id,session_id,created_at,reviewed_at`;
+      if (status !== 'all') path += `&status=eq.${encodeURIComponent(status)}`;
+      const data = await restRequest(path);
 
       const userIds = [...new Set((data || []).map(r => r.user_id).filter(Boolean))];
       const userMap = {};
       if (userIds.length) {
-        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', userIds);
+        const idsList = userIds.map(id => encodeURIComponent(id)).join(',');
+        const profiles = await restRequest(`profiles?id=in.(${idsList})&select=id,full_name`);
         (profiles || []).forEach(p => { userMap[p.id] = p; });
       }
       const reviews = (data || []).map(r => ({
@@ -1884,10 +1806,9 @@ async function handleReviews(req, res) {
       if (!id || !['approved', 'rejected'].includes(newStatus)) {
         return res.status(400).json({ error: 'id e status (approved|rejected) são obrigatórios' });
       }
-      const { error } = await supabase.from('user_feedback').update({
+      await update('user_feedback', 'id', id, {
         status: newStatus, reviewed_by: auth.user.id, reviewed_at: new Date().toISOString(),
-      }).eq('id', id);
-      if (error) throw error;
+      });
       return res.status(200).json({ success: true });
     }
 
@@ -1915,8 +1836,7 @@ async function handleReviews(req, res) {
 async function handleTemplates(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'GET') {
@@ -1929,26 +1849,24 @@ async function handleTemplates(req, res) {
       // trazer tudo e filtrar no browser, e nem isso funcionava porque
       // esta rota nunca chegou a ser usada pelo front-end (ver AdminApp.js).
       const status = (req.query?.status || '').trim();
-      let q = supabase.from('templates_custom')
-        // CORRIGIDO: 'avg_rating' não é uma coluna real de templates_custom
-        // (só existe como CASE calculado na view v_templates_gallery,
-        // migration_v12/v23) — o select directo causava
-        // "column templates_custom.avg_rating does not exist" e partia a
-        // página inteira de moderação de templates. Selecciona-se
-        // rating_sum/rating_count reais e calcula-se avg_rating abaixo.
-        // CORRIGIDO (v39): 'price_mzn' foi removida de templates_custom
-        // pela migration_v39_template_credits_only.sql — o preço passou a
-        // ser SEMPRE credit_cost, com o equivalente em MZN calculado ao
-        // vivo (ver mzn_per_credit/mzn_equivalent abaixo). Seleccionar
-        // price_mzn directamente causava "column templates_custom.price_mzn
-        // does not exist" e partia esta página inteira.
-        .select('id, user_id, service_type, template_name, description, template_type, status, is_featured, is_public, credit_cost, author_share_percent, use_count, downloads, rating_sum, rating_count, rejection_note, template_html, template_css, created_at')
-        .order('created_at', { ascending: false }).limit(limit);
-      if (search) q = q.ilike('template_name', `%${search}%`);
-      if (type)   q = q.eq('template_type', type);
-      if (status) q = q.eq('status', status);
-      const { data, error } = await q;
-      if (error) throw error;
+      // CORRIGIDO: 'avg_rating' não é uma coluna real de templates_custom
+      // (só existe como CASE calculado na view v_templates_gallery,
+      // migration_v12/v23) — o select directo causava
+      // "column templates_custom.avg_rating does not exist" e partia a
+      // página inteira de moderação de templates. Selecciona-se
+      // rating_sum/rating_count reais e calcula-se avg_rating abaixo.
+      // CORRIGIDO (v39): 'price_mzn' foi removida de templates_custom
+      // pela migration_v39_template_credits_only.sql — o preço passou a
+      // ser SEMPRE credit_cost, com o equivalente em MZN calculado ao
+      // vivo (ver mzn_per_credit/mzn_equivalent abaixo). Seleccionar
+      // price_mzn directamente causava "column templates_custom.price_mzn
+      // does not exist" e partia esta página inteira.
+      let path = `templates_custom?order=created_at.desc&limit=${limit}` +
+        `&select=id,user_id,service_type,template_name,description,template_type,status,is_featured,is_public,credit_cost,author_share_percent,use_count,downloads,rating_sum,rating_count,rejection_note,template_html,template_css,created_at`;
+      if (search) path += `&template_name=ilike.*${encodeURIComponent(search)}*`;
+      if (type)   path += `&template_type=eq.${encodeURIComponent(type)}`;
+      if (status) path += `&status=eq.${encodeURIComponent(status)}`;
+      const data = await restRequest(path);
 
       // v39: taxa dinâmica MZN/crédito, a mesma fonte de verdade usada no
       // checkout (api/_lib/packages.js) — nunca um valor fixo no código.
@@ -2013,10 +1931,14 @@ async function handleTemplates(req, res) {
         if (patch.status === 'rejected') { patch.is_public = patch.is_public ?? false; patch.rejected_at = new Date().toISOString(); }
         if (!Object.keys(patch).length) { results.push({ id: u.id, ok: false, error: 'nenhum campo válido' }); continue; }
         patch.updated_at = new Date().toISOString();
-        const { error } = await supabase.from('templates_custom').update(patch).eq('id', u.id);
-        results.push({ id: u.id, ok: !error, error: error?.message });
+        try {
+          await update('templates_custom', 'id', u.id, patch);
+          results.push({ id: u.id, ok: true });
+        } catch (error) {
+          results.push({ id: u.id, ok: false, error: error.message });
+        }
       }
-      await supabase.from('admin_logs').insert({
+      await insert('admin_logs', {
         admin_id:    auth.user.id,
         action:      'update_templates',
         target_type: 'templates_custom',
@@ -2037,8 +1959,7 @@ async function handleStaticPages(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const fs   = require('fs');
@@ -2068,18 +1989,15 @@ async function handleDocuments(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const limit  = Math.min(parseInt(req.query?.limit || '100'), 200);
     const search = (req.query?.q || '').trim();
-    let q = supabase.from('documents')
-      .select('id, service_type, title, model_used, created_at, content, profiles(full_name, phone)')
-      .order('created_at', { ascending: false }).limit(limit);
-    if (search) q = q.ilike('service_type', `%${search}%`);
-    const { data, error } = await q;
-    if (error) throw error;
+    let path = `documents?order=created_at.desc&limit=${limit}` +
+      `&select=id,service_type,title,model_used,created_at,content,profiles(full_name,phone)`;
+    if (search) path += `&service_type=ilike.*${encodeURIComponent(search)}*`;
+    const data = await restRequest(path);
     return res.status(200).json({ success: true, data: data || [] });
   } catch (err) {
     console.error('[admin/documents]', err);
@@ -2094,15 +2012,13 @@ async function handleDeleteDocument(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const { docId } = req.body || {};
     if (!docId) return res.status(400).json({ error: 'docId é obrigatório' });
 
-    const { error } = await supabase.from('documents').delete().eq('id', docId);
-    if (error) throw error;
+    await del('documents', 'id', docId);
 
     // Registar no audit log
     try {
@@ -2110,7 +2026,7 @@ async function handleDeleteDocument(req, res) {
       // só 'admin_logs' existe, criada na migration_v8_2). Esta chamada
       // falhava sempre, silenciosamente (try/catch best-effort já cobria
       // o erro, mas o registo nunca era de facto guardado).
-      await supabase.from('admin_logs').insert({
+      await insert('admin_logs', {
         admin_id:    auth.user.id,
         action:      'delete_document',
         target_type: 'document',
@@ -2139,21 +2055,19 @@ async function handleBlogPages(req, res) {
   if (!token) return res.status(401).json({ error: 'Token em falta' });
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'GET') {
       const { slug } = req.query;
       if (slug) {
-        const { data, error } = await supabase.from('blog_pages').select('*').eq('slug', slug).single();
-        if (error) return res.status(404).json({ error: 'Página não encontrada' });
+        const data = await selectOne('blog_pages', 'slug', slug, '*');
+        if (!data) return res.status(404).json({ error: 'Página não encontrada' });
         return res.status(200).json(data);
       }
-      const { data, error } = await supabase.from('blog_pages')
-        .select('id, slug, title, meta_description, published, views, ai_generated, created_at, updated_at')
-        .order('updated_at', { ascending: false });
-      if (error) throw error;
+      const data = await restRequest(
+        'blog_pages?order=updated_at.desc&select=id,slug,title,meta_description,published,views,ai_generated,created_at,updated_at'
+      );
       return res.status(200).json(data || []);
     }
 
@@ -2161,17 +2075,17 @@ async function handleBlogPages(req, res) {
       const { slug, title, meta_description, content_html, published = false, ai_generated = false } = req.body;
       if (!slug || !title || !content_html) return res.status(400).json({ error: 'slug, title e content_html são obrigatórios' });
       const cleanSlug = _slugify(slug);
-      const { data, error } = await supabase.from('blog_pages')
-        .insert({
+      let data;
+      try {
+        data = await insert('blog_pages', {
           slug: cleanSlug, title, meta_description, content_html, published, ai_generated, author_id: auth.user.id,
           // Sem isto, published_at fica sempre NULL — e como a listagem
           // pública (/blog) ordena por published_at, artigos publicados
           // por aqui nunca apareciam como "recentes", por mais novos que
           // fossem (ficavam sempre no fim, por causa do nullslast).
           published_at: published ? new Date().toISOString() : null,
-        })
-        .select().single();
-      if (error) {
+        });
+      } catch (error) {
         if (error.code === '23505') return res.status(409).json({ error: 'Já existe uma página com este slug' });
         throw error;
       }
@@ -2180,7 +2094,7 @@ async function handleBlogPages(req, res) {
           await _generateStaticPage(data, SITE_URL);
         } catch (pubErr) {
           console.error('[admin/pages] _generateStaticPage falhou:', pubErr.message);
-          await supabase.from('admin_notifications').insert({
+          insert('admin_notifications', {
             type: 'blog_publish_failed',
             title: '⚠️ Falha ao publicar página no GitHub',
             message: `"${data.title}" (slug: ${data.slug}) foi gravada mas a publicação estática falhou: ${pubErr.message}`,
@@ -2200,7 +2114,7 @@ async function handleBlogPages(req, res) {
       // publicada, nunca sobrescrevendo a data original em edições depois.
       let needsPublishedAt = false;
       if (published === true) {
-        const { data: existing } = await supabase.from('blog_pages').select('published_at').eq('id', id).single();
+        const existing = await selectOne('blog_pages', 'id', id, 'published_at');
         needsPublishedAt = !existing?.published_at;
       }
 
@@ -2213,14 +2127,14 @@ async function handleBlogPages(req, res) {
       if (ai_generated !== undefined)     updates.ai_generated     = ai_generated;
       if (needsPublishedAt)                updates.published_at    = new Date().toISOString();
 
-      const { data, error } = await supabase.from('blog_pages').update(updates).eq('id', id).select().single();
-      if (error) throw error;
+      const updatedRows = await update('blog_pages', 'id', id, updates);
+      const data = updatedRows?.[0] || null;
       if (data?.published) {
         try {
           await _generateStaticPage(data, SITE_URL);
         } catch (pubErr) {
           console.error('[admin/pages] _generateStaticPage falhou:', pubErr.message);
-          await supabase.from('admin_notifications').insert({
+          insert('admin_notifications', {
             type: 'blog_publish_failed',
             title: '⚠️ Falha ao publicar página no GitHub',
             message: `"${data.title}" (slug: ${data.slug}) foi actualizada mas a publicação estática falhou: ${pubErr.message}`,
@@ -2234,9 +2148,8 @@ async function handleBlogPages(req, res) {
     if (req.method === 'DELETE') {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: 'id é obrigatório' });
-      const { data: page } = await supabase.from('blog_pages').select('slug').eq('id', id).single();
-      const { error } = await supabase.from('blog_pages').delete().eq('id', id);
-      if (error) throw error;
+      const page = await selectOne('blog_pages', 'id', id, 'slug');
+      await del('blog_pages', 'id', id);
       return res.status(200).json({ success: true, deleted_slug: page?.slug });
     }
 
@@ -2258,8 +2171,7 @@ async function handleGeneratePage(req, res) {
   if (!token) return res.status(401).json({ error: 'Token em falta' });
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const { title, keywords = '', tone = 'informativo', word_count = 600, avoid_titles = [] } = req.body;
@@ -2322,10 +2234,8 @@ function _monthKey(d) {
 
 // Lê blog_monthly_limit / blog_min_interval_days de system_settings, com
 // valores por omissão sensatos caso a migration_v29 ainda não tenha corrido.
-async function _getBlogLimits(supabase) {
-  const { data } = await supabase
-    .from('system_settings').select('key, value')
-    .in('key', ['blog_monthly_limit', 'blog_min_interval_days']);
+async function _getBlogLimits() {
+  const data = await restRequest(`system_settings?key=in.(blog_monthly_limit,blog_min_interval_days)&select=key,value`);
   const map = {};
   (data || []).forEach(r => { map[r.key] = r.value; });
   return {
@@ -2354,18 +2264,15 @@ async function handleBlogQueue(req, res) {
   if (!token) return res.status(401).json({ error: 'Token em falta' });
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
-    const { monthlyLimit, minIntervalDays } = await _getBlogLimits(supabase);
+    const { monthlyLimit, minIntervalDays } = await _getBlogLimits();
 
     if (req.method === 'GET') {
-      const { data, error } = await supabase
-        .from('blog_schedule_queue')
-        .select('id, title, keywords, source, scheduled_at, status, blog_page_id, error_note, created_at')
-        .order('scheduled_at', { ascending: true });
-      if (error) throw error;
+      const data = await restRequest(
+        'blog_schedule_queue?order=scheduled_at.asc&select=id,title,keywords,source,scheduled_at,status,blog_page_id,error_note,created_at'
+      );
       const items = data || [];
 
       const now = new Date();
@@ -2391,17 +2298,15 @@ async function handleBlogQueue(req, res) {
       // Body: { reschedule: true, startDate?: ISO, intervalDays?: N }
       if (req.body?.reschedule) {
         const step = Math.max(minIntervalDays, parseInt(req.body.intervalDays, 10) || minIntervalDays);
-        const { data: pendingItems, error: pErr } = await supabase
-          .from('blog_schedule_queue').select('id, scheduled_at')
-          .eq('status', 'pending').order('scheduled_at', { ascending: true });
-        if (pErr) throw pErr;
+        const pendingItems = await restRequest(
+          `blog_schedule_queue?status=eq.pending&order=scheduled_at.asc&select=id,scheduled_at`
+        );
         if (!pendingItems || !pendingItems.length) {
           return res.status(200).json({ success: true, updated: 0 });
         }
 
         // Contar já publicados/agendados por mês para não estourar o limite.
-        const { data: settledItems } = await supabase
-          .from('blog_schedule_queue').select('scheduled_at').eq('status', 'published');
+        const settledItems = await restRequest(`blog_schedule_queue?status=eq.published&select=scheduled_at`);
         const monthCounts = {};
         (settledItems || []).forEach(p => { monthCounts[_monthKey(new Date(p.scheduled_at))] = (monthCounts[_monthKey(new Date(p.scheduled_at))] || 0) + 1; });
 
@@ -2414,8 +2319,7 @@ async function handleBlogQueue(req, res) {
         }
 
         for (const u of updates) {
-          await supabase.from('blog_schedule_queue')
-            .update({ scheduled_at: u.scheduled_at }).eq('id', u.id).eq('status', 'pending');
+          await update('blog_schedule_queue', 'id', u.id, { scheduled_at: u.scheduled_at }, '&status=eq.pending');
         }
         return res.status(200).json({ success: true, updated: updates.length, intervalUsed: step, monthlyLimit });
       }
@@ -2433,8 +2337,7 @@ async function handleBlogQueue(req, res) {
       const step = Math.max(minIntervalDays, parseInt(intervalDays, 10) || minIntervalDays);
 
       // Contar o que já está agendado/publicado por mês (falhados não contam).
-      const { data: existingItems } = await supabase
-        .from('blog_schedule_queue').select('scheduled_at').neq('status', 'failed');
+      const existingItems = await restRequest(`blog_schedule_queue?status=neq.failed&select=scheduled_at`);
       const monthCounts = {};
       (existingItems || []).forEach(p => { monthCounts[_monthKey(new Date(p.scheduled_at))] = (monthCounts[_monthKey(new Date(p.scheduled_at))] || 0) + 1; });
 
@@ -2460,8 +2363,9 @@ async function handleBlogQueue(req, res) {
 
       if (!rows.length) return res.status(400).json({ error: 'Nenhum título válido encontrado' });
 
-      const { data, error } = await supabase.from('blog_schedule_queue').insert(rows).select('id, title, scheduled_at');
-      if (error) throw error;
+      const data = await restRequest('blog_schedule_queue?select=id,title,scheduled_at', {
+        method: 'POST', body: rows, prefer: 'return=representation',
+      });
 
       return res.status(200).json({ success: true, inserted: data.length, data, intervalUsed: step, monthlyLimit });
     }
@@ -2477,18 +2381,14 @@ async function handleBlogQueue(req, res) {
       // Não deixar ultrapassar o limite mensal do mês de destino.
       const monthStart = new Date(newDate.getFullYear(), newDate.getMonth(), 1).toISOString();
       const monthEnd   = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 1).toISOString();
-      const { data: monthItems, error: mErr } = await supabase
-        .from('blog_schedule_queue').select('id')
-        .neq('status', 'failed').neq('id', id)
-        .gte('scheduled_at', monthStart).lt('scheduled_at', monthEnd);
-      if (mErr) throw mErr;
+      const monthItems = await restRequest(
+        `blog_schedule_queue?status=neq.failed&id=neq.${id}&scheduled_at=gte.${encodeURIComponent(monthStart)}&scheduled_at=lt.${encodeURIComponent(monthEnd)}&select=id`
+      );
       if ((monthItems || []).length >= monthlyLimit) {
         return res.status(400).json({ error: `Limite mensal (${monthlyLimit} artigos) já atingido para esse mês. Escolhe outro mês ou aumenta o limite em "Geração Automática".` });
       }
 
-      const { error } = await supabase.from('blog_schedule_queue')
-        .update({ scheduled_at: newDate.toISOString() }).eq('id', id).eq('status', 'pending');
-      if (error) throw error;
+      await update('blog_schedule_queue', 'id', id, { scheduled_at: newDate.toISOString() }, '&status=eq.pending');
       return res.status(200).json({ success: true });
     }
 
@@ -2497,18 +2397,14 @@ async function handleBlogQueue(req, res) {
 
       // Remover TODOS os pendentes de uma vez.
       if (body.all === 'pending') {
-        const { data: toDelete, error: selErr } = await supabase
-          .from('blog_schedule_queue').select('id').eq('status', 'pending');
-        if (selErr) throw selErr;
-        const { error } = await supabase.from('blog_schedule_queue').delete().eq('status', 'pending');
-        if (error) throw error;
+        const toDelete = await restRequest(`blog_schedule_queue?status=eq.pending&select=id`);
+        await del('blog_schedule_queue', 'status', 'pending');
         return res.status(200).json({ success: true, deleted: (toDelete || []).length });
       }
 
       const { id } = body;
       if (!id) return res.status(400).json({ error: 'id é obrigatório' });
-      const { error } = await supabase.from('blog_schedule_queue').delete().eq('id', id).eq('status', 'pending');
-      if (error) throw error;
+      await del('blog_schedule_queue', 'id', id, '&status=eq.pending');
       return res.status(200).json({ success: true });
     }
 
@@ -2529,15 +2425,13 @@ async function handleBlogSettings(req, res) {
   if (!token) return res.status(401).json({ error: 'Token em falta' });
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'GET') {
-      const { data, error } = await supabase
-        .from('system_settings').select('key, value')
-        .in('key', ['blog_autogen_enabled', 'blog_autogen_interval_days', 'blog_autogen_last_run', 'blog_monthly_limit', 'blog_min_interval_days']);
-      if (error) throw error;
+      const data = await restRequest(
+        `system_settings?key=in.(blog_autogen_enabled,blog_autogen_interval_days,blog_autogen_last_run,blog_monthly_limit,blog_min_interval_days)&select=key,value`
+      );
       const map = {};
       (data || []).forEach(r => { map[r.key] = r.value; });
       return res.status(200).json({
@@ -2554,25 +2448,21 @@ async function handleBlogSettings(req, res) {
       const { enabled, intervalDays, monthlyLimit, minIntervalDays } = req.body || {};
       const updates = [];
       if (typeof enabled === 'boolean') {
-        updates.push(supabase.from('system_settings')
-          .upsert({ key: 'blog_autogen_enabled', value: enabled ? 'true' : 'false' }, { onConflict: 'key' }));
+        updates.push(upsert('system_settings', { key: 'blog_autogen_enabled', value: enabled ? 'true' : 'false' }, 'key'));
       }
       if (intervalDays) {
         const n = Math.max(1, parseInt(intervalDays, 10) || 7);
-        updates.push(supabase.from('system_settings')
-          .upsert({ key: 'blog_autogen_interval_days', value: String(n) }, { onConflict: 'key' }));
+        updates.push(upsert('system_settings', { key: 'blog_autogen_interval_days', value: String(n) }, 'key'));
       }
       if (monthlyLimit) {
         // Tecto generoso de 31 (um por dia) para não permitir configurar um
         // ritmo que pareça publicação em massa aos olhos do Google.
         const n = Math.min(31, Math.max(1, parseInt(monthlyLimit, 10) || 12));
-        updates.push(supabase.from('system_settings')
-          .upsert({ key: 'blog_monthly_limit', value: String(n) }, { onConflict: 'key' }));
+        updates.push(upsert('system_settings', { key: 'blog_monthly_limit', value: String(n) }, 'key'));
       }
       if (minIntervalDays) {
         const n = Math.max(1, parseInt(minIntervalDays, 10) || 2);
-        updates.push(supabase.from('system_settings')
-          .upsert({ key: 'blog_min_interval_days', value: String(n) }, { onConflict: 'key' }));
+        updates.push(upsert('system_settings', { key: 'blog_min_interval_days', value: String(n) }, 'key'));
       }
       await Promise.all(updates);
       return res.status(200).json({ success: true });
@@ -2594,29 +2484,25 @@ async function handleAffiliates(req, res) {
   if (!token) return res.status(401).json({ error: 'Token em falta' });
 
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const q = req.query || {};
 
     // ── GET: listagem de afiliados ────────────────────────────────────────
     if (req.method === 'GET' && !q.sub) {
-      const { data, error } = await supabase.from('profiles')
-        .select('id,full_name,email,phone,ref_code,is_affiliate,aff_clicks,aff_conversions,aff_balance,aff_total_earned,aff_segment,aff_tier,aff_business_name,aff_city,aff_phone_mpesa,aff_is_blocked,aff_block_reason,aff_joined_at,created_at')
-        .not('ref_code', 'is', null)
-        .order('aff_total_earned', { ascending: false });
-      if (error) throw error;
+      const data = await restRequest(
+        `profiles?ref_code=not.is.null&order=aff_total_earned.desc` +
+        `&select=id,full_name,email,phone,ref_code,is_affiliate,aff_clicks,aff_conversions,aff_balance,aff_total_earned,aff_segment,aff_tier,aff_business_name,aff_city,aff_phone_mpesa,aff_is_blocked,aff_block_reason,aff_joined_at,created_at`
+      );
 
       // Fraud flags count por afiliado
-      const { data: fraudData } = await supabase.from('affiliate_fraud_flags')
-        .select('affiliate_id').eq('resolved', false);
+      const fraudData = await restRequest(`affiliate_fraud_flags?resolved=eq.false&select=affiliate_id`);
       const fraudCount = {};
       (fraudData || []).forEach(f => { fraudCount[f.affiliate_id] = (fraudCount[f.affiliate_id] || 0) + 1; });
 
       // Levantamentos pendentes count
-      const { data: wPending } = await supabase.from('affiliate_withdrawals')
-        .select('affiliate_id').eq('status', 'pending');
+      const wPending = await restRequest(`affiliate_withdrawals?status=eq.pending&select=affiliate_id`);
       const wCount = {};
       (wPending || []).forEach(w => { wCount[w.affiliate_id] = (wCount[w.affiliate_id] || 0) + 1; });
 
@@ -2632,13 +2518,14 @@ async function handleAffiliates(req, res) {
     // ── GET: levantamentos pendentes ──────────────────────────────────────
     if (req.method === 'GET' && q.sub === 'withdrawals') {
       const status = q.status || 'pending';
-      const { data, error } = await supabase.from('affiliate_withdrawals')
-        .select('id,affiliate_id,amount,mpesa_phone,status,admin_note,created_at,processed_at')
-        .eq('status', status).order('created_at', { ascending: false }).limit(50);
-      if (error) throw error;
+      const data = await restRequest(
+        `affiliate_withdrawals?status=eq.${encodeURIComponent(status)}&order=created_at.desc&limit=50` +
+        `&select=id,affiliate_id,amount,mpesa_phone,status,admin_note,created_at,processed_at`
+      );
       // Enriquecer com nome do afiliado
       const ids = [...new Set((data || []).map(w => w.affiliate_id))];
-      const { data: pnames } = await supabase.from('profiles').select('id,full_name,email,phone,aff_tier').in('id', ids);
+      const idsList = ids.map(id => encodeURIComponent(id)).join(',');
+      const pnames = ids.length ? await restRequest(`profiles?id=in.(${idsList})&select=id,full_name,email,phone,aff_tier`) : [];
       const pm = {};
       (pnames || []).forEach(p => { pm[p.id] = p; });
       return res.status(200).json({
@@ -2648,12 +2535,13 @@ async function handleAffiliates(req, res) {
 
     // ── GET: flags de fraude ──────────────────────────────────────────────
     if (req.method === 'GET' && q.sub === 'fraud') {
-      const { data, error } = await supabase.from('affiliate_fraud_flags')
-        .select('id,affiliate_id,flag_type,description,severity,resolved,created_at')
-        .eq('resolved', false).order('severity', { ascending: false }).limit(50);
-      if (error) throw error;
+      const data = await restRequest(
+        `affiliate_fraud_flags?resolved=eq.false&order=severity.desc&limit=50` +
+        `&select=id,affiliate_id,flag_type,description,severity,resolved,created_at`
+      );
       const ids = [...new Set((data || []).map(f => f.affiliate_id))];
-      const { data: pnames } = await supabase.from('profiles').select('id,full_name,ref_code').in('id', ids);
+      const idsList = ids.map(id => encodeURIComponent(id)).join(',');
+      const pnames = ids.length ? await restRequest(`profiles?id=in.(${idsList})&select=id,full_name,ref_code`) : [];
       const pm = {};
       (pnames || []).forEach(p => { pm[p.id] = p; });
       return res.status(200).json({
@@ -2664,12 +2552,13 @@ async function handleAffiliates(req, res) {
     // ── GET: ranking do mês ───────────────────────────────────────────────
     if (req.method === 'GET' && q.sub === 'ranking') {
       const month = q.month || new Date().toISOString().slice(0, 7);
-      const { data, error } = await supabase.from('affiliate_ranking')
-        .select('affiliate_id,rank_position,conversions,revenue_mzn,commission_mzn,tier')
-        .eq('month', month).order('rank_position', { ascending: true }).limit(20);
-      if (error) throw error;
+      const data = await restRequest(
+        `affiliate_ranking?month=eq.${encodeURIComponent(month)}&order=rank_position.asc&limit=20` +
+        `&select=affiliate_id,rank_position,conversions,revenue_mzn,commission_mzn,tier`
+      );
       const ids = (data || []).map(r => r.affiliate_id);
-      const { data: pnames } = await supabase.from('profiles').select('id,full_name,aff_segment,ref_code').in('id', ids);
+      const idsList = ids.map(id => encodeURIComponent(id)).join(',');
+      const pnames = ids.length ? await restRequest(`profiles?id=in.(${idsList})&select=id,full_name,aff_segment,ref_code`) : [];
       const pm = {};
       (pnames || []).forEach(p => { pm[p.id] = p; });
       return res.status(200).json({
@@ -2692,12 +2581,11 @@ async function handleAffiliates(req, res) {
         if (!user_id) return res.status(400).json({ error: 'user_id em falta' });
         const updates = { is_affiliate: action === 'approve' };
         if (action === 'approve') updates.aff_joined_at = new Date().toISOString();
-        const { error } = await supabase.from('profiles').update(updates).eq('id', user_id);
-        if (error) throw error;
+        await update('profiles', 'id', user_id, updates);
         // Notificação ao afiliado
         if (action === 'approve') {
           try {
-            await supabase.from('affiliate_notifications').insert({
+            await insert('affiliate_notifications', {
               affiliate_id: user_id, type: 'commission',
               title: '🎉 Candidatura Aprovada!',
               body: 'A sua conta de afiliado MzDocs Pro foi aprovada. Comece a partilhar o seu link e ganhe comissões!',
@@ -2713,8 +2601,7 @@ async function handleAffiliates(req, res) {
         const updates = { aff_is_blocked: action === 'block' };
         if (action === 'block') updates.aff_block_reason = note || 'Conta suspensa por actividade suspeita.';
         else updates.aff_block_reason = null;
-        const { error } = await supabase.from('profiles').update(updates).eq('id', user_id);
-        if (error) throw error;
+        await update('profiles', 'id', user_id, updates);
         return res.status(200).json({ success: true, message: action === 'block' ? 'Conta suspensa.' : 'Conta reactivada.' });
       }
 
@@ -2723,9 +2610,8 @@ async function handleAffiliates(req, res) {
         if (!withdrawal_id) return res.status(400).json({ error: 'withdrawal_id em falta' });
         const newStatus = body.status || 'completed';
         if (!['completed','rejected'].includes(newStatus)) return res.status(400).json({ error: 'status inválido' });
-        const { data: wd, error: wErr } = await supabase.from('affiliate_withdrawals')
-          .select('affiliate_id,amount,status').eq('id', withdrawal_id).single();
-        if (wErr || !wd) return res.status(404).json({ error: 'Levantamento não encontrado' });
+        const wd = await selectOne('affiliate_withdrawals', 'id', withdrawal_id, 'affiliate_id,amount,status');
+        if (!wd) return res.status(404).json({ error: 'Levantamento não encontrado' });
         if (wd.status !== 'pending') return res.status(400).json({ error: 'Levantamento não está pendente' });
 
         // Pagar exige sempre o print da transferência M-Pesa — é a prova
@@ -2748,28 +2634,27 @@ async function handleAffiliates(req, res) {
           if (buffer.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'Imagem demasiado grande (máx. 3 MB) — tire o print em qualidade normal, não a resolução máxima do ecrã.' });
 
           receiptNumber = `REC-${withdrawal_id.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
-          const path = `${withdrawal_id}.${ext}`;
-          const { error: upErr } = await supabase.storage
-            .from('affiliate-receipts')
-            .upload(path, buffer, { contentType: mime, upsert: true });
-          if (upErr) return res.status(500).json({ error: 'Falha ao guardar o comprovativo: ' + upErr.message });
-          const { data: pub } = supabase.storage.from('affiliate-receipts').getPublicUrl(path);
-          receiptUrl = pub?.publicUrl || null;
+          const objPath = `${withdrawal_id}.${ext}`;
+          try {
+            await storageUpload('affiliate-receipts', objPath, buffer, mime, true);
+          } catch (upErr) {
+            return res.status(500).json({ error: 'Falha ao guardar o comprovativo: ' + upErr.message });
+          }
+          receiptUrl = storageGetPublicUrl('affiliate-receipts', objPath);
         }
 
-        const { error } = await supabase.from('affiliate_withdrawals').update({
+        await update('affiliate_withdrawals', 'id', withdrawal_id, {
           status: newStatus, admin_note: note || null, processed_at: new Date().toISOString(),
           ...(receiptUrl ? { receipt_screenshot_url: receiptUrl, receipt_number: receiptNumber } : {}),
-        }).eq('id', withdrawal_id);
-        if (error) throw error;
+        });
         // Se rejeitado: devolver saldo
         if (newStatus === 'rejected') {
-          const { data: prof } = await supabase.from('profiles').select('aff_balance').eq('id', wd.affiliate_id).single();
-          await supabase.from('profiles').update({ aff_balance: (prof?.aff_balance || 0) + wd.amount }).eq('id', wd.affiliate_id);
+          const prof = await selectOne('profiles', 'id', wd.affiliate_id, 'aff_balance');
+          await update('profiles', 'id', wd.affiliate_id, { aff_balance: (prof?.aff_balance || 0) + wd.amount });
         }
         // Notificação ao afiliado
         try {
-          await supabase.from('affiliate_notifications').insert({
+          await insert('affiliate_notifications', {
             affiliate_id: wd.affiliate_id, type: 'withdrawal',
             title: newStatus === 'completed' ? '✅ Levantamento Pago!' : '❌ Levantamento Rejeitado',
             body: newStatus === 'completed'
@@ -2783,17 +2668,16 @@ async function handleAffiliates(req, res) {
       // Resolver flag de fraude
       if (action === 'resolve_fraud') {
         if (!flag_id) return res.status(400).json({ error: 'flag_id em falta' });
-        const { error } = await supabase.from('affiliate_fraud_flags').update({
+        await update('affiliate_fraud_flags', 'id', flag_id, {
           resolved: true, resolved_at: new Date().toISOString(),
-        }).eq('id', flag_id);
-        if (error) throw error;
+        });
         return res.status(200).json({ success: true });
       }
 
       // Gerar ranking mensal
       if (action === 'generate_ranking') {
         const month = body.month || new Date().toISOString().slice(0, 7);
-        await supabase.rpc('generate_monthly_ranking', { p_month: month }).catch(e => { throw e; });
+        await rpc('generate_monthly_ranking', { p_month: month });
         return res.status(200).json({ success: true, message: `Ranking de ${month} gerado.` });
       }
 
@@ -2856,22 +2740,18 @@ async function handleRepublishBlog(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     const offset = Math.max(parseInt(req.query?.offset || '0', 10) || 0, 0);
     const limit  = Math.min(Math.max(parseInt(req.query?.limit  || '15', 10) || 15, 1), 30);
     const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
-    const { data: pages, count, error } = await supabase
-      .from('blog_pages')
-      .select('slug, title, meta_description, content_html', { count: 'exact' })
-      .eq('published', true)
-      .order('created_at', { ascending: true })
-      .range(offset, offset + limit - 1);
-
-    if (error) throw error;
+    const pages = await restRequest(
+      `blog_pages?published=eq.true&order=created_at.asc&limit=${limit}&offset=${offset}` +
+      `&select=slug,title,meta_description,content_html`
+    );
+    const count = await countRows('blog_pages', '?published=eq.true');
 
     const { publishBlogPageToGithub } = require('../_lib/blogTemplate');
     const results = { ok: [], failed: [] };
@@ -2912,40 +2792,22 @@ async function handlePendingReceipts(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     // Buscar transacções com status review_needed ordenadas por data (mais antigas primeiro)
-    const { data, error } = await supabase
-      .from('transactions')
-      .select(`
-        id,
-        reference_id,
-        user_id,
-        package_id,
-        amount,
-        credits,
-        status,
-        phone_number,
-        receipt_confidence,
-        review_reason,
-        created_at,
-        profiles!transactions_user_id_fkey(full_name, email, phone)
-      `)
-      .eq('status', 'review_needed')
-      .order('created_at', { ascending: true })
-      .limit(50);
-
-    if (error) {
+    let data;
+    try {
+      data = await restRequest(
+        `transactions?status=eq.review_needed&order=created_at.asc&limit=50` +
+        `&select=id,reference_id,user_id,package_id,amount,credits,status,phone_number,receipt_confidence,review_reason,created_at,profiles!transactions_user_id_fkey(full_name,email,phone)`
+      );
+    } catch (error) {
       // Fallback sem join se FK não estiver registada
-      const { data: simple, error: simpleErr } = await supabase
-        .from('transactions')
-        .select('id,reference_id,user_id,package_id,amount,credits,status,phone_number,receipt_confidence,review_reason,created_at')
-        .eq('status', 'review_needed')
-        .order('created_at', { ascending: true })
-        .limit(50);
-      if (simpleErr) throw simpleErr;
+      const simple = await restRequest(
+        `transactions?status=eq.review_needed&order=created_at.asc&limit=50` +
+        `&select=id,reference_id,user_id,package_id,amount,credits,status,phone_number,receipt_confidence,review_reason,created_at`
+      );
       return res.status(200).json({ success: true, data: simple || [], total: (simple || []).length });
     }
 
@@ -2965,8 +2827,7 @@ async function handleApproveReceipt(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     let body;
@@ -2979,32 +2840,31 @@ async function handleApproveReceipt(req, res) {
     }
 
     // Buscar transacção
-    const { data: tx, error: txErr } = await supabase
-      .from('transactions')
-      .select('id,user_id,package_id,credits,status,reference_id,phone_number,amount,visitor_id')
-      .eq('id', transactionId)
-      .in('status', ['review_needed', 'pending'])
-      .single();
+    const txRows = await restRequest(
+      `transactions?id=eq.${transactionId}&status=in.(review_needed,pending)` +
+      `&select=id,user_id,package_id,credits,status,reference_id,phone_number,amount,visitor_id`
+    );
+    const tx = txRows?.[0] || null;
 
-    if (txErr || !tx) {
+    if (!tx) {
       return res.status(404).json({ error: 'Transacção não encontrada ou já processada.' });
     }
 
     if (!approved) {
       // REJEITAR
-      await supabase.from('transactions').update({
+      await update('transactions', 'id', transactionId, {
         status:              'failed',
         confirmed_by:        auth.user.id,
         confirmed_at:        new Date().toISOString(),
         verification_method: 'manual',
         review_reason:       note || 'Rejeitado pelo admin',
-      }).eq('id', transactionId);
+      });
 
       // Log de auditoria
       try {
         // CORRIGIDO: 'admin_audit_log' não existe na base de dados —
         // redireccionado para 'admin_logs' (a única tabela de log real).
-        await supabase.from('admin_logs').insert({
+        await insert('admin_logs', {
           admin_id:    auth.user.id,
           action:      'reject_receipt',
           target_type: 'transaction',
@@ -3026,14 +2886,14 @@ async function handleApproveReceipt(req, res) {
     // CORRIGIDO: estava a gravar status 'confirmed', que handleStats (e o
     // badge da UI em AdminTransactions.js) não reconhece — só 'completed'
     // conta como receita confirmada no dashboard. Ver migration_v25.
-    await supabase.from('transactions').update({
+    await update('transactions', 'id', transactionId, {
       status:              'completed',
       confirmed_by:        auth.user.id,
       confirmed_at:        new Date().toISOString(),
       receipt_verified:    true,
       verification_method: 'manual',
       review_reason:       note || null,
-    }).eq('id', transactionId);
+    });
 
     // 2. Adicionar créditos via RPC — ou, se for "avulso" sem conta ligada
     // (CORRIGIDO: antes disto os créditos ficavam por atribuir a ninguém
@@ -3043,12 +2903,14 @@ async function handleApproveReceipt(req, res) {
     let newCredits  = creditsInt;
     let accountInfo = null;
     if (tx.user_id) {
-      const { data: creditData } = await supabase
-        .rpc('add_credits', { user_id: tx.user_id, amount: creditsInt });
+      let creditData;
+      try {
+        creditData = await rpc('add_credits', { user_id: tx.user_id, amount: creditsInt });
+      } catch (_) { creditData = null; }
       newCredits = creditData || creditsInt;
 
       // 3. Registar credit_logs
-      await supabase.from('credit_logs').insert({
+      await insert('credit_logs', {
         user_id:        tx.user_id,
         transaction_id: transactionId,
         action:         'bonus',
@@ -3063,23 +2925,25 @@ async function handleApproveReceipt(req, res) {
         const tempEmail  = `temp_${ref.toLowerCase()}@mzdocs.temp`;
         const tempPass   = _genPassword();
 
-        const { data: newUser, error: createErr } = await supabase.auth.admin.createUser({
-          email: tempEmail, password: tempPass, email_confirm: true,
-          user_metadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: tx.phone_number || '' },
-        });
-        if (createErr) throw new Error('Erro ao criar conta temp: ' + createErr.message);
+        let newUser;
+        try {
+          newUser = await adminCreateUser({
+            email: tempEmail, password: tempPass, emailConfirm: true,
+            userMetadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: tx.phone_number || '' },
+          });
+        } catch (createErr) { throw new Error('Erro ao criar conta temp: ' + createErr.message); }
 
-        const tempUserId = newUser.user.id;
-        await supabase.from('profiles').update({
+        const tempUserId = newUser.id;
+        await update('profiles', 'id', tempUserId, {
           is_temp: true, temp_ref: ref, temp_password: tempPass,
           credits: creditsInt, plan: 'free', account_type: 'avulso',
           full_name: `Avulso ${ref}`, phone: tx.phone_number || null,
           updated_at: new Date().toISOString(),
-        }).eq('id', tempUserId);
+        });
 
-        await supabase.from('transactions').update({ user_id: tempUserId }).eq('id', transactionId);
+        await update('transactions', 'id', transactionId, { user_id: tempUserId });
 
-        await supabase.from('credit_logs').insert({
+        await insert('credit_logs', {
           user_id: tempUserId, transaction_id: transactionId, action: 'purchase_confirmed',
           credits: creditsInt,
           note: `Conta avulso criada automaticamente ao aprovar comprovativo em revisão — admin ${auth.user.id.slice(0, 8)}`,
@@ -3089,9 +2953,9 @@ async function handleApproveReceipt(req, res) {
       } catch (accErr) {
         console.error('[approve-receipt] Falha ao criar conta avulso:', accErr.message);
         // Não bloquear a aprovação — o pagamento já foi marcado completed.
-        await supabase.from('transactions').update({
+        await update('transactions', 'id', transactionId, {
           review_reason: 'FALHA_CRIACAO_CONTA_AVULSO: ' + accErr.message,
-        }).eq('id', transactionId);
+        });
       }
     }
 
@@ -3101,7 +2965,7 @@ async function handleApproveReceipt(req, res) {
     // manual de comprovativo com confiança baixa) nunca gerava comissão.
     const commissionUserId = tx.user_id || accountInfo?.tempUserId || null;
     if (commissionUserId) {
-      supabase.rpc('process_affiliate_commission_v2', {
+      rpc('process_affiliate_commission_v2', {
         p_transaction_id: transactionId,
         p_user_id:        commissionUserId,
         p_package_id:     tx.package_id,
@@ -3113,20 +2977,20 @@ async function handleApproveReceipt(req, res) {
     // pontos de confirmação (auto-approval em api/misc.js e confirmação
     // manual directa acima) — só regista se houver visitor_id.
     if (commissionUserId && tx.visitor_id) {
-      supabase.from('marketing_events').insert({
+      insert('marketing_events', {
         visitor_id: tx.visitor_id,
         user_id:    commissionUserId,
         event:      'credit_purchase',
         value:      tx.amount,
         metadata:   { package_id: tx.package_id, credits: creditsInt, verification_method: 'manual_review' },
-      }).then(({ error }) => { if (error) console.warn('[approve-receipt] marketing_events falhou:', error.message); });
+      }).catch(error => console.warn('[approve-receipt] marketing_events falhou:', error.message));
     }
 
     // 4. Log de auditoria
     try {
       // CORRIGIDO: 'admin_audit_log' não existe na base de dados —
       // redireccionado para 'admin_logs' (a única tabela de log real).
-      await supabase.from('admin_logs').insert({
+      await insert('admin_logs', {
         admin_id:    auth.user.id,
         action:      'approve_receipt',
         target_type: 'transaction',
@@ -3169,8 +3033,7 @@ async function handleApproveReceipt(req, res) {
 async function handleAiProviders(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'POST' || req.method === 'PUT') {
@@ -3178,8 +3041,7 @@ async function handleAiProviders(req, res) {
       const toggleId = body?.toggleReserve;
       if (!toggleId) return res.status(400).json({ error: 'toggleReserve é obrigatório' });
 
-      const { data: row } = await supabase
-        .from('system_settings').select('value').eq('key', 'ai_reserve_activated').maybeSingle();
+      const row = await selectOne('system_settings', 'key', 'ai_reserve_activated', 'value');
       let list = [];
       try { list = JSON.parse(row?.value || '[]'); } catch { list = []; }
       if (!Array.isArray(list)) list = [];
@@ -3187,14 +3049,14 @@ async function handleAiProviders(req, res) {
       const idx = list.indexOf(toggleId);
       if (idx >= 0) list.splice(idx, 1); else list.push(toggleId);
 
-      await supabase.from('system_settings').upsert({
+      await upsert('system_settings', {
         key: 'ai_reserve_activated',
         value: JSON.stringify(list),
         updated_by: auth.user.id,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'key' });
+      }, 'key');
 
-      await supabase.from('admin_logs').insert({
+      await insert('admin_logs', {
         admin_id:    auth.user.id,
         action:      'toggle_ai_reserve_provider',
         target_type: 'ai_provider',
@@ -3214,19 +3076,22 @@ async function handleAiProviders(req, res) {
     const todayStr = today.toISOString().split('T')[0];
     const sinceStr = sevenDaysAgo.toISOString().split('T')[0];
 
-    const { data: usageRows, error: usageErr } = await supabase
-      .from('ai_provider_daily_usage')
-      .select('day, provider, requests_ok, requests_fail, tokens_prompt, tokens_completion, last_model, last_success_at, last_error_at, last_error_message')
-      .gte('day', sinceStr)
-      .order('day', { ascending: true });
+    let rows = [];
+    let usageErr = null;
+    try {
+      rows = await restRequest(
+        `ai_provider_daily_usage?day=gte.${sinceStr}&order=day.asc` +
+        `&select=day,provider,requests_ok,requests_fail,tokens_prompt,tokens_completion,last_model,last_success_at,last_error_at,last_error_message`
+      ) || [];
+    } catch (error) {
+      // Tabela pode ainda não existir se a migration v27 não foi corrida —
+      // não deixar o painel todo em erro por isso, apenas devolver vazio.
+      usageErr = error;
+      rows = [];
+      console.warn('[admin/ai-providers] tabela indisponível (correr migration_v27?):', error.message);
+    }
 
-    // Tabela pode ainda não existir se a migration v27 não foi corrida —
-    // não deixar o painel todo em erro por isso, apenas devolver vazio.
-    const rows = usageErr ? [] : (usageRows || []);
-    if (usageErr) console.warn('[admin/ai-providers] tabela indisponível (correr migration_v27?):', usageErr.message);
-
-    const { data: reserveRow } = await supabase
-      .from('system_settings').select('value').eq('key', 'ai_reserve_activated').maybeSingle();
+    const reserveRow = await selectOne('system_settings', 'key', 'ai_reserve_activated', 'value');
     let reserveActivated = [];
     try { reserveActivated = JSON.parse(reserveRow?.value || '[]'); } catch { reserveActivated = []; }
 
@@ -3333,8 +3198,7 @@ function _slugify(s) {
 async function handleQrCodes(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'POST') {
@@ -3344,8 +3208,7 @@ async function handleQrCodes(req, res) {
       if (op === 'toggle') {
         const { id, active } = body;
         if (!id) return res.status(400).json({ error: 'id é obrigatório' });
-        const { error } = await supabase.from('marketing_qrcodes').update({ active: !!active }).eq('id', id);
-        if (error) throw error;
+        await update('marketing_qrcodes', 'id', id, { active: !!active });
         return res.status(200).json({ success: true });
       }
 
@@ -3357,20 +3220,22 @@ async function handleQrCodes(req, res) {
 
       // Código único, legível: slug do nome + sufixo curto caso já exista
       let code = _slugify(name);
-      const { data: clash } = await supabase.from('marketing_qrcodes').select('code').eq('code', code).maybeSingle();
+      const clash = await selectOne('marketing_qrcodes', 'code', code, 'code');
       if (clash) code = `${code}_${Math.random().toString(36).slice(2, 6)}`;
 
-      const { data: qr, error: insErr } = await supabase.from('marketing_qrcodes').insert({
-        code, name, location, target_path: targetPath, created_by: auth.user.id,
-      }).select('*').single();
-      if (insErr) throw insErr;
+      let qr;
+      try {
+        qr = await insert('marketing_qrcodes', {
+          code, name, location, target_path: targetPath, created_by: auth.user.id,
+        });
+      } catch (insErr) { throw insErr; }
 
       // Reaproveita marketing_sources (Fase 1) — assim entra automaticamente
       // em toda a agregação já construída (marketing_source_daily) sem
       // precisar de lógica nova para "somar visitas de QR".
-      await supabase.from('marketing_sources').upsert(
+      await upsert('marketing_sources',
         { code, name: `QR — ${name}`, type: 'qr', description: location },
-        { onConflict: 'code' }
+        'code'
       );
 
       // Gera o PNG do QR já apontando para o URL final com ?src=<code>.
@@ -3378,7 +3243,7 @@ async function handleQrCodes(req, res) {
       const fullUrl  = `${siteUrl}${targetPath}${targetPath.includes('?') ? '&' : '?'}src=${code}`;
       const pngDataUrl = await QRCode.toDataURL(fullUrl, { width: 600, margin: 2, color: { dark: '#07101F', light: '#FFFFFF' } });
 
-      await supabase.from('admin_logs').insert({
+      await insert('admin_logs', {
         admin_id: auth.user.id, action: 'create_qrcode', target_type: 'marketing_qrcode',
         target_id: qr.id, details: { code, name, location, targetPath },
       });
@@ -3389,26 +3254,24 @@ async function handleQrCodes(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
 
     // ── Listagem com estatísticas (reaproveita marketing_source_daily) ────
-    const { data: qrcodes, error: listErr } = await supabase
-      .from('marketing_qrcodes').select('*').order('created_at', { ascending: false });
-    if (listErr) throw listErr;
+    const qrcodes = await restRequest('marketing_qrcodes?order=created_at.desc&select=*');
 
     if (!qrcodes || !qrcodes.length) {
       return res.status(200).json({ success: true, qrcodes: [] });
     }
 
     const codes = qrcodes.map(q => q.code);
+    const codesList = codes.map(c => encodeURIComponent(c)).join(',');
     const since30d = new Date(); since30d.setDate(since30d.getDate() - 30);
 
-    const [{ data: dailyRows }, { data: lastVisits }] = await Promise.all([
-      supabase.from('marketing_source_daily')
-        .select('marketing_source, visits, signups, buyers, revenue')
-        .in('marketing_source', codes)
-        .gte('day', since30d.toISOString().split('T')[0]),
-      supabase.from('marketing_visits')
-        .select('marketing_source, created_at')
-        .in('marketing_source', codes)
-        .order('created_at', { ascending: false }),
+    const [dailyRows, lastVisits] = await Promise.all([
+      restRequest(
+        `marketing_source_daily?marketing_source=in.(${codesList})&day=gte.${since30d.toISOString().split('T')[0]}` +
+        `&select=marketing_source,visits,signups,buyers,revenue`
+      ),
+      restRequest(
+        `marketing_visits?marketing_source=in.(${codesList})&order=created_at.desc&select=marketing_source,created_at`
+      ),
     ]);
 
     const statsBySource = {};
@@ -3461,16 +3324,14 @@ const MAX_MATERIAL_IMAGE_BYTES = 4 * 1024 * 1024; // ~4MB de base64 (imagem ~3MB
 async function handleMarketingMaterials(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'GET') {
-      const { data, error } = await supabase.from('marketing_materials')
-        .select('id, title, description, category, media_type, file_data, external_url, width_px, height_px, qr_zone, text_zone, is_active, sort_order, created_at, updated_at')
-        .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await restRequest(
+        `marketing_materials?order=sort_order.asc,created_at.desc` +
+        `&select=id,title,description,category,media_type,file_data,external_url,width_px,height_px,qr_zone,text_zone,is_active,sort_order,created_at,updated_at`
+      );
       return res.status(200).json({ success: true, materials: data || [] });
     }
 
@@ -3505,10 +3366,9 @@ async function handleMarketingMaterials(req, res) {
         created_by:   auth.user.id,
       };
 
-      const { data, error } = await supabase.from('marketing_materials').insert(insertRow).select('*').single();
-      if (error) throw error;
+      const data = await insert('marketing_materials', insertRow);
 
-      await supabase.from('admin_logs').insert({
+      await insert('admin_logs', {
         admin_id: auth.user.id, action: 'create_marketing_material', target_type: 'marketing_materials',
         target_id: data.id, details: { title, category, media_type },
       });
@@ -3529,10 +3389,10 @@ async function handleMarketingMaterials(req, res) {
         return res.status(400).json({ error: 'Imagem demasiado grande (máx. ~3MB).' });
       }
 
-      const { data, error } = await supabase.from('marketing_materials').update(patch).eq('id', id).select('*').single();
-      if (error) throw error;
+      const updatedRows = await update('marketing_materials', 'id', id, patch);
+      const data = updatedRows?.[0] || null;
 
-      await supabase.from('admin_logs').insert({
+      await insert('admin_logs', {
         admin_id: auth.user.id, action: 'update_marketing_material', target_type: 'marketing_materials', target_id: id, details: patch,
       });
 
@@ -3543,10 +3403,9 @@ async function handleMarketingMaterials(req, res) {
       const id = req.query?.id || parseBody(req)?.id;
       if (!id) return res.status(400).json({ error: 'id é obrigatório' });
 
-      const { error } = await supabase.from('marketing_materials').delete().eq('id', id);
-      if (error) throw error;
+      await del('marketing_materials', 'id', id);
 
-      await supabase.from('admin_logs').insert({
+      await insert('admin_logs', {
         admin_id: auth.user.id, action: 'delete_marketing_material', target_type: 'marketing_materials', target_id: id,
       });
 
@@ -3570,17 +3429,13 @@ async function handleMarketingMaterials(req, res) {
 async function handleNotifications(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'GET') {
-      const { data, error } = await supabase
-        .from('admin_notifications')
-        .select('id, type, title, message, link, read, created_at')
-        .order('created_at', { ascending: false })
-        .limit(50);
-      if (error) throw error;
+      const data = await restRequest(
+        `admin_notifications?order=created_at.desc&limit=50&select=id,type,title,message,link,read,created_at`
+      );
       const unread = (data || []).filter(n => !n.read).length;
       return res.status(200).json({ success: true, notifications: data || [], unread });
     }
@@ -3588,13 +3443,14 @@ async function handleNotifications(req, res) {
     if (req.method === 'POST') {
       const body = parseBody(req);
       if (body.markAll) {
-        const { error } = await supabase.from('admin_notifications').update({ read: true }).eq('read', false);
-        if (error) throw error;
+        await update('admin_notifications', 'read', false, { read: true });
         return res.status(200).json({ success: true });
       }
       if (Array.isArray(body.ids) && body.ids.length) {
-        const { error } = await supabase.from('admin_notifications').update({ read: true }).in('id', body.ids);
-        if (error) throw error;
+        const idsList = body.ids.map(id => encodeURIComponent(id)).join(',');
+        await restRequest(`admin_notifications?id=in.(${idsList})`, {
+          method: 'PATCH', body: { read: true }, prefer: 'return=minimal',
+        });
         return res.status(200).json({ success: true });
       }
       return res.status(400).json({ error: 'ids (array) ou markAll (bool) é obrigatório' });
@@ -3617,8 +3473,7 @@ async function handleNotifications(req, res) {
 async function handleCampaigns(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'POST') {
@@ -3628,16 +3483,14 @@ async function handleCampaigns(req, res) {
       if (op === 'toggle') {
         const { id, active } = body;
         if (!id) return res.status(400).json({ error: 'id é obrigatório' });
-        const { error } = await supabase.from('marketing_campaigns').update({ active: !!active }).eq('id', id);
-        if (error) throw error;
+        await update('marketing_campaigns', 'id', id, { active: !!active });
         return res.status(200).json({ success: true });
       }
 
       if (op === 'delete') {
         const { id } = body;
         if (!id) return res.status(400).json({ error: 'id é obrigatório' });
-        const { error } = await supabase.from('marketing_campaigns').delete().eq('id', id);
-        if (error) throw error;
+        await del('marketing_campaigns', 'id', id);
         return res.status(200).json({ success: true });
       }
 
@@ -3652,22 +3505,24 @@ async function handleCampaigns(req, res) {
       if (!startDate) return res.status(400).json({ error: 'start_date é obrigatório' });
 
       let sourceTag = _slugify(name);
-      const { data: clash } = await supabase.from('marketing_campaigns').select('id').eq('source_tag', sourceTag).maybeSingle();
+      const clash = await selectOne('marketing_campaigns', 'source_tag', sourceTag, 'id');
       if (clash) sourceTag = `${sourceTag}_${Math.random().toString(36).slice(2, 6)}`;
 
-      const { data: campaign, error: insErr } = await supabase.from('marketing_campaigns').insert({
-        name, source_tag: sourceTag, description,
-        start_date: startDate, end_date: endDate,
-        goal_revenue: goalRevenue, goal_signups: goalSignups,
-        created_by: auth.user.id,
-      }).select('*').single();
-      if (insErr) throw insErr;
+      let campaign;
+      try {
+        campaign = await insert('marketing_campaigns', {
+          name, source_tag: sourceTag, description,
+          start_date: startDate, end_date: endDate,
+          goal_revenue: goalRevenue, goal_signups: goalSignups,
+          created_by: auth.user.id,
+        });
+      } catch (insErr) { throw insErr; }
 
       // Reaproveita marketing_sources (Fase 1) para aparecer com nome
       // legível no dashboard de "Origens de Marketing", tal como os QR Codes.
-      await supabase.from('marketing_sources').upsert(
+      await upsert('marketing_sources',
         { code: sourceTag, name: `Campanha — ${name}`, type: 'campaign', description },
-        { onConflict: 'code' }
+        'code'
       );
 
       const siteUrl = process.env.SITE_URL || 'https://mzdocs.co.mz';
@@ -3679,19 +3534,17 @@ async function handleCampaigns(req, res) {
 
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    const { data: campaigns, error: listErr } = await supabase
-      .from('marketing_campaigns').select('*').order('start_date', { ascending: false });
-    if (listErr) throw listErr;
+    const campaigns = await restRequest('marketing_campaigns?order=start_date.desc&select=*');
 
     if (!campaigns || !campaigns.length) {
       return res.status(200).json({ success: true, campaigns: [] });
     }
 
     const tags = campaigns.map(c => c.source_tag);
-    const { data: dailyRows } = await supabase
-      .from('marketing_source_daily')
-      .select('marketing_source, day, visits, signups, buyers, revenue')
-      .in('marketing_source', tags);
+    const tagsList = tags.map(t => encodeURIComponent(t)).join(',');
+    const dailyRows = await restRequest(
+      `marketing_source_daily?marketing_source=in.(${tagsList})&select=marketing_source,day,visits,signups,buyers,revenue`
+    );
 
     const enriched = campaigns.map(c => {
       const rows = (dailyRows || []).filter(r =>
@@ -3737,8 +3590,7 @@ async function handleCampaigns(req, res) {
 async function handleGoals(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method === 'POST') {
@@ -3751,11 +3603,10 @@ async function handleGoals(req, res) {
       if (!/^\d{4}-\d{2}$/.test(month))              return res.status(400).json({ error: 'period_month inválido (esperado YYYY-MM)' });
 
       const periodMonth = `${month}-01`;
-      const { data: goal, error } = await supabase.from('admin_goals')
-        .upsert({ metric, period_month: periodMonth, target_value: targetValue, created_by: auth.user.id },
-                { onConflict: 'metric,period_month' })
-        .select('*').single();
-      if (error) throw error;
+      const goal = await upsert('admin_goals',
+        { metric, period_month: periodMonth, target_value: targetValue, created_by: auth.user.id },
+        'metric,period_month'
+      );
       return res.status(200).json({ success: true, goal });
     }
 
@@ -3772,16 +3623,13 @@ async function handleGoals(req, res) {
     const monthStart = periodMonth;
     const monthEnd   = new Date(y, m, 0).toISOString().split('T')[0]; // último dia do mês
 
-    const { data: goals } = await supabase.from('admin_goals')
-      .select('*').eq('period_month', periodMonth);
+    const goals = await restRequest(`admin_goals?period_month=eq.${periodMonth}&select=*`);
 
     let progress = { revenue: 0, signups: 0 };
     try {
-      const { data: rows, error: funnelErr } = await supabase
-        .from('marketing_funnel_daily')
-        .select('day, signups, revenue')
-        .gte('day', monthStart).lte('day', monthEnd);
-      if (funnelErr) throw funnelErr;
+      const rows = await restRequest(
+        `marketing_funnel_daily?day=gte.${monthStart}&day=lte.${monthEnd}&select=day,signups,revenue`
+      );
       progress = (rows || []).reduce((acc, r) => {
         acc.signups += r.signups || 0;
         acc.revenue += Number(r.revenue) || 0;
@@ -3809,12 +3657,12 @@ async function handleGoals(req, res) {
     // para este mês+métrica (evita spam a cada refresh do dashboard).
     for (const r of result) {
       if (r.achieved) {
-        const { data: already } = await supabase.from('admin_notifications')
-          .select('id').eq('type', 'goal_reached')
-          .ilike('message', `%${targetMonth}%${r.metric}%`).limit(1);
+        const already = await restRequest(
+          `admin_notifications?type=eq.goal_reached&message=ilike.*${encodeURIComponent(targetMonth)}*${encodeURIComponent(r.metric)}*&limit=1&select=id`
+        );
         if (!already || !already.length) {
           const label = r.metric === 'revenue' ? 'Receita' : 'Novos Registos';
-          await supabase.from('admin_notifications').insert({
+          insert('admin_notifications', {
             type: 'goal_reached',
             title: `🎯 Meta atingida: ${label}`,
             message: `A meta de ${label} para ${targetMonth} (${r.metric}) foi atingida: ${r.current} / ${r.target}.`,
@@ -3840,8 +3688,7 @@ async function handleGoals(req, res) {
 async function handlePushSubscribeAdmin(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -3861,7 +3708,7 @@ async function handlePushSubscribeAdmin(req, res) {
       last_seen_at: new Date().toISOString(),
     };
 
-    await pushRestRequest('push_subscriptions?on_conflict=endpoint', {
+    await restRequest('push_subscriptions?on_conflict=endpoint', {
       method: 'POST',
       body: row,
       prefer: 'resolution=merge-duplicates,return=minimal',
@@ -3877,8 +3724,7 @@ async function handlePushSubscribeAdmin(req, res) {
 async function handlePushSend(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
-    const supabase = await getAdminClient();
-    const auth     = await validateAdmin(supabase, token);
+    const auth = await validateAdmin(token);
     if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -3890,7 +3736,7 @@ async function handlePushSend(req, res) {
     if (!title || !message) return res.status(400).json({ error: 'title e body são obrigatórios' });
 
     const targetFilter = target === 'all' ? '' : `&target=eq.${target}`;
-    const subs = await pushRestRequest(`push_subscriptions?select=id,endpoint,p256dh,auth${targetFilter}`);
+    const subs = await restRequest(`push_subscriptions?select=id,endpoint,p256dh,auth${targetFilter}`);
     if (!Array.isArray(subs) || !subs.length) {
       return res.status(200).json({ success: true, sent: 0, failed: 0, pruned: 0, message: 'Sem subscrições para este alvo.' });
     }
@@ -3898,7 +3744,7 @@ async function handlePushSend(req, res) {
     const result = await sendPushToSubscriptions(subs, { title, body: message, url });
 
     // Fica registado no feed interno de admin também, para histórico.
-    await supabase.from('admin_notifications').insert({
+    insert('admin_notifications', {
       type: 'push_sent',
       title: `📤 Push enviado: ${title}`,
       message: `Alvo: ${target} · ${result.sent} entregues, ${result.failed} falhas, ${result.pruned} subscrições expiradas removidas.`,
