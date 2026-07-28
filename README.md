@@ -1,29 +1,38 @@
-# MzDocs Pro — v27
+# MzDocs Pro — v28
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
 
 > 📌 **Nota de versão:** este documento reflecte o estado real do código até à auditoria de
-> 17 de Julho/2026 — Finanças com "Valor Levantável" real (`migration_v37`), Marketplace de
-> Templates corrigido e migrado para preço **sempre em créditos** (`migration_v38`/`v39`),
-> limites de uso por documento — downloads e edições (`migration_v40`), Kit de Marketing
-> dinâmico para afiliados com QR pessoal por peça (`migration_v41`), e a correcção de dois
-> bugs de produção que só se manifestavam depois de tudo isto estar em código mas por aplicar
-> por inteiro: (1) `/api/admin/templates` respondia sempre 500 porque ainda seleccionava/gravava
-> a coluna `price_mzn`, removida pela `migration_v39` — o preço passou a ser só `credit_cost`,
-> com o equivalente em MZN calculado ao vivo (`mzn_per_credit`); (2) o Kit de Marketing dos
-> Afiliados tinha todo o HTML/SQL prontos mas nenhuma das duas pontas de código a ligá-los —
-> `AdminApp.js` não tinha nenhuma das funções de gestão de materiais (`_openMaterialForm` e
-> afins), e `api/misc.js` não tinha as rotas `/api/affiliate/materials`/`/api/affiliate/qrcode`
-> que `afiliado.html` já chamava — ver secção "Alterações — v27" abaixo. O histórico de
-> auditorias anteriores está preservado nas secções abaixo (v12, v13–v16, v17–v24, v25, v26).
+> 27 de Julho/2026 — cobre as migrações `v42` a `v47` (antes existentes no repositório mas
+> nunca documentadas neste README): identidade fiscal da empresa para os relatórios de
+> Finanças (`migration_v42`), recibos de pagamento a afiliados (`migration_v43`), avaliações
+> públicas (`migration_v44`), anti-abuso nas avaliações de parceiros (`migration_v45`), código
+> de acesso de parceiro (`migration_v46_partner_access_code`), correcção de violação de chave
+> estrangeira no registo de documentos (`migration_v46_fix_document_insert_fk_violation` —
+> **nota:** existem dois ficheiros `v46` distintos no repositório; ver aviso na secção
+> "Migrações Supabase" abaixo), e advogados como parceiros (`migration_v47`) — ver secção
+> "Alterações — v28" abaixo. O histórico de auditorias anteriores está preservado nas secções
+> abaixo (v12, v13–v16, v17–v24, v25, v26, v27).
 
 > ⚠️ **Acção urgente — plano Vercel:** este projecto processa pagamentos (`api/process-payment.js`,
 > tabela `transactions`). Os Termos de Serviço da Vercel definem **qualquer fluxo de cobrança a
 > visitantes do site** como uso comercial, que **não é permitido no plano Hobby** — apenas no Pro
 > (US$20/mês) ou Enterprise. Um projecto no plano errado pode ser suspenso sem aviso prévio.
 > Recomenda-se a migração para o plano Pro **antes** de qualquer campanha de crescimento,
-> independentemente do número de utilizadores. Ver análise completa e roteiro em
-> [`ROADMAP-ESCALA.md`](./ROADMAP-ESCALA.md).
+> independentemente do número de utilizadores.
+>
+> **Adicional (confirmado nesta auditoria):** nos Termos de Serviço da Vercel, projectos no
+> plano **Hobby (ou em trial Pro)** concedem à Vercel o direito de usar o conteúdo do site para
+> treinar modelos de IA e partilhá-lo com terceiros para esse fim ("Model Training"). Isto só
+> deixa de se aplicar automaticamente no plano **Pro pago** (não no trial). Como esta plataforma
+> processa dados pessoais sensíveis (números de BI, moradas, dados de procurações e contratos),
+> a migração para o Pro deve ser tratada como prioridade assim que houver qualquer receita
+> consistente — não apenas como requisito comercial da Vercel, mas como salvaguarda de
+> protecção de dados dos utilizadores.
+>
+> *(Não existe ainda um `ROADMAP-ESCALA.md` neste repositório — a referência a esse ficheiro em
+> versões anteriores deste README apontava para um documento nunca criado. Recomenda-se criá-lo
+> com o roteiro de escala, ou remover a referência até lá.)*
 
 ---
 
@@ -50,9 +59,10 @@ Plataforma moçambicana de geração, edição e exportação de documentos prof
 | **Marketplace de Templates** | Galeria comunitária com preview A4 realista (usando `SampleData.js` + `A4Renderer`); submissão, avaliação (1–5★), partilha por token e aprovação pelo admin |
 | **Templates Oficiais Seed** | 70 templates oficiais inseridos na galeria via `migration_v22_seed_official_templates.sql` — galeria deixa de aparecer vazia |
 | **Sistema de Afiliados Pro** | Comissões automáticas por pacote, segmentação (papelaria/cyber/universidade/explicação/digitador), níveis (bronze→diamante), ranking, notificações e detecção de fraude |
-| **Rede de Parceiros** | Papelarias/cyber cafés parceiros listados perto do utilizador (`parceiros.html`) |
+| **Rede de Parceiros** | Papelarias/cyber cafés **e advogados** (NOVO v47) parceiros listados perto do utilizador (`parceiros.html`), com código de acesso próprio (NOVO v46) e anti-abuso nas avaliações (NOVO v45) |
+| **Avaliações Públicas** | NOVO (v44): avaliação ⭐ 1–5 visível publicamente, alimenta "O que dizem os utilizadores" |
 | **Blog / SEO** | CMS de artigos com geração assistida por IA (`blog_posts`, `blog_categories`); publicação automática de HTML estático no GitHub |
-| **Painel Admin** | Analytics em tempo real, feedback, utilizadores, pagamentos, parceiros, configurações (incluindo preços dinâmicos), Finanças ("Valor Levantável" — NOVO v37) e Kit de Marketing dos afiliados (NOVO v41) |
+| **Painel Admin** | Analytics em tempo real, feedback, utilizadores, pagamentos, parceiros, configurações (incluindo preços dinâmicos), Finanças ("Valor Levantável" — v37, agora com Identidade Fiscal — NOVO v42), Kit de Marketing dos afiliados (v41) e recibos de pagamento a afiliados (NOVO v43) |
 | **Página de Conta (`perfil.html`)** | NOVO (v25): dados pessoais, segurança (email/password), avatar, plano/créditos e documentos recentes — Comprar Créditos e Ver Arquivo abrem em modal na própria página, sem navegar para a home |
 | **PWA** | Instalável em Android e iOS, funciona offline; precache corrigido (33 ficheiros adicionados em v21) |
 
@@ -417,6 +427,39 @@ migration_v40_document_usage_limits.sql
 
 -- 37. Kit de Marketing dinâmico para afiliados (QR pessoal por peça)
 migration_v41_marketing_materials.sql
+
+-- 38. Identidade fiscal da empresa (nome legal, NUIT, morada, regime, início
+--     do exercício) para o cabeçalho dos relatórios de Finanças
+migration_v42_finance_fiscal_identity.sql
+
+-- 39. Recibos de pagamento (levantamento) a afiliados
+migration_v43_affiliate_payout_receipts.sql
+
+-- 40. Avaliações públicas (reviews)
+migration_v44_public_reviews.sql
+
+-- 41. Anti-abuso nas avaliações de parceiros
+migration_v45_partner_ratings_antiabuso.sql
+
+-- 42. Código de acesso de parceiro
+--     ⚠️ Existem DOIS ficheiros "v46" no repositório — este e o seguinte.
+--     Não é o mesmo número de migração aplicado duas vezes: são dois ficheiros
+--     SQL distintos que, por lapso, ficaram com o mesmo número de versão no
+--     nome. Correm ambos sem conflito (nomes de ficheiro diferentes), mas
+--     RECOMENDA-SE renomear um deles (ex: para v48) antes da próxima ronda de
+--     migrações, para não assumir por engano que "já correu a v46" tendo
+--     corrido apenas um dos dois.
+migration_v46_partner_access_code.sql
+
+-- 43. Corrige violação de chave estrangeira no registo de documentos
+--     ⚠️ Ver aviso de numeração duplicada acima (também "v46")
+migration_v46_fix_document_insert_fk_violation.sql
+
+-- 44. Área Jurídica: advogados como parceiros (reaproveita a tabela `partners`
+--     já existente — coluna `type` ('papelaria'|'advogado'), `credential_number`
+--     = nº de inscrição na Ordem dos Advogados de Moçambique, conferido
+--     manualmente pelo admin antes de aprovar; nunca há validação automática)
+migration_v47_partners_advogados.sql
 ```
 
 > ⚠️ Existem ainda vários ficheiros avulsos na pasta `supabase/` (`EMERGENCIA_*`,
@@ -689,6 +732,31 @@ Quando um afiliado abre a sua área de Marketing (`afiliado.html`), cada peça �
 - **Crédito de boas-vindas por registo via link (NOVO — v36)**: `aff_bonus_signup` concede créditos extra a quem se regista com `?ref=<código>`, via `grant_referral_signup_bonus()`. A chave já existia desde a v10 mas nunca era lida em lado nenhum — configuração morta até agora.
 - **🐛 Bug crítico corrigido (v36):** `profiles.referred_by` nunca era gravado no caminho normal do signup em `api/auth/index.js` — só era incluído no PATCH de *fallback*, que praticamente nunca corre. Ou seja, comissões de afiliado por compras de utilizadores registados via link podiam estar a falhar silenciosamente para **todos** os registos normais desde que o programa de afiliados existe. Corrigido em paralelo em `api/auth/index.js` e na migration `v36`. Recomenda-se conferir manualmente na Supabase se há afiliados com cliques/registos aparentes mas sem comissões correspondentes, para compensar casos afectados.
 - **Anti-fraude**: tabela `affiliate_fraud_flags` com eventos (`self_referral`, `ip_burst`, `fake_clicks`, `suspicious_conversion`) e severidade.
+- **Recibos de pagamento a afiliados (NOVO — v43)**: cada levantamento confirmado pelo admin gera um recibo formal registado (`migration_v43_affiliate_payout_receipts.sql`), dando ao afiliado e ao dono da plataforma um registo auditável de cada comissão efectivamente paga — útil tanto para reclamações de afiliados como para a contabilidade da plataforma (ver secção "Finanças" abaixo).
+
+---
+
+## ⭐ Avaliações Públicas e Reforço da Rede de Parceiros (v44–v46)
+
+- **Avaliações públicas (NOVO — v44)**: `migration_v44_public_reviews.sql` introduz um sistema de avaliação (⭐ 1–5) visível publicamente — usado tanto para a experiência geral da plataforma como, potencialmente, para parceiros individuais (ver ponto seguinte). Alimenta a secção "O que dizem os utilizadores" já existente em `index.html`.
+- **Anti-abuso nas avaliações de parceiros (NOVO — v45)**: `migration_v45_partner_ratings_antiabuso.sql` acrescenta protecções contra avaliações falsas/manipuladas dirigidas a parceiros (papelarias, cyber cafés, e agora advogados) — importante à medida que a Rede de Parceiros cresce e passa a ter concorrência entre parceiros na mesma zona.
+- **Código de acesso de parceiro (NOVO — v46)**: `migration_v46_partner_access_code.sql` dá a cada parceiro um código de acesso próprio, usado para autenticação/gestão do seu perfil sem precisar de login completo de utilizador — simplifica o onboarding de papelarias/cyber cafés/advogados que só precisam de gerir o seu perfil, e não o resto da plataforma.
+
+> ⚠️ **Aviso de numeração:** existem dois ficheiros diferentes chamados "v46" no repositório — `migration_v46_partner_access_code.sql` (acima) e `migration_v46_fix_document_insert_fk_violation.sql` (sem relação temática com parceiros — corrige uma violação de chave estrangeira no registo de documentos). Não é a mesma migração corrida duas vezes; são dois ficheiros SQL distintos com o mesmo número por lapso de nomenclatura. Ambos podem ser corridos sem conflito (nomes de ficheiro diferentes), mas recomenda-se renomear um deles (ex: para `v48`) antes da próxima ronda de migrações.
+
+---
+
+## ⚖️ Área Jurídica: Advogados como Parceiros (v47)
+
+A Rede de Parceiros (antes só papelarias/cyber cafés) passou a suportar um segundo tipo de parceiro: **advogados**. Reaproveita a tabela `partners` já existente em vez de criar uma tabela nova — mantém um único endpoint (`api/partners.js`) e respeita o limite de 12 funções serverless do plano Vercel Hobby.
+
+- **Coluna `type`** em `partners`: `'papelaria'` (comportamento antigo, valor por omissão para registos existentes) ou `'advogado'`.
+- **Campos exclusivos de advogado**: `credential_number` (nº de inscrição na Ordem dos Advogados de Moçambique — OAM) e `bio`. Ficam `NULL` para papelarias.
+  > ⚠️ Não existe API pública para validar o número da OAM automaticamente — a conferência é **sempre manual pelo admin** antes de aprovar um parceiro do tipo advogado. Nunca automatizar esta validação.
+- **Áreas de actuação**: para `type='advogado'`, a coluna `services` (já `text[]`) passa a guardar áreas jurídicas em vez de tipos de impressão — `civil`, `laboral`, `comercial`, `familia`, `penal`, `imobiliario`, `fiscal`, `sucessorio`. A lista branca por tipo está em `api/partners.js` (`VALID_SERVICES`).
+- **Índice** `partners_type_status_active` para filtrar rapidamente por tipo nas buscas "perto de si" e no painel admin.
+
+Posicionamento recomendado (ver auditoria de marketing): esta funcionalidade transforma um risco reputacional real — a percepção de que a plataforma "faz trabalho jurídico sem ser advogado" — numa vantagem: o MzDocs gera o rascunho correcto e formatado, o advogado parceiro faz a revisão paga e, quando necessário, o reconhecimento notarial. Isto dá mais clientes ao advogado em vez de lhe tirar trabalho.
 
 ---
 
@@ -804,6 +872,20 @@ Valor Levantável = Receita Total Confirmada
 - **Despesas operacionais** (`finance_expenses`): domínio, hosting, providers de IA pagos ou outras, com opção de marcação como recorrente.
 - **Custos recorrentes configuráveis** em `system_settings` (chaves `finance_*`) — domínio anual, plano Vercel, orçamento de providers de IA — amortizados automaticamente por mês.
 - A taxa de câmbio USD→MZN usada para converter custos em dólar é sempre obtida em tempo real, nunca fixa no código ou na migração.
+
+### Identidade Fiscal (NOVO — v42)
+
+Cartão "🧾 Contabilidade / Dados Fiscais" no separador Finanças, alimentado por `migration_v42_finance_fiscal_identity.sql`, que adiciona a `system_settings` os campos:
+
+| Chave | Descrição |
+|---|---|
+| `fiscal_company_name` | Nome legal/comercial da empresa, impresso no cabeçalho dos relatórios fiscais |
+| `fiscal_nuit` | NUIT (Número Único de Identificação Tributária) |
+| `fiscal_address` | Morada fiscal |
+| `fiscal_regime` | Regime fiscal (ex: "Regime Simplificado — ISPC", "Regime Normal de IVA") |
+| `fiscal_year_start` | Início do exercício fiscal (normalmente 1 de Janeiro) |
+
+Nenhum valor vem preenchido por omissão — o admin preenche isto uma única vez. Estes dados são impressos no cabeçalho de `/api/admin?action=finance&sub=period-report` (relatório de período, para liquidação trimestral do ISPC ou, mais tarde, declaração de IRPC) e nas exportações CSV do livro de receita/despesas/levantamentos — reduz o trabalho de preparar a informação para o contabilista ou para a Autoridade Tributária.
 
 ---
 
@@ -952,13 +1034,43 @@ do Marketplace" e o Kit de Marketing dos afiliados, ambos rebentando em produç�
 
 ---
 
+## 🛠️ Alterações — v28 (Auditoria Julho 2026 — sincronização do README com v42–v47)
+
+Ronda de trabalho de 27 de Julho/2026. Ao contrário das rondas anteriores, esta não corrigiu
+bugs de código — o código e as migrações `v42` a `v47` já estavam correctas e activas em
+produção. O que faltava era **este README**, que tinha parado na `v41` (ronda de 17 de Julho)
+enquanto seis migrações novas já tinham sido escritas e aplicadas sem nunca serem
+documentadas. Esta ronda é exclusivamente de documentação e de duas correcções de higiene do
+repositório.
+
+| Ficheiro / Migração | Alteração |
+|---|---|
+| `migration_v42_finance_fiscal_identity.sql` | Documentado. Identidade fiscal da empresa (nome legal, NUIT, morada, regime, início do exercício) para os relatórios de Finanças — ver secção "Finanças". |
+| `migration_v43_affiliate_payout_receipts.sql` | Documentado. Recibos formais para levantamentos de comissão de afiliados — ver secção "Sistema de Afiliados". |
+| `migration_v44_public_reviews.sql` | Documentado. Avaliações públicas ⭐ 1–5 — ver nova secção "Avaliações Públicas e Reforço da Rede de Parceiros". |
+| `migration_v45_partner_ratings_antiabuso.sql` | Documentado. Protecção contra avaliações falsas dirigidas a parceiros — mesma secção acima. |
+| `migration_v46_partner_access_code.sql` | Documentado. Código de acesso próprio por parceiro — mesma secção acima. |
+| `migration_v46_fix_document_insert_fk_violation.sql` | Documentado. Corrige violação de chave estrangeira no registo de documentos. **Nota de higiene:** partilha o número de versão "46" com o ficheiro anterior sem relação temática — recomenda-se renomear um dos dois (ex: para `v48`) na próxima ronda, para evitar assumir por engano que só existe uma migração "v46". |
+| `migration_v47_partners_advogados.sql` | Documentado. Advogados como parceiros na Rede de Parceiros, com nº de inscrição na OAM conferido manualmente — ver nova secção "Área Jurídica: Advogados como Parceiros". |
+| `README.md` | Actualizado de v27 para v28: nota de versão, lista de migrações do Deploy, tabela de Funcionalidades Principais, tabela de Versões, e aviso sobre o link morto para `ROADMAP-ESCALA.md` (ficheiro nunca criado). |
+
+> 📌 **Nota sobre o aviso do plano Vercel:** esta ronda também reforçou o aviso já existente
+> sobre o plano Hobby vs. Pro no topo do README com um ponto adicional confirmado numa
+> auditoria externa: nos Termos de Serviço da Vercel, o plano Hobby (e o trial Pro) concedem à
+> Vercel o direito de usar o conteúdo do site para treinar modelos de IA. Dado que este projecto
+> processa dados pessoais sensíveis (BI, procurações, contratos), isto reforça — não substitui —
+> a recomendação já existente de migrar para o Pro assim que houver receita consistente.
+
+---
+
 ## 📦 Versões
 
 | Componente | Versão | Nota |
 |------------|--------|------|
 | `package.json` | `11.0.0` | — |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy | formato `v<sha-git-7-chars>-<YYYYMMDD>`, escrito por `scripts/inject-version.js` — o valor no repositório é só um placeholder |
-| `README.md` | `v27` (esta edição) | — |
+| `README.md` | `v28` (esta edição) | Sincronizado com as migrações `v42`–`v47`, antes não documentadas — ver "Alterações — v28" |
+| `api/partners.js` | `v2.0` | ⚠️ *pendente de nota de versão explícita para v47* — suporta `type='advogado'` desde `migration_v47_partners_advogados.sql` (ver secção "Área Jurídica: Advogados como Parceiros") |
 | `assets/js/admin/AdminApp.js` | **v27** | **NOVO:** gestão completa do Kit de Marketing (materiais dos afiliados) — ver "Alterações — v27" |
 | `assets/js/services/MarketingTracker.js` | v26 | cliente do Marketing Analytics (Fases 1–5) |
 | `api/_lib/webpush.js` | v26 | envio de notificações push via VAPID |
@@ -982,14 +1094,14 @@ do Marketplace" e o Kit de Marketing dos afiliados, ambos rebentando em produç�
 | `api/generate-document.js` | `v2.1` | amostra grátis + custo progressivo |
 | `api/verify-credits.js` | `v3.0` | — |
 | `api/extract-template.js` | `v2.0` | — |
-| `api/partners.js` | `v2.0` | — |
 | `api/delete-temp-account.js` | `v9.0` | — |
 | `api/cleanup-temp-accounts.js` | `v9.0` | — |
 | `api/convert.js` | sem versão | — |
 | `assets/js/services/SmartOCRService.js` | `v4.0` | — |
 | `assets/js/services/LongDocumentEngine.js` | `v2.0` | — |
-| Migrações Supabase | até `migration_v41` | ver secção "Alterações — v27"; `v31` corrompida no export desta auditoria (ver aviso acima) |
+| Migrações Supabase | até `migration_v47` | ver secção "Alterações — v28"; `v31` corrompida no export da auditoria de Julho/2026 (ver aviso acima); existem dois ficheiros `v46` distintos (ver aviso na secção de Deploy) |
 | Templates integrados | 70 (14 serviços × 5) | 17 serviços no total |
+| `partners` (tipos) | `papelaria`, `advogado` | NOVO (v47): advogados como parceiros, com `credential_number` (OAM) conferido manualmente |
 
 ---
 
