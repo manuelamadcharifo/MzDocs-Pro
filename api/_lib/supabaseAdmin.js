@@ -128,6 +128,121 @@ async function rpc(fnName, args = {}) {
   return restRequest(`rpc/${fnName}`, { method: 'POST', body: args });
 }
 
+/**
+ * Apaga linhas que correspondam a `${matchColumn}=eq.${matchValue}`.
+ * `extraFilter`, se fornecido, deve começar por "&" (ex: "&status=eq.pending").
+ * Devolve as linhas apagadas (Prefer: return=representation).
+ */
+async function del(table, matchColumn, matchValue, extraFilter = '') {
+  return restRequest(
+    `${table}?${matchColumn}=eq.${encodeURIComponent(matchValue)}${extraFilter}`,
+    { method: 'DELETE', prefer: 'return=representation' }
+  );
+}
+
+/**
+ * Insere ou actualiza (upsert) uma linha via PostgREST (on_conflict).
+ * Devolve a linha resultante.
+ */
+async function upsert(table, row, onConflict = 'id') {
+  const result = await restRequest(
+    `${table}?on_conflict=${encodeURIComponent(onConflict)}`,
+    { method: 'POST', body: row, prefer: 'resolution=merge-duplicates,return=representation' }
+  );
+  return Array.isArray(result) ? result[0] : result;
+}
+
+/**
+ * Conta linhas que correspondam ao filtro (equivalente a
+ * `.select('*', { count: 'exact', head: true })` do SDK). `filters` deve
+ * começar por "?" e incluir toda a query string (ex: "?status=eq.pending").
+ */
+async function countRows(table, filters = '') {
+  assertConfigured();
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${filters}`, {
+    method: 'HEAD',
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      Prefer: 'count=exact',
+    },
+  });
+  if (!res.ok) {
+    const err = new Error(`Supabase REST HTTP ${res.status} (count em ${table})`);
+    err.status = res.status;
+    throw err;
+  }
+  const range = res.headers.get('content-range'); // ex: "*/123"
+  if (!range) return 0;
+  const total = range.split('/')[1];
+  return total === '*' || total === undefined ? 0 : (parseInt(total, 10) || 0);
+}
+
+/** Obtém um utilizador via Auth Admin API pelo seu id. */
+async function adminGetUserById(userId) {
+  assertConfigured();
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+  });
+  const text = await res.text();
+  let data = null;
+  if (text) { try { data = JSON.parse(text); } catch { data = text; } }
+  if (!res.ok) {
+    const err = new Error((data && (data.msg || data.message)) || `Erro ao obter utilizador (HTTP ${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Actualiza campos de um utilizador (ex: app_metadata) via Auth Admin API. */
+async function adminUpdateUserById(userId, patch) {
+  assertConfigured();
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const text = await res.text();
+  let data = null;
+  if (text) { try { data = JSON.parse(text); } catch { data = text; } }
+  if (!res.ok) {
+    const err = new Error((data && (data.msg || data.message)) || `Erro ao actualizar utilizador (HTTP ${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Envia um ficheiro (Buffer) para o Supabase Storage. upsert=true substitui se já existir. */
+async function storageUpload(bucket, path, buffer, contentType, upsert = true) {
+  assertConfigured();
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': contentType || 'application/octet-stream',
+      'x-upsert': upsert ? 'true' : 'false',
+    },
+    body: buffer,
+  });
+  const text = await res.text();
+  let data = null;
+  if (text) { try { data = JSON.parse(text); } catch { data = text; } }
+  if (!res.ok) {
+    const err = new Error((data && (data.message || data.error)) || `Erro ao enviar ficheiro (HTTP ${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Devolve o URL público de um ficheiro num bucket público. */
+function storageGetPublicUrl(bucket, path) {
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
+
 /** Remove permanentemente um utilizador via Auth Admin API (contas avulso). */
 async function adminDeleteUser(userId) {
   assertConfigured();
@@ -196,8 +311,15 @@ module.exports = {
   update,
   insert,
   rpc,
+  del,
+  upsert,
+  countRows,
   adminDeleteUser,
   adminCreateUser,
+  adminGetUserById,
+  adminUpdateUserById,
+  storageUpload,
+  storageGetPublicUrl,
 };
 
 /**
