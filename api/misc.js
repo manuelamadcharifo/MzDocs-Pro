@@ -22,7 +22,10 @@ const {
   selectOne,
   insert,
   update,
+  del,
+  countRows,
   adminCreateUser,
+  adminGetUserById,
   SUPABASE_URL,
   SERVICE_KEY,
 } = require('./_lib/supabaseAdmin');
@@ -30,30 +33,13 @@ const {
 const SITE_URL = (process.env.SITE_URL || 'https://mzdocs.co.mz').replace(/\/$/, '');
 const ORIGIN   = SITE_URL;
 
-// Instância SDK mínima (com transporte ws explícito) para operações que ainda
-// usam métodos do SDK como .rpc(), .auth.getUser() — apenas em funções
-// de afiliados e templates, enquanto não forem migradas para fetch puro.
-//
-// CORRIGIDO: a opção `realtime: { enabled: false }` NÃO é reconhecida pelo
-// @supabase/supabase-js (não existe tal propriedade) — é silenciosamente
-// ignorada, e o cliente cai no comportamento padrão de detecção automática
-// de WebSocket nativo, que falha em runtimes Node.js < 22 (sem WebSocket
-// global), lançando "Node.js 20 detected without native WebSocket support"
-// no PRÓPRIO MOMENTO de createClient(), antes de qualquer query. Isto
-// causava o erro visível ao registar parceiros/afiliados (handleAffiliate)
-// e ao gerir templates (handleTemplates). A opção correcta e documentada
-// pela Supabase para Node < 22 é `realtime: { transport: ws }` — confirmado
-// por reprodução directa: com `transport: ws` não há erro; com `enabled:
-// false` ou sem qualquer opção, o erro ocorre sempre que o WebSocket nativo
-// não existe no runtime.
-function makeSdkClient() {
-  const { createClient } = require('@supabase/supabase-js');
-  const ws = require('ws');
-  return createClient(SUPABASE_URL, SERVICE_KEY, {
-    auth:     { autoRefreshToken: false, persistSession: false },
-    realtime: { transport: ws },
-  });
-}
+// NOTA (migração): as funções de Afiliados e Templates usavam um cliente
+// SDK à parte (@supabase/supabase-js + 'ws' explícito) só para estas duas
+// secções, porque o SDK falha em runtimes Node < 22 sem WebSocket nativo
+// ("Node.js 20 detected without native WebSocket support"). Foram migradas
+// para o wrapper REST puro api/_lib/supabaseAdmin.js — o mesmo padrão já
+// usado no resto do projecto — eliminando por completo a dependência do
+// SDK e do pacote 'ws' nesta secção.
 
 // ATENÇÃO: ao adicionar novas páginas estáticas em /pages/, acrescentar aqui também.
 // Páginas geradas pelo admin (blog_pages) são lidas automaticamente da BD — não precisam
@@ -86,13 +72,6 @@ const STATIC_PAGES = [
 function parseBody(req) {
   try { return typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
   catch (_) { return {}; }
-}
-
-async function getUser(supabase, req) {
-  const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
-  if (!token) return null;
-  const { data } = await supabase.auth.getUser(token).catch(() => ({ data: {} }));
-  return data?.user || null;
 }
 
 // ── Main router ───────────────────────────────────────────────────────────
@@ -1088,7 +1067,7 @@ async function handlePushUnsubscribe(req, res) {
 
 // ════════════════════════════════════════════════════════════════════════════
 // TEMPLATES  (/api/templates/:action)
-// Ainda usa SDK (sem ws) — migração para fetch puro em sprint futuro
+// Migrado para o wrapper REST puro api/_lib/supabaseAdmin.js
 // ════════════════════════════════════════════════════════════════════════════
 async function handleTemplates(action, req, res) {
   res.setHeader('Access-Control-Allow-Origin', ORIGIN);
@@ -1096,17 +1075,14 @@ async function handleTemplates(action, req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Para templates list (GET público) usa REST puro — sem SDK
-  if (action === 'list') return tplList(req, res);
-
-  const supabase = makeSdkClient();
   switch (action) {
-    case 'submit':      return tplSubmit(req, res, supabase);
-    case 'rate':        return tplRate(req, res, supabase);
-    case 'download':    return tplDownload(req, res, supabase);
-    case 'approve':     return tplApprove(req, res, supabase);
-    case 'reject':      return tplReject(req, res, supabase);
-    case 'pending':     return tplPending(req, res, supabase);
+    case 'list':        return tplList(req, res);
+    case 'submit':      return tplSubmit(req, res);
+    case 'rate':        return tplRate(req, res);
+    case 'download':    return tplDownload(req, res);
+    case 'approve':     return tplApprove(req, res);
+    case 'reject':      return tplReject(req, res);
+    case 'pending':     return tplPending(req, res);
     // ── Acções que faltavam (rotas já existiam no vercel.json e o
     // frontend templates.html já as chamava — só a implementação aqui
     // estava em falta). Usam REST puro (rpc/restRequest), sem o SDK
@@ -1124,8 +1100,8 @@ async function handleTemplates(action, req, res) {
     case 'delete':      return tplDelete(req, res);
     // NOVO (v38): saldo de royalties e pedido de levantamento para quem
     // cria templates pagos — mesmo padrão já usado pelos afiliados.
-    case 'earnings':    return tplEarnings(req, res, supabase);
-    case 'withdraw':    return tplWithdraw(req, res, supabase);
+    case 'earnings':    return tplEarnings(req, res);
+    case 'withdraw':    return tplWithdraw(req, res);
     default:            return res.status(404).json({ error: 'Acção de template não encontrada' });
   }
 }
@@ -1173,9 +1149,9 @@ async function tplList(req, res) {
   }
 }
 
-async function tplSubmit(req, res, supabase) {
+async function tplSubmit(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   const body = parseBody(req);
   const { service_type, template_name, description, template_css, thumbnail_url, template_file } = body;
@@ -1199,20 +1175,24 @@ async function tplSubmit(req, res, supabase) {
     ? Math.min(70, Math.max(60, rawShare))
     : 65; // omisso → 65%, o valor intermédio da banda permitida
 
-  const { data, error } = await supabase.from('templates_custom').insert({
-    user_id: user.id,
-    service_type:  service_type.trim().slice(0, 50),
-    template_name: template_name.trim().slice(0, 100),
-    description:   (description || '').trim().slice(0, 300),
-    template_css:  template_css.slice(0, 20000),
-    thumbnail_url: thumbnail_url || null,
-    template_file: template_file || null,
-    status:        'pending',
-    is_public:     false,
-    credit_cost,
-    author_share_percent,
-  }).select('id').single();
-  if (error) return res.status(500).json({ error: error.message });
+  let data;
+  try {
+    data = await insert('templates_custom', {
+      user_id: user.id,
+      service_type:  service_type.trim().slice(0, 50),
+      template_name: template_name.trim().slice(0, 100),
+      description:   (description || '').trim().slice(0, 300),
+      template_css:  template_css.slice(0, 20000),
+      thumbnail_url: thumbnail_url || null,
+      template_file: template_file || null,
+      status:        'pending',
+      is_public:     false,
+      credit_cost,
+      author_share_percent,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
   return res.status(201).json({
     success: true, id: data.id,
     message: credit_cost > 0
@@ -1221,65 +1201,67 @@ async function tplSubmit(req, res, supabase) {
   });
 }
 
-async function tplRate(req, res, supabase) {
+async function tplRate(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   const { template_id, rating, comment } = parseBody(req);
   if (!template_id || !rating || rating < 1 || rating > 5)
     return res.status(400).json({ error: 'template_id e rating (1-5) são obrigatórios' });
-  const { data, error } = await supabase.rpc('rate_template', {
-    p_template_id: template_id, p_user_id: user.id,
-    p_rating: parseInt(rating), p_comment: (comment || '').slice(0, 500),
-  });
-  if (error) return res.status(500).json({ error: error.message });
-  return res.status(200).json({ success: true, ...data });
+  try {
+    const data = await rpc('rate_template', {
+      p_template_id: template_id, p_user_id: user.id,
+      p_rating: parseInt(rating), p_comment: (comment || '').slice(0, 500),
+    });
+    return res.status(200).json({ success: true, ...data });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 }
 
-async function tplDownload(req, res, supabase) {
+async function tplDownload(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   const { template_id, session_id } = parseBody(req);
   if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
   try {
-    await supabase.rpc('increment_template_downloads', { p_template_id: template_id });
+    await rpc('increment_template_downloads', { p_template_id: template_id });
   } catch (_) { /* contador é best-effort */ }
   try {
-    await supabase.from('template_downloads').insert({ template_id, session_id: session_id || null });
+    await insert('template_downloads', { template_id, session_id: session_id || null });
   } catch (_) { /* registo de download é best-effort */ }
   return res.status(200).json({ ok: true });
 }
 
-async function tplApprove(req, res, supabase) {
+async function tplApprove(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
-  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+  const profile = await selectOne('profiles', 'id', user.id, 'is_admin');
   if (!profile?.is_admin) return res.status(403).json({ error: 'Acesso negado' });
   const { template_id } = parseBody(req);
-  await supabase.rpc('approve_template', { p_template_id: template_id });
+  await rpc('approve_template', { p_template_id: template_id });
   return res.status(200).json({ success: true });
 }
 
-async function tplReject(req, res, supabase) {
+async function tplReject(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
-  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+  const profile = await selectOne('profiles', 'id', user.id, 'is_admin');
   if (!profile?.is_admin) return res.status(403).json({ error: 'Acesso negado' });
   const { template_id, note } = parseBody(req);
-  await supabase.rpc('reject_template', { p_template_id: template_id, p_note: note || '' });
+  await rpc('reject_template', { p_template_id: template_id, p_note: note || '' });
   return res.status(200).json({ success: true });
 }
 
-async function tplPending(req, res, supabase) {
-  const user = await getUser(supabase, req);
+async function tplPending(req, res) {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
-  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+  const profile = await selectOne('profiles', 'id', user.id, 'is_admin');
   if (!profile?.is_admin) return res.status(403).json({ error: 'Acesso negado' });
-  const { data } = await supabase
-    .from('templates_custom')
-    .select('id,service_type,template_name,description,thumbnail_url,status,created_at,user_id')
-    .eq('status', 'pending').order('created_at', { ascending: true });
+  const data = await restRequest(
+    'templates_custom?status=eq.pending&order=created_at.asc&select=id,service_type,template_name,description,thumbnail_url,status,created_at,user_id'
+  );
   return res.status(200).json({ success: true, templates: data || [] });
 }
 
@@ -1529,23 +1511,19 @@ async function tplDelete(req, res) {
 
 // GET /api/templates/earnings — saldo e histórico de vendas de templates
 // pagos criados pelo próprio utilizador (v38: repartição de receita).
-async function tplEarnings(req, res, supabase) {
-  const user = await getUser(supabase, req);
+async function tplEarnings(req, res) {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   try {
-    const { data: profile } = await supabase.from('profiles')
-      .select('template_author_balance, template_author_total_earned')
-      .eq('id', user.id).single();
-    const { data: sales } = await supabase.from('template_sales')
-      .select('id, template_id, amount_mzn, author_share_mzn, created_at, templates_custom(template_name)')
-      .eq('author_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    const { data: withdrawals } = await supabase.from('template_withdrawals')
-      .select('id, amount, status, created_at, processed_at')
-      .eq('author_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(20);
+    const profile = await selectOne('profiles', 'id', user.id, 'template_author_balance,template_author_total_earned');
+    const sales = await restRequest(
+      `template_sales?author_id=eq.${user.id}&order=created_at.desc&limit=50` +
+      `&select=id,template_id,amount_mzn,author_share_mzn,created_at,templates_custom(template_name)`
+    );
+    const withdrawals = await restRequest(
+      `template_withdrawals?author_id=eq.${user.id}&order=created_at.desc&limit=20` +
+      `&select=id,amount,status,created_at,processed_at`
+    );
     return res.status(200).json({
       success: true,
       balance:      profile?.template_author_balance || 0,
@@ -1562,9 +1540,9 @@ async function tplEarnings(req, res, supabase) {
 // POST /api/templates/withdraw  { amount, phone } — pedido de levantamento
 // de royalties de templates. Mesmo padrão de validação de affWithdraw
 // (número M-Pesa, saldo suficiente, sem pedido duplicado pendente).
-async function tplWithdraw(req, res, supabase) {
+async function tplWithdraw(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   const body   = parseBody(req);
   const phone  = (body.phone || '').replace(/\s/g, '');
@@ -1573,20 +1551,18 @@ async function tplWithdraw(req, res, supabase) {
     return res.status(400).json({ error: 'Número M-Pesa inválido' });
   if (!Number.isFinite(amount) || amount <= 0)
     return res.status(400).json({ error: 'Valor inválido' });
-  const { data: profile } = await supabase.from('profiles')
-    .select('template_author_balance').eq('id', user.id).single();
+  const profile = await selectOne('profiles', 'id', user.id, 'template_author_balance');
   if (amount > (profile?.template_author_balance || 0))
     return res.status(400).json({ error: 'Saldo insuficiente' });
-  const { data: pendingW } = await supabase.from('template_withdrawals')
-    .select('id').eq('author_id', user.id).eq('status', 'pending').limit(1);
+  const pendingW = await restRequest(`template_withdrawals?author_id=eq.${user.id}&status=eq.pending&select=id&limit=1`);
   if (pendingW && pendingW.length > 0)
     return res.status(400).json({ error: 'Já tem um levantamento pendente. Aguarde a conclusão.' });
-  const { error } = await supabase.from('template_withdrawals')
-    .insert({ author_id: user.id, amount, mpesa_phone: phone, status: 'pending' });
-  if (error) return res.status(500).json({ error: error.message });
-  await supabase.from('profiles')
-    .update({ template_author_balance: (profile.template_author_balance || 0) - amount })
-    .eq('id', user.id);
+  try {
+    await insert('template_withdrawals', { author_id: user.id, amount, mpesa_phone: phone, status: 'pending' });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+  await update('profiles', 'id', user.id, { template_author_balance: (profile.template_author_balance || 0) - amount });
   insert('admin_notifications', {
     type:    'withdrawal_request',
     title:   '💸 Pedido de levantamento — royalties de template',
@@ -1605,21 +1581,20 @@ async function handleAffiliate(action, req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   try {
-    const supabase = makeSdkClient();
     switch (action) {
-      case 'register':      return await affRegister(req, res, supabase);
-      case 'dashboard':     return await affDashboard(req, res, supabase);
-      case 'click':         return await affClick(req, res, supabase);
-      case 'withdraw':      return await affWithdraw(req, res, supabase);
-      case 'check':         return await affCheck(req, res, supabase);
-      case 'ranking':       return await affRanking(req, res, supabase);
-      case 'notifications': return await affNotifications(req, res, supabase);
+      case 'register':      return await affRegister(req, res);
+      case 'dashboard':     return await affDashboard(req, res);
+      case 'click':         return await affClick(req, res);
+      case 'withdraw':      return await affWithdraw(req, res);
+      case 'check':         return await affCheck(req, res);
+      case 'ranking':       return await affRanking(req, res);
+      case 'notifications': return await affNotifications(req, res);
       // v41: Kit de Marketing — materiais activos + QR pessoal do afiliado
       // (rota antes inexistente: o front-end de afiliado.html já chamava
       // /api/affiliate/materials e /api/affiliate/qrcode, mas caía sempre
       // no "default" abaixo e devolvia 404 "Acção não encontrada").
-      case 'materials':     return await affMaterials(req, res, supabase);
-      case 'qrcode':        return await affQrcode(req, res, supabase);
+      case 'materials':     return await affMaterials(req, res);
+      case 'qrcode':        return await affQrcode(req, res);
       default:              return res.status(404).json({ error: 'Acção não encontrada' });
     }
   } catch (err) {
@@ -1633,10 +1608,10 @@ async function handleAffiliate(action, req, res) {
   }
 }
 
-async function affRegister(req, res, supabase) {
+async function affRegister(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   try {
-    const user = await getUser(supabase, req);
+    const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Sessão inválida' });
     const body = parseBody(req);
     const segment     = ['papelaria','cyber','universidade','explicacao','digitador','individual'].includes(body.segment) ? body.segment : 'individual';
@@ -1644,20 +1619,27 @@ async function affRegister(req, res, supabase) {
     const city         = (body.city || '').trim().slice(0, 60) || null;
     const mpesaPhone   = (body.mpesa_phone || '').replace(/\s/g, '').slice(0, 20) || null;
 
-    const { data: profile, error: profileErr } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-    if (profileErr) return res.status(500).json({ error: 'Erro ao ler perfil: ' + profileErr.message });
+    let profile;
+    try {
+      profile = await selectOne('profiles', 'id', user.id, '*');
+    } catch (profileErr) {
+      return res.status(500).json({ error: 'Erro ao ler perfil: ' + profileErr.message });
+    }
     if (!profile) {
-      const { data: authUser } = await supabase.auth.admin.getUserById(user.id).catch(() => ({ data: null }));
-      const meta = authUser?.user?.user_metadata || {};
-      const { error: insertErr } = await supabase.from('profiles').insert({
-        id: user.id, email: user.email || '', full_name: meta.full_name || meta.name || user.email?.split('@')[0] || 'Utilizador',
-        phone: meta.phone || null, credits: 0, plan: 'free', is_admin: false, is_temp: false,
-        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      });
-      if (insertErr) return res.status(500).json({ error: 'Não foi possível criar o perfil: ' + insertErr.message });
-      const { data: newProfile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      const authUser = await adminGetUserById(user.id).catch(() => null);
+      const meta = authUser?.user_metadata || {};
+      try {
+        await insert('profiles', {
+          id: user.id, email: user.email || '', full_name: meta.full_name || meta.name || user.email?.split('@')[0] || 'Utilizador',
+          phone: meta.phone || null, credits: 0, plan: 'free', is_admin: false, is_temp: false,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        });
+      } catch (insertErr) {
+        return res.status(500).json({ error: 'Não foi possível criar o perfil: ' + insertErr.message });
+      }
+      const newProfile = await selectOne('profiles', 'id', user.id, '*');
       if (!newProfile) return res.status(500).json({ error: 'Perfil criado mas não encontrado. Tente de novo.' });
-      return continueRegister(res, supabase, user, newProfile, { segment, businessName, city, mpesaPhone });
+      return continueRegister(res, user, newProfile, { segment, businessName, city, mpesaPhone });
     }
     if (profile.ref_code) {
       // Já registado — actualizar segmento/info extra se fornecido
@@ -1665,20 +1647,20 @@ async function affRegister(req, res, supabase) {
       if (businessName) updates.aff_business_name = businessName;
       if (city) updates.aff_city = city;
       if (mpesaPhone) updates.aff_phone_mpesa = mpesaPhone;
-      await supabase.from('profiles').update(updates).eq('id', user.id);
+      await update('profiles', 'id', user.id, updates);
       return res.status(200).json({ success: true, ref_code: profile.ref_code, is_affiliate: profile.is_affiliate });
     }
-    return continueRegister(res, supabase, user, profile, { segment, businessName, city, mpesaPhone });
+    return continueRegister(res, user, profile, { segment, businessName, city, mpesaPhone });
   } catch (err) {
     return res.status(500).json({ error: 'Erro interno. Tente de novo.' });
   }
 }
 
-async function continueRegister(res, supabase, user, profile, extra = {}) {
+async function continueRegister(res, user, profile, extra = {}) {
   try {
     const namePart = (profile.full_name || user.email || 'MZD').replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
     const ref_code = namePart + Math.floor(10000 + Math.random() * 90000);
-    const { data: existing } = await supabase.from('profiles').select('id').eq('ref_code', ref_code).maybeSingle();
+    const existing = await selectOne('profiles', 'ref_code', ref_code, 'id');
     const finalCode = existing ? ref_code + Math.floor(Math.random() * 9) : ref_code;
     const updates = {
       ref_code: finalCode,
@@ -1689,8 +1671,9 @@ async function continueRegister(res, supabase, user, profile, extra = {}) {
     if (extra.businessName) updates.aff_business_name = extra.businessName;
     if (extra.city)         updates.aff_city          = extra.city;
     if (extra.mpesaPhone)   updates.aff_phone_mpesa   = extra.mpesaPhone;
-    const { error: updateErr } = await supabase.from('profiles').update(updates).eq('id', user.id);
-    if (updateErr) {
+    try {
+      await update('profiles', 'id', user.id, updates);
+    } catch (updateErr) {
       console.error('[affRegister] erro ao actualizar perfil:', updateErr.message, updateErr.code);
       if (updateErr.message.includes('column') || updateErr.code === '42703')
         return res.status(500).json({ error: 'Não foi possível concluir o registo. A equipa já foi notificada.', sql_needed: true });
@@ -1713,42 +1696,43 @@ async function continueRegister(res, supabase, user, profile, extra = {}) {
   }
 }
 
-async function affDashboard(req, res, supabase) {
+async function affDashboard(req, res) {
   if (req.method !== 'GET') return res.status(405).end();
-  const user = await getUser(supabase, req);
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
 
-  const { data: profile } = await supabase.from('profiles')
-    .select('ref_code,is_affiliate,aff_balance,aff_total_earned,aff_clicks,aff_conversions,full_name,phone,aff_segment,aff_tier,aff_business_name,aff_city,aff_phone_mpesa,aff_is_blocked,aff_block_reason')
-    .eq('id', user.id).single();
+  const profile = await selectOne('profiles', 'id', user.id,
+    'ref_code,is_affiliate,aff_balance,aff_total_earned,aff_clicks,aff_conversions,full_name,phone,aff_segment,aff_tier,aff_business_name,aff_city,aff_phone_mpesa,aff_is_blocked,aff_block_reason');
   if (!profile?.ref_code) return res.status(404).json({ error: 'Não é afiliado' });
 
-  const { data: commissions } = await supabase.from('affiliate_commissions')
-    .select('id,package_id,sale_amount,commission_mzn,status,created_at').eq('affiliate_id', user.id)
-    .order('created_at', { ascending: false }).limit(20);
+  const commissions = await restRequest(
+    `affiliate_commissions?affiliate_id=eq.${user.id}&order=created_at.desc&limit=20` +
+    `&select=id,package_id,sale_amount,commission_mzn,status,created_at`
+  );
 
-  const { data: withdrawals } = await supabase.from('affiliate_withdrawals')
-    .select('id,amount,mpesa_phone,status,created_at,processed_at,receipt_number,receipt_screenshot_url').eq('affiliate_id', user.id)
-    .order('created_at', { ascending: false }).limit(10);
+  const withdrawals = await restRequest(
+    `affiliate_withdrawals?affiliate_id=eq.${user.id}&order=created_at.desc&limit=10` +
+    `&select=id,amount,mpesa_phone,status,created_at,processed_at,receipt_number,receipt_screenshot_url`
+  );
 
   // NOVO: "Meus Referidos" — lista de quem se registou com o link deste
   // afiliado (profiles.referred_by), não só quem já gerou comissão. Antes
   // só se via o total agregado de cliques/conversões — agora dá para ver
   // exactamente QUEM entrou pelo link e se já é cliente pagante ou não.
-  const { data: referralsRaw } = await supabase.from('profiles')
-    .select('id, full_name, phone, created_at, account_type')
-    .eq('referred_by', user.id)
-    .order('created_at', { ascending: false })
-    .limit(200);
+  const referralsRaw = await restRequest(
+    `profiles?referred_by=eq.${user.id}&order=created_at.desc&limit=200` +
+    `&select=id,full_name,phone,created_at,account_type`
+  );
 
   let referrals = [];
   let payingReferrals = 0;
   if (referralsRaw && referralsRaw.length) {
     const refIds = referralsRaw.map(r => r.id);
-    const { data: commByReferred } = await supabase.from('affiliate_commissions')
-      .select('referred_user_id, commission_mzn, status')
-      .eq('affiliate_id', user.id)
-      .in('referred_user_id', refIds);
+    const idsList = refIds.map(id => encodeURIComponent(id)).join(',');
+    const commByReferred = await restRequest(
+      `affiliate_commissions?affiliate_id=eq.${user.id}&referred_user_id=in.(${idsList})` +
+      `&select=referred_user_id,commission_mzn,status`
+    );
 
     const commMap = {};
     (commByReferred || []).forEach(c => {
@@ -1780,18 +1764,17 @@ async function affDashboard(req, res, supabase) {
 
   // Ranking do mês actual
   const currentMonth = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
-  const { data: rankingRaw } = await supabase.from('affiliate_ranking')
-    .select('affiliate_id,rank_position,conversions,commission_mzn,tier')
-    .eq('month', currentMonth)
-    .order('rank_position', { ascending: true })
-    .limit(10);
+  const rankingRaw = await restRequest(
+    `affiliate_ranking?month=eq.${currentMonth}&order=rank_position.asc&limit=10` +
+    `&select=affiliate_id,rank_position,conversions,commission_mzn,tier`
+  );
 
   // Enriquecer ranking com nomes
   let ranking = [];
   if (rankingRaw && rankingRaw.length > 0) {
     const ids = rankingRaw.map(r => r.affiliate_id);
-    const { data: pnames } = await supabase.from('profiles')
-      .select('id,full_name,aff_segment,ref_code').in('id', ids);
+    const idsList = ids.map(id => encodeURIComponent(id)).join(',');
+    const pnames = await restRequest(`profiles?id=in.(${idsList})&select=id,full_name,aff_segment,ref_code`);
     const nameMap = {};
     (pnames || []).forEach(p => { nameMap[p.id] = p; });
     ranking = rankingRaw.map(r => ({
@@ -1803,13 +1786,15 @@ async function affDashboard(req, res, supabase) {
   }
 
   // Notificações não lidas
-  const { data: notifs, count: unreadCount } = await supabase.from('affiliate_notifications')
-    .select('id,type,title,body,created_at', { count: 'exact' })
-    .eq('affiliate_id', user.id).eq('is_read', false)
-    .order('created_at', { ascending: false }).limit(5);
+  const notifs = await restRequest(
+    `affiliate_notifications?affiliate_id=eq.${user.id}&is_read=eq.false&order=created_at.desc&limit=5` +
+    `&select=id,type,title,body,created_at`
+  );
+  const unreadCount = await countRows('affiliate_notifications', `?affiliate_id=eq.${user.id}&is_read=eq.false`);
 
-  const { data: settings } = await supabase.from('system_settings').select('key,value')
-    .in('key', ['aff_min_withdraw', 'aff_rate_basico', 'aff_rate_pro', 'aff_rate_empresa', 'aff_bonus_papelaria', 'aff_bonus_cyber', 'aff_bonus_universidade']);
+  const settingsKeys = ['aff_min_withdraw', 'aff_rate_basico', 'aff_rate_pro', 'aff_rate_empresa', 'aff_bonus_papelaria', 'aff_bonus_cyber', 'aff_bonus_universidade']
+    .map(k => encodeURIComponent(k)).join(',');
+  const settings = await restRequest(`system_settings?key=in.(${settingsKeys})&select=key,value`);
   const cfg = {};
   (settings || []).forEach(s => { cfg[s.key] = s.value; });
 
@@ -1850,21 +1835,21 @@ async function affDashboard(req, res, supabase) {
 // devolvida com a imagem (base64) ou link externo e as zonas de QR/texto
 // já definidas — a composição final (QR pessoal colado por cima) acontece
 // no browser do afiliado, nunca aqui no servidor.
-async function affMaterials(req, res, supabase) {
+async function affMaterials(req, res) {
   if (req.method !== 'GET') return res.status(405).end();
-  const user = await getUser(supabase, req);
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
 
-  const { data: profile } = await supabase.from('profiles')
-    .select('ref_code').eq('id', user.id).single();
+  const profile = await selectOne('profiles', 'id', user.id, 'ref_code');
   if (!profile?.ref_code) return res.status(404).json({ error: 'Não é afiliado' });
 
-  const { data, error } = await supabase.from('marketing_materials')
-    .select('id, title, description, category, media_type, file_data, external_url, width_px, height_px, qr_zone, text_zone, sort_order, created_at')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: false });
-  if (error) {
+  let data;
+  try {
+    data = await restRequest(
+      'marketing_materials?is_active=eq.true&order=sort_order.asc,created_at.desc' +
+      '&select=id,title,description,category,media_type,file_data,external_url,width_px,height_px,qr_zone,text_zone,sort_order,created_at'
+    );
+  } catch (error) {
     console.error('[affMaterials]', error.message);
     return res.status(500).json({ error: 'Não foi possível carregar os materiais de marketing.' });
   }
@@ -1876,13 +1861,12 @@ async function affMaterials(req, res, supabase) {
 // o PNG do QR code pessoal do afiliado, apontando para o seu link de
 // referência (?ref=CODIGO). Usado para compor os materiais de marketing
 // no browser do afiliado (canvas) com o SEU QR colado por cima.
-async function affQrcode(req, res, supabase) {
+async function affQrcode(req, res) {
   if (req.method !== 'GET') return res.status(405).end();
-  const user = await getUser(supabase, req);
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
 
-  const { data: profile } = await supabase.from('profiles')
-    .select('ref_code, full_name').eq('id', user.id).single();
+  const profile = await selectOne('profiles', 'id', user.id, 'ref_code,full_name');
   if (!profile?.ref_code) return res.status(404).json({ error: 'Não é afiliado' });
 
   try {
@@ -1901,7 +1885,7 @@ async function affQrcode(req, res, supabase) {
   }
 }
 
-async function affClick(req, res, supabase) {
+async function affClick(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   const body    = parseBody(req);
   const refCode = (body.ref_code || '').trim().toUpperCase();
@@ -1910,17 +1894,17 @@ async function affClick(req, res, supabase) {
   const ip     = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
   const ipHash = crypto.createHash('sha256').update(ip + refCode).digest('hex').slice(0, 16);
   // Antifraude: verificar burst de cliques antes de registar
-  const { data: recentClicks } = await supabase.from('affiliate_clicks')
-    .select('id', { count: 'exact' })
-    .eq('ip_hash', ipHash)
-    .gte('created_at', new Date(Date.now() - 3600000).toISOString());
+  const sinceIso = new Date(Date.now() - 3600000).toISOString();
+  const recentClicks = await restRequest(
+    `affiliate_clicks?ip_hash=eq.${ipHash}&created_at=gte.${encodeURIComponent(sinceIso)}&select=id`
+  );
   const clickCount = recentClicks?.length || 0;
   if (clickCount >= 30) {
     // Burst detectado — registar fraude mas retornar ok silenciosamente
-    const { data: aff } = await supabase.from('profiles').select('id').eq('ref_code', refCode).maybeSingle();
+    const aff = await selectOne('profiles', 'ref_code', refCode, 'id');
     if (aff) {
       try {
-        await supabase.from('affiliate_fraud_flags').insert({
+        await insert('affiliate_fraud_flags', {
           affiliate_id: aff.id, flag_type: 'ip_burst',
           description: 'IP com ' + (clickCount+1) + ' cliques na última hora', severity: 'critical',
         });
@@ -1928,42 +1912,45 @@ async function affClick(req, res, supabase) {
     }
     return res.status(200).json({ ok: true });
   }
-  const { error } = await supabase.rpc('register_affiliate_click', { p_ref_code: refCode, p_ip_hash: ipHash, p_page: page });
-  if (error) console.error('[affClick] error:', error.message);
+  try {
+    await rpc('register_affiliate_click', { p_ref_code: refCode, p_ip_hash: ipHash, p_page: page });
+  } catch (error) {
+    console.error('[affClick] error:', error.message);
+  }
   return res.status(200).json({ ok: true });
 }
 
-async function affWithdraw(req, res, supabase) {
+async function affWithdraw(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-  const user = await getUser(supabase, req);
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   const body   = parseBody(req);
   const phone  = (body.phone || '').replace(/\s/g, '');
   const amount = parseInt(body.amount || 0);
   if (!phone || !/^(\+?258)?[0-9]{9}$/.test(phone.replace('+258', '')))
     return res.status(400).json({ error: 'Número M-Pesa inválido' });
-  const { data: profile } = await supabase.from('profiles')
-    .select('aff_balance,is_affiliate,aff_is_blocked,aff_tier').eq('id', user.id).single();
+  const profile = await selectOne('profiles', 'id', user.id, 'aff_balance,is_affiliate,aff_is_blocked,aff_tier');
   if (!profile?.is_affiliate) return res.status(403).json({ error: 'Apenas afiliados aprovados podem levantar' });
   if (profile.aff_is_blocked) return res.status(403).json({ error: 'Conta suspensa. Contacte o suporte.' });
-  const { data: minSetting } = await supabase.from('system_settings').select('value').eq('key', 'aff_min_withdraw').single();
+  const minSetting = await selectOne('system_settings', 'key', 'aff_min_withdraw', 'value');
   let minWithdraw = parseInt(minSetting?.value || '200');
   // Diamante tem mínimo reduzido
   if (profile.aff_tier === 'diamante') minWithdraw = Math.max(50, Math.floor(minWithdraw * 0.5));
   if (amount < minWithdraw) return res.status(400).json({ error: `Valor mínimo: ${minWithdraw} MZN` });
   if (amount > (profile.aff_balance || 0)) return res.status(400).json({ error: 'Saldo insuficiente' });
   // Verificar levantamento pendente em duplicado
-  const { data: pendingW } = await supabase.from('affiliate_withdrawals')
-    .select('id').eq('affiliate_id', user.id).eq('status', 'pending').limit(1);
+  const pendingW = await restRequest(`affiliate_withdrawals?affiliate_id=eq.${user.id}&status=eq.pending&select=id&limit=1`);
   if (pendingW && pendingW.length > 0)
     return res.status(400).json({ error: 'Já tem um levantamento pendente. Aguarde a conclusão.' });
-  const { error } = await supabase.from('affiliate_withdrawals')
-    .insert({ affiliate_id: user.id, amount, mpesa_phone: phone, status: 'pending' });
-  if (error) return res.status(500).json({ error: error.message });
-  await supabase.from('profiles').update({ aff_balance: (profile.aff_balance || 0) - amount }).eq('id', user.id);
+  try {
+    await insert('affiliate_withdrawals', { affiliate_id: user.id, amount, mpesa_phone: phone, status: 'pending' });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+  await update('profiles', 'id', user.id, { aff_balance: (profile.aff_balance || 0) - amount });
   // Notificação
   try {
-    await supabase.from('affiliate_notifications').insert({
+    await insert('affiliate_notifications', {
       affiliate_id: user.id, type: 'withdrawal',
       title: '💸 Pedido de Levantamento',
       body: `Pedido de ${amount} MZN submetido. Processado em até 48h via M-Pesa.`,
@@ -1982,11 +1969,10 @@ async function affWithdraw(req, res, supabase) {
   return res.status(200).json({ success: true, message: `Pedido de ${amount} MZN submetido. Processado em até 48 horas via M-Pesa.` });
 }
 
-async function affCheck(req, res, supabase) {
+async function affCheck(req, res) {
   const refCode = req.query?.ref || '';
   if (!refCode) return res.status(400).json({ error: 'ref em falta' });
-  const { data } = await supabase.from('profiles')
-    .select('full_name,is_affiliate,ref_code,aff_segment').eq('ref_code', refCode).single();
+  const data = await selectOne('profiles', 'ref_code', refCode, 'full_name,is_affiliate,ref_code,aff_segment');
   if (!data) return res.status(404).json({ error: 'Link inválido' });
   return res.status(200).json({
     valid: true, is_affiliate: data.is_affiliate,
@@ -1995,16 +1981,17 @@ async function affCheck(req, res, supabase) {
   });
 }
 
-async function affRanking(req, res, supabase) {
+async function affRanking(req, res) {
   if (req.method !== 'GET') return res.status(405).end();
   const month = req.query?.month || new Date().toISOString().slice(0, 7);
-  const { data: ranking } = await supabase.from('affiliate_ranking')
-    .select('affiliate_id,rank_position,conversions,revenue_mzn,commission_mzn,tier')
-    .eq('month', month).order('rank_position', { ascending: true }).limit(20);
+  const ranking = await restRequest(
+    `affiliate_ranking?month=eq.${month}&order=rank_position.asc&limit=20` +
+    `&select=affiliate_id,rank_position,conversions,revenue_mzn,commission_mzn,tier`
+  );
   if (!ranking || !ranking.length) return res.status(200).json({ success: true, ranking: [], month });
   const ids = ranking.map(r => r.affiliate_id);
-  const { data: profiles } = await supabase.from('profiles')
-    .select('id,full_name,aff_segment').in('id', ids);
+  const idsList = ids.map(id => encodeURIComponent(id)).join(',');
+  const profiles = await restRequest(`profiles?id=in.(${idsList})&select=id,full_name,aff_segment`);
   const pm = {};
   (profiles || []).forEach(p => { pm[p.id] = p; });
   return res.status(200).json({
@@ -2017,18 +2004,18 @@ async function affRanking(req, res, supabase) {
   });
 }
 
-async function affNotifications(req, res, supabase) {
-  const user = await getUser(supabase, req);
+async function affNotifications(req, res) {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   if (req.method === 'POST') {
     // Marcar como lidas
-    await supabase.from('affiliate_notifications')
-      .update({ is_read: true }).eq('affiliate_id', user.id).eq('is_read', false);
+    await update('affiliate_notifications', 'affiliate_id', user.id, { is_read: true }, '&is_read=eq.false');
     return res.status(200).json({ success: true });
   }
-  const { data } = await supabase.from('affiliate_notifications')
-    .select('id,type,title,body,is_read,created_at')
-    .eq('affiliate_id', user.id).order('created_at', { ascending: false }).limit(20);
+  const data = await restRequest(
+    `affiliate_notifications?affiliate_id=eq.${user.id}&order=created_at.desc&limit=20` +
+    `&select=id,type,title,body,is_read,created_at`
+  );
   return res.status(200).json({ success: true, notifications: data || [] });
 }
 // ════════════════════════════════════════════════════════════════════════════
