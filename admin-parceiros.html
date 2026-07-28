@@ -149,8 +149,8 @@ async function doLogin() {
 }
 
 // Busca config do backend para obter URL e anon key sem expor no código
-async function getSupaUrl()  { const c = await getConfig(); return c.supaUrl || ''; }
-async function getSupaAnon() { const c = await getConfig(); return c.supaAnon || ''; }
+async function getSupaUrl()  { const c = await getConfig(); return c.supabaseUrl || ''; }
+async function getSupaAnon() { const c = await getConfig(); return c.supabaseAnonKey || ''; }
 let _cfg = null;
 async function getConfig() {
   if (_cfg) return _cfg;
