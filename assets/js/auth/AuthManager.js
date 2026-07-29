@@ -144,7 +144,7 @@ export class AuthManager {
  ]);
  }
 
-  async signUp(phone, email, password, fullName = '') {
+  async signUp(phone, email, password, fullName = '', consentTerms = false) {
     console.log('[AuthManager] signUp: A iniciar criação de conta…', { email, phone });
 
     // Capturar ref_code do link de afiliado se existir.
@@ -183,7 +183,7 @@ export class AuthManager {
         fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, email, password, fullName, ref_code: refCode, visitor_id: visitorId })
+          body: JSON.stringify({ phone, email, password, fullName, ref_code: refCode, visitor_id: visitorId, consentTerms })
         }),
         15000,
         'O servidor demorou demasiado a criar a conta. Tente novamente.'
