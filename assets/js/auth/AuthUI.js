@@ -84,6 +84,12 @@ export class AuthUI {
                                 <button type="button" class="pw-eye" aria-label="Mostrar password" onclick="(function(btn){var inp=btn.previousElementSibling;inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'👁️':'🙈';})(this)">👁️</button>
                             </div>
                         </div>
+                        <div class="form-group">
+                            <label style="display:flex;align-items:flex-start;gap:8px;font-weight:400;cursor:pointer;">
+                                <input type="checkbox" id="regConsentTerms" style="margin-top:3px;flex-shrink:0;">
+                                <span style="font-size:.85rem;line-height:1.4;">Li e aceito os <a href="/legal.html" target="_blank" class="auth-link">Termos de Serviço e a Política de Privacidade</a> <span style="color:#ef4444">*</span></span>
+                            </label>
+                        </div>
                         <button id="btnRegister" class="btn btn-primary btn-block">Criar Conta</button>
                     </div>
                     <p class="auth-footer">Já tem conta? <a href="#" class="auth-link" data-view="login">Entrar</a></p>
@@ -214,17 +220,19 @@ export class AuthUI {
         const email   = document.getElementById('regEmail')?.value?.trim();
         const pass    = document.getElementById('regPassword')?.value;
         const confirm = document.getElementById('regPasswordConfirm')?.value;
+        const consentTerms = document.getElementById('regConsentTerms')?.checked === true;
 
         if (!phone)              return this._showError('Número de telemóvel é obrigatório');
         if (!email)              return this._showError('E-mail é obrigatório');
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this._showError('E-mail inválido');
         if (!pass || pass.length < 6) return this._showError('Password deve ter pelo menos 6 caracteres');
         if (pass !== confirm)    return this._showError('As passwords não coincidem');
+        if (!consentTerms)       return this._showError('Tem de aceitar os Termos de Serviço e a Política de Privacidade para criar conta');
 
         this._registerSubmitting = true;
         if (btn) { btn.disabled = true; btn.textContent = '⏳ A criar conta...'; }
         try {
-            const result = await authManager.signUp(phone, email, pass, name);
+            const result = await authManager.signUp(phone, email, pass, name, consentTerms);
             const loggedIn = !!(result?.session || result?._autoLogin);
 
             if (loggedIn) {
