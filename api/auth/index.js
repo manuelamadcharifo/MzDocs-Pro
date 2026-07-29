@@ -1,3 +1,13 @@
+// api/auth/index.js — v2.2 (LPD/RGPD: consentimento explícito + rate limiting)
+// ALTERAÇÕES v2.2:
+//  1. NOVO: signup passa a exigir consentTerms === true (Termos de Serviço),
+//     e grava consentimento em consent_logs (IP, hora, versão dos termos) —
+//     tabela criada em supabase/migration_v48_lpd_compliance.sql.
+//  2. NOVO: rate limiting em signin/signup/reset-password via
+//     api/_lib/rateLimit.js (checkRateLimit — já usado noutros endpoints,
+//     persistente via Upstash Redis). Antes, estes 3 endpoints não tinham
+//     nenhuma protecção contra força bruta/enumeração de contas.
+//
 // api/auth/index.js — v2.1 (FIX: perfis sem nome/telefone após signup)
 // ALTERAÇÕES v2.1:
 //  1. CORRIGIDO: o trabalho de gravar full_name/phone no perfil corria
@@ -32,8 +42,19 @@ const {
   SUPABASE_URL,
   SERVICE_KEY,
 } = require('../_lib/supabaseAdmin');
+const { checkRateLimit } = require('../_lib/rateLimit');
 
 const origin = process.env.SITE_URL || 'https://mzdocs.co.mz';
+
+// Versão actual dos Termos de Serviço — subir este valor sempre que o texto
+// legal em legal.html mudar substancialmente, para que consent_logs reflicta
+// qual versão cada utilizador realmente aceitou.
+const TERMS_VERSION = process.env.TERMS_VERSION || '2026-07';
+
+function getClientIp(req) {
+  return (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '')
+    .split(',')[0].trim() || 'unknown';
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin);
@@ -69,6 +90,16 @@ function parseBody(req) {
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleSignin(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
+
+  // NOVO (LPD/segurança): protecção contra força bruta de password.
+  // 8 tentativas / 5 min por IP — generoso para uso normal, mas corta
+  // scripts de adivinhação de password rapidamente.
+  const ip = getClientIp(req);
+  const allowed = await checkRateLimit('auth-signin', ip, { limit: 8, windowSec: 300 });
+  if (!allowed) {
+    return res.status(429).json({ error: 'Demasiadas tentativas. Aguarde alguns minutos e tente novamente.' });
+  }
+
   const body = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
 
@@ -116,10 +147,26 @@ async function handleSignin(req, res) {
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleSignup(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
+
+  // NOVO (LPD/segurança): limita criação de contas em massa a partir do
+  // mesmo IP (scraping de créditos grátis, contas fantasma para afiliados).
+  const ip = getClientIp(req);
+  const allowed = await checkRateLimit('auth-signup', ip, { limit: 6, windowSec: 3600 });
+  if (!allowed) {
+    return res.status(429).json({ error: 'Demasiados registos a partir deste endereço. Tente novamente mais tarde.' });
+  }
+
   const body = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
 
-  const { phone, email, fullName, password, ref_code, visitor_id } = body;
+  const { phone, email, fullName, password, ref_code, visitor_id, consentTerms } = body;
+
+  // NOVO (LPD Lei nº 3/2017 + RGPD): consentimento explícito é obrigatório.
+  // O checkbox correspondente deve existir no formulário de registo do
+  // frontend (index.html) e enviar consentTerms: true quando marcado.
+  if (consentTerms !== true) {
+    return res.status(400).json({ error: 'É necessário aceitar os Termos de Serviço e a Política de Privacidade para criar uma conta.' });
+  }
 
   // NOVO (Fase 4 — Funil/CRM): visitor_id é opcional (localStorage pode estar
   // indisponível — modo privado, etc.), por isso nunca bloqueia o registo.
@@ -188,6 +235,8 @@ async function handleSignup(req, res) {
       credits:          1,
       credits_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       visitor_id:       visitorId,
+      consent_terms_at:      new Date().toISOString(),
+      consent_terms_version: TERMS_VERSION,
     };
 
     // Verificar link de afiliado
@@ -216,7 +265,11 @@ async function handleSignup(req, res) {
       message: 'Conta criada! 1 crédito grátis atribuído (válido 1 mês).',
     });
 
-    waitUntil(_persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId }));
+    waitUntil(_persistSignupProfile({
+      userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId,
+      consentIp: ip,
+      consentUserAgent: (req.headers['user-agent'] || '').slice(0, 500),
+    }));
 
   } catch (err) {
     console.error('[auth/signup]', err.message);
@@ -235,11 +288,24 @@ async function handleSignup(req, res) {
 // passada a waitUntil(), que diz ao runtime da Vercel para manter a função
 // viva até esta promise terminar, eliminando a perda intermitente de
 // nome/telefone em contas novas.
-async function _persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId }) {
+async function _persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId, consentIp, consentUserAgent }) {
   if (!SERVICE_KEY) {
     console.warn(`[auth/signup] Sem service role — perfil não actualizado para ${userId.slice(0,8)}***`);
     return;
   }
+
+  // NOVO (LPD/RGPD): registo formal e imutável do consentimento aos Termos
+  // de Serviço, separado do profile (que pode ser editado/anonimizado mais
+  // tarde). Corre em paralelo com o resto — se falhar, não bloqueia o
+  // registo da conta, mas fica logado para investigação.
+  insert('consent_logs', {
+    user_id:       userId,
+    email:         normalizedEmail,
+    consent_type:  'terms_of_service',
+    terms_version: profilePayload.consent_terms_version,
+    ip_address:    consentIp || 'unknown',
+    user_agent:    consentUserAgent || '',
+  }).catch(err => console.warn('[auth/signup] Falha ao gravar consent_logs:', err.message));
 
   await new Promise(r => setTimeout(r, 800)); // dar tempo ao trigger para terminar
 
@@ -258,6 +324,8 @@ async function _persistSignupProfile({ userId, normalized, normalizedEmail, norm
         full_name:  normalizedName,
         visitor_id: visitorId,
         updated_at: new Date().toISOString(),
+        consent_terms_at:      profilePayload.consent_terms_at,
+        consent_terms_version: profilePayload.consent_terms_version,
       };
       if (profilePayload.referred_by) patchBody.referred_by = profilePayload.referred_by;
 
@@ -309,6 +377,15 @@ async function _persistSignupProfile({ userId, normalized, normalizedEmail, norm
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleResetPassword(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
+
+  // NOVO (LPD/segurança): evita usar este endpoint para spam de emails de
+  // recuperação ou para tentar enumerar contas existentes por tentativa e erro.
+  const ip = getClientIp(req);
+  const allowed = await checkRateLimit('auth-reset-password', ip, { limit: 5, windowSec: 3600 });
+  if (!allowed) {
+    return res.status(429).json({ error: 'Demasiados pedidos. Tente novamente mais tarde.' });
+  }
+
   const body = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
   const { email } = body;
