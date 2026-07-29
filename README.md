@@ -1,18 +1,21 @@
-# MzDocs Pro — v28
+# MzDocs Pro — v29
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
 
-> 📌 **Nota de versão:** este documento reflecte o estado real do código até à auditoria de
-> 27 de Julho/2026 — cobre as migrações `v42` a `v47` (antes existentes no repositório mas
-> nunca documentadas neste README): identidade fiscal da empresa para os relatórios de
-> Finanças (`migration_v42`), recibos de pagamento a afiliados (`migration_v43`), avaliações
-> públicas (`migration_v44`), anti-abuso nas avaliações de parceiros (`migration_v45`), código
-> de acesso de parceiro (`migration_v46_partner_access_code`), correcção de violação de chave
-> estrangeira no registo de documentos (`migration_v46_fix_document_insert_fk_violation` —
-> **nota:** existem dois ficheiros `v46` distintos no repositório; ver aviso na secção
-> "Migrações Supabase" abaixo), e advogados como parceiros (`migration_v47`) — ver secção
-> "Alterações — v28" abaixo. O histórico de auditorias anteriores está preservado nas secções
-> abaixo (v12, v13–v16, v17–v24, v25, v26, v27).
+> 📌 **Nota de versão:** ronda de 29 de Julho/2026 — eliminação completa da dependência do
+> SDK `@supabase/supabase-js` (e do pacote `ws`) em todo o projecto. `api/admin/index.js` e as
+> secções de Afiliados e Templates de `api/misc.js` eram os últimos ficheiros a ainda
+> instanciar o SDK (com transporte `ws` explícito, necessário em Node.js < 22 sem WebSocket
+> nativo) só para usar `.rpc()`, `.auth.getUser()` e as operações Admin API — foram migrados
+> para o wrapper REST puro `api/_lib/supabaseAdmin.js`, o mesmo padrão já usado no resto do
+> projecto desde a v24. Isto também elimina um bug de runtime real: em Node.js 20 sem a opção
+> `realtime: { transport: ws }`, o SDK lançava `"Node.js 20 detected without native WebSocket
+> support"` ao instanciar o cliente — o erro visível ao registar parceiros/afiliados e ao gerir
+> templates. `@supabase/supabase-js` e `ws` foram removidos do `package.json` — o projecto
+> já não tem nenhuma dependência do SDK oficial da Supabase, só `fetch` nativo. Ver secção
+> "Alterações — v29" abaixo. O histórico de auditorias anteriores está preservado nas secções
+> abaixo (v12, v13–v16, v17–v24, v25, v26, v27, v28).
+
 
 > ⚠️ **Acção urgente — plano Vercel:** este projecto processa pagamentos (`api/process-payment.js`,
 > tabela `transactions`). Os Termos de Serviço da Vercel definem **qualquer fluxo de cobrança a
@@ -964,7 +967,7 @@ Esta ronda partiu de reports directos de utilização em produção (não uma au
   - ✅ Já migradas (sem `@supabase/supabase-js` nem `require('ws')`): `deduct-credit.js`, `process-payment.js`, `generate-document.js`, `auth/index.js`, `verify-credits.js`, `partners.js`, `delete-temp-account.js`, `cleanup-temp-accounts.js`.
   - ✅ Nunca precisaram do SDK: `extract-template.js`, `convert.js`.
   - 🟡 **Parcialmente migrado:** `misc.js` — usa `supabaseAdmin.js` na maioria das rotas, mas mantém `makeSdkClient()` interno (SDK + `ws`) para `handleAffiliate` e `handleTemplates`.
-  - ❌ **Ainda não migrado:** `api/admin/index.js` — usa `@supabase/supabase-js` + `require('ws')` integralmente (75 KB, o maior ficheiro de API; migrar requer mais cuidado).
+  - ❌ ~~Ainda não migrado: `api/admin/index.js` — usa `@supabase/supabase-js` + `require('ws')` integralmente (75 KB, o maior ficheiro de API; migrar requer mais cuidado).~~ **Resolvido na v29** — ver secção "Alterações — v29".
 
 - **Blog / CMS** (`api/admin/index.js`, `blog_pages`) — geração de artigos por IA e fluxo de publicação automática para GitHub não foram revistos a fundo.
 
@@ -1063,13 +1066,31 @@ repositório.
 
 ---
 
+## 🛠️ Alterações — v29 (eliminação total do SDK `@supabase/supabase-js`)
+
+Ronda de 29 de Julho/2026. Fecha a última dívida técnica identificada na auditoria de v28
+(ficheiro `api/admin/index.js`, então o maior do projecto e o único ainda a depender do SDK
+oficial da Supabase em vez do padrão REST puro já usado em todo o resto da API desde a v24).
+
+| Ficheiro | Alteração |
+|---|---|
+| `api/admin/index.js` | Removida a função `getAdminClient()` (que instanciava `createClient()` com `realtime: { transport: ws }`) e o parâmetro `supabase` de todas as funções do ficheiro. `validateAdmin()` e todos os handlers passam a usar só as funções REST de `api/_lib/supabaseAdmin.js`. Ficheiro passou de 3.914 para 3.760 linhas. |
+| `api/misc.js` | Removida `makeSdkClient()` (mesmo padrão SDK+`ws`, usada só nas secções de **Afiliados** e **Templates**). Migradas para o wrapper REST puro, alinhando com o resto do ficheiro. |
+| `api/_lib/supabaseAdmin.js` | Adicionadas 8 funções novas ao wrapper REST, necessárias para cobrir tudo o que só o SDK fazia antes: `del`, `upsert`, `countRows` (equivalente a `.select('*', { count:'exact', head:true })`), `adminGetUserById`, `adminUpdateUserById` (Auth Admin API), `storageUpload` e `storageGetPublicUrl` (Supabase Storage via REST). |
+| `admin-parceiros.html` | Corrigido nome das chaves de configuração lidas de `getConfig()`: `supaUrl`/`supaAnon` → `supabaseUrl`/`supabaseAnonKey`, alinhando com o resto do frontend. |
+| `package.json` | Removidas as dependências `@supabase/supabase-js` e `ws` — deixam de ser necessárias em qualquer parte do projecto. |
+
+**Porque isto importa:** para além de reduzir dependências (menos superfície de ataque, menos peso no bundle das funções serverless, relevante no limite de tamanho do Vercel Hobby), esta migração corrige um bug de produção real e não apenas cosmético: em Node.js 20 (o runtime que a Vercel usa por omissão em projectos mais antigos) sem a opção `realtime: { transport: ws }` explícita, `@supabase/supabase-js` lançava `"Node.js 20 detected without native WebSocket support"` **no próprio momento de `createClient()`**, antes de qualquer pedido — isto causava falhas visíveis ao registar parceiros/afiliados e ao gerir templates sempre que o transporte `ws` não estava correctamente configurado. Com o wrapper REST puro, esse cenário deixa de poder acontecer, porque nunca há um `RealtimeClient` a ser instanciado.
+
+---
+
 ## 📦 Versões
 
 | Componente | Versão | Nota |
 |------------|--------|------|
 | `package.json` | `11.0.0` | — |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy | formato `v<sha-git-7-chars>-<YYYYMMDD>`, escrito por `scripts/inject-version.js` — o valor no repositório é só um placeholder |
-| `README.md` | `v28` (esta edição) | Sincronizado com as migrações `v42`–`v47`, antes não documentadas — ver "Alterações — v28" |
+| `README.md` | `v29` (esta edição) | v28 sincronizou `v42`–`v47`; **v29** documenta a eliminação total do SDK `@supabase/supabase-js`/`ws` — ver "Alterações — v29" |
 | `api/partners.js` | `v2.0` | ⚠️ *pendente de nota de versão explícita para v47* — suporta `type='advogado'` desde `migration_v47_partners_advogados.sql` (ver secção "Área Jurídica: Advogados como Parceiros") |
 | `assets/js/admin/AdminApp.js` | **v27** | **NOVO:** gestão completa do Kit de Marketing (materiais dos afiliados) — ver "Alterações — v27" |
 | `assets/js/services/MarketingTracker.js` | v26 | cliente do Marketing Analytics (Fases 1–5) |
@@ -1077,18 +1098,18 @@ repositório.
 | `index.html` | v26 | banner `#sandboxBar` removido (código morto) |
 | `perfil.html` | v25 | página de conta com Créditos/Arquivo em modal embutido (sem navegar para "/") |
 | `templates.html` | v25 | modais Resultado/Créditos/Histórico adicionados; `openDetail()` corrigido (texto antes do preview); listener de clique delegado |
-| `api/misc.js` | `v3.1` | 🟡 parcialmente migrado · v25: `tplList` corrigido para filtrar por `id` · **v27: NOVO** `handleAffiliate` ganhou as acções `materials`/`qrcode` (Kit de Marketing) |
+| `api/misc.js` | `v3.2` | 🟢 **totalmente migrado desde v29** (era 🟡 parcial) · v25: `tplList` corrigido para filtrar por `id` · v27: `handleAffiliate` ganhou as acções `materials`/`qrcode` (Kit de Marketing) · **v29:** removida `makeSdkClient()` (Afiliados/Templates), sem dependência de SDK/`ws` |
 | `vercel.json` (CSP) | v25 | `img-src` agora inclui `https://*.supabase.co` (avatares) |
 | `assets/js/controllers/HistoryController.js` | v25 | guard do visualizador "lite" reforçado (confirma DOM, não só `window.docController`) |
 | `assets/js/views/Views.js` | v25 | `_renderResultInner` blindado contra elementos ausentes |
 | `assets/js/app.js` | v26 | v25: dropdown do utilizador corrigido; ícone duplicado removido; deep-links `?topup=1`/`?history=1` · v26: removida referência ao banner morto `#sandboxBar` |
-| `api/_lib/supabaseAdmin.js` | — | helper sem versão explícita |
+| `api/_lib/supabaseAdmin.js` | — | helper sem versão explícita · **v29:** +8 funções (`del`, `upsert`, `countRows`, `adminGetUserById`, `adminUpdateUserById`, `storageUpload`, `storageGetPublicUrl`) para suportar a migração de `admin/index.js` e `misc.js` |
 | `api/_lib/visionAI.js` | `v1.0` | — |
 | `api/_lib/legalSearch.js` | — | NOVO (v17) |
 | `api/_lib/packages.js` | — | preços dinâmicos · v27: `estimateMznPerCredit()` passou a ser usado também por `/api/admin/templates` |
 | `api/_lib/rateLimit.js` | — | NOVO (rate-limit partilhado) |
 | `api/auth/index.js` | `v2.1` | — |
-| `api/admin/index.js` | `v2.1` | ⚠️ ainda usa SDK legacy · **v27:** `handleTemplates` corrigido (removida referência a `price_mzn`, adicionado `mzn_per_credit`/`mzn_equivalent`); **NOVO** `handleMarketingMaterials` (`/api/admin/marketing-materials`) |
+| `api/admin/index.js` | `v2.2` | 🟢 **sem SDK legacy desde v29** (era ⚠️ SDK+`ws`) · v27: `handleTemplates` corrigido (removida referência a `price_mzn`, adicionado `mzn_per_credit`/`mzn_equivalent`); `handleMarketingMaterials` (`/api/admin/marketing-materials`) · **v29:** `getAdminClient()` removida, migrado para `api/_lib/supabaseAdmin.js` puro (3.914 → 3.760 linhas) |
 | `api/process-payment.js` | `v5.0` | — |
 | `api/deduct-credit.js` | `v3.0` | — |
 | `api/generate-document.js` | `v2.1` | amostra grátis + custo progressivo |
