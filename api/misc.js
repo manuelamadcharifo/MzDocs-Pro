@@ -187,7 +187,15 @@ async function _createAvulsoAccount({ reference, phone, credits, transactionId }
   await update('profiles', 'id', tempUserId, {
     is_temp:       true,
     temp_ref:      ref,
-    temp_password: tempPass,
+    // CORRIGIDO (auditoria segurança Julho 2026): já não se grava a password
+    // em texto limpo em profiles.temp_password — era um risco real (qualquer
+    // fuga da base de dados, ou de um admin comprometido, expunha passwords
+    // de utilizadores em claro, ao contrário das passwords normais, que o
+    // Supabase Auth já guarda em hash). A password ainda é devolvida UMA VEZ
+    // na resposta desta chamada (accountInfo.tempPass, mais abaixo) para
+    // mostrar ao cliente imediatamente — só deixa de ficar guardada para sempre.
+    // Para gerar uma nova mais tarde (ex: cliente perdeu o acesso), o admin
+    // usa a acção 'regenerate-temp-password' em api/admin/index.js.
     credits,
     plan:          'free',
     account_type:  'avulso',
