@@ -276,7 +276,8 @@
       <div class="section-desc">Ações irreversíveis ou de segurança avançada.</div>
       <div class="form-row">
         <button class="btn btn-ghost" id="btnLogoutAll">📵 Terminar sessão em todos os dispositivos</button>
-        <a href="https://wa.me/258858695506?text=Ol%C3%A1%2C%20quero%20eliminar%20a%20minha%20conta%20MzDocs%20Pro" target="_blank" class="btn btn-red-outline">🗑️ Pedir eliminação da conta</a>
+        <button class="btn btn-red-outline" id="btnDeleteAccount">🗑️ Eliminar a minha conta definitivamente</button>
+        <a href="https://wa.me/258858695506?text=Ol%C3%A1%2C%20quero%20eliminar%20a%20minha%20conta%20MzDocs%20Pro" target="_blank" class="btn btn-red-outline">💬 Prefiro pedir por WhatsApp</a>
       </div>
       <div class="msg-box" id="dangerMsg"></div>
     </div>
@@ -626,6 +627,38 @@ function bindForms() {
       location.href = '/';
     } catch (err) {
       showMsg('dangerMsg', '❌ ' + (err.message || 'Erro ao terminar sessões.'), false);
+    }
+  });
+
+  // NOVO (LPD/RGPD — direito ao esquecimento, auditoria Julho 2026):
+  // eliminação definitiva e imediata da conta, self-service. Dupla
+  // confirmação de propósito — é irreversível (apaga documentos gerados,
+  // desliga transacções da conta, elimina o login). A opção de pedir por
+  // WhatsApp ao lado continua disponível para quem prefira falar com alguém.
+  document.getElementById('btnDeleteAccount')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnDeleteAccount');
+    if (!confirm('Isto vai eliminar a sua conta MzDocs Pro DEFINITIVAMENTE, incluindo todos os documentos gerados. Esta acção não pode ser desfeita. Continuar?')) return;
+    const digitada = prompt('Para confirmar, escreva ELIMINAR (em maiúsculas) na caixa abaixo:');
+    if (digitada !== 'ELIMINAR') {
+      showMsg('dangerMsg', '❌ Eliminação cancelada — texto de confirmação não corresponde.', false);
+      return;
+    }
+    btn.disabled = true; btn.textContent = '⏳ A eliminar…';
+    try {
+      const token = authManager.getToken();
+      const res = await fetch('/api/delete-temp-account', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body:    JSON.stringify({ confirmDeletion: true }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.deleted) throw new Error(data.error || data.message || 'Não foi possível eliminar a conta.');
+      await authManager.signOutEverywhere().catch(() => {});
+      alert('A sua conta foi eliminada. Obrigado por ter usado o MzDocs Pro.');
+      location.href = '/';
+    } catch (err) {
+      showMsg('dangerMsg', '❌ ' + (err.message || 'Erro ao eliminar a conta.'), false);
+      btn.disabled = false; btn.textContent = '🗑️ Eliminar a minha conta definitivamente';
     }
   });
 }
