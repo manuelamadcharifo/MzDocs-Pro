@@ -58,6 +58,7 @@ module.exports = async function handler(req, res) {
     case 'settings':          return handleSettings(req, res);
     case 'audit-log':         return handleAuditLog(req, res);
     case 'delete-user':       return handleDeleteUser(req, res);
+    case 'regenerate-temp-password': return handleRegenerateTempPassword(req, res);
     case 'analytics':         return handleAnalytics(req, res);
     case 'feedback':          return handleFeedback(req, res);
     case 'reviews':           return handleReviews(req, res);
@@ -92,7 +93,7 @@ module.exports = async function handler(req, res) {
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
-        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt','ai-providers','qrcodes','funnel','user-timeline','republish-blog','notifications','campaigns','goals','push-subscribe','push-send','finance','template-withdrawals','marketing-materials'],
+        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','regenerate-temp-password','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt','ai-providers','qrcodes','funnel','user-timeline','republish-blog','notifications','campaigns','goals','push-subscribe','push-send','finance','template-withdrawals','marketing-materials'],
       });
   }
 };
@@ -332,7 +333,7 @@ async function handleConfirmAvulso(req, res) {
 
       try {
         await update('profiles', 'id', tempUserId, {
-          is_temp: true, temp_ref: ref, temp_password: tempPass,
+          is_temp: true, temp_ref: ref, // NOVO: já não grava temp_password em claro (ver misc.js/_createAvulsoAccount)
           credits: creditsInt, plan: 'free', account_type: 'avulso',
           full_name: `Avulso ${ref}`, phone: normPhone,
           updated_at: new Date().toISOString(),
@@ -408,7 +409,7 @@ async function handleConfirmAvulso(req, res) {
 
     try {
       await update('profiles', 'id', tempUserId, {
-        is_temp: true, temp_ref: ref, temp_password: tempPass,
+        is_temp: true, temp_ref: ref, // NOVO: já não grava temp_password em claro (ver misc.js/_createAvulsoAccount)
         credits: tx.credits, plan: 'free', account_type: 'avulso',
         full_name: `Avulso ${ref}`, phone: tx.phone_number || null,
         updated_at: new Date().toISOString(),
@@ -1275,6 +1276,65 @@ async function handleDeleteUser(req, res) {
     return res.status(200).json({ success: true, message: 'Utilizador eliminado do sistema' });
   } catch (err) {
     console.error('[admin/delete-user]', err);
+    return res.status(500).json({ error: err.message || 'Erro interno' });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REGENERATE-TEMP-PASSWORD — NOVO (auditoria de segurança Julho 2026)
+// ─────────────────────────────────────────────────────────────────────────────
+// Substitui a leitura directa de profiles.temp_password (que deixou de ser
+// gravado em texto limpo — ver misc.js/_createAvulsoAccount e as 3 chamadas
+// a handleConfirmAvulso/handleApproveReceipt neste ficheiro). Gera uma
+// password nova, actualiza-a de facto no Supabase Auth (não só num campo de
+// texto), e devolve-a UMA VEZ na resposta — nunca fica guardada em claro na
+// base de dados. Mesmo princípio já usado para o código de acesso das
+// parceiras (ver api/partners.js handleRegenerateCode).
+async function handleRegenerateTempPassword(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
+  const token = req.headers.authorization?.replace('Bearer ', '').trim();
+  const body  = parseBody(req);
+  if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
+  const { userId } = body;
+  if (!userId) return res.status(400).json({ error: 'userId é obrigatório' });
+
+  try {
+    const auth = await validateAdmin(token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    const profile = await selectOne('profiles', 'id', userId, 'id,is_temp,account_type,email,phone,full_name,credits');
+    if (!profile) return res.status(404).json({ error: 'Utilizador não encontrado' });
+    if (!profile.is_temp && profile.account_type !== 'avulso') {
+      return res.status(400).json({ error: 'Esta acção só se aplica a contas temporárias (avulso)' });
+    }
+
+    const newPass = _genPassword();
+
+    // Actualiza a password real no Supabase Auth (não um espelho em texto
+    // limpo) — é isto que efectivamente muda o que o cliente consegue usar
+    // para entrar.
+    await adminUpdateUserById(userId, { password: newPass });
+
+    // Já não se grava a nova password em profiles — só se devolve aqui,
+    // uma única vez, para o admin partilhar com o cliente.
+    await update('profiles', 'id', userId, { updated_at: new Date().toISOString() }).catch(() => null);
+
+    await insert('admin_logs', {
+      admin_id:    auth.user.id,
+      action:      'regenerate_temp_password',
+      target_type: 'user',
+      target_id:   userId,
+      created_at:  new Date().toISOString(),
+    }).catch(() => null);
+
+    return res.status(200).json({
+      success:  true,
+      email:    profile.email,
+      phone:    profile.phone,
+      password: newPass,
+    });
+  } catch (err) {
+    console.error('[admin/regenerate-temp-password]', err);
     return res.status(500).json({ error: err.message || 'Erro interno' });
   }
 }
@@ -2935,7 +2995,7 @@ async function handleApproveReceipt(req, res) {
 
         const tempUserId = newUser.id;
         await update('profiles', 'id', tempUserId, {
-          is_temp: true, temp_ref: ref, temp_password: tempPass,
+          is_temp: true, temp_ref: ref, // NOVO: já não grava temp_password em claro (ver misc.js/_createAvulsoAccount)
           credits: creditsInt, plan: 'free', account_type: 'avulso',
           full_name: `Avulso ${ref}`, phone: tx.phone_number || null,
           updated_at: new Date().toISOString(),
