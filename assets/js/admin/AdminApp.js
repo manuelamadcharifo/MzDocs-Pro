@@ -357,7 +357,7 @@ class AdminApp {
             // Tentativa 1: select completo
             ({ data, error } = await this.supabase
                 .from('profiles')
-                .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, is_temp, account_type, credits_expires_at, temp_ref, temp_password, created_at')
+                .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, is_temp, account_type, credits_expires_at, temp_ref, created_at')
                 .order('created_at', { ascending: false }));
 
             // Tentativa 2: sem is_blocked (BD não migrada)
@@ -615,42 +615,74 @@ USING (EXISTS (
     }
 
     // ── Ver credenciais de conta temporária ────────────────────────────
-    showTempCredentials(userId) {
+    // CORRIGIDO (auditoria de segurança Julho 2026): profiles.temp_password
+    // deixou de ser gravado em texto limpo na base de dados (risco real —
+    // ver api/admin/index.js/handleRegenerateTempPassword). Em vez de ler
+    // um valor guardado, este botão agora gera uma password nova válida na
+    // hora e mostra-a uma única vez. Isto invalida a password anterior —
+    // é intencional (mesmo princípio do código de acesso das parceiras).
+    async showTempCredentials(userId) {
         const u = this._users.find(u => u.id === userId);
         if (!u) return;
-        const email = u.email || '—';
-        const pass  = u.temp_password || '(não disponível — enviada por WhatsApp)';
-        const ref   = u.temp_ref || '—';
         this.showModal(`
             <p class="modal-title">🔑 Credenciais Avulso</p>
-            <p class="modal-sub">Conta temporária — referência: <code>${ref}</code></p>
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;margin:.75rem 0;font-size:.85rem;line-height:2">
-                <div><strong>📧 Email:</strong> <code>${email}</code></div>
-                <div><strong>🔐 Password:</strong> <code style="color:#7c3aed">${pass}</code></div>
-                <div><strong>💎 Créditos actuais:</strong> ${u.credits ?? 0}</div>
-                <div><strong>📱 Telemóvel:</strong> ${u.phone || '—'}</div>
-            </div>
-            <p style="font-size:.75rem;color:#94a3b8">Partilhe as credenciais com o cliente pelo WhatsApp de forma segura.</p>
-            <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
-                ${u.phone ? `<button style="background:#25d366;color:#fff" onclick="adminApp._sendCredentialsWA('${userId}')">📱 Reenviar WhatsApp</button>` : ''}
-            </div>
+            <p class="modal-sub">A gerar uma nova password de acesso…</p>
         `);
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/regenerate-temp-password', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body:    JSON.stringify({ userId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao gerar password');
+
+            // Guardado só em memória, para o botão "Reenviar WhatsApp" reusar
+            // sem ter de gerar outra vez (o que invalidaria esta).
+            this._lastTempCredentials = { userId, email: data.email, password: data.password, phone: data.phone };
+
+            const ref = u.temp_ref || '—';
+            this.showModal(`
+                <p class="modal-title">🔑 Credenciais Avulso</p>
+                <p class="modal-sub">Conta temporária — referência: <code>${ref}</code></p>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;margin:.75rem 0;font-size:.85rem;line-height:2">
+                    <div><strong>📧 Email:</strong> <code>${data.email || '—'}</code></div>
+                    <div><strong>🔐 Password (nova):</strong> <code style="color:#7c3aed">${data.password}</code></div>
+                    <div><strong>💎 Créditos actuais:</strong> ${u.credits ?? 0}</div>
+                    <div><strong>📱 Telemóvel:</strong> ${data.phone || u.phone || '—'}</div>
+                </div>
+                <p style="font-size:.75rem;color:#94a3b8">⚠️ Isto substitui a password anterior — partilhe já esta com o cliente pelo WhatsApp.</p>
+                <div class="modal-actions">
+                    <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                    ${(data.phone || u.phone) ? `<button style="background:#25d366;color:#fff" onclick="adminApp._sendCredentialsWA('${userId}')">📱 Enviar WhatsApp</button>` : ''}
+                </div>
+            `);
+        } catch (err) {
+            this.showModal(`
+                <p class="modal-title">🔑 Credenciais Avulso</p>
+                <p class="modal-sub" style="color:#ef4444">❌ ${err.message}</p>
+                <div class="modal-actions">
+                    <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                </div>
+            `);
+        }
     }
 
     _sendCredentialsWA(userId) {
-        const u = this._users.find(u => u.id === userId);
-        if (!u || !u.temp_password) { this._notify('⚠ Password não disponível', 'warn'); return; }
+        const c = this._lastTempCredentials;
+        if (!c || c.userId !== userId) { this._notify('⚠ Gere a password primeiro (botão 🔑)', 'warn'); return; }
+        const u     = this._users.find(u => u.id === userId);
         const origin = window.location.origin;
         const msg = encodeURIComponent(
             `Olá! As suas credenciais MzDocs Pro:\n` +
             `🌐 Acesso: ${origin}\n` +
-            `📧 Utilizador: ${u.email}\n` +
-            `🔐 Password: ${u.temp_password}\n` +
-            `💎 Créditos: ${u.credits}\n\n` +
+            `📧 Utilizador: ${c.email}\n` +
+            `🔐 Password: ${c.password}\n` +
+            `💎 Créditos: ${u?.credits ?? ''}\n\n` +
             `Use estas credenciais para gerar os seus documentos.`
         );
-        const phone = (u.phone || '').replace(/\D/g, '');
+        const phone = (c.phone || u?.phone || '').replace(/\D/g, '');
         window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
     }
 
