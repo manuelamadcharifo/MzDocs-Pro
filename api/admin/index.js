@@ -28,6 +28,8 @@ const {
   adminDeleteUser,
   storageUpload,
   storageGetPublicUrl,
+  storageCreateSignedUrl,
+  storageCreateSignedUrls,
 } = require('../_lib/supabaseAdmin');
 const { loadPackagesFromSettings, estimateMznPerCredit } = require('../_lib/packages');
 const { moderateComment, approvalStatusFor } = require('../_lib/contentModeration');
@@ -741,7 +743,7 @@ async function handleFinance(req, res) {
     // de consulta para o contabilista ver o que já foi efectivamente pago.
     if (req.method === 'GET' && q.sub === 'affiliate-payouts') {
       let path = `affiliate_withdrawals?status=eq.completed&order=processed_at.desc&limit=2000` +
-        `&select=id,affiliate_id,amount,mpesa_phone,receipt_number,receipt_screenshot_url,processed_at,created_at,profiles!affiliate_withdrawals_affiliate_id_fkey(full_name,email)`;
+        `&select=id,affiliate_id,amount,mpesa_phone,receipt_number,receipt_screenshot_path,processed_at,created_at,profiles!affiliate_withdrawals_affiliate_id_fkey(full_name,email)`;
       if (q.start) path += `&processed_at=gte.${encodeURIComponent(q.start + 'T00:00:00.000Z')}`;
       if (q.end)   path += `&processed_at=lte.${encodeURIComponent(q.end + 'T23:59:59.999Z')}`;
       let data;
@@ -750,7 +752,7 @@ async function handleFinance(req, res) {
       } catch (error) {
         console.warn('[admin/finance] Join com profiles falhou (affiliate-payouts), a tentar sem join:', error.message);
         let fallbackPath = `affiliate_withdrawals?status=eq.completed&order=processed_at.desc&limit=2000` +
-          `&select=id,affiliate_id,amount,mpesa_phone,receipt_number,receipt_screenshot_url,processed_at,created_at`;
+          `&select=id,affiliate_id,amount,mpesa_phone,receipt_number,receipt_screenshot_path,processed_at,created_at`;
         if (q.start) fallbackPath += `&processed_at=gte.${encodeURIComponent(q.start + 'T00:00:00.000Z')}`;
         if (q.end)   fallbackPath += `&processed_at=lte.${encodeURIComponent(q.end + 'T23:59:59.999Z')}`;
         data = await restRequest(fallbackPath);
@@ -763,6 +765,14 @@ async function handleFinance(req, res) {
           data = data.map(w => ({ ...w, profiles: pm[w.affiliate_id] || {} }));
         }
       }
+      // SEGURANÇA (auditoria Jul/2026): o bucket "affiliate-receipts" é
+      // privado — gera-se aqui um URL assinado e temporário (5 min) por
+      // cada recibo, em vez de devolver um URL público permanente.
+      const signedUrls = await storageCreateSignedUrls(
+        (data || []).map(w => ({ bucket: 'affiliate-receipts', path: w.receipt_screenshot_path })),
+        300
+      );
+      data = (data || []).map((w, i) => ({ ...w, receipt_screenshot_url: signedUrls[i] }));
       return res.status(200).json({ success: true, payouts: data || [] });
     }
 
@@ -2676,7 +2686,8 @@ async function handleAffiliates(req, res) {
 
         // Pagar exige sempre o print da transferência M-Pesa — é a prova
         // que sustenta o recibo entregue ao afiliado e o registo contabilístico.
-        let receiptUrl = null;
+        let receiptPath = null;
+        let receiptUrl = null; // apenas para a resposta imediata (URL assinado, expira em minutos)
         let receiptNumber = null;
         if (newStatus === 'completed') {
           const shot = body.receipt_image_base64;
@@ -2696,16 +2707,23 @@ async function handleAffiliates(req, res) {
           receiptNumber = `REC-${withdrawal_id.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
           const objPath = `${withdrawal_id}.${ext}`;
           try {
+            // SEGURANÇA (auditoria Jul/2026): o bucket "affiliate-receipts" é
+            // PRIVADO (migration_v50). Nunca voltar a usar storageGetPublicUrl
+            // aqui — comprovativos contêm dados financeiros pessoais e só
+            // devem ser acessíveis via URL assinado e temporário, gerado no
+            // momento em que alguém autorizado (admin ou o próprio afiliado)
+            // pede para ver o recibo.
             await storageUpload('affiliate-receipts', objPath, buffer, mime, true);
           } catch (upErr) {
             return res.status(500).json({ error: 'Falha ao guardar o comprovativo: ' + upErr.message });
           }
-          receiptUrl = storageGetPublicUrl('affiliate-receipts', objPath);
+          receiptPath = objPath;
+          receiptUrl = await storageCreateSignedUrl('affiliate-receipts', objPath, 300);
         }
 
         await update('affiliate_withdrawals', 'id', withdrawal_id, {
           status: newStatus, admin_note: note || null, processed_at: new Date().toISOString(),
-          ...(receiptUrl ? { receipt_screenshot_url: receiptUrl, receipt_number: receiptNumber } : {}),
+          ...(receiptPath ? { receipt_screenshot_path: receiptPath, receipt_number: receiptNumber } : {}),
         });
         // Se rejeitado: devolver saldo
         if (newStatus === 'rejected') {
