@@ -2,6 +2,7 @@
 // Mobile-first · Sync real · Bloquear/Deletar utilizadores · Total correcto
 
 import { authManager } from '../auth/AuthManager.js';
+import { sanitizeHtml } from '../utils/Sanitizer.js';
 
 class AdminApp {
     constructor() {
@@ -427,14 +428,27 @@ class AdminApp {
             if (!users.length) {
                 tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:#94a3b8">Nenhum utilizador</td></tr>';
             } else {
-                tbody.innerHTML = users.map(u => `
+                tbody.innerHTML = users.map(u => {
+                    // SEGURANÇA (auditoria Jul/2026): full_name é texto livre
+                    // escolhido pelo PRÓPRIO utilizador no registo — qualquer
+                    // pessoa pode pôr HTML/JS ali. É a maior superfície de XSS
+                    // armazenado de todo o painel, porque atinge o admin logo
+                    // na primeira vez que abre a lista de utilizadores.
+                    // jsSafe(): remove aspas simples (evita quebrar a string
+                    // JS dentro de onclick="...") e depois escapa HTML (evita
+                    // quebrar o próprio atributo via aspas duplas/"<"/">").
+                    const jsSafe = (s) => escapeHtml(String(s || '').replace(/'/g, ''));
+                    const safeName  = escapeHtml(u.full_name || '—');
+                    const safeLabel = jsSafe(u.full_name || u.phone || u.id.slice(0,8));
+                    const safeDelLabel = jsSafe(u.full_name || u.phone || '');
+                    return `
                     <tr>
                         <td>
-                            <div style="font-weight:700;font-size:.9rem">${u.full_name || '—'}</div>
+                            <div style="font-weight:700;font-size:.9rem">${safeName}</div>
                             <div style="font-size:.75rem;color:#64748b">${u.id.slice(0,8)}…</div>
                         </td>
-                        <td>${u.phone ? u.phone : '<span style="color:#f59e0b;font-size:.8rem">⚠ sem phone</span>'}</td>
-                        <td style="font-size:.8rem;color:#64748b;max-width:160px;overflow:hidden;text-overflow:ellipsis">${u.email || '—'}</td>
+                        <td>${u.phone ? escapeHtml(u.phone) : '<span style="color:#f59e0b;font-size:.8rem">⚠ sem phone</span>'}</td>
+                        <td style="font-size:.8rem;color:#64748b;max-width:160px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(u.email || '—')}</td>
                         <td><span class="credit-badge">💎 ${u.credits ?? 0}</span></td>
                         <td>${u.total_documents ?? 0}</td>
                         <td>
@@ -446,31 +460,40 @@ class AdminApp {
                         <td style="font-size:.8rem">${new Date(u.created_at).toLocaleDateString('pt-MZ')}</td>
                         <td>
                             <div class="action-group">
-                                <button class="btn-ghost" title="Timeline / CRM" onclick="adminApp._openUserTimeline('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}')">🕒</button>
-                                <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">➕</button>
-                                <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">✏️</button>
+                                <button class="btn-ghost" title="Timeline / CRM" onclick="adminApp._openUserTimeline('${u.id}','${safeLabel}')">🕒</button>
+                                <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${safeLabel}',${u.credits??0})">➕</button>
+                                <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${safeLabel}',${u.credits??0})">✏️</button>
                                 ${u.is_temp ? `<button class="btn-info" onclick="adminApp.showTempCredentials('${u.id}')">🔑</button>` : ''}
                                 ${u.is_blocked
                                     ? `<button class="btn-success" onclick="adminApp.toggleBlock('${u.id}',false)">🔓</button>`
                                     : `<button class="btn-warning" onclick="adminApp.toggleBlock('${u.id}',true)">🔒</button>`}
-                                <button class="btn-danger" onclick="adminApp.deleteUser('${u.id}','${(u.full_name||u.phone||'').replace(/'/g,'')}')">🗑️</button>
+                                <button class="btn-danger" onclick="adminApp.deleteUser('${u.id}','${safeDelLabel}')">🗑️</button>
                             </div>
                         </td>
                     </tr>
-                `).join('');
+                `;
+                }).join('');
             }
         }
     }
 
     _userCard(u) {
+        // SEGURANÇA (auditoria Jul/2026): ver nota igual na tabela desktop
+        // acima — full_name é texto livre do próprio utilizador.
+        const jsSafe = (s) => escapeHtml(String(s || '').replace(/'/g, ''));
+        const safeName     = escapeHtml(u.full_name || '(sem nome)');
+        const safePhone    = escapeHtml(u.phone || '⚠ sem telemóvel');
+        const safeEmail    = escapeHtml(u.email || '—');
+        const safeLabel    = jsSafe(u.full_name || u.phone || u.id.slice(0,8));
+        const safeDelLabel = jsSafe(u.full_name || u.phone || '');
         const initials = (u.full_name || u.email || '?')[0].toUpperCase();
         return `<div class="user-card">
             <div class="user-card-header">
-                <div class="user-card-avatar">${initials}</div>
+                <div class="user-card-avatar">${escapeHtml(initials)}</div>
                 <div class="user-card-info">
-                    <div class="user-card-name">${u.full_name || '(sem nome)'}</div>
-                    <div class="user-card-phone">${u.phone || '⚠ sem telemóvel'}</div>
-                    <div class="user-card-email">${u.email || '—'}</div>
+                    <div class="user-card-name">${safeName}</div>
+                    <div class="user-card-phone">${safePhone}</div>
+                    <div class="user-card-email">${safeEmail}</div>
                 </div>
             </div>
             <div class="user-card-meta">
@@ -481,16 +504,16 @@ class AdminApp {
                 ${u.is_blocked  ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
             </div>
             <div class="user-card-actions">
-                <button class="btn-ghost" onclick="adminApp._openUserTimeline('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}')">🕒 Timeline</button>
-                <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">➕ Créditos</button>
-                <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${(u.full_name||u.phone||u.id.slice(0,8)).replace(/'/g,'')}',${u.credits??0})">✏️ Definir</button>
+                <button class="btn-ghost" onclick="adminApp._openUserTimeline('${u.id}','${safeLabel}')">🕒 Timeline</button>
+                <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${safeLabel}',${u.credits??0})">➕ Créditos</button>
+                <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${safeLabel}',${u.credits??0})">✏️ Definir</button>
                 ${u.is_temp
                     ? `<button class="btn-info" onclick="adminApp.showTempCredentials('${u.id}')">🔑 Credenciais</button>`
                     : ''}
                 ${u.is_blocked
                     ? `<button class="btn-success" onclick="adminApp.toggleBlock('${u.id}',false)">🔓 Desbloquear</button>`
                     : `<button class="btn-warning" onclick="adminApp.toggleBlock('${u.id}',true)">🔒 Bloquear</button>`}
-                <button class="btn-danger" onclick="adminApp.deleteUser('${u.id}','${(u.full_name||u.phone||'').replace(/'/g,'')}')">🗑️ Eliminar</button>
+                <button class="btn-danger" onclick="adminApp.deleteUser('${u.id}','${safeDelLabel}')">🗑️ Eliminar</button>
             </div>
         </div>`;
     }
@@ -1025,8 +1048,8 @@ USING (EXISTS (
         tbody.innerHTML = docs.map(d => `
             <tr>
                 <td>${this._typeLabel(d.service_type)}</td>
-                <td>${d.profiles?.full_name || d.profiles?.phone || 'Anónimo'}</td>
-                <td><code style="font-size:.75rem">${d.model_used || '—'}</code></td>
+                <td>${escapeHtml(d.profiles?.full_name || d.profiles?.phone || 'Anónimo')}</td>
+                <td><code style="font-size:.75rem">${escapeHtml(d.model_used || '—')}</code></td>
                 <td style="font-size:.78rem">${new Date(d.created_at).toLocaleString('pt-MZ')}</td>
                 <td>
                     <div class="action-group">
@@ -1043,7 +1066,7 @@ USING (EXISTS (
         if (!doc) return;
         this.showModal(`
             <p class="modal-title">${this._typeLabel(doc.service_type)}</p>
-            <p class="modal-sub">${doc.profiles?.full_name || doc.profiles?.phone || 'Anónimo'} · ${new Date(doc.created_at).toLocaleString('pt-MZ')}</p>
+            <p class="modal-sub">${escapeHtml(doc.profiles?.full_name || doc.profiles?.phone || 'Anónimo')} · ${new Date(doc.created_at).toLocaleString('pt-MZ')}</p>
             <div style="background:#f8fafc;border-radius:8px;padding:.875rem;white-space:pre-wrap;font-family:monospace;font-size:.75rem;max-height:50vh;overflow-y:auto;border:1px solid #e2e8f0">
                 ${(doc.content || '').replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0, 3000)}${doc.content?.length > 3000 ? '\n\n[…truncado]' : ''}
             </div>
@@ -2602,9 +2625,9 @@ USING (EXISTS (
 
             return `<tr style="border-bottom:1px solid #f1f5f9">
                 <td style="padding:10px 12px">
-                  <div style="font-weight:700;font-size:13px">${a.full_name || '—'}${fraudWarn}</div>
-                  <div style="font-size:11px;color:#64748b">${a.email || a.phone || '—'}</div>
-                  <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:10px">${a.ref_code || '—'}</code>
+                  <div style="font-weight:700;font-size:13px">${escapeHtml(a.full_name || '—')}${fraudWarn}</div>
+                  <div style="font-size:11px;color:#64748b">${escapeHtml(a.email || a.phone || '—')}</div>
+                  <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:10px">${escapeHtml(a.ref_code || '—')}</code>
                 </td>
                 <td style="padding:10px 12px;text-align:center">${segIco[seg] || '👤'} <span style="font-size:10.5px;color:#64748b">${seg}</span></td>
                 <td style="padding:10px 12px;text-align:center">${tierBadge}</td>
@@ -2703,8 +2726,8 @@ USING (EXISTS (
         const tierLabel = { bronze:'🥉 Bronze', prata:'🥈 Prata', ouro:'🥇 Ouro', diamante:'💎 Diamante' };
 
         content.innerHTML = `
-          <h3 style="font-size:16px;font-weight:800;margin:0 0 4px">${aff.full_name || 'Afiliado'}</h3>
-          <p style="font-size:11.5px;color:#64748b;margin-bottom:16px">${aff.email || aff.phone || '—'} · ${segLabel[aff.aff_segment || 'individual']} · ${tierLabel[aff.aff_tier || 'bronze']}</p>
+          <h3 style="font-size:16px;font-weight:800;margin:0 0 4px">${escapeHtml(aff.full_name || 'Afiliado')}</h3>
+          <p style="font-size:11.5px;color:#64748b;margin-bottom:16px">${escapeHtml(aff.email || aff.phone || '—')} · ${segLabel[aff.aff_segment || 'individual']} · ${tierLabel[aff.aff_tier || 'bronze']}</p>
 
           <div style="display:grid;gap:8px;margin-bottom:16px">
             <div style="background:#f8fafc;border-radius:10px;padding:10px 12px">
@@ -2768,8 +2791,8 @@ USING (EXISTS (
             document.getElementById('withdrawalsAdminBody').innerHTML = list.map(w => `
               <tr style="border-bottom:1px solid #f1f5f9">
                 <td style="padding:9px 12px">
-                  <div style="font-weight:700;font-size:13px">${w.affiliate?.full_name || '—'}</div>
-                  <div style="font-size:10.5px;color:#64748b">${w.affiliate?.email || w.affiliate?.phone || '—'}</div>
+                  <div style="font-weight:700;font-size:13px">${escapeHtml(w.affiliate?.full_name || '—')}</div>
+                  <div style="font-size:10.5px;color:#64748b">${escapeHtml(w.affiliate?.email || w.affiliate?.phone || '—')}</div>
                   ${w.affiliate?.aff_tier ? `<span style="font-size:9.5px;color:#7c3aed;font-weight:700">${{'bronze':'🥉','prata':'🥈','ouro':'🥇','diamante':'💎'}[w.affiliate.aff_tier]} ${w.affiliate.aff_tier}</span>` : ''}
                 </td>
                 <td style="padding:9px 12px;text-align:center;font-size:15px;font-weight:800;color:#16a34a">${(w.amount || 0).toLocaleString('pt-MZ')} MZN</td>
@@ -2909,8 +2932,8 @@ USING (EXISTS (
               <div style="background:${sevBg[f.severity]};border:1.5px solid ${f.severity === 'critical' ? '#991b1b' : '#e2e8f0'};border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
                 <div style="font-size:22px">${typeIco[f.flag_type] || '⚠️'}</div>
                 <div style="flex:1;min-width:180px">
-                  <div style="font-size:13px;font-weight:800;color:#0f172a">${f.affiliate?.full_name || '—'} <code style="background:rgba(0,0,0,.07);padding:1px 5px;border-radius:4px;font-size:10px">${f.affiliate?.ref_code || ''}</code></div>
-                  <div style="font-size:11.5px;color:#475569;margin-top:2px">${f.description || f.flag_type}</div>
+                  <div style="font-size:13px;font-weight:800;color:#0f172a">${escapeHtml(f.affiliate?.full_name || '—')} <code style="background:rgba(0,0,0,.07);padding:1px 5px;border-radius:4px;font-size:10px">${escapeHtml(f.affiliate?.ref_code || '')}</code></div>
+                  <div style="font-size:11.5px;color:#475569;margin-top:2px">${escapeHtml(f.description || f.flag_type)}</div>
                   <div style="font-size:10.5px;color:#94a3b8;margin-top:2px">${new Date(f.created_at).toLocaleDateString('pt-MZ', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</div>
                 </div>
                 <span style="background:${sevBg[f.severity]};color:${sevClr[f.severity]};border:1px solid currentColor;padding:3px 8px;border-radius:20px;font-size:10.5px;font-weight:700">${sevLbl[f.severity]}</span>
@@ -3048,6 +3071,17 @@ USING (EXISTS (
             const statusLabel = { pending: '⏳ Pendente', approved: '✅ Aprovado', rejected: '❌ Rejeitado' };
 
             container.innerHTML = data.map(tpl => {
+                // SEGURANÇA (auditoria Jul/2026): template_name, description e
+                // service_type vêm de texto livre submetido por utilizadores
+                // (marketplace da comunidade). O preview do HTML/CSS do
+                // template já corre isolado num iframe sandboxed sem
+                // "allow-scripts" — seguro. Mas estes três campos são
+                // inseridos directamente na página real do admin (fora do
+                // sandbox), pelo que têm de ser escapados para impedir XSS
+                // armazenado contra a sessão do administrador.
+                const safeName    = escapeHtml(tpl.template_name || '');
+                const safeDesc    = escapeHtml(tpl.description || '—');
+                const safeService = escapeHtml(tpl.service_type || '');
                 const previewCSS = tpl.template_css || 'body{font-family:sans-serif;font-size:10pt;padding:10mm;}';
                 const previewHTML = (tpl.template_html || '').slice(0, 2000);
                 const date = new Date(tpl.created_at).toLocaleDateString('pt');
@@ -3059,14 +3093,14 @@ USING (EXISTS (
                       style="width:794px;height:1123px;border:none;transform:scale(0.22);transform-origin:top left;pointer-events:none"
                       sandbox="allow-same-origin"></iframe>
                     <div style="position:absolute;top:8px;right:8px;background:${statusColor[tpl.status]};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px">${statusLabel[tpl.status]}</div>
-                    <div style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 8px;border-radius:6px">${tpl.service_type}</div>
+                    <div style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 8px;border-radius:6px">${safeService}</div>
                   </div>
                   <!-- Info -->
                   <div style="padding:14px">
-                    <div style="font-size:14px;font-weight:800;color:#0f172a;margin-bottom:4px">${tpl.template_name}</div>
-                    <div style="font-size:12px;color:#64748b;margin-bottom:8px">${tpl.description || '—'}</div>
+                    <div style="font-size:14px;font-weight:800;color:#0f172a;margin-bottom:4px">${safeName}</div>
+                    <div style="font-size:12px;color:#64748b;margin-bottom:8px">${safeDesc}</div>
                     <div style="font-size:11px;color:#94a3b8;margin-bottom:12px">📅 ${date} · 📥 ${tpl.downloads || 0} downloads</div>
-                    ${tpl.rejection_note ? `<div style="font-size:11px;color:#dc2626;background:#fef2f2;border-radius:6px;padding:6px 10px;margin-bottom:10px">❌ ${tpl.rejection_note}</div>` : ''}
+                    ${tpl.rejection_note ? `<div style="font-size:11px;color:#dc2626;background:#fef2f2;border-radius:6px;padding:6px 10px;margin-bottom:10px">❌ ${escapeHtml(tpl.rejection_note)}</div>` : ''}
                     <!-- v39: preço SEMPRE em créditos (nunca um valor MZN fixo) — o
                          equivalente em MZN é só informativo, calculado ao vivo a
                          partir da taxa dinâmica dos pacotes activos, e a
@@ -3213,15 +3247,23 @@ USING (EXISTS (
 
     _previewTemplate(id) {
         // Fetch and display full preview in a new window
+        // SEGURANÇA (auditoria Jul/2026): esta janela é aberta same-origin,
+        // sem qualquer sandbox (ao contrário do preview em miniatura na
+        // grelha, que usa um iframe sandboxed). template_html/template_css
+        // vêm de templates submetidos por utilizadores da comunidade —
+        // sanitizar aqui antes de escrever, para impedir que um template
+        // malicioso execute JavaScript na sessão real do admin.
         this.supabase.from('templates_custom')
             .select('template_name, template_html, template_css')
             .eq('id', id)
             .single()
             .then(({ data, error }) => {
                 if (error || !data) return;
-                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${data.template_name}</title>
+                const safeName = escapeHtml(data.template_name || '');
+                const safeHtml = sanitizeHtml(data.template_html || '<p>Sem conteúdo HTML</p>');
+                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${safeName}</title>
 <style>*{box-sizing:border-box;}${data.template_css || ''}</style></head>
-<body>${data.template_html || '<p>Sem conteúdo HTML</p>'}</body></html>`;
+<body>${safeHtml}</body></html>`;
                 const win = window.open('', '_blank');
                 if (win) { win.document.write(html); win.document.close(); }
             });
@@ -4164,8 +4206,8 @@ USING (EXISTS (
                 ? d.withdrawals.map(w => `
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px">
                         <div>
-                            <div style="font-weight:700;font-size:13px">${w.profiles?.full_name || w.profiles?.email || 'Criador'} — ${(w.amount ?? 0).toLocaleString('pt-MZ')} MZN</div>
-                            <div style="color:#92400e;font-size:11px">📱 ${w.mpesa_phone} · ${new Date(w.created_at).toLocaleDateString('pt')}</div>
+                            <div style="font-weight:700;font-size:13px">${escapeHtml(w.profiles?.full_name || w.profiles?.email || 'Criador')} — ${(w.amount ?? 0).toLocaleString('pt-MZ')} MZN</div>
+                            <div style="color:#92400e;font-size:11px">📱 ${escapeHtml(w.mpesa_phone || '')} · ${new Date(w.created_at).toLocaleDateString('pt')}</div>
                         </div>
                         <div style="display:flex;gap:6px">
                             <button onclick="adminApp._processTemplateWithdrawal('${w.id}', 'completed')" style="padding:6px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">✅ Pago</button>
@@ -4577,12 +4619,12 @@ USING (EXISTS (
                 const when = t.created_at ? new Date(t.created_at).toLocaleString('pt-MZ', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
                 return `<tr>
                     <td style="font-size:12px;color:#64748b;">${when}</td>
-                    <td style="font-size:12px;">${user.full_name || '—'}</td>
-                    <td style="font-size:12px;">${t.phone_number || '—'}</td>
+                    <td style="font-size:12px;">${escapeHtml(user.full_name || '—')}</td>
+                    <td style="font-size:12px;">${escapeHtml(t.phone_number || '—')}</td>
                     <td style="font-size:12px;">${(t.package_id || '—').toUpperCase()}</td>
                     <td style="font-size:12px;"><strong>${(t.amount ?? 0).toLocaleString('pt-MZ')}</strong></td>
                     <td>${statusBadge[t.status] || t.status}</td>
-                    <td style="font-size:11px;color:#64748b;">${t.mpesa_receipt || '—'}</td>
+                    <td style="font-size:11px;color:#64748b;">${escapeHtml(t.mpesa_receipt || '—')}</td>
                 </tr>`;
             }).join('');
         } catch (err) {
@@ -4614,10 +4656,10 @@ USING (EXISTS (
                 const when = p.processed_at ? new Date(p.processed_at).toLocaleString('pt-MZ', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
                 return `<tr>
                     <td style="font-size:12px;color:#64748b;">${when}</td>
-                    <td style="font-size:12px;">${user.full_name || '—'}</td>
+                    <td style="font-size:12px;">${escapeHtml(user.full_name || '—')}</td>
                     <td style="font-size:12px;"><strong>${(p.amount ?? 0).toLocaleString('pt-MZ')}</strong></td>
-                    <td style="font-size:12px;">${p.mpesa_phone || '—'}</td>
-                    <td style="font-size:11px;font-family:monospace;">${p.receipt_number || '—'}</td>
+                    <td style="font-size:12px;">${escapeHtml(p.mpesa_phone || '—')}</td>
+                    <td style="font-size:11px;font-family:monospace;">${escapeHtml(p.receipt_number || '—')}</td>
                     <td>${p.receipt_screenshot_url ? `<a href="${p.receipt_screenshot_url}" target="_blank" rel="noopener" style="font-size:12px;color:#2563eb;font-weight:700;">👁️ Ver</a>` : '—'}</td>
                 </tr>`;
             }).join('');
@@ -4677,8 +4719,20 @@ USING (EXISTS (
         setTimeout(() => URL.revokeObjectURL(url), 2000);
     }
 
+    // SEGURANÇA (auditoria Jul/2026): protecção contra "CSV/Formula
+    // Injection" — full_name e outros campos de texto livre (submetidos
+    // por qualquer utilizador) vão parar a estas exportações, que o admin
+    // abre no Excel/Sheets. Se um valor começar por =, +, -, @, TAB ou CR,
+    // o Excel pode interpretá-lo como fórmula (ex: =HYPERLINK(...) para
+    // exfiltrar dados, ou pior em folhas de cálculo mais antigas). Um
+    // apóstrofo à frente força o Excel a tratar sempre como texto.
+    _neutralizeFormula(s) {
+        return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+    }
+
     _csvEscape(v) {
-        const s = (v === null || v === undefined) ? '' : String(v);
+        let s = (v === null || v === undefined) ? '' : String(v);
+        s = this._neutralizeFormula(s);
         return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     }
 
@@ -4704,7 +4758,14 @@ USING (EXISTS (
     async _exportExcel(filename, headers, rows) {
         try {
             await this._loadXLSXLib();
-            const ws = window.XLSX.utils.aoa_to_sheet([headers, ...rows]);
+            // SEGURANÇA: mesma neutralização de fórmulas do _csvEscape —
+            // aqui é ainda mais importante, porque este é o .xlsx real que
+            // o Excel abre directamente (sem passar pelo CSV).
+            const safeRows = rows.map(r => r.map(v => {
+                const s = (v === null || v === undefined) ? '' : String(v);
+                return typeof v === 'number' ? v : this._neutralizeFormula(s);
+            }));
+            const ws = window.XLSX.utils.aoa_to_sheet([headers, ...safeRows]);
             const wb = window.XLSX.utils.book_new();
             window.XLSX.utils.book_append_sheet(wb, ws, 'Dados');
             const buf = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
