@@ -115,6 +115,16 @@
 </div>
 
 <script>
+// SEGURANÇA (auditoria Jul/2026): dados de candidatos a parceiro (nome do
+// negócio, nome do dono, bio, nº de credencial) são texto livre submetido
+// por quem se candidata — sem escape, um candidato malicioso executava
+// JavaScript na sessão do admin ao rever candidaturas pendentes.
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = String(str ?? '');
+  return div.innerHTML;
+}
+
 let AUTH_TOKEN = '';
 let currentStatus = 'pending';
 let currentType = ''; // '' = todos | 'papelaria' | 'advogado'
@@ -221,9 +231,9 @@ function renderPartners(partners, status) {
     // NOVO — nº OAM em destaque; lembrete de conferência manual enquanto
     // pendente, já que não há forma automática de validar a inscrição.
     const oamLine = isLawyer
-      ? `<div class="oam-line">🛡️ OAM: ${p.credential_number || '⚠️ não indicado'}${p.status === 'pending' ? ' — confirmar na Ordem antes de aprovar' : ''}</div>`
+      ? `<div class="oam-line">🛡️ OAM: ${escapeHtml(p.credential_number || '⚠️ não indicado')}${p.status === 'pending' ? ' — confirmar na Ordem antes de aprovar' : ''}</div>`
       : '';
-    const bioLine = isLawyer && p.bio ? `<div class="bio-line">${p.bio}</div>` : '';
+    const bioLine = isLawyer && p.bio ? `<div class="bio-line">${escapeHtml(p.bio)}</div>` : '';
 
     let actions = '';
     if (p.status === 'pending') {
@@ -245,19 +255,19 @@ function renderPartners(partners, status) {
     return `<div class="card" id="card-${p.id}">
       <div class="card-header">
         <div>
-          <div class="card-name">${p.name}${typeBadge}</div>
-          <div class="card-owner">👤 ${p.owner_name}</div>
+          <div class="card-name">${escapeHtml(p.name)}${typeBadge}</div>
+          <div class="card-owner">👤 ${escapeHtml(p.owner_name)}</div>
         </div>
         <span class="badge ${badgeCls}">${badgeTxt}</span>
       </div>
       ${oamLine}
       ${bioLine}
       <div class="card-info">
-        <div>📞 <strong>${p.phone}</strong></div>
-        <div>📲 <strong>${p.whatsapp}</strong></div>
-        <div>📍 <strong>${p.city}</strong></div>
-        <div>🏠 <strong>${p.address}</strong></div>
-        <div>🕐 <strong>${p.hours || 'Não indicado'}</strong></div>
+        <div>📞 <strong>${escapeHtml(p.phone)}</strong></div>
+        <div>📲 <strong>${escapeHtml(p.whatsapp)}</strong></div>
+        <div>📍 <strong>${escapeHtml(p.city)}</strong></div>
+        <div>🏠 <strong>${escapeHtml(p.address)}</strong></div>
+        <div>🕐 <strong>${escapeHtml(p.hours || 'Não indicado')}</strong></div>
         <div>⭐ <strong>${rating}</strong></div>
         <div>🌐 <strong>${p.lat?.toFixed(4)}, ${p.lng?.toFixed(4)}</strong></div>
         <div>📅 <strong>${new Date(p.created_at).toLocaleDateString('pt-MZ')}</strong></div>

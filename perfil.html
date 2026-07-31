@@ -390,6 +390,7 @@
 
 <script type="module">
 import { authManager } from '/assets/js/auth/AuthManager.js';
+import { escapeHtml } from '/assets/js/utils/Sanitizer.js';
 import { CreditModel } from '/assets/js/models/Models.js';
 import { PaymentController, syncPackagesV8FromConfig, renderPackageCards } from '/assets/js/controllers/PaymentController.js';
 import { updatePackagesFromConfig } from '/assets/js/services/PaymentService.js';
@@ -444,7 +445,13 @@ function renderIdentity(user, profile) {
 
   const avatarEl = document.getElementById('avatarImg');
   if (profile?.avatar_url) {
-    avatarEl.innerHTML = `<img src="${profile.avatar_url}" alt="${name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.parentElement.textContent='${initials(name)}'">`;
+    // SEGURANÇA (auditoria Jul/2026): name é o próprio nome do utilizador
+    // (texto livre escolhido por ele no registo). Escapar tanto no atributo
+    // alt como no onerror — sem isto, um nome com aspas podia quebrar o
+    // atributo onerror e injectar JavaScript arbitrário.
+    const safeName = escapeHtml(name);
+    const safeInitials = escapeHtml(initials(name));
+    avatarEl.innerHTML = `<img src="${profile.avatar_url}" alt="${safeName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.parentElement.textContent='${safeInitials}'">`;
   } else {
     avatarEl.textContent = initials(name);
   }

@@ -606,6 +606,7 @@
 // (SampleData.js), em vez de mostrar apenas título+descrição.
 import { renderA4Pages, markdownToHtml, A4_PAGES_CONTAINER_CSS } from '/assets/js/utils/A4Renderer.js';
 import { SAMPLE_DATA, SAMPLE_MARKDOWN, fillTemplate, getSampleData } from '/assets/js/marketplace/SampleData.js';
+import { escapeHtml, sanitizeHtml } from '/assets/js/utils/Sanitizer.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API    = '/api/templates';
@@ -731,9 +732,16 @@ function _mountCardPreviews(grid, templates) {
 // modelos de Procuração, que nunca tiveram htmlTemplate mesmo no picker
 // original).
 function _buildSampleHtml(t) {
+  // SEGURANÇA (auditoria Jul/2026): esta função alimenta directamente os
+  // 3 pontos de renderA4Pages(..., isRawHTML:true) desta página — a
+  // miniatura da lista, o preview de detalhe, e o preview em tela cheia.
+  // t.template_html vem de templates da comunidade (terceiros); sem
+  // sanitizar, um template malicioso executava JavaScript em QUALQUER
+  // visitante que apenas visse a galeria pública, sem precisar de usar
+  // o template nem de ter sessão iniciada.
   if (t.template_html) {
     const data = getSampleData(t.service_type, t.template_name, t.description);
-    return fillTemplate(t.template_html, data);
+    return sanitizeHtml(fillTemplate(t.template_html, data));
   }
   if (t.template_css) {
     const md = SAMPLE_MARKDOWN[t.service_type] || SAMPLE_MARKDOWN.generic;
@@ -769,8 +777,8 @@ function renderCard(t) {
       ${creditTag}
     </div>
     <div class="tpl-card-body">
-      <div class="tpl-card-name">${t.template_name}</div>
-      <div class="tpl-card-sub">${t.description || ''}</div>
+      <div class="tpl-card-name">${escapeHtml(t.template_name)}</div>
+      <div class="tpl-card-sub">${escapeHtml(t.description || '')}</div>
       <div class="tpl-card-meta">
         <span class="tpl-card-uses">📄 ${uses}</span>
         ${rating ? `<span class="tpl-card-rating">${rating}</span>` : ''}
@@ -792,7 +800,7 @@ const tplCache = {};
 function renderTemplatePreview(t) {
   const prev = document.getElementById('detailPreview');
   if (t.thumbnail_url) {
-    prev.innerHTML = `<img src="${t.thumbnail_url}" alt="${t.template_name}"/>`;
+    prev.innerHTML = `<img src="${t.thumbnail_url}" alt="${escapeHtml(t.template_name)}"/>`;
     return;
   }
   const sampleHtml = _buildSampleHtml(t);
