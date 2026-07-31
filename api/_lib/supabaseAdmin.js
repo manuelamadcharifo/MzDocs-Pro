@@ -243,6 +243,53 @@ function storageGetPublicUrl(bucket, path) {
   return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
 }
 
+/**
+ * NOVO (segurança): gera um URL assinado e temporário para um ficheiro num
+ * bucket PRIVADO. Usar sempre para dados sensíveis (comprovativos de
+ * pagamento, documentos com dados pessoais, etc.) em vez de
+ * storageGetPublicUrl — o link expira sozinho e só é gerado no servidor
+ * (com a service_role key), nunca fica guardado de forma permanente.
+ *
+ * @param {string} bucket
+ * @param {string} path
+ * @param {number} expiresInSeconds — validade do link (default: 5 minutos)
+ * @returns {Promise<string|null>} URL assinado absoluto, ou null se falhar
+ */
+async function storageCreateSignedUrl(bucket, path, expiresInSeconds = 300) {
+  assertConfigured();
+  if (!path) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${path}`, {
+      method: 'POST',
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ expiresIn: expiresInSeconds }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !data.signedURL) return null;
+    return `${SUPABASE_URL}/storage/v1${data.signedURL}`;
+  } catch (err) {
+    console.error('[storageCreateSignedUrl] erro:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Gera vários URLs assinados em paralelo. Recebe um array de {bucket, path}
+ * e devolve um array na mesma ordem, com null nas posições que falharem.
+ */
+async function storageCreateSignedUrls(items, expiresInSeconds = 300) {
+  return Promise.all(
+    items.map(({ bucket, path }) =>
+      path ? storageCreateSignedUrl(bucket, path, expiresInSeconds) : Promise.resolve(null)
+    )
+  );
+}
+
 /** Remove permanentemente um utilizador via Auth Admin API (contas avulso). */
 async function adminDeleteUser(userId) {
   assertConfigured();
@@ -320,6 +367,8 @@ module.exports = {
   adminUpdateUserById,
   storageUpload,
   storageGetPublicUrl,
+  storageCreateSignedUrl,
+  storageCreateSignedUrls,
 };
 
 /**
