@@ -26,6 +26,7 @@ const {
   countRows,
   adminCreateUser,
   adminGetUserById,
+  storageCreateSignedUrl,
   SUPABASE_URL,
   SERVICE_KEY,
 } = require('./_lib/supabaseAdmin');
@@ -820,8 +821,28 @@ async function handleSitemap(req, res) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CONFIG — CORRIGIDO (C-1): NÃO expõe supabaseAnonKey no JSON público
+// CONFIG
 // ════════════════════════════════════════════════════════════════════════════
+// NOTA (auditoria Jul/2026 — corrigido comentário anterior que contradizia o
+// código): este endpoint EXPÕE supabaseUrl + supabaseAnonKey de propósito, e
+// isso está correcto. AuthManager.js usa-os no browser para criar um cliente
+// Supabase real (createClient), necessário para autenticação e para as
+// poucas escritas directas feitas pelo painel admin (ver AdminApp.js).
+//
+// A anon key do Supabase é, por desenho, uma chave PÚBLICA — todo o modelo
+// de segurança do Supabase assume que ela vai parar ao browser de qualquer
+// app que a use, e a protecção real vem do Row Level Security (RLS) em
+// cada tabela, não do sigilo desta chave. Confirmado nesta auditoria:
+//   - profiles/documents/transactions têm RLS activo com políticas "own
+//     row" para utilizadores normais e políticas de admin (baseadas em
+//     is_admin=true verificado no próprio Postgres, não confiado ao
+//     cliente) em polices.sql.
+//   - migration_v50_protect_sensitive_profile_columns.sql acrescenta uma
+//     camada extra: mesmo dentro da própria linha, um utilizador normal
+//     não consegue alterar directamente is_admin/credits/aff_balance/etc.
+// O que NUNCA pode ir para aqui (nem para nenhum endpoint público) é a
+// SERVICE_ROLE_KEY — essa sim ignora todo o RLS e só é usada server-side
+// em api/_lib/supabaseAdmin.js.
 async function handleConfig(req, res) {
   res.setHeader('Access-Control-Allow-Origin', ORIGIN);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -921,12 +942,9 @@ async function handleConfig(req, res) {
     console.warn('[handleConfig] Falha ao carregar settings extra:', e.message);
   }
 
-  // SEGURANÇA (C-1): Não expor supabaseAnonKey.
-  // O frontend (AuthManager.js) deve receber a chave via variável de ambiente
-  // injectada no build (scripts/inject-version.js) ou via import directo de
-  // process.env em funções server-side. Se o frontend precisar da chave,
-  // ela deve estar em NEXT_PUBLIC_* ou injectada estáticamente — nunca
-  // trazida dinamicamente de uma API pública sem autenticação.
+  // supabaseUrl/supabaseAnonKey são intencionalmente públicos — ver nota
+  // completa no topo desta função (handleConfig). A protecção real é o
+  // RLS de cada tabela, não o sigilo desta chave.
   return res.status(200).json({
     configured:    true,
     isSandbox,
@@ -1718,9 +1736,22 @@ async function affDashboard(req, res) {
     `&select=id,package_id,sale_amount,commission_mzn,status,created_at`
   );
 
-  const withdrawals = await restRequest(
+  let withdrawals = await restRequest(
     `affiliate_withdrawals?affiliate_id=eq.${user.id}&order=created_at.desc&limit=10` +
-    `&select=id,amount,mpesa_phone,status,created_at,processed_at,receipt_number,receipt_screenshot_url`
+    `&select=id,amount,mpesa_phone,status,created_at,processed_at,receipt_number,receipt_screenshot_path`
+  );
+
+  // SEGURANÇA (auditoria Jul/2026): o bucket "affiliate-receipts" é privado
+  // — gera-se aqui um URL assinado e temporário (5 min) só para os
+  // levantamentos deste afiliado autenticado, em vez de expor um URL
+  // público permanente.
+  withdrawals = await Promise.all(
+    (withdrawals || []).map(async (w) => ({
+      ...w,
+      receipt_screenshot_url: w.receipt_screenshot_path
+        ? await storageCreateSignedUrl('affiliate-receipts', w.receipt_screenshot_path, 300)
+        : null,
+    }))
   );
 
   // NOVO: "Meus Referidos" — lista de quem se registou com o link deste

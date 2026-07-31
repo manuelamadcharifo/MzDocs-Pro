@@ -9,6 +9,7 @@ const fs      = require('fs');
 const crypto  = require('crypto');
 const https   = require('https');
 const http    = require('http');
+const { checkRateLimit } = require('./_lib/rateLimit');
 
 const USE_LIBRE = process.env.LIBREOFFICE === 'true';
 const CC_KEY    = process.env.CLOUDCONVERT_API_KEY || '';
@@ -270,6 +271,16 @@ module.exports = async function handler(req, res) {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')    return res.status(405).json({ error: 'Método não permitido' });
+
+  // SEGURANÇA (auditoria Jul/2026): esta conversão chama uma API externa
+  // paga (CloudConvert) ou um processo pesado (LibreOffice headless) e não
+  // tinha qualquer limite — podia ser usada para esgotar a quota/crédito do
+  // CloudConvert ou sobrecarregar o servidor. Limite conservador por IP.
+  const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  const withinLimit = await checkRateLimit('convert', clientIp, { limit: 10, windowSec: 600 });
+  if (!withinLimit) {
+    return res.status(429).json({ error: 'Demasiadas conversões seguidas. Tente novamente dentro de alguns minutos.' });
+  }
 
   let tmpInput = null;
   let tmpDir   = null;

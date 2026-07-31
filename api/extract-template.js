@@ -5,6 +5,7 @@
 // o prompt e a validação do resultado; apenas delega ao helper.
 
 const { analyzeImage, parseJSON } = require('./_lib/visionAI');
+const { checkRateLimit } = require('./_lib/rateLimit');
 
 const SERVICE_NAMES = {
   cv: 'Currículo (CV)', carta: 'Carta', orcamento: 'Orçamento',
@@ -59,6 +60,19 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Método não permitido' });
+
+  // SEGURANÇA (auditoria Jul/2026): este endpoint chama a IA de visão e não
+  // exige sessão iniciada nem tinha qualquer limite — qualquer pessoa na
+  // internet podia martelar /api/extract-template directamente (sem passar
+  // pela interface) e esgotar as quotas gratuitas dos fornecedores de IA.
+  // Limite conservador: 5 pedidos por IP a cada 10 minutos (chamada cara,
+  // usada raramente por um utilizador normal — extrair um template a partir
+  // de foto não é uma acção do dia-a-dia).
+  const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  const withinLimit = await checkRateLimit('extract-template', clientIp, { limit: 5, windowSec: 600 });
+  if (!withinLimit) {
+    return res.status(429).json({ error: 'Demasiados pedidos de extracção de template. Tente novamente dentro de alguns minutos.' });
+  }
 
   let body;
   try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body; }
