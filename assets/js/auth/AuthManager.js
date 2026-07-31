@@ -4,6 +4,7 @@
 //   expiresAt era undefined/null — token stale devolvido sem refresh → 401 no servidor.
 //   Agora: !expiresAt trata-se como expirado; token definitivamente expirado não é
 //   devolvido mesmo em caso de falha de rede no refresh.
+import { offlineDB } from '../utils/IndexedDB.js';
 export class AuthManager {
  constructor() {
  this.user = undefined;
@@ -380,6 +381,12 @@ export class AuthManager {
  this.session = null;
  this.user = null;
  this._isAdmin = false;
+ // SEGURANÇA (auditoria Jul/2026): limpa o cache local de documentos e
+ // rascunhos (IndexedDB) ao terminar sessão. Essencial em computadores
+ // partilhados (papelarias, cyber cafés) para que o próximo cliente não
+ // veja documentos/dados pessoais de quem usou o computador antes. Não
+ // deixar que uma falha aqui impeça o logout de completar.
+ try { await offlineDB.clearAll(); } catch (err) { console.warn('[AuthManager] Falha a limpar dados locais no logout:', err.message); }
  this._notify();
  }
 
@@ -547,6 +554,11 @@ export class AuthManager {
  this.session = null;
  this.user = null;
  this._isAdmin = false;
+ // SEGURANÇA (auditoria Jul/2026): ver nota igual em signOut() — limpa o
+ // cache local (IndexedDB) também aqui, já que "terminar em todos os
+ // dispositivos" é, no mínimo, tão claramente uma intenção de sair como
+ // um logout normal.
+ try { await offlineDB.clearAll(); } catch (err) { console.warn('[AuthManager] Falha a limpar dados locais no logout global:', err.message); }
  this._notify();
  }
 
