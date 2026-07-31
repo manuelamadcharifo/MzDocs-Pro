@@ -791,11 +791,19 @@ export class DocumentEditor {
 
   _renderPreviewInner(outer, format) {
     // Prioridade 1: HTML estruturado do template (layout de 2 colunas, sidebar, etc.)
-    // NÃO passar pelo sanitizeHtml — o templateHtml vem de TemplateLibrary.js (fonte interna
-    // confiável) e o sanitizer removeria tags semânticas (section, aside, main, header, footer)
-    // que são essenciais para o layout. Os dados do utilizador já foram limpos em _extractRealData.
+    // SEGURANÇA (auditoria Jul/2026): este HTML passa SEMPRE por sanitizeHtml
+    // antes de ser inserido no editor real. O comentário antigo assumia que
+    // "templateHtml vem de TemplateLibrary.js (fonte interna confiável)" —
+    // mas TemplateLibrary.js também carrega templates submetidos por
+    // terceiros e aprovados no marketplace da comunidade (ver
+    // loadPublicTemplatesFromSupabase em TemplatePicker.js). Um template
+    // aprovado com HTML malicioso escondido executaria no editor de
+    // QUALQUER cliente que o escolhesse. O Sanitizer.js já suporta as tags
+    // semânticas (section, aside, main, header, footer, etc.) necessárias
+    // para estes layouts, por isso sanitizar aqui já não quebra o design.
     if (this._templateHtml && this._templateCss) {
-      renderA4Pages(outer, this._templateHtml, { css: this._templateCss, isRawHTML: true, showPageLabel: true });
+      const safeTemplateHtml = sanitizeHtml(this._templateHtml);
+      renderA4Pages(outer, safeTemplateHtml, { css: this._templateCss, isRawHTML: true, showPageLabel: true });
       return;
     }
 
