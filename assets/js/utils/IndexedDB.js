@@ -228,6 +228,35 @@ export class OfflineDB {
             }
         }
     }
+    // ============================================
+    // LIMPEZA COMPLETA (SEGURANÇA — computadores partilhados)
+    // ============================================
+    // NOVO (auditoria Jul/2026): nada limpava o cache local de documentos
+    // e rascunhos ao terminar sessão. Num computador partilhado (papelaria,
+    // cyber café — parte central do modelo de negócio do MzDocs), o
+    // próximo cliente a usar o mesmo computador podia potencialmente ver
+    // documentos e rascunhos (BI, morada, dados de contrato, etc.) da
+    // pessoa anterior, guardados neste IndexedDB do browser. Chamado
+    // automaticamente por AuthManager.signOut() — não precisa de nenhuma
+    // acção extra do utilizador ou do dono da papelaria.
+    async clearAll() {
+        await this.init();
+        const stores = ['pending', 'documents', 'drafts', 'assets'];
+        await Promise.all(stores.map(name => new Promise((resolve) => {
+            if (!this.db.objectStoreNames.contains(name)) return resolve();
+            try {
+                const tx = this.db.transaction(name, 'readwrite');
+                const req = tx.objectStore(name).clear();
+                req.onsuccess = () => resolve();
+                // Nunca bloquear o logout por causa disto — se falhar,
+                // regista o erro mas continua (não impede sair da conta).
+                req.onerror = () => { console.warn(`[OfflineDB] Falha a limpar '${name}':`, req.error); resolve(); };
+            } catch (err) {
+                console.warn(`[OfflineDB] Falha a limpar '${name}':`, err.message);
+                resolve();
+            }
+        })));
+    }
 }
 
 export const offlineDB = new OfflineDB();
