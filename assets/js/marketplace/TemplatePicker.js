@@ -4,6 +4,7 @@
 
 import { getTemplates, getDefaultTemplate, getTemplateById, addSessionTemplate, getSessionTemplates, loadPublicTemplatesFromSupabase } from './TemplateLibrary.js';
 import { renderA4Pages, markdownToHtml, scalePage } from '../utils/A4Renderer.js';
+import { escapeHtml } from '../utils/Sanitizer.js';
 
 // ── Notificação toast ─────────────────────────────────────────────────────────
 function _notify(msg) {
@@ -436,8 +437,16 @@ export class TemplatePicker {
       return;
     }
 
-    list.innerHTML = templates.map(t => `
-      <div class="tpl-card" data-id="${t.id}" role="button" tabindex="0" aria-label="${t.name}">
+    list.innerHTML = templates.map(t => {
+      // SEGURANÇA (auditoria Jul/2026): t.name e t.description podem vir de
+      // templates submetidos pela comunidade (texto livre de terceiros) e
+      // são mostrados a TODOS os utilizadores que abrirem este selector —
+      // têm de ser escapados para impedir XSS armazenado atingindo
+      // qualquer visitante.
+      const safeName = escapeHtml(t.name || '');
+      const safeDesc = escapeHtml(t.description || '');
+      return `
+      <div class="tpl-card" data-id="${escapeHtml(String(t.id))}" role="button" tabindex="0" aria-label="${safeName}">
         <div class="tpl-thumb" style="background:${t.preview?.bg||'#f8fafc'}">
           <div class="tpl-thumb-inner">
             <div class="tpl-tl" style="background:${t.preview?.accent||'#3B82F6'};width:65%"></div>
@@ -449,9 +458,10 @@ export class TemplatePicker {
           ${t._fromMarketplace ? '<div style="position:absolute;top:3px;right:3px;background:#f59e0b;color:#fff;font-size:7px;font-weight:800;padding:1px 5px;border-radius:4px">🌐</div>' : ''}
           ${t._isCustom ? '<div style="position:absolute;top:3px;right:3px;background:#10b981;color:#fff;font-size:7px;font-weight:800;padding:1px 5px;border-radius:4px">MEU</div>' : ''}
         </div>
-        <div class="tpl-card-name">${t.name}</div>
-        <div class="tpl-card-desc">${t.description || ''}</div>
-      </div>`).join('');
+        <div class="tpl-card-name">${safeName}</div>
+        <div class="tpl-card-desc">${safeDesc}</div>
+      </div>`;
+    }).join('');
 
     list.querySelectorAll('.tpl-card').forEach(el => {
       const pick = () => this._pick(el.dataset.id);
