@@ -53,6 +53,12 @@ function clientIp(req) {
   return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
 }
 
+// SEGURANÇA (auditoria Jul/2026, ronda 2): igual ao mesmo ajuste em
+// convert.js/extract-template.js — algumas rotas aqui (register, rate,
+// check, login) são públicas e sem token; wildcard '*' permitia que
+// qualquer site externo as chamasse a partir do browser de terceiros.
+const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
+
 // Tipos de parceiro válidos.
 const VALID_TYPES = ['papelaria', 'advogado'];
 
@@ -78,7 +84,7 @@ function onlyDigits(v) {
 }
 
 function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
 }
