@@ -2,6 +2,7 @@
 import { Validator } from '../utils/Formatter.js';
 import { Formatter } from '../utils/Formatter.js';
 import { PROMPT_BUILDERS, DATA_BLOCK_BUILDERS } from './prompts/index.js';
+import { maskFormData, unmaskText } from './prompts/piiShield.js';
 import { AcademicEngine } from '../academic/AcademicEngine.js';
 
 // ── FASE 2 (Motor Jurídico/RAG) ───────────────────────────────────────────
@@ -29,8 +30,9 @@ export class OpenRouterService {
   }
 
   async generate(serviceType, formData, ocrText = null, credits = null, cost = 1, templateData = null, pickerTemplate = null) {
-    const prompt = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
-    return await this._callBackend(serviceType, prompt, credits, cost);
+    const { prompt, tokenMap } = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
+    const result = await this._callBackend(serviceType, prompt, credits, cost);
+    return this._unmaskResult(result, tokenMap);
   }
 
   // ── NOVO v2.1: amostra grátis ───────────────────────────────────────────
@@ -41,7 +43,7 @@ export class OpenRouterService {
   // function nova foi criada — o projecto já está no limite de 12 do Vercel
   // Hobby).
   async previewDocument(serviceType, formData, ocrText = null, templateData = null, pickerTemplate = null) {
-    const prompt = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
+    const { prompt, tokenMap } = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
     const userId = localStorage.getItem('mz_uid') || 'anon';
 
     // Token é opcional em modo preview — se existir sessão, é enviado (ajuda
@@ -80,7 +82,25 @@ export class OpenRouterService {
       throw e;
     }
 
-    return await res.json(); // { document, model, preview: true }
+    const result = await res.json(); // { document, model, preview: true }
+    return this._unmaskResult(result, tokenMap);
+  }
+
+  // NOVO: repõe os valores reais dos campos mascarados no documento devolvido
+  // pela IA. Ver assets/js/services/prompts/piiShield.js para a lógica e as
+  // limitações documentadas.
+  _unmaskResult(result, tokenMap) {
+    if (!result || !result.document || !tokenMap || tokenMap.size === 0) return result;
+    const { text, hasLeftoverTokens } = unmaskText(result.document, tokenMap);
+    if (hasLeftoverTokens) {
+      // Rede de segurança: um marcador não foi reproduzido correctamente
+      // pela IA. Não bloqueia a entrega do documento (seria pior gastar o
+      // crédito do utilizador e não devolver nada), mas fica sinalizado
+      // para quem consome o resultado poder avisar o utilizador para rever
+      // esse campo manualmente.
+      console.warn('[piiShield] Marcador(es) de dados pessoais não reposto(s) na resposta da IA — reveja o documento antes de usar.');
+    }
+    return { ...result, document: text, _piiUnmaskWarning: hasLeftoverTokens };
   }
 
 
@@ -235,7 +255,16 @@ export class OpenRouterService {
     return result;
   }
 
-  async _buildPrompt(type, data, ocr, templateData = null, pickerTemplate = null) {
+  async _buildPrompt(type, rawData, ocr, templateData = null, pickerTemplate = null) {
+    // NOVO (Julho 2026 — pseudonimização): mascara os campos sensíveis do
+    // formData ANTES de qualquer uso — nenhum fornecedor de IA (de risco ou
+    // não) vê o valor real de nome/BI/NUIT/telefone/morada/etc. A partir
+    // daqui, `data` é sempre a versão mascarada; `tokenMap` viaja com o
+    // prompt devolvido para o chamador poder repor os valores reais na
+    // resposta (ver OpenRouterService.generate/_unmaskResult e
+    // assets/js/services/prompts/piiShield.js para a lógica e limitações).
+    const { maskedData: data, tokenMap } = maskFormData(rawData);
+
     // ── Bloco de template próprio (se o utilizador carregou um modelo) ─────
     // CORRIGIDO: tratamento separado para imagem vs texto extraído (PDF/Word).
     // Antes, quando o utilizador carregava uma IMAGEM, templateData.text era vazio
@@ -344,7 +373,7 @@ INSTRUCAO CRITICA: Preencha o modelo acima com os dados reais. NAO gere um docum
     // O modelo tem um layout HTML estruturado (duas colunas, sidebar, etc.)
     // Geramos o documento como HTML directamente para fidelidade máxima ao template.
     if (pickerTemplate?.htmlTemplate) {
-      return this._buildHTMLStructuredPrompt(type, data, ocr, pickerTemplate);
+      return { prompt: this._buildHTMLStructuredPrompt(type, data, ocr, pickerTemplate), tokenMap };
     }
 
     // Antes: objecto `builders` de 1700+ linhas definido inline aqui.
@@ -374,7 +403,8 @@ INSTRUCAO CRITICA: Preencha o modelo acima com os dados reais. NAO gere um docum
 
     const basePrompt = builder(data, ocrBlock, legalContext);
     // Injectar bloco de template no início do prompt (antes das instruções)
-    return templateBlock ? templateBlock + '\n\n' + basePrompt : basePrompt;
+    const finalPrompt = templateBlock ? templateBlock + '\n\n' + basePrompt : basePrompt;
+    return { prompt: finalPrompt, tokenMap };
   }
 
   // ── Dados específicos por tipo de documento para prompt HTML ─────────────
