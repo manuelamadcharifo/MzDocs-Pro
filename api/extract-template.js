@@ -7,6 +7,13 @@
 const { analyzeImage, parseJSON } = require('./_lib/visionAI');
 const { checkRateLimit } = require('./_lib/rateLimit');
 
+// SEGURANÇA (auditoria Jul/2026, ronda 2): "Access-Control-Allow-Origin: *"
+// combinado com nenhuma autenticação permitia que qualquer site externo
+// embutisse este endpoint (que chama IA de visão, um custo real) a partir
+// do browser de visitantes seus — o rate limit por IP dilui-se porque cada
+// visitante desse site tem o seu próprio IP. Alinhado com o resto da API.
+const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
+
 const SERVICE_NAMES = {
   cv: 'Currículo (CV)', carta: 'Carta', orcamento: 'Orçamento',
   arrendamento: 'Contrato de Arrendamento', recibo: 'Recibo/Factura',
@@ -55,7 +62,7 @@ IMPORTANTE: usa as cores, tipografia e layout EXACTOS observados na imagem. Não
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin',  '*');
+  res.setHeader('Access-Control-Allow-Origin',  ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
