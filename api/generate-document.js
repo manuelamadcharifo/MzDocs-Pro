@@ -39,6 +39,7 @@ const { getUserFromToken, rpc } = require('./_lib/supabaseAdmin');
 const { PROVIDERS }               = require('./_lib/aiProviderRegistry');
 const { isModelDisabled, recordModelResult } = require('./_lib/modelHealth');
 const { getAvailableModels }      = require('./_lib/modelDiscovery');
+const { redactSensitive, restoreSensitive } = require('./_lib/piiRedaction');
 
 // Regista (fire-and-forget) o uso de cada provider na tabela
 // ai_provider_daily_usage — alimenta a aba "IA Providers" do painel admin
@@ -173,6 +174,14 @@ module.exports = async function handler(req, res) {
         finalPrompt = `${finalPrompt}\n\n---\nIMPORTANTE: Esta é apenas uma AMOSTRA GRÁTIS para o utilizador avaliar a qualidade antes de gerar o documento completo. Escreva APENAS o cabeçalho/título e a abertura do documento (primeiro parágrafo ou primeira secção, no máximo). Pare num ponto natural — não tente preencher o documento todo. Não escreva "[continua]" nem comentários meta.`;
     }
 
+    // SEGURANÇA (auditoria Jul/2026, item 5): mascara BI, NUIT, telefone e
+    // e-mail ANTES de enviar o texto aos fornecedores de IA externos —
+    // ver api/_lib/piiRedaction.js. Os valores reais são restaurados no
+    // texto devolvido, mais abaixo, antes de responder ao utilizador.
+    // O provider e o modelo nunca chegam a ver estes valores.
+    const { text: redactedPrompt, tokens: piiTokens } = redactSensitive(finalPrompt);
+    finalPrompt = redactedPrompt;
+
     // CORRIGIDO (auditoria A-3): limite de tamanho do prompt.
     const MAX_PROMPT_LENGTH = 15000;
     if (finalPrompt.length > MAX_PROMPT_LENGTH) {
@@ -238,8 +247,14 @@ module.exports = async function handler(req, res) {
             }));
         }
 
+        // SEGURANÇA (auditoria Jul/2026, item 5): restaura os valores reais
+        // de BI/NUIT/telefone/e-mail nos marcadores que o modelo devolveu.
+        // Ver nota em api/_lib/piiRedaction.js sobre o carácter de "melhor
+        // esforço" desta restauração (defesa em profundidade).
+        const restoredContent = restoreSensitive(result.content, piiTokens);
+
         return res.status(200).json({
-            document: result.content,
+            document: restoredContent,
             model: `${result.provider} · ${result.model}`,
             creditsRemaining: creditsAfterDeduction,
             usage: result.usage,
