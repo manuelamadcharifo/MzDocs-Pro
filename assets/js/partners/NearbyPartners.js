@@ -3,6 +3,7 @@
 // (papelarias) e, desde v2.1, também de advogados no ecrã de resultado.
 // Usado por DocumentController ao abrir impressao/foto/conversao (papelaria)
 // e ao gerar documentos jurídicos (advogado).
+import { escapeHtml } from '../utils/Sanitizer.js';
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 let _geoCache   = null;
@@ -72,10 +73,10 @@ export function buildPartnersHTML(partners, svcLabel) {
     return `
       <div class="np-card">
         <div class="np-card-head">
-          <div class="np-name">${p.name}</div>
+          <div class="np-name">${escapeHtml(p.name)}</div>
           <div class="np-dist">${dist}</div>
         </div>
-        ${p.hours ? `<div class="np-hours">🕐 ${p.hours}</div>` : ''}
+        ${p.hours ? `<div class="np-hours">🕐 ${escapeHtml(p.hours)}</div>` : ''}
         ${rating   ? `<div class="np-rating">${rating}</div>` : ''}
         <a href="${wa}" target="_blank" rel="noopener" class="np-btn-wa"
            onclick="window._mzPartnerClick && window._mzPartnerClick('${p.id}')">
@@ -122,11 +123,11 @@ export function buildLawyersHTML(lawyers) {
     return `
       <div class="np-card">
         <div class="np-card-head">
-          <div class="np-name">${p.name}</div>
+          <div class="np-name">${escapeHtml(p.name)}</div>
           <div class="np-dist">${dist}</div>
         </div>
-        ${p.credential_number ? `<div class="np-oam">🛡️ OAM Nº ${p.credential_number}</div>` : ''}
-        ${p.bio ? `<div class="np-hours">${p.bio}</div>` : ''}
+        ${p.credential_number ? `<div class="np-oam">🛡️ OAM Nº ${escapeHtml(p.credential_number)}</div>` : ''}
+        ${p.bio ? `<div class="np-hours">${escapeHtml(p.bio)}</div>` : ''}
         ${tags ? `<div class="np-tags">${tags}</div>` : ''}
         ${rating ? `<div class="np-rating">${rating}</div>` : ''}
         <a href="${wa}" target="_blank" rel="noopener" class="np-btn-wa"
