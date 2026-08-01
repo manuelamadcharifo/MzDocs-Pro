@@ -11,7 +11,42 @@ class AdminApp {
         this._docs     = [];
         this._section  = 'dashboard';
         this.charts    = {};
+        this._bindDelegatedEvents();
         this._boot();
+    }
+
+    // ── CSP FASE 1 (auditoria Ago/2026) ─────────────────────────────────────
+    // Substitui progressivamente onclick="..." inline por delegação de
+    // eventos via data-action, para eventualmente permitir remover
+    // 'unsafe-inline' do CSP. Um único listener em document sobrevive a
+    // qualquer re-render (innerHTML), ao contrário de addEventListener por
+    // elemento, que teria de ser reatado a cada renderização.
+    //
+    // Uso no HTML: em vez de onclick="adminApp.metodo('${x}')", escreve-se
+    // data-action="nomeDaAcao" data-id="${x}" data-outro="${y}" — o valor
+    // de cada data-* chega como string a _actionHandlers[nomeDaAcao].
+    //
+    // PROGRESSO: esta é a Fase 1 — só a secção "Utilizadores" (tabela
+    // desktop + cartão mobile) foi migrada até agora. O resto do ficheiro
+    // (afiliados, documentos, levantamentos, templates, finanças, etc.)
+    // continua com onclick inline por enquanto, e por isso o CSP ainda
+    // precisa de 'unsafe-inline' — não remover já.
+    _actionHandlers = {
+        openUserTimeline:  (d) => this._openUserTimeline(d.id, d.label),
+        addCredits:        (d) => this.addCreditsModal(d.id, d.label, Number(d.credits) || 0),
+        editCredits:       (d) => this.editCreditsModal(d.id, d.label, Number(d.credits) || 0),
+        showTempCreds:     (d) => this.showTempCredentials(d.id),
+        toggleBlockUser:   (d) => this.toggleBlock(d.id, d.block === 'true'),
+        deleteUser:        (d) => this.deleteUser(d.id, d.label),
+    };
+
+    _bindDelegatedEvents() {
+        document.addEventListener('click', (e) => {
+            const el = e.target.closest('[data-action]');
+            if (!el) return;
+            const handler = this._actionHandlers[el.dataset.action];
+            if (handler) handler(el.dataset);
+        });
     }
 
     async _boot() {
@@ -434,9 +469,10 @@ class AdminApp {
                     // pessoa pode pôr HTML/JS ali. É a maior superfície de XSS
                     // armazenado de todo o painel, porque atinge o admin logo
                     // na primeira vez que abre a lista de utilizadores.
-                    // jsSafe(): remove aspas simples (evita quebrar a string
-                    // JS dentro de onclick="...") e depois escapa HTML (evita
-                    // quebrar o próprio atributo via aspas duplas/"<"/">").
+                    // jsSafe(): mantido por compatibilidade com outras secções
+                    // ainda não migradas (Fase 2+ do CSP); nesta secção os
+                    // botões já usam data-action em vez de onclick inline,
+                    // por isso o escapeHtml sozinho já seria suficiente aqui.
                     const jsSafe = (s) => escapeHtml(String(s || '').replace(/'/g, ''));
                     const safeName  = escapeHtml(u.full_name || '—');
                     const safeLabel = jsSafe(u.full_name || u.phone || u.id.slice(0,8));
@@ -460,14 +496,14 @@ class AdminApp {
                         <td style="font-size:.8rem">${new Date(u.created_at).toLocaleDateString('pt-MZ')}</td>
                         <td>
                             <div class="action-group">
-                                <button class="btn-ghost" title="Timeline / CRM" onclick="adminApp._openUserTimeline('${u.id}','${safeLabel}')">🕒</button>
-                                <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${safeLabel}',${u.credits??0})">➕</button>
-                                <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${safeLabel}',${u.credits??0})">✏️</button>
-                                ${u.is_temp ? `<button class="btn-info" onclick="adminApp.showTempCredentials('${u.id}')">🔑</button>` : ''}
+                                <button class="btn-ghost" title="Timeline / CRM" data-action="openUserTimeline" data-id="${escapeHtml(u.id)}" data-label="${safeLabel}">🕒</button>
+                                <button class="btn-ghost" data-action="addCredits" data-id="${escapeHtml(u.id)}" data-label="${safeLabel}" data-credits="${u.credits??0}">➕</button>
+                                <button class="btn-warning" data-action="editCredits" data-id="${escapeHtml(u.id)}" data-label="${safeLabel}" data-credits="${u.credits??0}">✏️</button>
+                                ${u.is_temp ? `<button class="btn-info" data-action="showTempCreds" data-id="${escapeHtml(u.id)}">🔑</button>` : ''}
                                 ${u.is_blocked
-                                    ? `<button class="btn-success" onclick="adminApp.toggleBlock('${u.id}',false)">🔓</button>`
-                                    : `<button class="btn-warning" onclick="adminApp.toggleBlock('${u.id}',true)">🔒</button>`}
-                                <button class="btn-danger" onclick="adminApp.deleteUser('${u.id}','${safeDelLabel}')">🗑️</button>
+                                    ? `<button class="btn-success" data-action="toggleBlockUser" data-id="${escapeHtml(u.id)}" data-block="false">🔓</button>`
+                                    : `<button class="btn-warning" data-action="toggleBlockUser" data-id="${escapeHtml(u.id)}" data-block="true">🔒</button>`}
+                                <button class="btn-danger" data-action="deleteUser" data-id="${escapeHtml(u.id)}" data-label="${safeDelLabel}">🗑️</button>
                             </div>
                         </td>
                     </tr>
@@ -504,16 +540,16 @@ class AdminApp {
                 ${u.is_blocked  ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
             </div>
             <div class="user-card-actions">
-                <button class="btn-ghost" onclick="adminApp._openUserTimeline('${u.id}','${safeLabel}')">🕒 Timeline</button>
-                <button class="btn-ghost" onclick="adminApp.addCreditsModal('${u.id}','${safeLabel}',${u.credits??0})">➕ Créditos</button>
-                <button class="btn-warning" onclick="adminApp.editCreditsModal('${u.id}','${safeLabel}',${u.credits??0})">✏️ Definir</button>
+                <button class="btn-ghost" data-action="openUserTimeline" data-id="${escapeHtml(u.id)}" data-label="${safeLabel}">🕒 Timeline</button>
+                <button class="btn-ghost" data-action="addCredits" data-id="${escapeHtml(u.id)}" data-label="${safeLabel}" data-credits="${u.credits??0}">➕ Créditos</button>
+                <button class="btn-warning" data-action="editCredits" data-id="${escapeHtml(u.id)}" data-label="${safeLabel}" data-credits="${u.credits??0}">✏️ Definir</button>
                 ${u.is_temp
-                    ? `<button class="btn-info" onclick="adminApp.showTempCredentials('${u.id}')">🔑 Credenciais</button>`
+                    ? `<button class="btn-info" data-action="showTempCreds" data-id="${escapeHtml(u.id)}">🔑 Credenciais</button>`
                     : ''}
                 ${u.is_blocked
-                    ? `<button class="btn-success" onclick="adminApp.toggleBlock('${u.id}',false)">🔓 Desbloquear</button>`
-                    : `<button class="btn-warning" onclick="adminApp.toggleBlock('${u.id}',true)">🔒 Bloquear</button>`}
-                <button class="btn-danger" onclick="adminApp.deleteUser('${u.id}','${safeDelLabel}')">🗑️ Eliminar</button>
+                    ? `<button class="btn-success" data-action="toggleBlockUser" data-id="${escapeHtml(u.id)}" data-block="false">🔓 Desbloquear</button>`
+                    : `<button class="btn-warning" data-action="toggleBlockUser" data-id="${escapeHtml(u.id)}" data-block="true">🔒 Bloquear</button>`}
+                <button class="btn-danger" data-action="deleteUser" data-id="${escapeHtml(u.id)}" data-label="${safeDelLabel}">🗑️ Eliminar</button>
             </div>
         </div>`;
     }
