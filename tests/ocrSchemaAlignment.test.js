@@ -65,6 +65,20 @@ describe('Alinhamento entre formulário real e schema de extracção OCR', () =>
   // schema OCR — isso é esperado, não testado aqui.
   const servicesWithOcr = Object.keys(ocrFields);
 
+  // EXCEPÇÕES CONHECIDAS E DOCUMENTADAS — não são bugs, são limitações
+  // assumidas conscientemente no próprio SmartOCRService.js (ver o
+  // comentário "CORRIGIDO (2.6)" junto ao schema de 'recibo'). Campos do
+  // tipo 'itemtable' (tabela dinâmica de artigos/linhas) ainda não têm
+  // extracção estruturada linha-a-linha pela IA de visão — o texto extraído
+  // cai no campo 'obs' (Observações) como solução intercalar, e a pessoa
+  // copia os valores para a tabela manualmente. Se um dia a extracção
+  // estruturada for implementada, remova a entrada correspondente aqui E
+  // adicione 'itens' ao schema de SmartOCRService.js — não faça só uma das
+  // duas coisas, ou este teste deixa de proteger contra o bug original.
+  const KNOWN_OCR_GAPS = {
+    recibo: ['itens'],
+  };
+
   test('todos os serviços com schema OCR existem em ServiceDefinitions.js', () => {
     for (const service of servicesWithOcr) {
       expect(formFields).toHaveProperty(service);
@@ -77,9 +91,10 @@ describe('Alinhamento entre formulário real e schema de extracção OCR', () =>
     expect(idsOnlyInOcr).toEqual([]);
   });
 
-  test.each(servicesWithOcr)('%s: nenhum campo do formulário ficou de fora do schema OCR', (service) => {
+  test.each(servicesWithOcr)('%s: nenhum campo do formulário ficou de fora do schema OCR (excepto lacunas conhecidas)', (service) => {
     const realIds = formFields[service] || [];
-    const missingFromOcr = realIds.filter(id => !ocrFields[service].includes(id));
+    const knownGaps = KNOWN_OCR_GAPS[service] || [];
+    const missingFromOcr = realIds.filter(id => !ocrFields[service].includes(id) && !knownGaps.includes(id));
     expect(missingFromOcr).toEqual([]);
   });
 });
