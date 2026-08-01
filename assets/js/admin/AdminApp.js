@@ -38,6 +38,20 @@ class AdminApp {
         showTempCreds:     (d) => this.showTempCredentials(d.id),
         toggleBlockUser:   (d) => this.toggleBlock(d.id, d.block === 'true'),
         deleteUser:        (d) => this.deleteUser(d.id, d.label),
+        // Secção Afiliados/Levantamentos (CSP Fase 1, parte 2)
+        closeModal:            () => this.closeModal(),
+        closeModalAndReloadUsers: () => { this.closeModal(); this._loadUsers(); },
+        viewAffiliate:          (d) => this._viewAffiliate(d.id),
+        approveAffiliate:       (d) => this._approveAffiliate(d.id),
+        approveAffiliateAndClose: (d) => { this._approveAffiliate(d.id); document.getElementById('affDetailModal').style.display = 'none'; },
+        revokeAffiliate:        (d) => this._revokeAffiliate(d.id),
+        revokeAffiliateAndClose:  (d) => { this._revokeAffiliate(d.id); document.getElementById('affDetailModal').style.display = 'none'; },
+        unblockAffiliate:       (d) => this._unblockAffiliate(d.id),
+        unblockAffiliateAndClose: (d) => { this._unblockAffiliate(d.id); document.getElementById('affDetailModal').style.display = 'none'; },
+        blockAffiliateModal:    (d) => this._blockAffiliateModal(d.id),
+        copyRefLink:            (d) => navigator.clipboard.writeText(d.link),
+        processWithdrawal:      (d) => this._processWithdrawal(d.id, d.status),
+        confirmPayWithdrawal:   (d) => this._confirmPayWithdrawal(d.id),
     };
 
     _bindDelegatedEvents() {
@@ -564,7 +578,7 @@ class AdminApp {
                 <input type="number" id="mCredits" min="1" max="9999" value="10" autofocus>
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#3b82f6;color:#fff" onclick="adminApp._doAddCredits('${userId}')">✅ Confirmar</button>
             </div>
         `);
@@ -606,7 +620,7 @@ class AdminApp {
                 <input type="number" id="mCreditsSet" min="0" max="9999" value="${current}" autofocus>
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#f59e0b;color:#000" onclick="adminApp._doSetCredits('${userId}')">✅ Guardar</button>
             </div>
         `);
@@ -668,7 +682,7 @@ USING (EXISTS (
   WHERE id = auth.uid() AND is_admin = TRUE
 ));</pre>
             <div class="modal-actions">
-                <button style="background:#3b82f6;color:#fff" onclick="adminApp.closeModal()">OK</button>
+                <button style="background:#3b82f6;color:#fff" data-action="closeModal">OK</button>
             </div>
         `);
     }
@@ -713,7 +727,7 @@ USING (EXISTS (
                 </div>
                 <p style="font-size:.75rem;color:#94a3b8">⚠️ Isto substitui a password anterior — partilhe já esta com o cliente pelo WhatsApp.</p>
                 <div class="modal-actions">
-                    <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                    <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
                     ${(data.phone || u.phone) ? `<button style="background:#25d366;color:#fff" onclick="adminApp._sendCredentialsWA('${userId}')">📱 Enviar WhatsApp</button>` : ''}
                 </div>
             `);
@@ -722,7 +736,7 @@ USING (EXISTS (
                 <p class="modal-title">🔑 Credenciais Avulso</p>
                 <p class="modal-sub" style="color:#ef4444">❌ ${err.message}</p>
                 <div class="modal-actions">
-                    <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                    <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
                 </div>
             `);
         }
@@ -763,7 +777,7 @@ USING (EXISTS (
                 <input type="text" id="avRef" placeholder="MAN001 (ou deixe vazio para gerar automaticamente)">
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#009A44;color:#fff" onclick="adminApp._doCreateAvulso()">✅ Criar conta</button>
             </div>
         `);
@@ -802,7 +816,7 @@ USING (EXISTS (
                 </div>
                 <p style="font-size:.75rem;color:#94a3b8">Partilhe estas credenciais com o cliente.</p>
                 <div class="modal-actions">
-                    <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal();adminApp._loadUsers()">Fechar</button>
+                    <button style="background:#f1f5f9;color:#0f172a" data-action="closeModalAndReloadUsers">Fechar</button>
                     ${result.waLink ? `<a href="${result.waLink}" target="_blank" style="display:inline-flex;align-items:center;gap:.4rem;background:#25d366;color:#fff;padding:.6rem 1.2rem;border-radius:8px;font-weight:700;text-decoration:none">📱 Enviar WhatsApp</a>` : ''}
                 </div>
             `);
@@ -818,7 +832,7 @@ USING (EXISTS (
             <p class="modal-sub">Esta acção é <strong>irreversível</strong>. Todos os documentos e dados serão apagados.</p>
             <p style="font-size:.9rem;margin:.75rem 0"><strong>Utilizador:</strong> ${userName}</p>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#ef4444;color:#fff" onclick="adminApp._doDeleteUser('${userId}')">🗑️ Eliminar definitivamente</button>
             </div>
         `);
@@ -916,7 +930,7 @@ USING (EXISTS (
             <p class="modal-title">✅ Confirmar Pagamento</p>
             <p class="modal-sub">Adicionar <strong>${credits} créditos</strong> ao utilizador?</p>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#22c55e;color:#fff" onclick="adminApp._doConfirm('${txId}','${userId}',${credits})">✅ Confirmar</button>
             </div>
         `);
@@ -975,7 +989,7 @@ USING (EXISTS (
                 ${receiptImgHtml}
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
                 <button style="background:#ef4444;color:#fff" onclick="adminApp._rejectReceipt('${txId}')">❌ Rejeitar</button>
                 <button style="background:#22c55e;color:#fff" onclick="adminApp._approveReceipt('${txId}','${userId}',${credits})">✅ Aprovar</button>
             </div>
@@ -1107,7 +1121,7 @@ USING (EXISTS (
                 ${(doc.content || '').replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0, 3000)}${doc.content?.length > 3000 ? '\n\n[…truncado]' : ''}
             </div>
             <div class="modal-actions" style="margin-top:.75rem">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
                 <button style="background:#ef4444;color:#fff" onclick="adminApp._deleteDoc('${doc.id}')">🗑️ Eliminar</button>
             </div>
         `);
@@ -1155,7 +1169,7 @@ USING (EXISTS (
             </div>
             <div class="modal-actions">
                 <button style="background:#3b82f6;color:#fff" onclick="adminApp.fixMissingPhones()">🔧 Reparar</button>
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
             </div>
         `);
     }
@@ -1520,7 +1534,7 @@ USING (EXISTS (
                 <input type="number" id="rescheduleInterval" min="${lim.minIntervalDays}" value="${lim.minIntervalDays}">
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#009A44;color:#fff" onclick="adminApp._doRescheduleAll()">🔀 Reagendar Tudo</button>
             </div>
         `);
@@ -1566,7 +1580,7 @@ USING (EXISTS (
                 <input type="number" id="bulkInterval" min="1" value="7">
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#009A44;color:#fff" onclick="adminApp._doBulkSchedule()">📅 Agendar</button>
             </div>
         `);
@@ -1635,7 +1649,7 @@ USING (EXISTS (
                 </div>
                 <p style="font-size:.75rem;color:#94a3b8;">Última geração automática: ${lastRunTxt}. O sistema verifica isto uma vez por dia.</p>
                 <div class="modal-actions">
-                    <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                    <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                     <button style="background:#009A44;color:#fff" onclick="adminApp._saveBlogAutogenSettings()">💾 Guardar</button>
                 </div>
             `);
@@ -2671,12 +2685,12 @@ USING (EXISTS (
                 <td style="padding:10px 12px;text-align:center;font-weight:800">${(a.aff_conversions || 0).toLocaleString()}</td>
                 <td style="padding:10px 12px;text-align:center;font-weight:800;color:${(a.aff_balance || 0) > 0 ? '#16a34a' : '#64748b'}">${(a.aff_balance || 0).toLocaleString('pt-MZ')}</td>
                 <td style="padding:10px 12px;text-align:center;white-space:nowrap">
-                  <button onclick="adminApp._viewAffiliate('${a.id}')" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">👁 Ver</button>
+                  <button data-action="viewAffiliate" data-id="${escapeHtml(a.id)}" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">👁 Ver</button>
                   ${!a.is_affiliate && !a.aff_is_blocked
-                    ? `<button onclick="adminApp._approveAffiliate('${a.id}')" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">✅</button>`
+                    ? `<button data-action="approveAffiliate" data-id="${escapeHtml(a.id)}" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">✅</button>`
                     : a.aff_is_blocked
-                      ? `<button onclick="adminApp._unblockAffiliate('${a.id}')" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">🔓</button>`
-                      : `<button onclick="adminApp._revokeAffiliate('${a.id}')" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">🚫</button>`}
+                      ? `<button data-action="unblockAffiliate" data-id="${escapeHtml(a.id)}" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">🔓</button>`
+                      : `<button data-action="revokeAffiliate" data-id="${escapeHtml(a.id)}" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">🚫</button>`}
                 </td>
             </tr>`;
         }).join('');
@@ -2770,10 +2784,10 @@ USING (EXISTS (
               <div style="font-size:10px;color:#64748b;margin-bottom:3px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Código / Link</div>
               <div style="font-size:16px;font-weight:800;color:#1e40af;margin-bottom:4px">${aff.ref_code || '—'}</div>
               <div style="font-size:11px;word-break:break-all;color:#3b82f6">${refLink}</div>
-              <button onclick="navigator.clipboard.writeText('${refLink}')" style="margin-top:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:3px 9px;font-size:10.5px;font-weight:700;cursor:pointer">📋 Copiar Link</button>
+              <button data-action="copyRefLink" data-link="${escapeHtml(refLink)}" style="margin-top:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:3px 9px;font-size:10.5px;font-weight:700;cursor:pointer">📋 Copiar Link</button>
             </div>
 
-            ${aff.aff_business_name ? `<div style="background:#f8fafc;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Negócio</div><div style="font-size:13px;font-weight:700">${aff.aff_business_name}${aff.aff_city ? ' · ' + aff.aff_city : ''}</div></div>` : ''}
+            ${aff.aff_business_name ? `<div style="background:#f8fafc;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Negócio</div><div style="font-size:13px;font-weight:700">${escapeHtml(aff.aff_business_name)}${aff.aff_city ? ' · ' + escapeHtml(aff.aff_city) : ''}</div></div>` : ''}
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
               <div style="background:#f8fafc;border-radius:10px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:800;color:#7c3aed">${(aff.aff_clicks || 0).toLocaleString()}</div><div style="font-size:10.5px;color:#64748b">Cliques</div></div>
@@ -2787,12 +2801,12 @@ USING (EXISTS (
 
           <div style="display:flex;flex-direction:column;gap:8px">
             ${!aff.is_affiliate && !aff.aff_is_blocked
-              ? `<button onclick="adminApp._approveAffiliate('${aff.id}');document.getElementById('affDetailModal').style.display='none'" style="background:#16a34a;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;width:100%">✅ Aprovar Afiliado</button>`
+              ? `<button data-action="approveAffiliateAndClose" data-id="${escapeHtml(aff.id)}" style="background:#16a34a;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;width:100%">✅ Aprovar Afiliado</button>`
               : aff.is_affiliate
-                ? `<button onclick="adminApp._revokeAffiliate('${aff.id}');document.getElementById('affDetailModal').style.display='none'" style="background:#f1f5f9;color:#475569;border:1.5px solid #e2e8f0;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🔄 Revogar Aprovação</button>` : ''}
+                ? `<button data-action="revokeAffiliateAndClose" data-id="${escapeHtml(aff.id)}" style="background:#f1f5f9;color:#475569;border:1.5px solid #e2e8f0;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🔄 Revogar Aprovação</button>` : ''}
             ${!aff.aff_is_blocked
-              ? `<button onclick="adminApp._blockAffiliateModal('${aff.id}')" style="background:#fef2f2;color:#991b1b;border:1.5px solid #fca5a5;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;width:100%">⛔ Suspender Conta</button>`
-              : `<button onclick="adminApp._unblockAffiliate('${aff.id}');document.getElementById('affDetailModal').style.display='none'" style="background:#16a34a;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🔓 Reactivar Conta</button>`}
+              ? `<button data-action="blockAffiliateModal" data-id="${escapeHtml(aff.id)}" style="background:#fef2f2;color:#991b1b;border:1.5px solid #fca5a5;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;width:100%">⛔ Suspender Conta</button>`
+              : `<button data-action="unblockAffiliateAndClose" data-id="${escapeHtml(aff.id)}" style="background:#16a34a;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🔓 Reactivar Conta</button>`}
             ${aff.aff_phone_mpesa ? `<a href="https://wa.me/${aff.aff_phone_mpesa.replace(/\D/g,'')}" target="_blank" style="background:#25d366;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;width:100%;text-align:center;text-decoration:none;display:block">📲 WhatsApp</a>` : ''}
           </div>`;
 
@@ -2832,13 +2846,13 @@ USING (EXISTS (
                   ${w.affiliate?.aff_tier ? `<span style="font-size:9.5px;color:#7c3aed;font-weight:700">${{'bronze':'🥉','prata':'🥈','ouro':'🥇','diamante':'💎'}[w.affiliate.aff_tier]} ${w.affiliate.aff_tier}</span>` : ''}
                 </td>
                 <td style="padding:9px 12px;text-align:center;font-size:15px;font-weight:800;color:#16a34a">${(w.amount || 0).toLocaleString('pt-MZ')} MZN</td>
-                <td style="padding:9px 12px;font-family:monospace;font-size:12px">${w.mpesa_phone}</td>
+                <td style="padding:9px 12px;font-family:monospace;font-size:12px">${escapeHtml(w.mpesa_phone)}</td>
                 <td style="padding:9px 12px;text-align:center;font-size:11px;color:#64748b;white-space:nowrap">${new Date(w.created_at).toLocaleDateString('pt-MZ')}</td>
                 <td style="padding:9px 12px;text-align:center"><span style="background:${statusBg[w.status]};color:${statusClr[w.status]};padding:3px 8px;border-radius:20px;font-size:10.5px;font-weight:700">${statusLbl[w.status] || w.status}</span></td>
                 <td style="padding:9px 12px;text-align:center;white-space:nowrap">
                   ${w.status === 'pending' ? `
-                    <button onclick="adminApp._processWithdrawal('${w.id}','completed')" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">✅ Pagar</button>
-                    <button onclick="adminApp._processWithdrawal('${w.id}','rejected')" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">❌ Rejeitar</button>
+                    <button data-action="processWithdrawal" data-id="${escapeHtml(w.id)}" data-status="completed" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">✅ Pagar</button>
+                    <button data-action="processWithdrawal" data-id="${escapeHtml(w.id)}" data-status="rejected" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">❌ Rejeitar</button>
                   ` : `<span style="font-size:11px;color:#94a3b8">${w.processed_at ? new Date(w.processed_at).toLocaleDateString('pt-MZ') : '—'}</span>`}
                 </td>
               </tr>`).join('');
@@ -2884,8 +2898,8 @@ USING (EXISTS (
                 <div id="wdReceiptPreview" style="margin-top:8px;"></div>
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
-                <button style="background:#16a34a;color:#fff" onclick="adminApp._confirmPayWithdrawal('${wdId}')">✅ Confirmar Pagamento</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
+                <button style="background:#16a34a;color:#fff" data-action="confirmPayWithdrawal" data-id="${escapeHtml(wdId)}">✅ Confirmar Pagamento</button>
             </div>
         `);
         document.getElementById('wdReceiptFile')?.addEventListener('change', (ev) => {
@@ -3876,7 +3890,7 @@ USING (EXISTS (
                 <div style="text-align:center;padding:30px;color:#94a3b8;font-size:13px">A carregar…</div>
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Fechar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
             </div>
         `);
 
@@ -4088,7 +4102,7 @@ USING (EXISTS (
                 <div class="modal-field" style="flex:1"><label>Meta de Registos (opcional)</label><input type="number" id="campGoalSignups" placeholder="0"></div>
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#3b82f6;color:#fff" onclick="adminApp._createCampaign()">Criar Campanha</button>
             </div>
         `);
@@ -4198,7 +4212,7 @@ USING (EXISTS (
             <div class="modal-field"><label>Valor alvo</label><input type="number" id="goalTarget" value="${currentTarget || ''}" placeholder="Ex: 50000"></div>
             <input type="hidden" id="goalMetric" value="${metric}">
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#3b82f6;color:#fff" onclick="adminApp._saveGoal('${monthStr}')">Guardar</button>
             </div>
         `);
@@ -5092,7 +5106,7 @@ USING (EXISTS (
                 </select>
             </div>
             <div class="modal-actions">
-                <button style="background:#f1f5f9;color:#0f172a" onclick="adminApp.closeModal()">Cancelar</button>
+                <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
                 <button style="background:#3b82f6;color:#fff" onclick="adminApp._sendPush()">Enviar</button>
             </div>
         `);
