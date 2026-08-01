@@ -2,7 +2,7 @@
 // Mobile-first · Sync real · Bloquear/Deletar utilizadores · Total correcto
 
 import { authManager } from '../auth/AuthManager.js';
-import { sanitizeHtml } from '../utils/Sanitizer.js';
+import { sanitizeHtml, escapeHtml } from '../utils/Sanitizer.js';
 
 class AdminApp {
     constructor() {
@@ -3133,11 +3133,6 @@ USING (EXISTS (
                   </div>
                 </div>`;
             }).join('');
-
-            // Helper for HTML escaping in template literals
-            function escapeHtml(s) {
-                return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            }
 
         } catch (err) {
             container.innerHTML = `<div style="text-align:center;padding:40px;color:#ef4444;font-size:14px">❌ Erro: ${err.message}</div>`;
