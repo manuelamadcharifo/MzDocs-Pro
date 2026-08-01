@@ -375,6 +375,12 @@ function selectType(type) {
   document.getElementById('formTitle').textContent = isLawyer ? '⚖️ Registar Advogado(a)' : '📋 Registar Papelaria / Gráfica';
   document.getElementById('lblName').textContent = isLawyer ? 'Nome do Escritório / Advogado(a) *' : 'Nome da Papelaria / Gráfica *';
   document.getElementById('lblOwner').textContent = isLawyer ? 'Nome Completo *' : 'Nome do Responsável *';
+  // CORRIGIDO (bug pré-existente, não relacionado com as correcções de
+  // segurança): a etiqueta mudava consoante o tipo, mas o placeholder do
+  // campo ficava sempre com o exemplo de papelaria, mesmo com
+  // "Advogado(a)" seleccionado.
+  document.getElementById('fName').placeholder  = isLawyer ? 'Ex: Dr. João Machel Advogados' : 'Ex: Papelaria Central Maputo';
+  document.getElementById('fOwner').placeholder = isLawyer ? 'Ex: João Machel' : 'Ex: Maria José';
   document.getElementById('fgCredential').style.display = isLawyer ? '' : 'none';
   document.getElementById('fgBio').style.display = isLawyer ? '' : 'none';
   document.getElementById('fgServicesPapelaria').style.display = isLawyer ? 'none' : '';
