@@ -52,6 +52,14 @@ class AdminApp {
         copyRefLink:            (d) => navigator.clipboard.writeText(d.link),
         processWithdrawal:      (d) => this._processWithdrawal(d.id, d.status),
         confirmPayWithdrawal:   (d) => this._confirmPayWithdrawal(d.id),
+        // Secção Documentos/Transacções (CSP Fase 1, parte 3)
+        viewDoc:            (d) => this._viewDoc(d.id),
+        deleteDoc:          (d) => this._deleteDoc(d.id),
+        confirmPayment:     (d) => this._confirmPayment(d.id, d.user, Number(d.credits) || 0),
+        rejectPayment:      (d) => this._rejectPayment(d.id),
+        rejectReceipt:      (d) => this._rejectReceipt(d.id),
+        approveReceipt:     (d) => this._approveReceipt(d.id, d.user, Number(d.credits) || 0),
+        reviewReceipt:      (d) => this._reviewReceipt(d.id, d.user, Number(d.credits) || 0, d.ref, Number(d.confidence) || 0, d.reason),
     };
 
     _bindDelegatedEvents() {
@@ -886,14 +894,14 @@ USING (EXISTS (
                 if (t.status === 'pending') {
                     actions = `
                         <div class="action-group">
-                            <button class="btn-success" title="Confirmar" onclick="adminApp._confirmPayment('${t.id}','${t.user_id}',${t.credits})">✅</button>
-                            <button class="btn-danger"  title="Rejeitar"  onclick="adminApp._rejectPayment('${t.id}')">❌</button>
+                            <button class="btn-success" title="Confirmar" data-action="confirmPayment" data-id="${escapeHtml(t.id)}" data-user="${escapeHtml(t.user_id)}" data-credits="${t.credits}">✅</button>
+                            <button class="btn-danger"  title="Rejeitar"  data-action="rejectPayment" data-id="${escapeHtml(t.id)}">❌</button>
                         </div>`;
                 } else if (t.status === 'review_needed') {
                     actions = `
                         <div class="action-group">
-                            <button class="btn-success" title="Ver comprovativo e aprovar" onclick="adminApp._reviewReceipt('${t.id}','${t.user_id}',${t.credits},'${t.reference_id || ''}',${t.receipt_confidence || 0},'${(t.review_reason || '').replace(/'/g, '')}')">🔍 Rever</button>
-                            <button class="btn-danger"  title="Rejeitar directamente"      onclick="adminApp._rejectReceipt('${t.id}')">❌</button>
+                            <button class="btn-success" title="Ver comprovativo e aprovar" data-action="reviewReceipt" data-id="${escapeHtml(t.id)}" data-user="${escapeHtml(t.user_id)}" data-credits="${t.credits}" data-ref="${escapeHtml(t.reference_id || '')}" data-confidence="${t.receipt_confidence || 0}" data-reason="${escapeHtml(t.review_reason || '')}">🔍 Rever</button>
+                            <button class="btn-danger"  title="Rejeitar directamente"      data-action="rejectReceipt" data-id="${escapeHtml(t.id)}">❌</button>
                         </div>`;
                 }
 
@@ -903,10 +911,10 @@ USING (EXISTS (
 
                 return `
                 <tr>
-                    <td><code style="font-size:.75rem">${t.reference_id || t.id.slice(0,8)}</code></td>
+                    <td><code style="font-size:.75rem">${escapeHtml(t.reference_id || t.id.slice(0,8))}</code></td>
                     <td>
-                        <div style="font-size:.85rem">${name}</div>
-                        <div style="font-size:.72rem;color:#64748b">${email}</div>
+                        <div style="font-size:.85rem">${escapeHtml(name)}</div>
+                        <div style="font-size:.72rem;color:#64748b">${escapeHtml(email)}</div>
                     </td>
                     <td>${(t.package_id||'-').toUpperCase()}</td>
                     <td style="font-weight:700">${(t.amount||0).toLocaleString('pt-MZ')} MZN</td>
@@ -977,12 +985,12 @@ USING (EXISTS (
             <p class="modal-title">🔍 Rever Comprovativo</p>
             <div style="margin-bottom:10px;">
                 <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:6px;">
-                    <span>Referência: <code>${refId}</code></span>
+                    <span>Referência: <code>${escapeHtml(refId)}</code></span>
                     <span>Créditos: <strong>${credits}</strong></span>
                 </div>
                 <div style="font-size:.78rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:8px;">
                     Confiança IA: <strong>${Math.round(confidence * 100)}%</strong>
-                    ${reviewReason ? ` &mdash; ${reviewReason}` : ''}
+                    ${reviewReason ? ` &mdash; ${escapeHtml(reviewReason)}` : ''}
                 </div>
             </div>
             <div id="receiptImgContainer" style="text-align:center;margin-bottom:12px;min-height:80px;">
@@ -990,8 +998,8 @@ USING (EXISTS (
             </div>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
-                <button style="background:#ef4444;color:#fff" onclick="adminApp._rejectReceipt('${txId}')">❌ Rejeitar</button>
-                <button style="background:#22c55e;color:#fff" onclick="adminApp._approveReceipt('${txId}','${userId}',${credits})">✅ Aprovar</button>
+                <button style="background:#ef4444;color:#fff" data-action="rejectReceipt" data-id="${escapeHtml(txId)}">❌ Rejeitar</button>
+                <button style="background:#22c55e;color:#fff" data-action="approveReceipt" data-id="${escapeHtml(txId)}" data-user="${escapeHtml(userId)}" data-credits="${credits}">✅ Aprovar</button>
             </div>
         `);
 
@@ -1103,8 +1111,8 @@ USING (EXISTS (
                 <td style="font-size:.78rem">${new Date(d.created_at).toLocaleString('pt-MZ')}</td>
                 <td>
                     <div class="action-group">
-                        <button class="btn-ghost" onclick="adminApp._viewDoc('${d.id}')">👁 Ver</button>
-                        <button class="btn-danger" onclick="adminApp._deleteDoc('${d.id}')">🗑️</button>
+                        <button class="btn-ghost" data-action="viewDoc" data-id="${escapeHtml(d.id)}">👁 Ver</button>
+                        <button class="btn-danger" data-action="deleteDoc" data-id="${escapeHtml(d.id)}">🗑️</button>
                     </div>
                 </td>
             </tr>
@@ -1122,7 +1130,7 @@ USING (EXISTS (
             </div>
             <div class="modal-actions" style="margin-top:.75rem">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
-                <button style="background:#ef4444;color:#fff" onclick="adminApp._deleteDoc('${doc.id}')">🗑️ Eliminar</button>
+                <button style="background:#ef4444;color:#fff" data-action="deleteDoc" data-id="${escapeHtml(doc.id)}">🗑️ Eliminar</button>
             </div>
         `);
     }
