@@ -1,8 +1,19 @@
-# MzDocs Pro — v29
+# MzDocs Pro — v30
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
 
-> 📌 **Nota de versão:** ronda de 29 de Julho/2026 — eliminação completa da dependência do
+> 📌 **Nota de versão (actual):** ronda de Agosto/2026 — auditoria de segurança ponto-a-ponto.
+> Confirmou-se que RLS, chaves, comprovativos privados, validação do painel admin, sanitização
+> de templates da comunidade e limpeza de IndexedDB já estavam correctamente implementados em
+> rondas anteriores. Duas lacunas novas foram fechadas: mascaragem automática de BI/NUIT/telefone/
+> e-mail antes de qualquer envio a fornecedores de IA externos (`api/_lib/piiRedaction.js`), e
+> restrição de CORS + verificação de assinatura binária de ficheiros em `api/convert.js`,
+> `api/extract-template.js` e `api/partners.js` (antes abertos a qualquer origem). Ver secção
+> "Alterações — v30" e "Segurança" abaixo para o detalhe completo, incluindo o que fica por
+> verificar fora do alcance de uma auditoria de código (migrations aplicadas em produção,
+> `npm audit`, cabeçalhos HTTP reais do site).
+
+> 📌 **Nota de versão (29 de Julho/2026):** eliminação completa da dependência do
 > SDK `@supabase/supabase-js` (e do pacote `ws`) em todo o projecto. `api/admin/index.js` e as
 > secções de Afiliados e Templates de `api/misc.js` eram os últimos ficheiros a ainda
 > instanciar o SDK (com transporte `ws` explícito, necessário em Node.js < 22 sem WebSocket
@@ -77,43 +88,61 @@ Plataforma moçambicana de geração, edição e exportação de documentos prof
 MzDocs-Pro/
 ├── api/                               # 12 Serverless Functions (Vercel Hobby — limite 12, sem margem)
 │   ├── _lib/                          # Helpers partilhados (prefixo "_" — não contam para o limite)
-│   │   ├── supabaseAdmin.js           # Cliente Supabase via fetch puro (REST + Auth API),
+│   │   ├── supabaseAdmin.js           # Cliente Supabase via fetch puro (REST + Auth API + Storage),
 │   │   │                              #   sem @supabase/supabase-js nem 'ws'
 │   │   ├── visionAI.js                # IA visão (Gemini → OpenRouter fallback),
 │   │   │                              #   partilhado entre extract-template.js e misc.js
 │   │   ├── legalSearch.js             # NOVO (v17): busca vectorial pgvector para o Motor Jurídico RAG
-│   │   ├── packages.js                # NOVO: única fonte de verdade dos pacotes de créditos
+│   │   ├── packages.js                # Única fonte de verdade dos pacotes de créditos
 │   │   │                              #   (lê de system_settings — eliminou duplicação em 5 locais)
-│   │   └── rateLimit.js               # NOVO: rate-limit via Upstash Redis (com fallback Map local),
-│   │                                  #   partilhado por verify-receipt e legal-search
+│   │   ├── rateLimit.js               # Rate-limit via Upstash Redis (com fallback Map local),
+│   │   │                              #   partilhado por vários endpoints (verify-receipt, legal-search,
+│   │   │                              #   convert, extract-template, partners)
+│   │   ├── aiProviderRegistry.js      # Lista/config dos providers de IA usados em generate-document.js
+│   │   ├── aiProvidersCatalog.js      # Catálogo exposto ao painel admin (monitorização de providers)
+│   │   ├── modelDiscovery.js          # Descoberta de modelos disponíveis por provider
+│   │   ├── modelHealth.js             # Estado de saúde por modelo (desactiva automaticamente
+│   │   │                              #   modelos que estejam a falhar, ver migration_v27)
+│   │   ├── contentModeration.js       # Moderação de conteúdo (templates/blog submetidos)
+│   │   ├── blogTemplate.js            # Template HTML das páginas de blog/SEO publicadas
+│   │   ├── webpush.js                 # Envio de notificações push via VAPID
+│   │   └── piiRedaction.js            # NOVO (v30 — auditoria de segurança Ago/2026): mascara BI,
+│   │                                  #   NUIT, telefone e e-mail identificados no prompt ANTES de o
+│   │                                  #   enviar a qualquer fornecedor de IA externo; restaura os
+│   │                                  #   valores reais no texto devolvido. Usado por generate-document.js
 │   ├── admin/
-│   │   └── index.js                   # v2.0 — Dashboard, analytics, feedback, pagamentos,
+│   │   └── index.js                   # v2.2 — Dashboard, analytics, feedback, pagamentos,
 │   │                                  #   blog/páginas estáticas, gerador de artigos com IA,
 │   │                                  #   gestão de templates e afiliados
-│   │                                  #   ⚠️ AINDA USA @supabase/supabase-js + require('ws')
+│   │                                  #   🟢 sem @supabase/supabase-js/'ws' desde a v29
 │   ├── auth/
 │   │   └── index.js                   # v2.1 — Login, registo, reset password
-│   ├── generate-document.js           # v2.1 — 5 providers IA + amostra grátis + custo progressivo
-│   │                                  #   + reembolso automático em falha total
-│   ├── extract-template.js            # v2.0 — Extracção de template via imagem (IA visão)
+│   ├── generate-document.js           # v2.2 — 5 providers IA + amostra grátis + custo progressivo
+│   │                                  #   + reembolso automático em falha total + mascaragem de PII
+│   │                                  #   antes de enviar à IA (NOVO v30, ver api/_lib/piiRedaction.js)
+│   ├── extract-template.js            # v2.1 — Extracção de template via imagem (IA visão);
+│   │                                  #   CORS restrito a SITE_URL desde v30 (era wildcard '*')
 │   ├── verify-credits.js              # v3.0 — Verificar saldo de créditos
 │   ├── deduct-credit.js               # v3.0 — Debitar/reembolsar crédito (fetch puro, sem 'ws')
 │   ├── process-payment.js             # v5.0 — Pagamento manual multi-carteira + registo de transação
-│   ├── partners.js                    # v2.0 — API da Rede de Parceiros
-│   ├── convert.js                     # Conversão de ficheiros (OCR / extracção de texto)
+│   ├── partners.js                    # v2.1 — API da Rede de Parceiros; CORS restrito a SITE_URL
+│   │                                  #   desde v30 (era wildcard '*')
+│   ├── convert.js                     # v1.1 — Conversão de ficheiros (OCR / extracção de texto);
+│   │                                  #   desde v30: CORS restrito a SITE_URL + verificação de
+│   │                                  #   assinatura binária (magic bytes) do ficheiro enviado,
+│   │                                  #   em vez de confiar só na extensão do nome do ficheiro
 │   ├── delete-temp-account.js         # v9.0 — Limpeza de conta temporária individual
 │   ├── cleanup-temp-accounts.js       # v9.0 — Cron diário: limpeza automática de contas expiradas
-│   └── misc.js                        # v3.0 — Router auxiliar:
+│   └── misc.js                        # v3.2 — Router auxiliar:
 │                                      #   /api/config · /api/ocr-analyze · /api/verify-receipt
-│                                      #   /api/legal-search (NOVO — Motor Jurídico RAG)
+│                                      #   /api/legal-search (Motor Jurídico RAG)
 │                                      #   /api/page-view · sitemap.xml
 │                                      #   /api/affiliate/* (register/dashboard/click/withdraw/
 │                                      #     check/ranking/notifications)
 │                                      #   /api/templates/* (list/gallery/mine/saved/save/submit/
 │                                      #     rate/download/use/approve/reject/pending/report/
 │                                      #     share-token/by-token/delete)
-│                                      #   ⚠️ handleAffiliate e handleTemplates ainda usam
-│                                      #   makeSdkClient() interno (SDK + ws)
+│                                      #   🟢 sem SDK/'ws' desde a v29 (ex-makeSdkClient())
 │
 ├── assets/
 │   ├── js/
@@ -220,6 +249,24 @@ MzDocs-Pro/
 │   │                                                   #   template_html/css → preview genérico)
 │   ├── migration_v24_secure_orphan_credit_packages.sql # RLS na tabela credit_packages (estava
 │   │                                                   #   sem políticas desde v8 — escrevível por anon)
+│   ├── migration_v25 … v47                             # Marketing Analytics, QR codes, Funnel/CRM,
+│   │                                                   #   push notifications, afiliados (tiers/bónus),
+│   │                                                   #   Finanças, Marketplace (split de créditos),
+│   │                                                   #   limites de uso por documento, Kit de Marketing,
+│   │                                                   #   Identidade Fiscal, recibos de afiliados,
+│   │                                                   #   avaliações públicas, código de acesso de
+│   │                                                   #   parceiro, advogados como parceiros —
+│   │                                                   #   ver secções "Alterações — v25" a "v28" abaixo
+│   ├── migration_v48_lpd_compliance.sql                # NOVO: consent_logs (prova de consentimento) +
+│   │                                                   #   retenção definida, preparação para a nova Lei
+│   │                                                   #   de Protecção de Dados Pessoais (ainda em
+│   │                                                   #   votação na Assembleia da República)
+│   ├── migration_v49_secure_affiliate_receipts.sql     # CORRECÇÃO DE SEGURANÇA: bucket de storage
+│   │                                                   #   "affiliate-receipts" (comprovativos de
+│   │                                                   #   pagamento M-Pesa) passou de público para
+│   │                                                   #   privado, acesso só via signed URL (5 min)
+│   ├── migration_v50_protect_sensitive_profile_columns.sql # RLS reforçada nas colunas sensíveis de
+│   │                                                   #   `profiles` (BI, NUIT, morada)
 │   └── supabase-partners-setup.sql            # Tabela `partners` (Rede de Parceiros)
 │
 ├── tests/
@@ -237,6 +284,10 @@ MzDocs-Pro/
 ├── admin.html                         # Painel administrativo
 ├── admin-parceiros.html               # Gestão da Rede de Parceiros (admin)
 ├── parceiros.html                     # Listagem pública de parceiros
+├── parceiro-portal.html               # Portal de acesso do próprio parceiro (papelaria/advogado) —
+│                                      #   login por código de acesso próprio (v46), sem passar por
+│                                      #   conta de utilizador normal
+├── blog.html                          # Página pública do blog/CMS (artigos gerados/publicados)
 ├── templates.html                     # Galeria comunitária de templates — inclui agora os modais
 │                                      #   de Resultado/Créditos/Histórico (v25, ver abaixo)
 ├── perfil.html                        # NOVO (v25): página de conta do utilizador — dados pessoais,
@@ -793,14 +844,50 @@ Posicionamento recomendado (ver auditoria de marketing): esta funcionalidade tra
 
 ## 🔒 Segurança
 
-- RLS activado em todas as tabelas Supabase (incluindo `credit_packages` — corrigido em v24)
-- Tokens JWT validados em todos os endpoints privados via `api/_lib/supabaseAdmin.js`
-- IPs hasheados (SHA-256) para tracking de cliques — sem dados pessoais
-- `sanitizeHtml()` com lista explícita de tags permitidas
-- Service Role Key nunca exposta ao cliente
+> Última auditoria completa: Agosto/2026 (v30). Ver "Alterações — v30" para o detalhe de cada correcção.
+> Nenhuma auditoria de código garante segurança "100%" — isto cobre o que é verificável no
+> repositório; configuração de produção (migrations aplicadas, variáveis de ambiente, backups,
+> 2FA no painel admin, resposta a incidentes) fica fora do que um ficheiro de código consegue provar.
+
+**Acesso a dados (Supabase)**
+- RLS activado e verificado nas 49 tabelas do schema (incluindo `credit_packages`, corrigido em v24) — cada política restringe a `auth.uid() = user_id`, excepto rotas de admin com política própria
+- Colunas sensíveis de `profiles` (BI, NUIT, morada) com protecção reforçada desde `migration_v50`
+- Service Role Key (que ignora RLS) usada **só no servidor**, via `api/_lib/supabaseAdmin.js` — nunca enviada a nenhum ficheiro que corre no browser
+- Frontend usa sempre a `anon key`, nunca a `service_role`
+
+**Comprovativos e ficheiros**
+- Bucket de comprovativos de pagamento a afiliados (`affiliate-receipts`) é **privado**, sem URLs públicas — acesso só via signed URL de 5 minutos, gerada no servidor (`migration_v49`)
+- Uploads em `api/convert.js` verificados por assinatura binária (magic bytes), não só pela extensão do nome do ficheiro (NOVO v30)
+
+**Painel administrativo**
+- Toda a leitura/escrita de dados no painel passa por `validateAdmin()` no servidor (`api/admin/index.js`), verificado por JWT + tabela `profiles` — nunca só escondido no frontend
+- Preview de templates submetidos, dentro do próprio admin, é sanitizado (`Sanitizer.js`) antes de ser escrito em qualquer documento/janela
+
+**Conteúdo de terceiros (templates da comunidade)**
+- `Sanitizer.js` remove tags/atributos perigosos (`<script>`, handlers `on*`, `javascript:`, CSS malicioso) de todo o conteúdo submetido por utilizadores, antes de qualquer renderização
+- Preview A4 (`A4Renderer.js`) corre em iframe com `sandbox="allow-same-origin"` **sem** `allow-scripts` — mesmo que um template malicioso escape à sanitização, nenhum script consegue executar dentro do preview
+- Moderação manual antes de qualquer template ficar público na galeria
+
+**Dispositivos partilhados (papelarias/cyber cafés)**
+- `authManager.signOut()` limpa o histórico local (IndexedDB, via `offlineDB.clearAll()`) ao terminar sessão — protege o próximo cliente a usar o mesmo computador
+
+**Fornecedores de IA externos**
+- Antes de qualquer prompt ser enviado a Groq/Gemini/OpenRouter/Cerebras/NVIDIA NIM/etc., `api/_lib/piiRedaction.js` mascara números de BI, NUIT (com contexto), telefone e e-mail identificados no texto, substituindo-os por marcadores opacos — os valores reais só são repostos no documento final, do lado do servidor (NOVO v30). É uma camada de reforço (best-effort), não uma garantia absoluta nem substituto da minimização de dados no desenho dos formulários
+- Política de retenção/treino de cada fornecedor documentada em `legal.html`, incluindo o facto de que nem todos oferecem retenção zero no nível gratuito
+
+**Rede/endpoints**
+- CORS restrito à origem do site (`SITE_URL`) em todos os endpoints — `api/convert.js`, `api/extract-template.js` e `api/partners.js` usavam `Access-Control-Allow-Origin: '*'` até v30 (corrigido: um site externo podia embutir estes endpoints, que chamam APIs pagas, no browser de visitantes seus)
+- Rate limiting via Upstash Redis (com fallback gracioso para Map local) — dados de rate-limit expiram automaticamente (TTL), não ficam persistidos numa tabela exportável
+- IPs de tracking de cliques (afiliados) guardados com hash SHA-256, não em texto simples
 - Erros internos do Supabase nunca devolvidos ao cliente — apenas em logs do servidor
-- Rate limiting via Upstash Redis (com fallback gracioso para Map local)
 - Contas temporárias limpas automaticamente via cron diário
+- `unsafe-inline` presente em `script-src` do CSP (`vercel.json`) — necessário enquanto o projecto usar scripts inline; não migrado para CSP com nonce nesta ronda (fica como melhoria futura, ver "Verificação em falta" abaixo)
+
+**Verificação em falta (não coberta por auditoria de código)**
+- Confirmar que as migrations `v43`–`v50` foram mesmo executadas no Supabase de produção, não só commitadas no repositório
+- `npm audit` às dependências
+- Cabeçalhos HTTP realmente servidos em produção (`mzdocs.co.mz`) — o que está em `vercel.json` pode não reflectir o último deploy
+- CSP com nonce (eliminar `unsafe-inline`), 2FA no painel admin, processo de resposta a incidentes
 
 ---
 
@@ -1084,14 +1171,51 @@ oficial da Supabase em vez do padrão REST puro já usado em todo o resto da API
 
 ---
 
+## 🛠️ Alterações — v30 (Auditoria de Segurança Agosto 2026)
+
+Ronda de verificação ponto-a-ponto dos riscos identificados numa auditoria externa ao projecto,
+mais uma segunda passagem de auditoria aos endpoints não cobertos por essa primeira lista
+(`convert.js`, `extract-template.js`, `partners.js`). A maior parte dos riscos originais já
+tinha sido corrigida em rondas anteriores (RLS em todas as tabelas, comprovativos privados com
+signed URLs desde v49, `validateAdmin()` em todos os handlers do admin, `Sanitizer.js` + iframe
+sandboxed nos templates da comunidade, limpeza de IndexedDB no logout) — confirmados novamente
+nesta ronda, sem alterações de código necessárias. Dois pontos novos, ainda por corrigir, foram
+tratados agora:
+
+| Ficheiro | Alteração |
+|---|---|
+| `api/_lib/piiRedaction.js` | **NOVO.** Mascara BI, NUIT (com contexto), telefone e e-mail identificados no texto do prompt antes de o enviar a qualquer fornecedor de IA externo; restaura os valores reais no texto devolvido. Testado com casos reais (separadores diferentes, falsos positivos como telefone/valor monetário) — restauração byte-a-byte confirmada. |
+| `api/generate-document.js` | Chama `redactSensitive()` sobre `finalPrompt` antes de o enviar a qualquer provider, e `restoreSensitive()` sobre a resposta antes de a devolver ao utilizador. |
+| `legal.html` | Parágrafo "Fornecedores de IA" da Política de Privacidade actualizado para descrever com precisão a mascaragem automática, em vez da formulação anterior ("não enviamos deliberadamente..."). |
+| `api/convert.js` | CORS restrito a `SITE_URL` (era `Access-Control-Allow-Origin: '*'`, sem qualquer autenticação — permitia que sites externos embutissem este endpoint, que chama a API paga CloudConvert, no browser dos seus próprios visitantes). Adicionada verificação de assinatura binária (magic bytes) para PDF/JPG/PNG/DOCX/XLSX/PPTX — antes só a extensão do nome do ficheiro era validada. |
+| `api/extract-template.js` | Mesma correcção de CORS (chama IA de visão, também paga). |
+| `api/partners.js` | Mesma correcção de CORS, por consistência (rotas de registo/avaliação/login são públicas e sem token). |
+
+**O que ficou confirmado, sem necessidade de alterar código:**
+RLS nas 49 tabelas · Service Role Key nunca no frontend · comprovativos privados com signed URLs
+· `validateAdmin()` em todos os handlers de dados do admin (excepto `handleFeedback`, que é
+submissão pública por desenho, não leitura de dados) · `Sanitizer.js` + iframe `sandbox=
+"allow-same-origin"` sem `allow-scripts` nos previews de templates · limpeza de IndexedDB no
+logout · rate limiting com TTL (sem persistência exportável de IPs de fraude).
+
+**Por verificar, fora do alcance de uma auditoria de código** (ver "Verificação em falta" na
+secção Segurança): migrations `v43`–`v50` aplicadas mesmo em produção, `npm audit`, cabeçalhos
+HTTP reais servidos por `mzdocs.co.mz`.
+
+---
+
 ## 📦 Versões
 
 | Componente | Versão | Nota |
 |------------|--------|------|
 | `package.json` | `11.0.0` | — |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy | formato `v<sha-git-7-chars>-<YYYYMMDD>`, escrito por `scripts/inject-version.js` — o valor no repositório é só um placeholder |
-| `README.md` | `v29` (esta edição) | v28 sincronizou `v42`–`v47`; **v29** documenta a eliminação total do SDK `@supabase/supabase-js`/`ws` — ver "Alterações — v29" |
-| `api/partners.js` | `v2.0` | ⚠️ *pendente de nota de versão explícita para v47* — suporta `type='advogado'` desde `migration_v47_partners_advogados.sql` (ver secção "Área Jurídica: Advogados como Parceiros") |
+| `README.md` | `v30` (esta edição) | v29 documentou a eliminação do SDK; **v30** documenta a auditoria de segurança de Agosto/2026 — ver "Alterações — v30" |
+| `api/_lib/piiRedaction.js` | `v1.0` | NOVO (v30): mascara BI/NUIT/telefone/e-mail antes de qualquer chamada a fornecedor de IA |
+| `api/generate-document.js` | `v2.2` | v30: integra `piiRedaction.js` antes/depois da chamada aos providers |
+| `api/convert.js` | `v1.1` | v30: CORS restrito a `SITE_URL` + verificação de magic bytes (era sem versão explícita) |
+| `api/extract-template.js` | `v2.1` | v30: CORS restrito a `SITE_URL` |
+| `api/partners.js` | `v2.1` | v30: CORS restrito a `SITE_URL` |
 | `assets/js/admin/AdminApp.js` | **v27** | **NOVO:** gestão completa do Kit de Marketing (materiais dos afiliados) — ver "Alterações — v27" |
 | `assets/js/services/MarketingTracker.js` | v26 | cliente do Marketing Analytics (Fases 1–5) |
 | `api/_lib/webpush.js` | v26 | envio de notificações push via VAPID |
@@ -1112,15 +1236,12 @@ oficial da Supabase em vez do padrão REST puro já usado em todo o resto da API
 | `api/admin/index.js` | `v2.2` | 🟢 **sem SDK legacy desde v29** (era ⚠️ SDK+`ws`) · v27: `handleTemplates` corrigido (removida referência a `price_mzn`, adicionado `mzn_per_credit`/`mzn_equivalent`); `handleMarketingMaterials` (`/api/admin/marketing-materials`) · **v29:** `getAdminClient()` removida, migrado para `api/_lib/supabaseAdmin.js` puro (3.914 → 3.760 linhas) |
 | `api/process-payment.js` | `v5.0` | — |
 | `api/deduct-credit.js` | `v3.0` | — |
-| `api/generate-document.js` | `v2.1` | amostra grátis + custo progressivo |
 | `api/verify-credits.js` | `v3.0` | — |
-| `api/extract-template.js` | `v2.0` | — |
 | `api/delete-temp-account.js` | `v9.0` | — |
 | `api/cleanup-temp-accounts.js` | `v9.0` | — |
-| `api/convert.js` | sem versão | — |
 | `assets/js/services/SmartOCRService.js` | `v4.0` | — |
 | `assets/js/services/LongDocumentEngine.js` | `v2.0` | — |
-| Migrações Supabase | até `migration_v47` | ver secção "Alterações — v28"; `v31` corrompida no export da auditoria de Julho/2026 (ver aviso acima); existem dois ficheiros `v46` distintos (ver aviso na secção de Deploy) |
+| Migrações Supabase | até `migration_v50` | ver secções "Alterações — v25" a "v30"; `v31` corrompida no export da auditoria de Julho/2026 (ver aviso acima); existem dois ficheiros `v46` e dois `v48` distintos (ver aviso na secção de Deploy) |
 | Templates integrados | 70 (14 serviços × 5) | 17 serviços no total |
 | `partners` (tipos) | `papelaria`, `advogado` | NOVO (v47): advogados como parceiros, com `credential_number` (OAM) conferido manualmente |
 
