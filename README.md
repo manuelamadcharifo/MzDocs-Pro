@@ -1,8 +1,16 @@
-# MzDocs Pro — v30
+# MzDocs Pro — v31
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
 
-> 📌 **Nota de versão (actual):** ronda de Agosto/2026 — auditoria de segurança ponto-a-ponto.
+> 📌 **Nota de versão (actual):** ronda de protecção de dados pessoais (LPD/RGPD) — consentimento
+> explícito no registo (`consent_logs`), direito ao esquecimento self-service para qualquer conta
+> (não só `avulso`), remoção de uma password guardada em texto simples (`profiles.temp_password`),
+> correcção da citação legal em `legal.html`, e uma segunda camada de mascaragem de dados pessoais
+> antes do envio a fornecedores de IA — `assets/js/services/prompts/piiShield.js`, do lado do
+> browser, cobre nome/morada/papéis nomeados por campo do formulário, complementando a mascaragem
+> por padrão de texto já existente (`piiRedaction.js`, v30). Ver secção "Alterações — v31" abaixo.
+
+> 📌 **Nota de versão (Agosto/2026):** ronda de auditoria de segurança ponto-a-ponto.
 > Confirmou-se que RLS, chaves, comprovativos privados, validação do painel admin, sanitização
 > de templates da comunidade e limpeza de IndexedDB já estavam correctamente implementados em
 > rondas anteriores. Duas lacunas novas foram fechadas: mascaragem automática de BI/NUIT/telefone/
@@ -131,7 +139,10 @@ MzDocs-Pro/
 │   │                                  #   desde v30: CORS restrito a SITE_URL + verificação de
 │   │                                  #   assinatura binária (magic bytes) do ficheiro enviado,
 │   │                                  #   em vez de confiar só na extensão do nome do ficheiro
-│   ├── delete-temp-account.js         # v9.0 — Limpeza de conta temporária individual
+│   ├── delete-temp-account.js         # v10.0 — Direito ao esquecimento: contas 'avulso' (regra
+│   │                                  #   original) + contas normais via { confirmDeletion: true }
+│   │                                  #   (NOVO v31); rate limiting; transactions anonimizadas
+│   │                                  #   (não apagadas — obrigação fiscal), documents em CASCADE
 │   ├── cleanup-temp-accounts.js       # v9.0 — Cron diário: limpeza automática de contas expiradas
 │   └── misc.js                        # v3.2 — Router auxiliar:
 │                                      #   /api/config · /api/ocr-analyze · /api/verify-receipt
@@ -196,7 +207,9 @@ MzDocs-Pro/
 │   │   │   └── NearbyPartners.js      # Lista/mapa de parceiros próximos
 │   │   ├── services/
 │   │   │   ├── ServiceDefinitions.js  # 17 serviços (14 com templates + 3 via WhatsApp)
-│   │   │   ├── Services.js            # Orquestra chamadas à API de geração
+│   │   │   ├── Services.js            # Orquestra chamadas à API de geração; desde v31 mascara
+│   │   │   │                          #   nome/BI/NUIT/morada/contacto (campos estruturados do
+│   │   │   │                          #   formulário) antes de montar o prompt — ver piiShield.js
 │   │   │   ├── LegalContext.js        # NOVO (v17): ponte frontend ↔ /api/legal-search (RAG)
 │   │   │   ├── LongDocumentEngine.js  # v2.0: motor de geração em cadeia para docs longos;
 │   │   │   │                          #   débito APÓS planeamento (fix: crédito perdido em falha)
@@ -205,6 +218,11 @@ MzDocs-Pro/
 │   │   │   └── SmartOCRService.js     # v4.0: IA visual primeiro, Tesseract como complemento
 │   │   │   └── prompts/               # 1 ficheiro de prompt por categoria (v17+)
 │   │   │       ├── index.js           # Agregador; prompts jurídicos usam LegalContext (RAG)
+│   │   │       ├── piiShield.js       # NOVO (v31): mascara/repõe campos sensíveis do formData —
+│   │   │       │                      #   complementa api/_lib/piiRedaction.js (que actua sobre o
+│   │   │       │                      #   texto já montado, por padrão; este actua sobre os campos
+│   │   │       │                      #   estruturados, por nome do campo — nome, morada, papéis
+│   │   │       │                      #   como outorgante/procurador/senhorio, etc.)
 │   │   │       └── [14 ficheiros: acta.js, arrendamento.js, carta.js, cv.js, licenca.js,
 │   │   │           orcamento.js, planonegocio.js, prestacao.js, procuracao.js, recibo.js,
 │   │   │           recomendacao.js, requerimento.js, residencia.js, trabalho.js]
@@ -844,7 +862,8 @@ Posicionamento recomendado (ver auditoria de marketing): esta funcionalidade tra
 
 ## 🔒 Segurança
 
-> Última auditoria completa: Agosto/2026 (v30). Ver "Alterações — v30" para o detalhe de cada correcção.
+> Última auditoria completa: Agosto/2026 (v30–v31). Ver "Alterações — v30" e "Alterações — v31"
+> para o detalhe de cada correcção.
 > Nenhuma auditoria de código garante segurança "100%" — isto cobre o que é verificável no
 > repositório; configuração de produção (migrations aplicadas, variáveis de ambiente, backups,
 > 2FA no painel admin, resposta a incidentes) fica fora do que um ficheiro de código consegue provar.
@@ -872,8 +891,13 @@ Posicionamento recomendado (ver auditoria de marketing): esta funcionalidade tra
 - `authManager.signOut()` limpa o histórico local (IndexedDB, via `offlineDB.clearAll()`) ao terminar sessão — protege o próximo cliente a usar o mesmo computador
 
 **Fornecedores de IA externos**
-- Antes de qualquer prompt ser enviado a Groq/Gemini/OpenRouter/Cerebras/NVIDIA NIM/etc., `api/_lib/piiRedaction.js` mascara números de BI, NUIT (com contexto), telefone e e-mail identificados no texto, substituindo-os por marcadores opacos — os valores reais só são repostos no documento final, do lado do servidor (NOVO v30). É uma camada de reforço (best-effort), não uma garantia absoluta nem substituto da minimização de dados no desenho dos formulários
-- Política de retenção/treino de cada fornecedor documentada em `legal.html`, incluindo o facto de que nem todos oferecem retenção zero no nível gratuito
+- Antes de qualquer prompt ser enviado a Groq/Gemini/OpenRouter/Cerebras/NVIDIA NIM/etc., `api/_lib/piiRedaction.js` mascara números de BI, NUIT (com contexto), telefone e e-mail identificados no texto, substituindo-os por marcadores opacos — os valores reais só são repostos no documento final, do lado do servidor (v30). Camada complementar, do lado do browser, desde v31: `assets/js/services/prompts/piiShield.js` mascara nome/morada/papéis nomeados (outorgante, procurador, senhorio, etc.) por **nome do campo do formulário**, antes de o prompt sair do browser — cobre o que a mascaragem por padrão de texto não consegue reconhecer. Nenhuma das duas é uma garantia absoluta nem substituto da minimização de dados no desenho dos formulários; nenhuma protege dados pessoais escritos à mão dentro de um campo de texto livre não reconhecido como sensível
+- Política de retenção/treino de cada fornecedor documentada em `legal.html` (corrigida em v31 — lista completa dos 10 fornecedores realmente activos, antes só listava 5), incluindo o facto de que nem todos oferecem retenção zero no nível gratuito
+
+**Dados pessoais e consentimento (LPD/RGPD)**
+- Registo exige consentimento explícito aos Termos de Serviço (`consentTerms: true`), gravado em `consent_logs` com IP, hora e versão dos termos (`api/auth/index.js`, `migration_v48`) — NOVO v31
+- Direito ao esquecimento self-service para qualquer conta (não só `avulso`) via `api/delete-temp-account.js` — `transactions` anonimizada (obrigação fiscal), `documents` removido por `CASCADE`, botão dedicado em `perfil.html` com dupla confirmação — NOVO v31
+- `profiles.temp_password` (password de contas `avulso` em texto simples, lida directamente pelo painel admin) deixou de ser gravado — substituído por `regenerate-temp-password`, que gera e devolve uma password nova uma única vez, sem a persistir — NOVO v31
 
 **Rede/endpoints**
 - CORS restrito à origem do site (`SITE_URL`) em todos os endpoints — `api/convert.js`, `api/extract-template.js` e `api/partners.js` usavam `Access-Control-Allow-Origin: '*'` até v30 (corrigido: um site externo podia embutir estes endpoints, que chamam APIs pagas, no browser de visitantes seus)
@@ -1204,47 +1228,63 @@ HTTP reais servidos por `mzdocs.co.mz`.
 
 ---
 
-## 📦 Versões
+## 🛠️ Alterações — v31 (Protecção de Dados Pessoais — LPD/RGPD)
+
+Ronda dedicada especificamente aos dados pessoais dos utilizadores — consentimento no registo,
+direito ao esquecimento, e uma segunda camada de protecção junto dos fornecedores de IA que
+complementa a mascaragem por padrão de texto já feita em `api/_lib/piiRedaction.js` (v30).
+
+| Ficheiro | Alteração |
+|---|---|
+| `api/auth/index.js` | Signup passa a exigir `consentTerms === true`; consentimento gravado em `consent_logs` (IP, hora, versão dos termos — `migration_v48`). Rate limiting adicionado a signin/signup/reset-password (não tinham nenhum antes). |
+| `api/delete-temp-account.js` (→ v10.0) | Direito ao esquecimento estendido a **todas** as contas, não só `avulso` — conta normal autenticada pode pedir eliminação definitiva enviando `{ confirmDeletion: true }`. `transactions.user_id` é anonimizado (`SET NULL`), não apagado — os registos têm de sobreviver por obrigação fiscal/contabilística; `documents` é removido via `ON DELETE CASCADE` já existente no schema. |
+| `perfil.html` | Botão "Eliminar a minha conta definitivamente" (antes só existia um link de WhatsApp para pedir manualmente). Dupla confirmação: `confirm()` do browser + escrever "ELIMINAR" antes de chamar a API. |
+| `api/misc.js`, `api/admin/index.js`, `assets/js/admin/AdminApp.js` | **Correcção de segurança:** `profiles.temp_password` guardava a password das contas `avulso` em **texto simples**, lida directamente pelo painel de admin — exposta por inteiro em caso de fuga da base de dados ou de uma sessão de admin comprometida. Deixou de ser gravado; nova acção `regenerate-temp-password` gera uma password nova, actualiza-a de facto no Supabase Auth (`adminUpdateUserById`), e devolve-a **uma única vez** na resposta — nunca fica persistida em claro. `migration_v48` limpa os valores já gravados (`UPDATE profiles SET temp_password = NULL`) e marca a coluna como `DEPRECATED`. |
+| `legal.html` | Citação da lei corrigida: o texto anterior misturava três números de lei diferentes e inconsistentes (`3/2017`, `58/2021`, `3/2022`) — os dois últimos não correspondem a nenhuma legislação moçambicana real encontrada. Passou a citar consistentemente a Lei n.º 3/2017 (Lei das Transacções Electrónicas), com nota honesta de que Moçambique ainda não tem lei de protecção de dados autónoma em vigor (proposta aprovada em Conselho de Ministros em Março/2026, pendente de votação final). Lista de subprocessadores de IA corrigida para os 10 fornecedores realmente activos no código (`aiProviderRegistry.js`) — antes só listava 5. |
+| `assets/js/services/prompts/piiShield.js` | **NOVO.** Mascara os valores de campos do formulário identificados como dados pessoais — por **nome do campo** (`nome`, `bi*`, `nuit`, `telefone`, `morada`, e papéis nomeados como `outorgante`/`procurador`/`senhorio`/`locatário`/etc., construído a partir do catálogo real de campos em `ServiceDefinitions.js`) — substituindo-os por marcadores opacos (`[[DADO_N]]`) **antes** de o prompt sair do browser. Os valores reais nunca chegam ao servidor nem a nenhum fornecedor de IA; só são repostos no documento final, também no browser. |
+| `assets/js/services/Services.js` | `_buildPrompt()` aplica `maskFormData()` a todo o formData antes de montar o prompt (`data` passa a referir-se sempre à versão mascarada dentro da função); `generate()` e `previewDocument()` repõem os valores reais via `_unmaskResult()`, com aviso (`_piiUnmaskWarning`) se algum marcador não voltar correctamente na resposta do modelo. |
+
+**Como as duas camadas de mascaragem se complementam (não colidem):**
+`piiRedaction.js` (servidor, v30) actua sobre o **texto já montado**, por **padrão** — apanha
+BI/NUIT/telefone/e-mail mesmo dentro de um campo de texto livre, mas não consegue reconhecer
+nomes nem moradas (não há regex fiável para isso). `piiShield.js` (browser, v31) actua sobre os
+**campos estruturados do formulário**, por **nome do campo** — cobre nome/morada/papéis com
+fiabilidade total nesses campos, mas só protege o que o sistema já sabe à partida que é um campo
+sensível. Os formatos de marcador são distintos (`‹‹BI_1››` vs `[[DADO_N]]`), por isso as duas
+substituições e restaurações correm sem interferir uma com a outra.
+
+**Limitação partilhada pelas duas camadas, documentada e não escondida:** nenhuma protege dados
+pessoais escritos à mão dentro de um campo de texto livre não reconhecido como sensível (ex:
+"motivo: para o meu filho João Machava, BI 110234567..." dentro de um campo "Finalidade"). Isto
+exigiria reconhecimento de entidades nomeadas (NER), uma técnica bem menos fiável do que as duas
+usadas aqui, e fica fora do âmbito desta ronda.
+
+**Nota sobre a abordagem escolhida:** chegou a ser desenhada uma variante que bloqueava por
+omissão os fornecedores com política de treino menos clara (Gemini free tier, NVIDIA NIM hosted,
+Mistral tier "Experiment", SambaNova), só os usando como último recurso. Foi descartada a favor
+da mascaragem (`piiRedaction.js` + `piiShield.js` acima) — a qualidade de resposta de todos os
+fornecedores configurados importa mais para o produto do que restringir o conjunto disponível, e
+a mascaragem protege os dados independentemente de qual fornecedor acaba por responder primeiro
+na corrida (`raceAllProviders`). Não há por isso nenhum campo de classificação de risco por
+fornecedor no código — `aiProviderRegistry.js` não tem essa distinção.
+
+
 
 | Componente | Versão | Nota |
 |------------|--------|------|
 | `package.json` | `11.0.0` | — |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy | formato `v<sha-git-7-chars>-<YYYYMMDD>`, escrito por `scripts/inject-version.js` — o valor no repositório é só um placeholder |
-| `README.md` | `v30` (esta edição) | v29 documentou a eliminação do SDK; **v30** documenta a auditoria de segurança de Agosto/2026 — ver "Alterações — v30" |
+| `README.md` | `v31` (esta edição) | v30 documentou a auditoria de segurança de Agosto/2026; **v31** documenta a ronda de protecção de dados pessoais (LPD/RGPD) — ver "Alterações — v31" |
 | `api/_lib/piiRedaction.js` | `v1.0` | NOVO (v30): mascara BI/NUIT/telefone/e-mail antes de qualquer chamada a fornecedor de IA |
+| `assets/js/services/prompts/piiShield.js` | `v1.0` | NOVO (v31): mascara nome/morada/papéis nomeados por campo do formulário — complementa `piiRedaction.js` |
+| `assets/js/services/Services.js` | — | v31: `_buildPrompt()` mascara `data` via `piiShield.js` antes de montar o prompt; `generate()`/`previewDocument()` repõem os valores reais via `_unmaskResult()` |
 | `api/generate-document.js` | `v2.2` | v30: integra `piiRedaction.js` antes/depois da chamada aos providers |
 | `api/convert.js` | `v1.1` | v30: CORS restrito a `SITE_URL` + verificação de magic bytes (era sem versão explícita) |
 | `api/extract-template.js` | `v2.1` | v30: CORS restrito a `SITE_URL` |
 | `api/partners.js` | `v2.1` | v30: CORS restrito a `SITE_URL` |
-| `assets/js/admin/AdminApp.js` | **v27** | **NOVO:** gestão completa do Kit de Marketing (materiais dos afiliados) — ver "Alterações — v27" |
+| `assets/js/admin/AdminApp.js` | **v27** | **NOVO:** gestão completa do Kit de Marketing (materiais dos afiliados) — ver "Alterações — v27" · v31: `showTempCredentials`/`_sendCredentialsWA` passam a chamar `regenerate-temp-password` em vez de ler `temp_password` directamente |
 | `assets/js/services/MarketingTracker.js` | v26 | cliente do Marketing Analytics (Fases 1–5) |
 | `api/_lib/webpush.js` | v26 | envio de notificações push via VAPID |
 | `index.html` | v26 | banner `#sandboxBar` removido (código morto) |
-| `perfil.html` | v25 | página de conta com Créditos/Arquivo em modal embutido (sem navegar para "/") |
-| `templates.html` | v25 | modais Resultado/Créditos/Histórico adicionados; `openDetail()` corrigido (texto antes do preview); listener de clique delegado |
-| `api/misc.js` | `v3.2` | 🟢 **totalmente migrado desde v29** (era 🟡 parcial) · v25: `tplList` corrigido para filtrar por `id` · v27: `handleAffiliate` ganhou as acções `materials`/`qrcode` (Kit de Marketing) · **v29:** removida `makeSdkClient()` (Afiliados/Templates), sem dependência de SDK/`ws` |
-| `vercel.json` (CSP) | v25 | `img-src` agora inclui `https://*.supabase.co` (avatares) |
-| `assets/js/controllers/HistoryController.js` | v25 | guard do visualizador "lite" reforçado (confirma DOM, não só `window.docController`) |
-| `assets/js/views/Views.js` | v25 | `_renderResultInner` blindado contra elementos ausentes |
-| `assets/js/app.js` | v26 | v25: dropdown do utilizador corrigido; ícone duplicado removido; deep-links `?topup=1`/`?history=1` · v26: removida referência ao banner morto `#sandboxBar` |
-| `api/_lib/supabaseAdmin.js` | — | helper sem versão explícita · **v29:** +8 funções (`del`, `upsert`, `countRows`, `adminGetUserById`, `adminUpdateUserById`, `storageUpload`, `storageGetPublicUrl`) para suportar a migração de `admin/index.js` e `misc.js` |
-| `api/_lib/visionAI.js` | `v1.0` | — |
-| `api/_lib/legalSearch.js` | — | NOVO (v17) |
-| `api/_lib/packages.js` | — | preços dinâmicos · v27: `estimateMznPerCredit()` passou a ser usado também por `/api/admin/templates` |
-| `api/_lib/rateLimit.js` | — | NOVO (rate-limit partilhado) |
-| `api/auth/index.js` | `v2.1` | — |
-| `api/admin/index.js` | `v2.2` | 🟢 **sem SDK legacy desde v29** (era ⚠️ SDK+`ws`) · v27: `handleTemplates` corrigido (removida referência a `price_mzn`, adicionado `mzn_per_credit`/`mzn_equivalent`); `handleMarketingMaterials` (`/api/admin/marketing-materials`) · **v29:** `getAdminClient()` removida, migrado para `api/_lib/supabaseAdmin.js` puro (3.914 → 3.760 linhas) |
-| `api/process-payment.js` | `v5.0` | — |
-| `api/deduct-credit.js` | `v3.0` | — |
-| `api/verify-credits.js` | `v3.0` | — |
-| `api/delete-temp-account.js` | `v9.0` | — |
-| `api/cleanup-temp-accounts.js` | `v9.0` | — |
-| `assets/js/services/SmartOCRService.js` | `v4.0` | — |
-| `assets/js/services/LongDocumentEngine.js` | `v2.0` | — |
-| Migrações Supabase | até `migration_v50` | ver secções "Alterações — v25" a "v30"; `v31` corrompida no export da auditoria de Julho/2026 (ver aviso acima); existem dois ficheiros `v46` e dois `v48` distintos (ver aviso na secção de Deploy) |
-| Templates integrados | 70 (14 serviços × 5) | 17 serviços no total |
-| `partners` (tipos) | `papelaria`, `advogado` | NOVO (v47): advogados como parceiros, com `credential_number` (OAM) conferido manualmente |
-
----
-
-*MzDocs Pro — Desenvolvido por Manuel Amad Charifo · [mzdocs.co.mz](https://mzdocs.co.mz)*
+| `perfil.html` | v25 | página de conta com Créditos/Arquivo em modal embutido (sem navegar para "/") · v31: botão de eliminação definitiva de conta (dupla confirmação) |
+| `templates.html` | v25 | modais Resultado/Créditos/Histórico adicionados; `openDetail()` corrigido (texto antes do preview); listener de clique delega
