@@ -15,6 +15,19 @@ const USE_LIBRE = process.env.LIBREOFFICE === 'true';
 const CC_KEY    = process.env.CLOUDCONVERT_API_KEY || '';
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
+// SEGURANÇA (auditoria Jul/2026, ronda 2): este endpoint chama uma API paga
+// de terceiros (CloudConvert) sem exigir sessão iniciada. Com
+// "Access-Control-Allow-Origin: *", qualquer site externo podia embutir JS
+// que chamasse este endpoint a partir do browser de um visitante seu,
+// gastando a nossa quota do CloudConvert sem que nós saibamos a origem real
+// do abuso (cada visitante tem o seu próprio IP, o que dilui o rate limit
+// por IP). Restringir a origem ao nosso próprio site — igual ao padrão já
+// usado em generate-document.js/admin/index.js/process-payment.js — não
+// impede um script no servidor de chamar directamente (CORS só é aplicado
+// pelo browser), mas fecha a via mais fácil de abuso silencioso embutido
+// noutro site.
+const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
+
 const ALLOWED = {
   'docx-pdf':true,'doc-pdf':true,'pdf-docx':true,
   'xlsx-pdf':true,'xls-pdf':true,'pdf-xlsx':true,
@@ -30,8 +43,44 @@ const MIME = {
   jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png',
 };
 
+// SEGURANÇA (auditoria Jul/2026, ronda 2): antes desta correcção, o "tipo de
+// origem" de um ficheiro era determinado só pela extensão do nome enviado
+// pelo cliente (fileField.filename) — um atacante podia renomear qualquer
+// ficheiro para ".docx"/".pdf"/etc. e o servidor aceitava-o sem verificar o
+// conteúdo real, encaminhando-o directamente para o CloudConvert (ou para o
+// LibreOffice local, se LIBREOFFICE=true numa VPS própria). Isto não expõe
+// dados de outros utilizadores, mas facilita enviar ficheiros deliberadamente
+// mal formados (ex.: bombas de descompressão disfarçadas de .docx/.xlsx, que
+// são ficheiros ZIP) a um serviço de conversão de terceiros ou a um processo
+// local pesado. Esta verificação confirma a "assinatura" (magic bytes) reais
+// do ficheiro antes de continuar — barata e sem dependências novas.
+const MAGIC_CHECKS = {
+  pdf:  buf => buf.slice(0, 5).toString('latin1') === '%PDF-',
+  jpg:  buf => buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF,
+  jpeg: buf => buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF,
+  png:  buf => buf.slice(0, 8).equals(Buffer.from([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A])),
+  // .docx/.xlsx/.pptx (e .doc/.xls/.ppt binários antigos, aceites por
+  // compatibilidade) são todos ficheiros ZIP — a assinatura "PK\x03\x04"
+  // cobre o formato moderno (Office Open XML). Não valida a estrutura
+  // interna (isso cabe ao CloudConvert/LibreOffice), só que é mesmo um ZIP.
+  docx: buf => buf.slice(0, 4).equals(Buffer.from([0x50,0x4B,0x03,0x04])),
+  xlsx: buf => buf.slice(0, 4).equals(Buffer.from([0x50,0x4B,0x03,0x04])),
+  pptx: buf => buf.slice(0, 4).equals(Buffer.from([0x50,0x4B,0x03,0x04])),
+};
+
+function looksLikeDeclaredType(buffer, fromFmt) {
+  const check = MAGIC_CHECKS[fromFmt];
+  // Formatos antigos (.doc/.xls/.ppt binários OLE) não têm um único magic
+  // byte simples de verificar sem depender de mais uma biblioteca — não
+  // bloqueamos esses, só os formatos com assinatura conhecida e barata de
+  // confirmar. Ainda assim cobre a maioria real dos uploads (pdf/imagens/
+  // docx/xlsx/pptx modernos).
+  if (!check) return true;
+  try { return check(buffer); } catch { return false; }
+}
+
 function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
 }
@@ -304,6 +353,10 @@ module.exports = async function handler(req, res) {
 
     if (fileField.data.length > MAX_BYTES)
       return res.status(413).json({ error: `Ficheiro demasiado grande (${(fileField.data.length/1024/1024).toFixed(1)}MB). Máximo 10MB.` });
+
+    if (!looksLikeDeclaredType(fileField.data, fromFmt)) {
+      return res.status(400).json({ error: `O ficheiro enviado não corresponde ao tipo .${fromFmt} declarado.` });
+    }
 
     const outName = origName.replace(/\.[^.]+$/, '') + '.' + toFmt;
     let   outBuffer;
