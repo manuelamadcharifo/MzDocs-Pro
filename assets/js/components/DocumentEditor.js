@@ -1430,7 +1430,15 @@ export class DocumentEditor {
     // modal, pelo que _buildPreviewHTML encontrava _templateHtml como null.
     // Com setTimeout(0) o callback corre após o modal ser painted (micro-task).
     this._templateCss  = templateCss  || null;
-    this._templateHtml = templateHtml || null;
+    // SEGURANÇA (auditoria Jul/2026 — correcção à correcção anterior):
+    // sanitizar aqui, na origem, e não só no ponto de renderização da
+    // pré-visualização — a exportação para PDF (HTMLPDFExporter.export)
+    // lê this._templateHtml directamente, e um template malicioso não
+    // sanitizado aqui voltaria a executar JavaScript na janela de
+    // impressão (via document.write), mesmo com a pré-visualização já
+    // protegida. Sanitizar uma única vez na origem cobre todos os
+    // consumidores (preview, exportação PDF, exportação Word).
+    this._templateHtml = templateHtml ? sanitizeHtml(templateHtml) : null;
     // v40: snapshot do conteúdo/template tal como chegam, para ao fechar
     // sabermos se houve mesmo uma alteração real gravada (ver close()) —
     // o contador de edições do documento só deve ser gasto nesse caso,
