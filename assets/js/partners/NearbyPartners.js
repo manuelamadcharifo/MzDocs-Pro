@@ -5,6 +5,15 @@
 // e ao gerar documentos jurídicos (advogado).
 import { escapeHtml } from '../utils/Sanitizer.js';
 
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..." inline — mesma lógica usada em AdminApp.js.
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  if (el.dataset.action === 'partnerClick' && window._mzPartnerClick) window._mzPartnerClick(el.dataset.id);
+  if (el.dataset.action === 'retryGeo' && window._mzRetryGeo) window._mzRetryGeo(el.dataset.svc);
+});
+
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 let _geoCache   = null;
 let _geoTs      = 0;
@@ -79,7 +88,7 @@ export function buildPartnersHTML(partners, svcLabel) {
         ${p.hours ? `<div class="np-hours">🕐 ${escapeHtml(p.hours)}</div>` : ''}
         ${rating   ? `<div class="np-rating">${rating}</div>` : ''}
         <a href="${wa}" target="_blank" rel="noopener" class="np-btn-wa"
-           onclick="window._mzPartnerClick && window._mzPartnerClick('${p.id}')">
+           data-action="partnerClick" data-id="${escapeHtml(p.id)}">
           <span>📲</span> Contactar via WhatsApp
         </a>
       </div>`;
@@ -131,7 +140,7 @@ export function buildLawyersHTML(lawyers) {
         ${tags ? `<div class="np-tags">${tags}</div>` : ''}
         ${rating ? `<div class="np-rating">${rating}</div>` : ''}
         <a href="${wa}" target="_blank" rel="noopener" class="np-btn-wa"
-           onclick="window._mzPartnerClick && window._mzPartnerClick('${p.id}')">
+           data-action="partnerClick" data-id="${escapeHtml(p.id)}">
           <span>📲</span> Falar com advogado
         </a>
       </div>`;
@@ -167,7 +176,7 @@ export function buildLoadingHTML(label = 'A procurar parceiras próximas…') {
 export function buildGeoErrorHTML(svcId) {
   return `<div class="np-geo-error">
     <div>📍 Precisamos da sua localização para encontrar parceiras próximas.</div>
-    <button class="np-btn-geo" onclick="window._mzRetryGeo && window._mzRetryGeo('${svcId}')">
+    <button class="np-btn-geo" data-action="retryGeo" data-svc="${escapeHtml(svcId)}">
       Activar localização
     </button>
     <div style="margin-top:8px;font-size:11px;color:var(--muted)">
