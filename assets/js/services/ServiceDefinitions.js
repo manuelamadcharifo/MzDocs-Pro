@@ -81,7 +81,7 @@ export const SERVICES = {
   transcricao: {
     icon:'🖨️', bg:'#F5F3FF', title:'Digitalizar Documento',
     sub:'Fotografe um trabalho manuscrito ou em vários ficheiros — recebe o documento digitado, formatado e pronto a imprimir',
-    hasAI:true, category:'servicos', popularity:18,
+    hasAI:true, category:'academico', popularity:18,
     // NOVO: custo dinâmico — 1 crédito por cada 3 páginas fotografadas
     // (arredondado para cima), mínimo 1, máximo 10 (tecto técnico de
     // api/deduct-credit.js). Calculado em DocumentController.generate()
