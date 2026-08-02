@@ -79,7 +79,7 @@ export const SERVICES = {
   // um documento que pode ter dezenas de páginas, ao contrário dos outros
   // serviços (1 crédito fixo).
   transcricao: {
-    icon:'🖨️', bg:'#F5F3FF', title:'Digitalizar Documento',
+    icon:'📑', bg:'#F5F3FF', title:'Digitalizar Documento',
     sub:'Fotografe um trabalho manuscrito ou em vários ficheiros — recebe o documento digitado, formatado e pronto a imprimir',
     hasAI:true, category:'academico', popularity:18,
     // NOVO: custo dinâmico — 1 crédito por cada 3 páginas fotografadas
