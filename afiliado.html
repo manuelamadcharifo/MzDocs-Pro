@@ -247,12 +247,12 @@
         <div class="fg">
           <label>Tipo de Parceiro</label>
           <div class="seg-grid" id="segGrid">
-            <button class="seg-btn selected" data-seg="individual" onclick="selectSeg(this)"><div class="seg-ico">👤</div><div class="seg-lbl">Individual</div></button>
-            <button class="seg-btn" data-seg="papelaria" onclick="selectSeg(this)"><div class="seg-ico">🖨️</div><div class="seg-lbl">Papelaria</div></button>
-            <button class="seg-btn" data-seg="cyber" onclick="selectSeg(this)"><div class="seg-ico">💻</div><div class="seg-lbl">Cyber Café</div></button>
-            <button class="seg-btn" data-seg="universidade" onclick="selectSeg(this)"><div class="seg-ico">🎓</div><div class="seg-lbl">Universidade</div></button>
-            <button class="seg-btn" data-seg="explicacao" onclick="selectSeg(this)"><div class="seg-ico">📚</div><div class="seg-lbl">Explicação</div></button>
-            <button class="seg-btn" data-seg="digitador" onclick="selectSeg(this)"><div class="seg-ico">⌨️</div><div class="seg-lbl">Digitador</div></button>
+            <button class="seg-btn selected" data-seg="individual" data-action="selectSeg"><div class="seg-ico">👤</div><div class="seg-lbl">Individual</div></button>
+            <button class="seg-btn" data-seg="papelaria" data-action="selectSeg"><div class="seg-ico">🖨️</div><div class="seg-lbl">Papelaria</div></button>
+            <button class="seg-btn" data-seg="cyber" data-action="selectSeg"><div class="seg-ico">💻</div><div class="seg-lbl">Cyber Café</div></button>
+            <button class="seg-btn" data-seg="universidade" data-action="selectSeg"><div class="seg-ico">🎓</div><div class="seg-lbl">Universidade</div></button>
+            <button class="seg-btn" data-seg="explicacao" data-action="selectSeg"><div class="seg-ico">📚</div><div class="seg-lbl">Explicação</div></button>
+            <button class="seg-btn" data-seg="digitador" data-action="selectSeg"><div class="seg-ico">⌨️</div><div class="seg-lbl">Digitador</div></button>
           </div>
         </div>
         <div class="fg" id="businessNameFg" style="display:none">
@@ -327,7 +327,7 @@
         Isto é diferente da sua comissão de afiliado: clientes que precisam de imprimir podem encontrar o seu negócio directamente pelo mapa, sem precisarem do seu link.
       </div>
       <a id="partnerBridgeLink" href="/parceiros.html" style="display:inline-block;background:#3B82F6;color:#fff;text-decoration:none;font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:10px">Candidatar o meu negócio →</a>
-      <button onclick="dismissPartnerBridge()" style="background:none;border:none;color:#64748B;font-size:12px;font-weight:600;margin-left:8px;cursor:pointer">Já fiz isto</button>
+      <button data-action="dismissPartnerBridge" style="background:none;border:none;color:#64748B;font-size:12px;font-weight:600;margin-left:8px;cursor:pointer">Já fiz isto</button>
     </div>
 
     <!-- TIER PROGRESS -->
@@ -347,12 +347,12 @@
 
     <!-- TABS -->
     <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('overview',this)">📊 Visão Geral</button>
-      <button class="tab-btn" onclick="switchTab('referrals',this)">👥 Referidos</button>
-      <button class="tab-btn" onclick="switchTab('ranking',this)">🏆 Ranking</button>
-      <button class="tab-btn" onclick="switchTab('commissions',this)">💰 Comissões</button>
-      <button class="tab-btn" onclick="switchTab('withdraw',this)">💸 Levantamentos</button>
-      <button class="tab-btn" onclick="switchTab('marketing',this)">🎨 Marketing</button>
+      <button class="tab-btn active" data-tab="overview" data-action="switchTab">📊 Visão Geral</button>
+      <button class="tab-btn" data-tab="referrals" data-action="switchTab">👥 Referidos</button>
+      <button class="tab-btn" data-tab="ranking" data-action="switchTab">🏆 Ranking</button>
+      <button class="tab-btn" data-tab="commissions" data-action="switchTab">💰 Comissões</button>
+      <button class="tab-btn" data-tab="withdraw" data-action="switchTab">💸 Levantamentos</button>
+      <button class="tab-btn" data-tab="marketing" data-action="switchTab">🎨 Marketing</button>
     </div>
 
     <!-- TAB: VISÃO GERAL -->
@@ -387,19 +387,19 @@
         <div class="card-title">🔗 O Seu Link de Partilha</div>
         <div class="link-box">
           <span class="link-text" id="affLink">—</span>
-          <button class="btn btn-copy" onclick="copyLink()">Copiar</button>
+          <button class="btn btn-copy" data-action="copyLink">Copiar</button>
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
           <span class="code-pill" id="affCodeDisp">—</span>
           <span style="font-size:11px;color:var(--muted)">Taxa de conversão: <strong id="statRate">—</strong>%</span>
         </div>
         <div class="share-row">
-          <button class="btn btn-wa" onclick="shareWhatsApp()">
+          <button class="btn btn-wa" data-action="shareWhatsApp">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
             WhatsApp
           </button>
-          <button class="btn btn-fb" onclick="shareFacebook()">📘 Facebook</button>
-          <button class="btn btn-share" onclick="shareNative()">📤 Partilhar</button>
+          <button class="btn btn-fb" data-action="shareFacebook">📘 Facebook</button>
+          <button class="btn btn-share" data-action="shareNative">📤 Partilhar</button>
         </div>
       </div>
 
@@ -503,7 +503,7 @@
           <label>Número M-Pesa</label>
           <input type="tel" id="withdrawPhone" class="inp" placeholder="258 8X XXX XXXX" id="affMpesaSaved"/>
         </div>
-        <button class="btn btn-green" id="btnWithdraw" onclick="submitWithdraw()" style="width:100%;justify-content:center;padding:12px">
+        <button class="btn btn-green" id="btnWithdraw" data-action="submitWithdraw" style="width:100%;justify-content:center;padding:12px">
           Pedir Levantamento
         </button>
         <div class="msg-box" id="withdrawMsg"></div>
@@ -556,6 +556,28 @@ function escapeHtml(str) {
   div.textContent = String(str ?? '');
   return div.innerHTML;
 }
+
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..." inline — mesma lógica usada em AdminApp.js. As
+// funções window.* mantêm-se (algum código antigo ainda pode chamá-las
+// directamente), mas os botões do HTML passam a usar data-action.
+const _affActionHandlers = {
+  selectSeg:            (d, el) => window.selectSeg(el),
+  dismissPartnerBridge: ()      => window.dismissPartnerBridge(),
+  switchTab:            (d, el) => window.switchTab(d.tab, el),
+  copyLink:             ()      => window.copyLink(),
+  shareWhatsApp:        ()      => window.shareWhatsApp(),
+  shareFacebook:        ()      => window.shareFacebook(),
+  shareNative:          ()      => window.shareNative(),
+  submitWithdraw:       ()      => window.submitWithdraw(),
+  downloadMaterial:     (d)     => window.downloadMaterial(Number(d.index), d.filename),
+};
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const handler = _affActionHandlers[el.dataset.action];
+  if (handler) handler(el.dataset, el);
+});
 
 let _token = null;
 let _affLink = '';
@@ -901,7 +923,7 @@ window.selectSeg = function(el) {
 // ── PARTILHA ─────────────────────────────────────────────────────────────────
 window.copyLink = function() {
   navigator.clipboard.writeText(_affLink).then(() => {
-    const btn = document.querySelector('[onclick="copyLink()"]');
+    const btn = document.querySelector('[data-action="copyLink"]');
     if (btn) { btn.textContent = '✅ Copiado!'; setTimeout(() => { btn.textContent = 'Copiar'; }, 2000); }
   });
 };
@@ -997,7 +1019,7 @@ async function loadMarketingMaterials() {
           <div style="font-weight:800;font-size:13px;color:var(--ink,#0f172a);margin-bottom:2px">${m.title}</div>
           ${m.description ? `<div style="font-size:11px;color:var(--muted,#64748b);margin-bottom:8px">${m.description}</div>` : ''}
           ${m.media_type === 'image'
-            ? `<button class="btn btn-green" style="width:100%;justify-content:center;padding:9px;font-size:12px" onclick="downloadMaterial(${i}, '${(m.title||'material').replace(/[^a-z0-9]+/gi,'-')}')">⬇️ Descarregar</button>`
+            ? `<button class="btn btn-green" style="width:100%;justify-content:center;padding:9px;font-size:12px" data-action="downloadMaterial" data-index="${i}" data-filename="${escapeHtml((m.title||'material').replace(/[^a-z0-9]+/gi,'-'))}">⬇️ Descarregar</button>`
             : `<a class="btn btn-green" style="width:100%;justify-content:center;padding:9px;font-size:12px;text-decoration:none" href="${m.external_url}" target="_blank" rel="noopener">🔗 Abrir</a>`}
         </div>
       </div>
