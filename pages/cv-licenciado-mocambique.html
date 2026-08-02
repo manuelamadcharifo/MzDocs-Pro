@@ -220,15 +220,15 @@
 
     <h2>Perguntas Frequentes</h2>
     <div class="faq-item">
-      <div class="faq-q" onclick="toggleFaq(this)">Como fazer um CV sem experiência profissional?</div>
+      <div class="faq-q">Como fazer um CV sem experiência profissional?</div>
       <div class="faq-a">Destaque os estágios académicos, voluntariado, projectos universitários e extracurriculares. Experiência de estágio em qualquer entidade pública ou privada reconhecida vale muito.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="toggleFaq(this)">Devo colocar a média de licenciatura?</div>
+      <div class="faq-q">Devo colocar a média de licenciatura?</div>
       <div class="faq-a">Sim, se for 14 ou mais (em 20) ou equivalente a "Bom" / "Muito Bom". Médias acima de 15 são um diferenciador importante para recém-licenciados.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="toggleFaq(this)">Qual a diferença entre CV para empresa privada e para função pública?</div>
+      <div class="faq-q">Qual a diferença entre CV para empresa privada e para função pública?</div>
       <div class="faq-a">Para a função pública, normalmente é pedido um "requerimento" formal além do CV. O CV segue o mesmo formato, mas inclui o NUIT e frequentemente acompanha certidões e diplomas originais ou autenticados.</div>
     </div>
 
@@ -263,7 +263,10 @@
   <div>© 2026 MzDocs Pro — Documentos profissionais para Moçambique</div>
   <div><a href="/" data-track-link>Início</a> · <a href="/pages/">Guias</a> · <a href="/legal.html">Privacidade</a></div>
 </footer>
-<script>function toggleFaq(el){el.classList.toggle('open');el.nextElementSibling.classList.toggle('open');}</script>
+<script>
+function toggleFaq(el){el.classList.toggle('open');el.nextElementSibling.classList.toggle('open');}
+document.querySelectorAll('.faq-q').forEach(function(el){ el.addEventListener('click', function(){ toggleFaq(el); }); });
+</script>
 
 <!-- NOVO: atribuição de origem (blog/pesquisa orgânica/social) — esta
      página é HTML estático, sem o MarketingTracker.js da SPA. Sem isto,
