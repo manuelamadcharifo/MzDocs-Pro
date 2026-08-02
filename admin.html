@@ -1369,6 +1369,98 @@
           </form>
         </div>
 
+        <!-- NOVO (pedido do fundador — controlo máximo sobre créditos, comissões
+             de afiliados e royalties de templates): usa a mesma tabela
+             system_settings e o mesmo endpoint genérico /api/admin/settings —
+             nenhuma alteração de backend foi necessária para estes campos, só
+             estavam por expor na interface. -->
+        <div class="settings-card">
+          <h3>🎁 Créditos Bónus / Promoções</h3>
+          <p style="font-size:.8rem;color:#64748b;margin-bottom:10px;">Dê créditos extra pontualmente, sem mexer no valor base de créditos grátis acima.</p>
+          <form id="bonusCreditsForm">
+            <div class="form-row">
+              <label>Promoção de créditos bónus activa?</label>
+              <select id="cfg_bonus_credits_enabled">
+                <option value="false">Não</option>
+                <option value="true">Sim</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Créditos bónus a atribuir</label>
+              <input type="number" id="cfg_bonus_credits_amount" min="0"/>
+            </div>
+            <div class="form-row">
+              <label>Validade dos créditos bónus (dias)</label>
+              <input type="number" id="cfg_bonus_credits_expiry_days" min="1"/>
+            </div>
+            <p style="font-size:.72rem;color:#94a3b8;margin:2px 0 10px;">
+              ⚠️ Nota honesta: a validade acima ainda não é aplicada automaticamente
+              (nenhum crédito — grátis, bónus ou comprado — expira sozinho no sistema
+              hoje). Este campo já fica guardado para quando essa parte for construída;
+              por agora serve só de registo da regra pretendida.
+            </p>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem"
+              data-action="saveBonusCreditsSettings">💾 Guardar Créditos Bónus</button>
+          </form>
+        </div>
+
+        <div class="settings-card">
+          <h3>🤝 Afiliados — Comissões e Regras</h3>
+          <form id="affiliateRulesForm">
+            <div class="form-row">
+              <label>Levantamento mínimo (MZN)</label>
+              <input type="number" id="cfg_aff_min_withdraw" min="0"/>
+            </div>
+            <div class="form-row">
+              <label>Comissão — Starter/Básico (%)</label>
+              <input type="number" id="cfg_aff_rate_basico" min="0" max="100" step="0.1"/>
+            </div>
+            <div class="form-row">
+              <label>Comissão — Pro (%)</label>
+              <input type="number" id="cfg_aff_rate_pro" min="0" max="100" step="0.1"/>
+            </div>
+            <div class="form-row">
+              <label>Comissão — Empresa (%)</label>
+              <input type="number" id="cfg_aff_rate_empresa" min="0" max="100" step="0.1"/>
+            </div>
+            <div class="form-row">
+              <label>Bónus segmento Papelaria (%)</label>
+              <input type="number" id="cfg_aff_bonus_papelaria" min="0" max="100" step="0.1"/>
+            </div>
+            <div class="form-row">
+              <label>Bónus segmento Cyber Café (%)</label>
+              <input type="number" id="cfg_aff_bonus_cyber" min="0" max="100" step="0.1"/>
+            </div>
+            <div class="form-row">
+              <label>Bónus segmento Universidade (%)</label>
+              <input type="number" id="cfg_aff_bonus_universidade" min="0" max="100" step="0.1"/>
+            </div>
+            <div class="form-row">
+              <label>Créditos por registo via link de afiliado</label>
+              <input type="number" id="cfg_aff_bonus_signup" min="0"/>
+            </div>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem"
+              data-action="saveAffiliateRulesSettings">💾 Guardar Regras de Afiliados</button>
+          </form>
+        </div>
+
+        <div class="settings-card">
+          <h3>🛍️ Templates — Royalties de Criadores</h3>
+          <form id="templateRulesForm">
+            <div class="form-row">
+              <label>Levantamento mínimo (MZN)</label>
+              <input type="number" id="cfg_tpl_min_withdraw" min="0"/>
+            </div>
+            <p style="font-size:.72rem;color:#94a3b8;margin:2px 0 10px;">
+              A repartição da venda (60%–70% para o criador) é uma regra fixa de
+              negócio validada por documento no acto de aprovação — não é editável
+              aqui de propósito, para nunca sair da faixa combinada.
+            </p>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem"
+              data-action="saveTemplateRulesSettings">💾 Guardar Regras de Templates</button>
+          </form>
+        </div>
+
         <div class="settings-card">
           <h3>📦 Preços dos Pacotes</h3>
           <form id="pricingForm">
