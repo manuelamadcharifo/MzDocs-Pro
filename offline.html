@@ -23,8 +23,15 @@
     <span class="icon">📡</span>
     <h1>Sem Ligação à Internet</h1>
     <p>Não foi possível carregar a página.<br/>Verifique a sua ligação de dados e tente novamente.</p>
-    <button onclick="location.reload()">🔄 Tentar Novamente</button>
+    <button id="btnRetry">🔄 Tentar Novamente</button>
     <p class="hint">O MzDocs Pro funciona offline para páginas já visitadas.</p>
   </div>
+  <script>
+    // CSP (auditoria Ago/2026): este ficheiro não tinha nenhum <script> —
+    // era o único onclick inline que restava no projecto. Em vez de criar
+    // todo o padrão data-action só para um botão, um listener directo por
+    // id é mais simples e igualmente livre de inline scripts.
+    document.getElementById('btnRetry').addEventListener('click', () => location.reload());
+  </script>
 </body>
 </html>
