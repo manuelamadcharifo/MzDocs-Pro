@@ -226,14 +226,19 @@
 <header class="hdr">
   <div class="hdr-l">
     <a href="/" style="display:flex;align-items:center;text-decoration:none;gap:6px;">
-      <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-      <div style="display:none;align-items:center;gap:6px">
+      <img id="siteLogo" src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;">
+      <div id="siteLogoFallback" style="display:none;align-items:center;gap:6px">
         <div class="logo-badge">📄</div>
         <div class="logo-text"><span class="lt-name">MzDocs</span><span class="lt-pro">Pro</span></div>
       </div>
     </a>
   </div>
+  <script>
+  document.getElementById('siteLogo').addEventListener('error', function(){
+    this.style.display = 'none';
+    document.getElementById('siteLogoFallback').style.display = 'flex';
+  });
+  </script>
   <div class="hdr-r">
     <button class="btn-auth" id="authBtn">🔐 Entrar</button>
     <div class="user-area" id="userArea">
