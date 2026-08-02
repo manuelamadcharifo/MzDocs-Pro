@@ -8,6 +8,17 @@
 //  Preservado: toda a lógica existente — inalterada
 
 import { Storage } from './utils/Storage.js';
+
+// CSP (auditoria Ago/2026): fallback do avatar do utilizador movido de
+// onerror inline para listener delegado. 'error' em <img> não faz bubble,
+// por isso precisa de capture:true para ser apanhado num único listener
+// no document (em vez de um por cada avatar renderizado).
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (img && img.classList && img.classList.contains('avatar-img')) {
+    img.parentElement.textContent = img.dataset.fallbackInitials || '';
+  }
+}, true);
 import { initHome } from './homeController.js';
 import { CreditModel, DocumentModel } from './models/Models.js';
 import { DocumentController } from './controllers/DocumentController.js';
@@ -386,7 +397,7 @@ function _setupAuthHeader() {
       document.getElementById('btnProfileQuick')?.remove();
 
       const avatarInner = avatarUrl
-        ? `<img src="${avatarUrl}" alt="${name}" onerror="this.parentElement.textContent='${initials}'">`
+        ? `<img class="avatar-img" src="${avatarUrl}" alt="${name}" data-fallback-initials="${initials}">`
         : initials;
 
       // Usar classes CSS do styles.css — sem inline styles
