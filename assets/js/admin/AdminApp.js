@@ -165,6 +165,9 @@ class AdminApp {
         loadTransactionLedger:   () => this._loadTransactionLedger(),
         loadAffiliatePayouts:    () => this._loadAffiliatePayouts(),
         saveSystemSettings:      () => this.saveSystemSettings(),
+        saveBonusCreditsSettings:    () => this.saveBonusCreditsSettings(),
+        saveAffiliateRulesSettings:  () => this.saveAffiliateRulesSettings(),
+        saveTemplateRulesSettings:   () => this.saveTemplateRulesSettings(),
         loadAuditLog:            () => this.loadAuditLog(),
         diagnoseMissingPhones:   () => this.diagnoseMissingPhones(),
         // fixMissingPhones já existe acima (secção Utilizadores)
@@ -2618,6 +2621,27 @@ USING (EXISTS (
             set('cfg_auto_delete_temp_hours',  'auto_delete_temp_hours');
             set('cfg_whatsapp_support',        'whatsapp_support');
 
+            // NOVO: créditos bónus/promoções — mesma fonte (system_settings),
+            // só a exposição na UI é que faltava.
+            set('cfg_bonus_credits_enabled',      'bonus_credits_enabled');
+            set('cfg_bonus_credits_amount',       'bonus_credits_amount');
+            set('cfg_bonus_credits_expiry_days',  'bonus_credits_expiry_days');
+
+            // NOVO: regras de afiliados — já reais e usadas pela função SQL
+            // process_affiliate_commission_v2 (ver migration_v36); só faltava
+            // poder editá-las sem SQL directo.
+            set('cfg_aff_min_withdraw',        'aff_min_withdraw');
+            set('cfg_aff_rate_basico',         'aff_rate_basico');
+            set('cfg_aff_rate_pro',            'aff_rate_pro');
+            set('cfg_aff_rate_empresa',        'aff_rate_empresa');
+            set('cfg_aff_bonus_papelaria',     'aff_bonus_papelaria');
+            set('cfg_aff_bonus_cyber',         'aff_bonus_cyber');
+            set('cfg_aff_bonus_universidade',  'aff_bonus_universidade');
+            set('cfg_aff_bonus_signup',        'aff_bonus_signup');
+
+            // NOVO: royalties de templates
+            set('cfg_tpl_min_withdraw',        'tpl_min_withdraw');
+
             // Populate pricing fields too
             set('pkgStarterCredits', 'pkg_starter_credits');
             set('pkgStarterPrice',   'pkg_starter_price');
@@ -2660,6 +2684,82 @@ USING (EXISTS (
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
             this._notify('✅ Configurações guardadas com sucesso!', 'success');
+        } catch (err) {
+            this._notify('❌ ' + err.message, 'error');
+        }
+    }
+
+    // NOVO: os 3 métodos abaixo seguem exactamente o mesmo padrão de
+    // saveSystemSettings() acima — só mudam os campos recolhidos — porque
+    // todos gravam na mesma tabela genérica system_settings através do
+    // mesmo endpoint /api/admin/settings. Estão em formulários separados
+    // (em vez de tudo dentro de systemSettingsForm) só para organizar
+    // visualmente a Área de Configurações por assunto.
+    async saveBonusCreditsSettings() {
+        const get = id => document.getElementById(id)?.value?.trim() || '';
+        const updates = {
+            bonus_credits_enabled:     get('cfg_bonus_credits_enabled'),
+            bonus_credits_amount:      get('cfg_bonus_credits_amount'),
+            bonus_credits_expiry_days: get('cfg_bonus_credits_expiry_days'),
+        };
+        Object.keys(updates).forEach(k => { if (updates[k] === '') delete updates[k]; });
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/settings', {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body:    JSON.stringify({ updates }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
+            this._notify('✅ Créditos bónus guardados!', 'success');
+        } catch (err) {
+            this._notify('❌ ' + err.message, 'error');
+        }
+    }
+
+    async saveAffiliateRulesSettings() {
+        const get = id => document.getElementById(id)?.value?.trim() || '';
+        const updates = {
+            aff_min_withdraw:       get('cfg_aff_min_withdraw'),
+            aff_rate_basico:        get('cfg_aff_rate_basico'),
+            aff_rate_pro:           get('cfg_aff_rate_pro'),
+            aff_rate_empresa:       get('cfg_aff_rate_empresa'),
+            aff_bonus_papelaria:    get('cfg_aff_bonus_papelaria'),
+            aff_bonus_cyber:        get('cfg_aff_bonus_cyber'),
+            aff_bonus_universidade: get('cfg_aff_bonus_universidade'),
+            aff_bonus_signup:       get('cfg_aff_bonus_signup'),
+        };
+        Object.keys(updates).forEach(k => { if (updates[k] === '') delete updates[k]; });
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/settings', {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body:    JSON.stringify({ updates }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
+            this._notify('✅ Regras de afiliados guardadas!', 'success');
+        } catch (err) {
+            this._notify('❌ ' + err.message, 'error');
+        }
+    }
+
+    async saveTemplateRulesSettings() {
+        const get = id => document.getElementById(id)?.value?.trim() || '';
+        const updates = { tpl_min_withdraw: get('cfg_tpl_min_withdraw') };
+        Object.keys(updates).forEach(k => { if (updates[k] === '') delete updates[k]; });
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/settings', {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body:    JSON.stringify({ updates }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
+            this._notify('✅ Regras de templates guardadas!', 'success');
         } catch (err) {
             this._notify('❌ ' + err.message, 'error');
         }
