@@ -1,14 +1,13 @@
-# MzDocs Pro — v31
+# MzDocs Pro — v32
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
 
-> 📌 **Nota de versão (actual):** ronda de protecção de dados pessoais (LPD/RGPD) — consentimento
-> explícito no registo (`consent_logs`), direito ao esquecimento self-service para qualquer conta
-> (não só `avulso`), remoção de uma password guardada em texto simples (`profiles.temp_password`),
-> correcção da citação legal em `legal.html`, e uma segunda camada de mascaragem de dados pessoais
-> antes do envio a fornecedores de IA — `assets/js/services/prompts/piiShield.js`, do lado do
-> browser, cobre nome/morada/papéis nomeados por campo do formulário, complementando a mascaragem
-> por padrão de texto já existente (`piiRedaction.js`, v30). Ver secção "Alterações — v31" abaixo.
+> 📌 **Nota de versão (actual):** auditoria de UI/UX (6 pontos de descoberta/conversão, todos
+> resolvidos) + correcção de três bugs relatados directamente em produção: crédito grátis/de
+> afiliado a ficar preso a 0 até reload manual, a app a recarregar-se sozinha ao detectar um
+> deploy novo (agora só avisa, nunca força), e um `SyntaxError` em `api/admin/index.js`
+> (função duplicada) que tirava **toda** a API de admin do ar. Ver secção "Alterações — v32"
+> abaixo para o detalhe completo.
 
 > 📌 **Nota de versão (Agosto/2026):** ronda de auditoria de segurança ponto-a-ponto.
 > Confirmou-se que RLS, chaves, comprovativos privados, validação do painel admin, sanitização
@@ -518,9 +517,10 @@ migration_v45_partner_ratings_antiabuso.sql
 --     Não é o mesmo número de migração aplicado duas vezes: são dois ficheiros
 --     SQL distintos que, por lapso, ficaram com o mesmo número de versão no
 --     nome. Correm ambos sem conflito (nomes de ficheiro diferentes), mas
---     RECOMENDA-SE renomear um deles (ex: para v48) antes da próxima ronda de
---     migrações, para não assumir por engano que "já correu a v46" tendo
---     corrido apenas um dos dois.
+--     RECOMENDA-SE renomear um deles (ex: para v51 — v48/v49/v50 já estão
+--     ocupados desde esta ronda) antes da próxima ronda de migrações, para
+--     não assumir por engano que "já correu a v46" tendo corrido apenas um
+--     dos dois.
 migration_v46_partner_access_code.sql
 
 -- 43. Corrige violação de chave estrangeira no registo de documentos
@@ -532,6 +532,26 @@ migration_v46_fix_document_insert_fk_violation.sql
 --     = nº de inscrição na Ordem dos Advogados de Moçambique, conferido
 --     manualmente pelo admin antes de aprovar; nunca há validação automática)
 migration_v47_partners_advogados.sql
+
+-- 45. LPD/RGPD: consent_logs (prova de consentimento), colunas
+--     consent_terms_at/version em profiles, purge_expired_documents()
+--     (âmbito realista: só limpa consent_logs >5 anos e registos órfãos —
+--     nunca o arquivo de documentos dos utilizadores) + remediação:
+--     limpa profiles.temp_password já gravado em texto simples (ver v50)
+--     ⚠️ Havia dois ficheiros "v48" neste repositório (um quase cópia do
+--     outro, com uma secção extra de remediação) — consolidados num único
+--     ficheiro nesta ronda; se já tiver corrido o antigo "-1" antes desta
+--     data, confirme se a secção 5 (remoção de temp_password) já foi
+--     aplicada antes de correr este ficheiro de novo.
+migration_v48_lpd_compliance.sql
+
+-- 46. CORRECÇÃO DE SEGURANÇA: bucket de storage "affiliate-receipts"
+--     (comprovativos de pagamento M-Pesa) passa de público para privado,
+--     acesso só via signed URL (5 min)
+migration_v49_secure_affiliate_receipts.sql
+
+-- 47. RLS reforçada nas colunas sensíveis de `profiles` (BI, NUIT, morada)
+migration_v50_protect_sensitive_profile_columns.sql
 ```
 
 > ⚠️ Existem ainda vários ficheiros avulsos na pasta `supabase/` (`EMERGENCIA_*`,
@@ -1274,17 +1294,9 @@ fornecedor no código — `aiProviderRegistry.js` não tem essa distinção.
 |------------|--------|------|
 | `package.json` | `11.0.0` | — |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy | formato `v<sha-git-7-chars>-<YYYYMMDD>`, escrito por `scripts/inject-version.js` — o valor no repositório é só um placeholder |
-| `README.md` | `v31` (esta edição) | v30 documentou a auditoria de segurança de Agosto/2026; **v31** documenta a ronda de protecção de dados pessoais (LPD/RGPD) — ver "Alterações — v31" |
+| `README.md` | `v32` (esta edição) | v31 documentou a ronda LPD/RGPD; **v32** documenta a auditoria de UI/UX (3.1–3.6) + bugs de crédito preso/reload forçado/API de admin fora do ar — ver "Alterações — v32" |
 | `api/_lib/piiRedaction.js` | `v1.0` | NOVO (v30): mascara BI/NUIT/telefone/e-mail antes de qualquer chamada a fornecedor de IA |
 | `assets/js/services/prompts/piiShield.js` | `v1.0` | NOVO (v31): mascara nome/morada/papéis nomeados por campo do formulário — complementa `piiRedaction.js` |
 | `assets/js/services/Services.js` | — | v31: `_buildPrompt()` mascara `data` via `piiShield.js` antes de montar o prompt; `generate()`/`previewDocument()` repõem os valores reais via `_unmaskResult()` |
 | `api/generate-document.js` | `v2.2` | v30: integra `piiRedaction.js` antes/depois da chamada aos providers |
-| `api/convert.js` | `v1.1` | v30: CORS restrito a `SITE_URL` + verificação de magic bytes (era sem versão explícita) |
-| `api/extract-template.js` | `v2.1` | v30: CORS restrito a `SITE_URL` |
-| `api/partners.js` | `v2.1` | v30: CORS restrito a `SITE_URL` |
-| `assets/js/admin/AdminApp.js` | **v27** | **NOVO:** gestão completa do Kit de Marketing (materiais dos afiliados) — ver "Alterações — v27" · v31: `showTempCredentials`/`_sendCredentialsWA` passam a chamar `regenerate-temp-password` em vez de ler `temp_password` directamente |
-| `assets/js/services/MarketingTracker.js` | v26 | cliente do Marketing Analytics (Fases 1–5) |
-| `api/_lib/webpush.js` | v26 | envio de notificações push via VAPID |
-| `index.html` | v26 | banner `#sandboxBar` removido (código morto) |
-| `perfil.html` | v25 | página de conta com Créditos/Arquivo em modal embutido (sem navegar para "/") · v31: botão de eliminação definitiva de conta (dupla confirmação) |
-| `templates.html` | v25 | modais Resultado/Créditos/Histórico adicionados; `openDetail()` corrigido (texto antes do preview); listener de clique delega
+| `api/convert.js` | `v1.1` | v30: CORS restrito a `SITE_URL` + verificação de magic bytes (era sem versão explícita
