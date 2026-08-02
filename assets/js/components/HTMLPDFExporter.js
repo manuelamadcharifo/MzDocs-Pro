@@ -185,16 +185,21 @@ ${css}
 ${metaBlockHTML}${bodyHTML}
 
 <!-- Botão apenas no ecrã — não imprime -->
-<div class="no-print" style="
+<div class="no-print" id="btnSavePdf1" style="
   position:fixed;bottom:20px;right:20px;
   background:#1e3a5f;color:#fff;
   padding:12px 20px;border-radius:24px;
   font-family:sans-serif;font-size:14px;font-weight:700;
   cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);
   z-index:9999;
-" onclick="window.print()">🖨️ Guardar como PDF</div>
+">🖨️ Guardar como PDF</div>
 
 <script>
+// CSP: botão movido de onclick inline para listener via id (consistente
+// com o resto do projecto), embora esta janela de impressão (gerada por
+// document.write, sem resposta HTTP própria) não esteja sujeita ao CSP
+// do site principal.
+document.getElementById('btnSavePdf1').addEventListener('click', () => window.print());
 // Auto-print após render completo (com delay para estilos aplicarem)
 window.addEventListener('load', function() {
   // Em mobile, não forçar auto-print — o utilizador toca no botão
@@ -303,8 +308,9 @@ ${safeCss}
 </head>
 <body>
 ${bodyHTML}
-<div class="no-print" style="position:fixed;bottom:20px;right:20px;background:#1e3a5f;color:#fff;padding:12px 20px;border-radius:24px;font-family:sans-serif;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:9999;" onclick="window.print()">🖨️ Guardar como PDF</div>
+<div class="no-print" id="btnSavePdf2" style="position:fixed;bottom:20px;right:20px;background:#1e3a5f;color:#fff;padding:12px 20px;border-radius:24px;font-family:sans-serif;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:9999;">🖨️ Guardar como PDF</div>
 <script>
+document.getElementById('btnSavePdf2').addEventListener('click', () => window.print());
 window.addEventListener('load', function() {
   const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
   if (!isMobile) { setTimeout(function() { window.print(); }, 400); }
