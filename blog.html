@@ -85,7 +85,7 @@
 </head>
 <body>
 <header class="site-header">
-  <a class="site-logo" href="/" data-track-link><img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+  <a class="site-logo" href="/" data-track-link><img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" data-action="hideAndShowNext">
     <div style="display:none;align-items:center;gap:8px">
       <div class="logo-badge">📄</div>
       <span class="logo-text">MzDocs</span>
@@ -108,7 +108,7 @@
 
   <div class="search-box">
     <span style="font-size:18px;color:var(--muted)">🔍</span>
-    <input type="text" id="searchInput" placeholder="Pesquisar guias... ex: CV, requerimento, procuração" oninput="filterArticles(this.value)"/>
+    <input type="text" id="searchInput" placeholder="Pesquisar guias... ex: CV, requerimento, procuração" data-input-action="filterArticles"/>
   </div>
   <div class="no-results" id="noResults">😕 Nenhum guia encontrado. <a href="/" style="color:var(--blue)" data-track-link>Gere o documento directamente aqui.</a></div>
 
@@ -280,6 +280,22 @@
   <div><a href="/" data-track-link>Início</a> · <a href="/templates.html">Templates</a> · <a href="/legal.html">Privacidade</a></div>
 </footer>
 <script>
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..."/oninput="..." inline — mesma lógica usada em
+// AdminApp.js. "error" em <img> não faz bubbling, por isso usa-se a fase de
+// captura (terceiro argumento "true").
+document.addEventListener('error', function (e) {
+  var el = e.target;
+  if (el.dataset && el.dataset.action === 'hideAndShowNext') {
+    el.style.display = 'none';
+    if (el.nextElementSibling) el.nextElementSibling.style.display = 'flex';
+  }
+}, true);
+document.addEventListener('input', function (e) {
+  var el = e.target;
+  if (el.dataset && el.dataset.inputAction === 'filterArticles') filterArticles(el.value);
+});
+
 (function () {
   // Citações do dia — a mesma para todos os visitantes num dado dia, muda
   // automaticamente à meia-noite (baseado no dia do ano, não em sorteio).
