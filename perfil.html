@@ -122,7 +122,7 @@
 
 <header class="hdr">
   <a href="/" class="hdr-logo">
-    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" data-action="hideAndShowNext">
     <div style="display:none;align-items:center;gap:8px">
       <div class="hdr-badge">📄</div>
       <span class="hdr-name">MzDocs Pro</span>
@@ -391,6 +391,21 @@
 <script type="module">
 import { authManager } from '/assets/js/auth/AuthManager.js';
 import { escapeHtml } from '/assets/js/utils/Sanitizer.js';
+
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..."/onerror="..." inline — mesma lógica usada em
+// AdminApp.js. "error" em <img> não faz bubbling, por isso usa-se a fase de
+// captura (terceiro argumento "true").
+document.addEventListener('error', (e) => {
+  const el = e.target;
+  if (!el.dataset) return;
+  if (el.dataset.action === 'hideAndShowNext') {
+    el.style.display = 'none';
+    if (el.nextElementSibling) el.nextElementSibling.style.display = 'flex';
+  } else if (el.dataset.action === 'fallbackInitials') {
+    el.parentElement.textContent = el.dataset.fallback || '';
+  }
+}, true);
 import { CreditModel } from '/assets/js/models/Models.js';
 import { PaymentController, syncPackagesV8FromConfig, renderPackageCards } from '/assets/js/controllers/PaymentController.js';
 import { updatePackagesFromConfig } from '/assets/js/services/PaymentService.js';
@@ -451,7 +466,7 @@ function renderIdentity(user, profile) {
     // atributo onerror e injectar JavaScript arbitrário.
     const safeName = escapeHtml(name);
     const safeInitials = escapeHtml(initials(name));
-    avatarEl.innerHTML = `<img src="${profile.avatar_url}" alt="${safeName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.parentElement.textContent='${safeInitials}'">`;
+    avatarEl.innerHTML = `<img src="${profile.avatar_url}" alt="${safeName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" data-action="fallbackInitials" data-fallback="${safeInitials}">`;
   } else {
     avatarEl.textContent = initials(name);
   }

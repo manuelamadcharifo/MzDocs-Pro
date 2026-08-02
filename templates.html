@@ -343,9 +343,9 @@
         <div style="font-size:11.5px;font-weight:700;color:var(--dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">🔗 Link de Partilha</div>
         <div class="tpl-share-box">
           <input type="text" id="detailShareLink" readonly/>
-          <button onclick="copyShareLink()">Copiar</button>
+          <button data-action="copyShareLink">Copiar</button>
         </div>
-        <button onclick="regenerateToken()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;margin-top:4px;font-family:inherit">🔄 Gerar novo link</button>
+        <button data-action="regenerateToken" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;margin-top:4px;font-family:inherit">🔄 Gerar novo link</button>
       </div>
     </div>
     <div class="tpl-detail-actions">
@@ -377,11 +377,11 @@
       <div class="tpl-field">
         <label>Tipo de Template</label>
         <div class="tpl-type-radios" id="submitTypeRadios">
-          <div class="tpl-type-radio selected" data-val="community" onclick="selectType('community',this)">
+          <div class="tpl-type-radio selected" data-val="community" data-action="selectType">
             <h4>👥 Comunidade</h4>
             <p>Público, sujeito a aprovação</p>
           </div>
-          <div class="tpl-type-radio" data-val="private" onclick="selectType('private',this)">
+          <div class="tpl-type-radio" data-val="private" data-action="selectType">
             <h4>🔒 Privado</h4>
             <p>Só você acede (ou link)</p>
           </div>
@@ -459,7 +459,7 @@
       </div>
 
       <button class="btn-tpl-submit-form" id="btnSubmitForm">🚀 Submeter Template</button>
-      <button class="btn-tpl-cancel" id="btnCancelSubmit" onclick="closeSubmit()">Cancelar</button>
+      <button class="btn-tpl-cancel" id="btnCancelSubmit" data-action="closeSubmit">Cancelar</button>
     </div>
   </div>
 </div>
@@ -607,6 +607,23 @@
 import { renderA4Pages, markdownToHtml, A4_PAGES_CONTAINER_CSS } from '/assets/js/utils/A4Renderer.js';
 import { SAMPLE_DATA, SAMPLE_MARKDOWN, fillTemplate, getSampleData } from '/assets/js/marketplace/SampleData.js';
 import { escapeHtml, sanitizeHtml } from '/assets/js/utils/Sanitizer.js';
+
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..." inline — mesma lógica usada em AdminApp.js.
+const _tplActionHandlers = {
+  copyShareLink:    () => window.copyShareLink(),
+  regenerateToken:  () => window.regenerateToken(),
+  selectType:       (d, el) => window.selectType(d.val, el),
+  closeSubmit:      () => closeSubmit(),
+  copyPublicLink:   (d) => navigator.clipboard.writeText(d.link).then(() => window.tplNotify('Copiado!', 'success')),
+  deleteMine:       (d, el) => window.deleteMine(d.id, el.closest('.tpl-mine-card')),
+};
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const handler = _tplActionHandlers[el.dataset.action];
+  if (handler) handler(el.dataset, el);
+});
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API    = '/api/templates';
@@ -1053,24 +1070,24 @@ async function loadMine() {
     <div class="tpl-mine-card" style="margin-bottom:10px">
       <div class="tpl-mine-ico">${svcIco[t.service_type] || '📄'}</div>
       <div class="tpl-mine-info">
-        <div class="tpl-mine-name">${t.template_name}</div>
-        <div class="tpl-mine-meta">${t.service_type} · ${new Date(t.created_at).toLocaleDateString('pt-MZ')}</div>
+        <div class="tpl-mine-name">${escapeHtml(t.template_name)}</div>
+        <div class="tpl-mine-meta">${escapeHtml(t.service_type)} · ${new Date(t.created_at).toLocaleDateString('pt-MZ')}</div>
         <span class="tpl-mine-status ${t.status}">${
           t.status === 'pending'  ? '⏳ A aguardar aprovação' :
           t.status === 'approved' ? '✅ Aprovado' : '❌ Rejeitado'
         }</span>
-        ${t.status === 'rejected' && t.rejection_note ? `<div style="font-size:11px;color:#EF4444;margin-top:4px">Motivo: ${t.rejection_note}</div>` : ''}
+        ${t.status === 'rejected' && t.rejection_note ? `<div style="font-size:11px;color:#EF4444;margin-top:4px">Motivo: ${escapeHtml(t.rejection_note)}</div>` : ''}
         ${t.use_count ? `<div style="font-size:11px;color:var(--dim);margin-top:3px">📄 ${t.use_count} usos</div>` : ''}
         ${t.template_type === 'private' && t.share_token ? `
           <div style="margin-top:6px">
             <div style="font-size:11px;color:var(--dim);margin-bottom:3px">🔗 Link privado:</div>
             <div class="tpl-share-box" style="margin:0">
               <input type="text" value="${SITE}/templates?token=${t.share_token}" readonly style="font-size:11px"/>
-              <button onclick="navigator.clipboard.writeText('${SITE}/templates?token=${t.share_token}').then(()=>window.tplNotify('Copiado!','success'))">Copiar</button>
+              <button data-action="copyPublicLink" data-link="${escapeHtml(`${SITE}/templates?token=${t.share_token}`)}">Copiar</button>
             </div>
           </div>` : ''}
         <div class="tpl-mine-actions">
-          <button class="tpl-mine-btn danger" onclick="deleteMine('${t.id}',this.closest('.tpl-mine-card'))">🗑️ Apagar</button>
+          <button class="tpl-mine-btn danger" data-action="deleteMine" data-id="${escapeHtml(t.id)}">🗑️ Apagar</button>
         </div>
       </div>
     </div>`).join('');

@@ -100,7 +100,7 @@
 <!-- HEADER -->
 <header class="hdr">
   <a href="/" class="hdr-logo">
-    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" data-action="hideAndShowNext">
     <div style="display:none;align-items:center;gap:8px">
       <div class="hdr-badge">📄</div>
       <div class="hdr-name">Mz<span>Docs</span> Pro</div>
@@ -194,11 +194,11 @@
 
     <!-- NOVO — tipo de parceiro -->
     <div class="type-toggle" id="typeToggle">
-      <div class="type-opt active" data-type="papelaria" onclick="selectType('papelaria')">
+      <div class="type-opt active" data-type="papelaria" data-action="selectType">
         <span class="type-opt-ico">🏪</span>
         <span class="type-opt-lbl">Papelaria / Gráfica</span>
       </div>
-      <div class="type-opt" data-type="advogado" onclick="selectType('advogado')">
+      <div class="type-opt" data-type="advogado" data-action="selectType">
         <span class="type-opt-ico">⚖️</span>
         <span class="type-opt-lbl">Advogado(a)</span>
       </div>
@@ -252,7 +252,7 @@
     <!-- LOCALIZAÇÃO GPS -->
     <div class="fg">
       <label>Localização GPS *</label>
-      <button type="button" class="loc-btn" id="btnGPS" onclick="getGPS()">
+      <button type="button" class="loc-btn" id="btnGPS" data-action="getGPS">
         📍 Obter localização actual
       </button>
       <input type="hidden" id="fLat"/>
@@ -339,7 +339,7 @@
       <input type="text" id="fHours" placeholder="Ex: Seg–Sex 08h–18h, Sáb 08h–13h" maxlength="100"/>
     </div>
 
-    <button class="btn-submit" id="btnSubmit" onclick="submitForm()">
+    <button class="btn-submit" id="btnSubmit" data-action="submitForm">
       🚀 Enviar Candidatura
     </button>
     <div class="msg" id="formMsg"></div>
@@ -360,6 +360,28 @@
 </footer>
 
 <script>
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..." inline — mesma lógica usada em AdminApp.js.
+const _parceirosActionHandlers = {
+  selectType:      (d, el) => selectType(el.dataset.type),
+  getGPS:          () => getGPS(),
+  submitForm:      () => submitForm(),
+  hideAndShowNext: (d, el) => { el.style.display = 'none'; if (el.nextElementSibling) el.nextElementSibling.style.display = 'flex'; },
+};
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const handler = _parceirosActionHandlers[el.dataset.action];
+  if (handler) handler(el.dataset, el);
+});
+document.addEventListener('error', (e) => {
+  const el = e.target;
+  if (el.dataset && el.dataset.action === 'hideAndShowNext') {
+    el.style.display = 'none';
+    if (el.nextElementSibling) el.nextElementSibling.style.display = 'flex';
+  }
+}, true); // captura, já que "error" em <img> não faz bubbling
+
 // NOVO: pré-preenche a partir de afiliado.html (ver "ponte" na área de
 // Afiliados) — quem já deu o nome do negócio e o número de M-Pesa lá não
 // devia ter de os escrever outra vez aqui.

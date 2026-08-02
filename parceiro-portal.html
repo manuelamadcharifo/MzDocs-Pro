@@ -79,7 +79,7 @@
       <div class="hdr-name">Mz<span>Docs</span> Pro</div>
     </div>
   </a>
-  <button class="btn-back" id="btnLogout" style="display:none" onclick="doLogout()">🚪 Sair</button>
+  <button class="btn-back" id="btnLogout" style="display:none" data-action="doLogout">🚪 Sair</button>
 </header>
 
 <div class="wrap">
@@ -98,7 +98,7 @@
         <label>Código de acesso (6 dígitos)</label>
         <input class="inp" type="text" id="lCode" placeholder="000000" maxlength="6" inputmode="numeric"/>
       </div>
-      <button class="btn btn-primary" id="btnLogin" onclick="doLogin()">Entrar</button>
+      <button class="btn btn-primary" id="btnLogin" data-action="doLogin">Entrar</button>
       <div class="msg" id="loginMsg"></div>
       <div class="hint">Ainda não é parceira? <a href="/parceiros.html">Candidate-se aqui</a>. Perdeu o código? Contacte o suporte MzDocs.</div>
     </div>
@@ -116,7 +116,7 @@
           <div class="toggle-row-desc">Desligue temporariamente se estiver de férias ou sem stock.</div>
         </div>
         <label class="switch">
-          <input type="checkbox" id="tActive" onchange="toggleActive()"/>
+          <input type="checkbox" id="tActive" data-change-action="toggleActive"/>
           <span class="slider"></span>
         </label>
       </div>
@@ -128,7 +128,7 @@
         <label>Morada</label>
         <input class="inp" type="text" id="pAddress" placeholder="Rua, bairro, referência"/>
       </div>
-      <button class="loc-btn" id="btnGPS" onclick="getGPS()">📍 Actualizar a minha localização actual</button>
+      <button class="loc-btn" id="btnGPS" data-action="getGPS">📍 Actualizar a minha localização actual</button>
       <div class="fg">
         <label>Horário de funcionamento</label>
         <input class="inp" type="text" id="pHours" placeholder="Seg-Sex 8h-17h, Sáb 8h-12h"/>
@@ -166,13 +166,36 @@
       </div>
     </div>
 
-    <button class="btn btn-primary" id="btnSave" onclick="saveProfile()" style="margin-top:16px">💾 Guardar alterações</button>
+    <button class="btn btn-primary" id="btnSave" data-action="saveProfile" style="margin-top:16px">💾 Guardar alterações</button>
     <div class="msg" id="saveMsg"></div>
   </div>
 
 </div>
 
 <script>
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..."/onchange="..." inline — mesma lógica usada em
+// AdminApp.js. Todas as acções desta página são sem parâmetros.
+const _portalActionHandlers = {
+  doLogout:     () => doLogout(),
+  doLogin:      () => doLogin(),
+  toggleActive: () => toggleActive(),
+  getGPS:       () => getGPS(),
+  saveProfile:  () => saveProfile(),
+};
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const handler = _portalActionHandlers[el.dataset.action];
+  if (handler) handler();
+});
+document.addEventListener('change', (e) => {
+  const el = e.target.closest('[data-change-action]');
+  if (!el) return;
+  const handler = _portalActionHandlers[el.dataset.changeAction];
+  if (handler) handler();
+});
+
 let TOKEN = localStorage.getItem('mzd_partner_token') || '';
 let CURRENT_LAT = null, CURRENT_LNG = null;
 let PARTNER_TYPE = 'papelaria'; // NOVO — vem de /api/partners?action=me

@@ -151,7 +151,7 @@
 <!-- BANNER VISITANTE — aparece só para não autenticados -->
 <div class="free-bar" id="guestBar" style="display:none;">
   👋 <strong>Bem-vindo!</strong> Crie uma conta gratuita e ganhe 1 crédito grátis — ou <button id="btnGuestBuy" style="background:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.5);color:inherit;border-radius:6px;padding:2px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-left:4px;">Comprar acesso avulso · 50 MZN</button>
-  <button onclick="this.parentElement.style.display='none'" style="margin-left:8px;background:none;border:none;cursor:pointer;font-size:16px;color:inherit;">✕</button>
+  <button data-action="hideParent" style="margin-left:8px;background:none;border:none;cursor:pointer;font-size:16px;color:inherit;">✕</button>
 </div>
 
 <!-- QUEUE STATUS BAR -->
@@ -203,11 +203,11 @@
         <div class="gt-sp-card"><div class="gt-sp-ico">🏠</div><div class="gt-sp-name">Contrato Arrendamento</div></div>
         <div class="gt-sp-card"><div class="gt-sp-ico">📄</div><div class="gt-sp-name">Requerimento Oficial</div></div>
       </div>
-      <button class="btn-gt-register" onclick="window.openRegisterFromTeaser()">
+      <button class="btn-gt-register" data-action="openRegisterFromTeaser">
         🚀 Criar conta gratuita — receber 1 crédito
       </button>
       <div class="gt-login-hint">
-        Já tem conta? <button onclick="window.openLoginFromTeaser()">Entrar aqui</button>
+        Já tem conta? <button data-action="openLoginFromTeaser">Entrar aqui</button>
       </div>
     </div>
   </div>
@@ -570,7 +570,7 @@ window.openLoginFromTeaser = function() {
 <div id="feedbackWidget" style="display:none;position:fixed;bottom:80px;right:16px;z-index:998;background:#fff;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:16px;width:260px;border:1px solid #e2e8f0;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
     <strong style="font-size:.875rem;">Como foi o serviço?</strong>
-    <button onclick="document.getElementById('feedbackWidget').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:16px;color:#94a3b8;">✕</button>
+    <button data-action="hideById" data-target-id="feedbackWidget" style="background:none;border:none;cursor:pointer;font-size:16px;color:#94a3b8;">✕</button>
   </div>
   <div id="feedbackServiceName" style="font-size:.78rem;color:#64748b;margin-bottom:10px;"></div>
   <div style="display:flex;gap:6px;justify-content:center;margin-bottom:12px;" id="feedbackStars">
@@ -585,6 +585,25 @@ window.openLoginFromTeaser = function() {
 </div>
 
 <script type="module">
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..." inline — mesma lógica usada em AdminApp.js. Um único
+// listener em document cobre elementos de qualquer bloco <script> da
+// página (a delegação é ao nível do DOM, não do módulo).
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = String(str ?? '');
+  return div.innerHTML;
+}
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  if (el.dataset.action === 'removeParent')          { el.parentElement.remove(); return; }
+  if (el.dataset.action === 'hideParent')             { el.parentElement.style.display = 'none'; return; }
+  if (el.dataset.action === 'hideById')               { const t = document.getElementById(el.dataset.targetId); if (t) t.style.display = 'none'; return; }
+  if (el.dataset.action === 'openRegisterFromTeaser') { window.openRegisterFromTeaser(); return; }
+  if (el.dataset.action === 'openLoginFromTeaser')    { window.openLoginFromTeaser(); return; }
+});
+
 // ── PWA Install ──────────────────────────────────────────────────────────────
 (function() {
   let deferredPrompt  = null;
@@ -672,7 +691,7 @@ window.openLoginFromTeaser = function() {
         if (!d.valid) return;
         var bar = document.createElement('div');
         bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#009A44;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.8rem;font-weight:600';
-        bar.innerHTML = '🎁 Convidado por <strong>' + (d.name || 'um parceiro') + '</strong> · Registe-se e ganhe 1 crédito grátis! <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:.5rem;font-size:14px">✕</button>';
+        bar.innerHTML = '🎁 Convidado por <strong>' + escapeHtml(d.name || 'um parceiro') + '</strong> · Registe-se e ganhe 1 crédito grátis! <button data-action="removeParent" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:.5rem;font-size:14px">✕</button>';
         document.body.prepend(bar);
         setTimeout(function() { if (bar.parentElement) bar.remove(); }, 8000);
       }).catch(function() {});
