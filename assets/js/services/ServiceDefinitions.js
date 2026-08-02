@@ -65,6 +65,40 @@ export const SERVICES = {
     buildWA: null,
   },
 
+  // NOVO: pensado especificamente para digitadores — em vez de digitar à
+  // mão um trabalho manuscrito (ou espalhado por vários ficheiros/fotos),
+  // o digitador fotografa todas as páginas e recebe o documento já
+  // digitado, com acentuação e gramática corrigidas e formatação
+  // organizada, pronto a imprimir. Ao contrário de "Trabalho Escolar",
+  // aqui a IA NÃO desenvolve nem reescreve o conteúdo — apenas transcreve
+  // fielmente o que está nas páginas, corrigindo apenas erros de OCR,
+  // ortografia e formatação (ver instrução dedicada em Services.js
+  // _buildPrompt e prompts/transcricao.js). O custo em créditos é
+  // dinâmico (por página, ver DocumentController.generate() →
+  // svc.dynamicCostPerPage), para ser justo com o consumo real de IA de
+  // um documento que pode ter dezenas de páginas, ao contrário dos outros
+  // serviços (1 crédito fixo).
+  transcricao: {
+    icon:'🖨️', bg:'#F5F3FF', title:'Digitalizar Documento',
+    sub:'Fotografe um trabalho manuscrito ou em vários ficheiros — recebe o documento digitado, formatado e pronto a imprimir',
+    hasAI:true, category:'servicos', popularity:18,
+    // NOVO: custo dinâmico — 1 crédito por cada 3 páginas fotografadas
+    // (arredondado para cima), mínimo 1, máximo 10 (tecto técnico de
+    // api/deduct-credit.js). Calculado em DocumentController.generate()
+    // a partir de docModel.ocrPageCount; se nenhuma página for enviada
+    // (utilizador preencheu/colou o texto directamente), usa o custo
+    // mínimo de 1 crédito como qualquer outro documento.
+    dynamicCostPerPage: 3,
+    fields:[
+      { id:'titulo',     label:'Título do documento (opcional)', type:'text', ph:'Ex: Relatório de Estágio — Departamento de Vendas' },
+      { id:'tipo',       label:'Tipo de conteúdo (opcional)', type:'select',
+        opts:['Trabalho/Relatório','Acta ou Documento Oficial','Carta ou Correspondência','Livro/Manuscrito Longo','Outro'] },
+      { id:'organizacao',label:'Como organizar o documento (opcional)', type:'textarea',
+        ph:'Ex: mantenha a ordem das páginas · agrupe por capítulos · ponha a conclusão no fim · etc.' },
+    ],
+    buildWA: null,
+  },
+
   carta: {
     icon:'✉️', bg:'#FFFBEB', title:'Carta Formal',
     sub:'Carta profissional bem estruturada', hasAI:true,
