@@ -128,14 +128,20 @@
 <!-- HEADER -->
 <header class="hdr">
   <a href="/" class="hdr-logo" data-track-link>
-    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-    <div style="display:none;align-items:center;gap:8px">
+    <img id="siteLogo" src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;">
+    <div id="siteLogoFallback" style="display:none;align-items:center;gap:8px">
       <div class="hdr-badge">📄</div>
       <div class="hdr-name">MzDocs<span>Pro</span></div>
     </div>
   </a>
   <a href="/" class="hdr-back" data-track-link>← Voltar ao início</a>
 </header>
+<script>
+document.getElementById('siteLogo').addEventListener('error', function(){
+  this.style.display = 'none';
+  document.getElementById('siteLogoFallback').style.display = 'flex';
+});
+</script>
 
 <!-- HERO -->
 <div class="hero">
