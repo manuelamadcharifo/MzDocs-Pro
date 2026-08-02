@@ -79,13 +79,19 @@
 </head>
 <body>
 <header class="site-header">
-  <a class="site-logo" href="/" data-track-link><img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-    <div style="display:none;align-items:center;gap:8px">
+  <a class="site-logo" href="/" data-track-link><img id="siteLogo" src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;">
+    <div id="siteLogoFallback" style="display:none;align-items:center;gap:8px">
       <div class="logo-badge">📄</div>
       <span class="logo-text">MzDocs</span>
     </div></a>
   <a class="header-cta" href="/" data-track-link>Criar Documento →</a>
 </header>
+<script>
+document.getElementById('siteLogo').addEventListener('error', function(){
+  this.style.display = 'none';
+  document.getElementById('siteLogoFallback').style.display = 'flex';
+});
+</script>
 
 <div class="hub-hero">
   <h1>Guias e Modelos de Documentos para Moçambique</h1>
@@ -102,7 +108,7 @@
 
   <div class="search-box">
     <span style="font-size:18px;color:var(--muted)">🔍</span>
-    <input type="text" id="searchInput" placeholder="Pesquisar guias... ex: CV, requerimento, procuração" oninput="filterArticles(this.value)"/>
+    <input type="text" id="searchInput" placeholder="Pesquisar guias... ex: CV, requerimento, procuração"/>
   </div>
   <div class="no-results" id="noResults">😕 Nenhum guia encontrado. <a href="/" data-track-link style="color:var(--blue)">Gere o documento directamente aqui.</a></div>
 
@@ -256,6 +262,7 @@
   <div><a href="/" data-track-link>Início</a> · <a href="/templates.html">Templates</a> · <a href="/legal.html">Privacidade</a></div>
 </footer>
 <script>
+document.getElementById('searchInput').addEventListener('input', function(){ filterArticles(this.value); });
 function filterArticles(q){
   q=q.toLowerCase().trim();
   var clusters=document.querySelectorAll('.cluster'),total=0;
