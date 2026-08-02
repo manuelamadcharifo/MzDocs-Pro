@@ -1577,6 +1577,14 @@ async function tplWithdraw(req, res) {
     return res.status(400).json({ error: 'Número M-Pesa inválido' });
   if (!Number.isFinite(amount) || amount <= 0)
     return res.status(400).json({ error: 'Valor inválido' });
+  // NOVO (pedido do fundador — controlo administrativo): antes disto não
+  // existia NENHUM valor mínimo de levantamento para royalties de
+  // templates (só para afiliados, ver affWithdraw acima). Lê o mesmo
+  // padrão de system_settings, editável em Configurações → "Templates —
+  // Royalties de Criadores".
+  const minSetting = await selectOne('system_settings', 'key', 'tpl_min_withdraw', 'value');
+  const minWithdraw = parseInt(minSetting?.value || '100');
+  if (amount < minWithdraw) return res.status(400).json({ error: `Valor mínimo: ${minWithdraw} MZN` });
   const profile = await selectOne('profiles', 'id', user.id, 'template_author_balance');
   if (amount > (profile?.template_author_balance || 0))
     return res.status(400).json({ error: 'Saldo insuficiente' });
