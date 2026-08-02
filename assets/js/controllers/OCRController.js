@@ -1,7 +1,8 @@
 // assets/js/controllers/OCRController.js
 // Versão melhorada: usa SmartOCRService para auto-preenchimento inteligente
-import { NotificationView } from '../views/Views.js';
+import { NotificationView, DocumentView } from '../views/Views.js';
 import { SmartOCRService } from '../services/SmartOCRService.js';
+import { SERVICES } from '../services/ServiceDefinitions.js';
 
 export class OCRController {
   constructor(docModel) {
@@ -30,13 +31,19 @@ export class OCRController {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
+    const serviceTypeEarly = this.docModel?.service || '';
+
     const maxSize = 10 * 1024 * 1024; // 10 MB para PDF/Word; 5 MB para imagens
-    // NOVO: limite de páginas para o rascunho manuscrito do Trabalho Escolar —
-    // 8 fotos cobre confortavelmente um trabalho escolar típico (poucas
-    // páginas manuscritas); acima disso o pedido às APIs de IA visual fica
-    // demasiado grande para uma única chamada e o custo deixa de compensar
-    // face a escrever o texto directamente.
-    const maxPages = 8;
+    // NOVO: limite de páginas por serviço.
+    // "trabalho" (Trabalho Escolar): 8 fotos cobre confortavelmente um
+    // rascunho/apontamento típico de aluno (poucas páginas manuscritas).
+    // "transcricao" (Digitalizar Documento — pensado para digitadores que
+    // já têm um trabalho INTEIRO escrito à mão ou espalhado por vários
+    // ficheiros): precisa de um limite bem maior, por isso 25 páginas.
+    // Acima disso o pedido às APIs de IA visual fica demasiado grande para
+    // uma única chamada.
+    const MAX_PAGES_BY_SERVICE = { trabalho: 8, transcricao: 25 };
+    const maxPages = MAX_PAGES_BY_SERVICE[serviceTypeEarly] || 8;
     if (files.length > maxPages) {
       NotificationView.warn(`⚠️ Máximo de ${maxPages} fotos de cada vez. Foram consideradas só as primeiras ${maxPages}.`);
       files.length = maxPages;
@@ -97,7 +104,23 @@ export class OCRController {
         }
       }
 
-      if (this.docModel) this.docModel.ocrText = text;
+      if (this.docModel) {
+        this.docModel.ocrText = text;
+        // NOVO: guarda quantas páginas entraram neste OCR — usado por
+        // DocumentController.generate() para calcular o custo em créditos
+        // do serviço "transcricao" (Digitalizar Documento), que cobra por
+        // página em vez de custo fixo (ver ServiceDefinitions.js).
+        this.docModel.ocrPageCount = files.length;
+
+        // NOVO: se este serviço tiver custo dinâmico, mostra já o custo
+        // real no botão "Gerar com IA" — antes disto o utilizador só via
+        // "1 crédito" (o valor por omissão) até carregar em gerar.
+        const svcDef = SERVICES[serviceType];
+        if (svcDef?.dynamicCostPerPage) {
+          const realCost = Math.min(10, Math.max(1, Math.ceil(files.length / svcDef.dynamicCostPerPage)));
+          DocumentView.updateGenCostLabel(realCost);
+        }
+      }
 
       const ocrTxt  = document.getElementById('ocrTxt');
       const ocrConf = document.getElementById('ocrConf');
@@ -192,7 +215,8 @@ export class OCRController {
   }
 
   discard() {
-    if (this.docModel) this.docModel.ocrText = null;
+    if (this.docModel) { this.docModel.ocrText = null; this.docModel.ocrPageCount = 0; }
+    DocumentView.updateGenCostLabel(1);
     document.getElementById('smartFillBanner')?.remove();
     document.querySelectorAll('#formBody input, #formBody textarea, #formBody select').forEach(el => {
       el.style.borderColor = '';
