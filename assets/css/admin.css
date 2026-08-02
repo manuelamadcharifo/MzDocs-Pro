@@ -612,3 +612,8 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: .5; transform: scale(.85); }
 }
+
+/* CSP (auditoria Ago/2026): substitui onfocus/onblur inline do campo de
+   input dos modais de confirmação — mesmo efeito visual, via CSS puro. */
+.modal-focus-input { border-color: #d1d5db; }
+.modal-focus-input:focus { border-color: #3b82f6; }
