@@ -68,9 +68,15 @@
 
 <header class="hdr">
   <a href="/" style="display:flex;align-items:center;gap:8px;text-decoration:none" data-track-link>
-    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-    <div class="hdr-name" style="display:none">Mz<span>Docs</span> Pro · Admin Parceiros</div>
+    <img id="siteLogo" src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;">
+    <div id="siteLogoFallback" class="hdr-name" style="display:none">Mz<span>Docs</span> Pro · Admin Parceiros</div>
   </a>
+  <script>
+  document.getElementById('siteLogo').addEventListener('error', function(){
+    this.style.display = 'none';
+    document.getElementById('siteLogoFallback').style.display = 'block';
+  });
+  </script>
   <!-- CORRIGIDO (auditoria 3.1): antes ia para "/" (site público) — sem
        nenhuma forma de voltar ao painel admin a partir daqui. Como esta
        página só é usada por administradores (ver loginSection abaixo), o
