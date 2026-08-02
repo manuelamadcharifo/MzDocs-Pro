@@ -174,6 +174,7 @@ class AdminApp {
         // do modal (replica o comportamento do onclick="closeModal(event)"
         // original, que comparava e.target com o próprio overlay).
         closeModalOverlay:       (d, el, e) => { if (e.target === el) this.closeModal(); },
+        copyCampaignLink:        (d, el) => { navigator.clipboard.writeText(d.link); el.textContent = 'Copiado!'; },
     };
 
     // Segundo listener delegado, para o único caso de evento 'input' inline
@@ -224,6 +225,12 @@ class AdminApp {
             const handler = this._changeActionHandlers[el.dataset.changeAction];
             if (handler) handler(el.dataset, el, e);
         });
+        // 'error' em <img> não faz bubble — precisa de capture:true para
+        // apanhar via listener único no document (mesmo motivo por que não
+        // dá para reaproveitar o dispatcher de 'click' acima).
+        document.addEventListener('error', (e) => {
+            if (e.target && e.target.id === 'sidebarLogo') e.target.style.display = 'none';
+        }, true);
     }
 
     async _boot() {
@@ -1439,8 +1446,7 @@ USING (EXISTS (
                     style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:8px;
                            font-size:.9rem;outline:none;box-sizing:border-box;margin-bottom:14px;
                            transition:border .2s;"
-                    onfocus="this.style.borderColor='#3b82f6'"
-                    onblur="this.style.borderColor='#d1d5db'"
+                    class="modal-focus-input"
                 >
                 <div class="modal-actions">
                     <button id="_promptCancel" style="background:#f1f5f9;color:#0f172a;flex:1;">
@@ -4221,7 +4227,7 @@ USING (EXISTS (
 
                     <div style="display:flex;gap:8px;margin-top:10px;font-size:11px;color:#3b82f6;background:#EFF6FF;border-radius:8px;padding:8px 10px;align-items:center;overflow-x:auto">
                         <code style="white-space:nowrap">${siteUrl}/?src=${c.source_tag}</code>
-                        <button class="btn-ghost" style="padding:2px 8px;font-size:11px" onclick="navigator.clipboard.writeText('${siteUrl}/?src=${c.source_tag}');this.textContent='Copiado!'">Copiar</button>
+                        <button class="btn-ghost" style="padding:2px 8px;font-size:11px" data-action="copyCampaignLink" data-link="${escapeHtml(siteUrl + '/?src=' + c.source_tag)}">Copiar</button>
                     </div>
 
                     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px">
