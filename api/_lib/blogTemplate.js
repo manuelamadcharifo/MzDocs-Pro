@@ -176,7 +176,7 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
 
 <header class="site-header">
   <a class="site-logo" href="/" data-track-link>
-    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <img id="siteLogo" src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;">
     <div style="display:none;align-items:center;gap:8px">
       <div class="logo-badge">📄</div>
       <span class="logo-text">MzDocs<span>Pro</span></span>
@@ -218,8 +218,16 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
   </div>
 </footer>
 
-<!-- Contador de visitas -->
+<!-- CSP (auditoria Ago/2026): fallback do logo movido de onerror inline
+     para listener, e contador de visitas -->
 <script>
+  (function(){
+    var logo = document.getElementById('siteLogo');
+    if (logo) logo.addEventListener('error', function(){
+      logo.style.display = 'none';
+      logo.nextElementSibling.style.display = 'flex';
+    });
+  })();
   (function(){
     try {
       fetch('/api/page-view', {
