@@ -85,9 +85,9 @@
   <input class="inp" type="email" id="adminEmail" placeholder="Email de admin"/>
   <div style="position:relative">
     <input class="inp" type="password" id="adminPass" placeholder="Password" style="padding-right:44px"/>
-    <button type="button" style="position:absolute;right:12px;top:13px;background:none;border:none;cursor:pointer;font-size:16px" onclick="(function(b){var i=b.previousElementSibling;i.type=i.type==='password'?'text':'password';b.textContent=i.type==='password'?'👁️':'🙈';})(this)">👁️</button>
+    <button type="button" style="position:absolute;right:12px;top:13px;background:none;border:none;cursor:pointer;font-size:16px" data-action="togglePasswordVisibility">👁️</button>
   </div>
-  <button class="btn-login" onclick="doLogin()">Entrar</button>
+  <button class="btn-login" data-action="doLogin">Entrar</button>
   <div id="loginErr">❌ Email ou password incorrectos.</div>
 </div>
 
@@ -98,16 +98,16 @@
     <div class="page-sub">Aprovar, rejeitar e gerir papelarias e gráficas parceiras.</div>
 
     <div class="tabs">
-      <button class="tab active" data-status="pending" onclick="switchTab(this)">⏳ Pendentes <span class="cnt" id="cntPending">0</span></button>
-      <button class="tab" data-status="approved" onclick="switchTab(this)">✅ Aprovadas</button>
-      <button class="tab" data-status="rejected" onclick="switchTab(this)">❌ Rejeitadas</button>
+      <button class="tab active" data-status="pending" data-action="switchTab">⏳ Pendentes <span class="cnt" id="cntPending">0</span></button>
+      <button class="tab" data-status="approved" data-action="switchTab">✅ Aprovadas</button>
+      <button class="tab" data-status="rejected" data-action="switchTab">❌ Rejeitadas</button>
     </div>
 
     <!-- NOVO — sub-filtro por tipo de parceiro -->
     <div class="type-tabs">
-      <button class="type-tab active" data-type="" onclick="switchType(this)">Todos</button>
-      <button class="type-tab" data-type="papelaria" onclick="switchType(this)">🏪 Papelarias</button>
-      <button class="type-tab" data-type="advogado" onclick="switchType(this)">⚖️ Advogados</button>
+      <button class="type-tab active" data-type="" data-action="switchType">Todos</button>
+      <button class="type-tab" data-type="papelaria" data-action="switchType">🏪 Papelarias</button>
+      <button class="type-tab" data-type="advogado" data-action="switchType">⚖️ Advogados</button>
     </div>
 
     <div id="partnersList"></div>
@@ -124,6 +124,28 @@ function escapeHtml(str) {
   div.textContent = String(str ?? '');
   return div.innerHTML;
 }
+
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..." inline — mesma lógica usada em AdminApp.js/afiliado.html.
+const _adminParcActionHandlers = {
+  togglePasswordVisibility: (d, el) => {
+    const i = el.previousElementSibling;
+    i.type = i.type === 'password' ? 'text' : 'password';
+    el.textContent = i.type === 'password' ? '👁️' : '🙈';
+  },
+  doLogin:            () => doLogin(),
+  switchTab:           (d, el) => switchTab(el),
+  switchType:          (d, el) => switchType(el),
+  doAction:            (d) => doAction(d.verb, d.id),
+  doToggle:            (d) => doToggle(d.id, d.active === 'true'),
+  doRegenerateCode:    (d) => doRegenerateCode(d.id),
+};
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const handler = _adminParcActionHandlers[el.dataset.action];
+  if (handler) handler(el.dataset, el);
+});
 
 let AUTH_TOKEN = '';
 let currentStatus = 'pending';
@@ -238,18 +260,18 @@ function renderPartners(partners, status) {
     let actions = '';
     if (p.status === 'pending') {
       actions = `
-        <button class="btn btn-approve" onclick="doAction('approve','${p.id}')">✅ Aprovar</button>
-        <button class="btn btn-reject"  onclick="doAction('reject','${p.id}')">❌ Rejeitar</button>
+        <button class="btn btn-approve" data-action="doAction" data-verb="approve" data-id="${escapeHtml(p.id)}">✅ Aprovar</button>
+        <button class="btn btn-reject"  data-action="doAction" data-verb="reject" data-id="${escapeHtml(p.id)}">❌ Rejeitar</button>
         <a href="${waLink}" target="_blank" rel="noopener" class="btn btn-wa">WhatsApp</a>`;
     } else if (p.status === 'approved') {
       actions = p.active
-        ? `<button class="btn btn-toggle-on"  onclick="doToggle('${p.id}',false)">⏸️ Desactivar</button>`
-        : `<button class="btn btn-toggle-off" onclick="doToggle('${p.id}',true)">▶️ Activar</button>`;
+        ? `<button class="btn btn-toggle-on"  data-action="doToggle" data-id="${escapeHtml(p.id)}" data-active="false">⏸️ Desactivar</button>`
+        : `<button class="btn btn-toggle-off" data-action="doToggle" data-id="${escapeHtml(p.id)}" data-active="true">▶️ Activar</button>`;
       // NOVO: para quando a parceira perde/esquece o código do portal.
-      actions += `<button class="btn btn-toggle-on" onclick="doRegenerateCode('${p.id}')">🔑 Reenviar código</button>`;
+      actions += `<button class="btn btn-toggle-on" data-action="doRegenerateCode" data-id="${escapeHtml(p.id)}">🔑 Reenviar código</button>`;
       actions += `<a href="${waLink}" target="_blank" rel="noopener" class="btn btn-wa">WhatsApp</a>`;
     } else {
-      actions = `<button class="btn btn-approve" onclick="doAction('approve','${p.id}')">↩️ Reactivar</button>`;
+      actions = `<button class="btn btn-approve" data-action="doAction" data-verb="approve" data-id="${escapeHtml(p.id)}">↩️ Reactivar</button>`;
     }
 
     return `<div class="card" id="card-${p.id}">
