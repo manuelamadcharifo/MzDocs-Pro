@@ -3,6 +3,19 @@
 
 import { authManager } from './AuthManager.js';
 
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..." inline — mesma lógica usada em AdminApp.js. Instalado
+// ao nível do módulo (não da classe) para nunca duplicar o listener, mesmo
+// que várias instâncias de AuthUI sejam criadas.
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action="togglePasswordVisibility"]');
+  if (!el) return;
+  const inp = el.previousElementSibling;
+  if (!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  el.textContent = inp.type === 'password' ? '👁️' : '🙈';
+});
+
 export class AuthUI {
     constructor() {
         this.overlay = null;
@@ -38,7 +51,7 @@ export class AuthUI {
                             <label>Password</label>
                             <div class="pw-wrap">
                                 <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
-                                <button type="button" class="pw-eye" aria-label="Mostrar password" onclick="(function(btn){var inp=btn.previousElementSibling;inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'👁️':'🙈';})(this)">👁️</button>
+                                <button type="button" class="pw-eye" aria-label="Mostrar password" data-action="togglePasswordVisibility">👁️</button>
                             </div>
                             <a href="#" class="auth-link" data-view="forgot">Esqueceu a password?</a>
                         </div>
@@ -74,14 +87,14 @@ export class AuthUI {
                             <label>Password <span style="color:#ef4444">*</span></label>
                             <div class="pw-wrap">
                                 <input type="password" id="regPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
-                                <button type="button" class="pw-eye" aria-label="Mostrar password" onclick="(function(btn){var inp=btn.previousElementSibling;inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'👁️':'🙈';})(this)">👁️</button>
+                                <button type="button" class="pw-eye" aria-label="Mostrar password" data-action="togglePasswordVisibility">👁️</button>
                             </div>
                         </div>
                         <div class="form-group">
                             <label>Confirmar Password <span style="color:#ef4444">*</span></label>
                             <div class="pw-wrap">
                                 <input type="password" id="regPasswordConfirm" placeholder="Repita a password" autocomplete="new-password">
-                                <button type="button" class="pw-eye" aria-label="Mostrar password" onclick="(function(btn){var inp=btn.previousElementSibling;inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'👁️':'🙈';})(this)">👁️</button>
+                                <button type="button" class="pw-eye" aria-label="Mostrar password" data-action="togglePasswordVisibility">👁️</button>
                             </div>
                         </div>
                         <div class="form-group">
