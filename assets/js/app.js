@@ -171,33 +171,40 @@ async function bootstrap() {
       // Quando o Service Worker activa uma nova versão, envia postMessage SW_UPDATED.
       // Aqui decidimos quando é seguro recarregar: só se não houver modal aberto
       // e não estiver a gerar um documento — evita congelar a app a meio de uma operação.
+      // CORRIGIDO (relatado pelo utilizador: "a app recarrega sozinha ao fim
+      // de um tempo"): antes, ao detectar uma versão nova do Service
+      // Worker, a app recarregava-se SOZINHA — e se houvesse um modal aberto
+      // ou uma geração em curso, esperava até 5 minutos e recarregava à
+      // força de qualquer forma, apagando o que a pessoa estivesse a fazer
+      // sem aviso. Como o projecto tem saído com deploys frequentes, isto
+      // acontecia no meio de sessões normais. Agora nunca recarrega
+      // sozinha — mostra um aviso fixo e discreto, e só actualiza quando o
+      // próprio utilizador escolher.
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data?.type !== 'SW_UPDATED') return;
-        console.log('[MzDocs] SW actualizado para', event.data.version, '— a verificar se é seguro recarregar…');
-
-        const isSafe = () => {
-          const hasOpenModal  = !!document.querySelector('.open[id]');
-          const isGenerating  = !!window.docController?._generating;
-          return !hasOpenModal && !isGenerating;
-        };
-
-        if (isSafe()) {
-          console.log('[MzDocs] Seguro — a recarregar agora.');
-          location.reload();
-        } else {
-          // Aguardar até não haver modal aberto nem geração em curso
-          console.log('[MzDocs] Modal/geração em curso — aguardar para recarregar…');
-          const check = setInterval(() => {
-            if (isSafe()) {
-              clearInterval(check);
-              console.log('[MzDocs] Livre — a recarregar agora.');
-              location.reload();
-            }
-          }, 1500);
-          // Segurança: recarregar no máximo após 5 min mesmo que algo fique preso
-          setTimeout(() => { clearInterval(check); location.reload(); }, 5 * 60 * 1000);
-        }
+        console.log('[MzDocs] Nova versão disponível:', event.data.version);
+        _showUpdateBanner();
       });
+
+      function _showUpdateBanner() {
+        if (document.getElementById('mzUpdateBanner')) return; // já visível
+        const bar = document.createElement('div');
+        bar.id = 'mzUpdateBanner';
+        bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;'
+          + 'background:var(--ink,#07101F);color:#fff;padding:12px 16px;'
+          + 'display:flex;align-items:center;justify-content:space-between;gap:10px;'
+          + 'font-size:12.5px;box-shadow:0 -4px 16px rgba(0,0,0,.25);'
+          + 'padding-bottom:calc(12px + env(safe-area-inset-bottom));';
+        bar.innerHTML = `
+          <span>✨ Há uma versão nova do MzDocs Pro.</span>
+          <span style="display:flex;gap:8px;flex-shrink:0">
+            <button id="mzUpdateNow" style="background:var(--green,#16A34A);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">Actualizar</button>
+            <button id="mzUpdateLater" style="background:transparent;color:rgba(255,255,255,.6);border:none;font-size:12px;cursor:pointer">Depois</button>
+          </span>`;
+        document.body.appendChild(bar);
+        document.getElementById('mzUpdateNow').onclick = () => location.reload();
+        document.getElementById('mzUpdateLater').onclick = () => bar.remove();
+      }
       authManager.onChange(user => {
         if (user && !user.is_anonymous) {
           _setupPushNotifications(registration).catch(() => {});
