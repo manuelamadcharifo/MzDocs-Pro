@@ -275,15 +275,15 @@
 
     <h2>Perguntas Frequentes</h2>
     <div class="faq-item">
-      <div class="faq-q" onclick="toggleFaq(this)">O que colocar no CV quando não tenho experiência?</div>
+      <div class="faq-q">O que colocar no CV quando não tenho experiência?</div>
       <div class="faq-a">Destaque a formação académica, trabalhos voluntários, projectos escolares, actividades extracurriculares e competências técnicas como informática e línguas. Qualquer experiência prática, mesmo não remunerada, deve constar.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="toggleFaq(this)">Posso enviar CV sem ter trabalhado antes?</div>
+      <div class="faq-q">Posso enviar CV sem ter trabalhado antes?</div>
       <div class="faq-a">Sim. Muitas empresas e ONGs em Moçambique contratam jovens sem experiência para estágios ou cargos de entrada. O CV mostra o seu potencial, não apenas o seu passado.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="toggleFaq(this)">Preciso de carta de candidatura se não tenho experiência?</div>
+      <div class="faq-q">Preciso de carta de candidatura se não tenho experiência?</div>
       <div class="faq-a">Sim, especialmente quando não tem experiência. A carta de candidatura é a sua oportunidade de explicar a sua motivação e mostrar que, apesar de ser jovem, é sério e preparado.</div>
     </div>
 
@@ -318,7 +318,10 @@
   <div>© 2026 MzDocs Pro — Documentos profissionais para Moçambique</div>
   <div><a href="/" data-track-link>Início</a> · <a href="/pages/">Guias</a> · <a href="/legal.html">Privacidade</a></div>
 </footer>
-<script>function toggleFaq(el){el.classList.toggle('open');el.nextElementSibling.classList.toggle('open');}</script>
+<script>
+function toggleFaq(el){el.classList.toggle('open');el.nextElementSibling.classList.toggle('open');}
+document.querySelectorAll('.faq-q').forEach(function(el){ el.addEventListener('click', function(){ toggleFaq(el); }); });
+</script>
 
 <!-- NOVO: atribuição de origem (blog/pesquisa orgânica/social) — esta
      página é HTML estático, sem o MarketingTracker.js da SPA. Sem isto,
