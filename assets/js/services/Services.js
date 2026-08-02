@@ -366,6 +366,15 @@ INSTRUCAO CRITICA: Preencha o modelo acima com os dados reais. NAO gere um docum
       if (type === 'trabalho') {
         return `\n\nMATERIAL ENVIADO PELO ALUNO (extraído do ficheiro/imagem carregado — apontamentos, rascunho ou enunciado):\n--- INÍCIO DO MATERIAL ---\n${ocr.slice(0, 9000)}\n--- FIM DO MATERIAL ---\n\nINSTRUÇÃO CRÍTICA SOBRE O MATERIAL ACIMA:\n1. Antes de escrever qualquer secção, leia e avalie o material: ele está legível (não é ruído/lixo de OCR) E tem relação directa com o tema "${data.tema || ''}"?\n2. SE SIM: utilize o conteúdo do material como BASE REAL do trabalho — extraia os factos, dados, argumentos, citações e estrutura que ele já contém, reorganize-os de forma académica e desenvolva-os com mais profundidade. NÃO ignore o material para escrever algo genérico diferente do que o aluno trouxe. O resultado deve reflectir o que está no material, apenas mais completo, melhor estruturado e com linguagem académica corrigida.\n3. SE NÃO (material ilegível, corrompido, vazio de conteúdo útil, ou claramente sobre outro tema sem nenhuma relação com "${data.tema || ''}"): ignore o material e gere o trabalho inteiramente a partir do tema, disciplina e nível indicados — sem mencionar que o material foi descartado.\n4. Nunca invente que o material disse algo que não está nele — se faltar informação para uma secção, desenvolva-a com conhecimento académico geral em vez de atribuir conteúdo inexistente ao material do aluno.${academicSuffix}`;
       }
+      if (type === 'transcricao') {
+        // NOVO: ao contrário de 'trabalho' (que desenvolve/amplia o
+        // material), aqui o material é o documento inteiro a transcrever
+        // fielmente — por isso o limite de caracteres é bem maior (até
+        // ~25 páginas fotografadas, cada uma pode gerar bastante texto),
+        // e a instrução (ver prompts/transcricao.js) é de fidelidade
+        // total, nunca de desenvolvimento/expansão de conteúdo.
+        return `\n\nMATERIAL A TRANSCREVER (extraído das páginas fotografadas/ficheiros carregados pelo utilizador):\n--- INÍCIO DO MATERIAL ---\n${ocr.slice(0, 40000)}\n--- FIM DO MATERIAL ---`;
+      }
       return `\n\nRascunho OCR (use como base, corrija erros):\n${ocr}`;
     })();
 
