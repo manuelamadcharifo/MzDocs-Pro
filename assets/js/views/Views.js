@@ -102,6 +102,16 @@ export const DocumentView = {
     }
   },
 
+  // NOVO: actualiza só o texto de custo do botão "Gerar com IA" sem
+  // re-renderizar o formulário inteiro — usado por OCRController depois de
+  // processar as páginas de um serviço com dynamicCostPerPage (ex:
+  // "transcricao"/Digitalizar Documento), para o utilizador ver o custo
+  // real ANTES de gerar, não só depois de o crédito já ter sido debitado.
+  updateGenCostLabel(cost) {
+    const label = document.querySelector('#btnGen small');
+    if (label) label.textContent = cost === 1 ? '1 crédito' : `${cost} créditos`;
+  },
+
   _buildFieldsHTML(fields) {
     return fields.map(f => {
       if (f.row) return `
