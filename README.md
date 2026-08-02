@@ -1,643 +1,221 @@
-# MzDocs Pro — v33
+# MzDocs Pro
 
-Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
+Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA.
+PWA instalável (Android/iOS), construída para o Vercel Hobby (limite: 12 Serverless Functions —
+**já esgotado, sem margem**), Supabase (PostgreSQL + pgvector) e pagamento manual por carteira
+móvel (M-Pesa, e-Mola, mKesh).
 
-> 📌 **Nota de versão (actual):** conclusão da Fase 1 do CSP hardening — zero handlers inline
-> (`onclick`/`oninput`/`onchange`/`onfocus`/`onblur`/`onerror`) restantes em qualquer ficheiro do
-> código activo, confirmado por varredura a todo o repositório. Documentadas variáveis de ambiente
-> de push notifications que faltavam por completo. Ver secção "Alterações — v33" abaixo. **Ainda
-> por fazer:** testar manualmente antes de remover `unsafe-inline` do CSP em `vercel.json`.
+> 📌 **Nota sobre este README:** este documento foi reconstruído do zero em Agosto/2026 a partir
+> de uma leitura directa e integral do código-fonte (não apenas das notas de versão anteriores),
+> precisamente porque a versão anterior deste ficheiro tinha ficado **cortada a meio de uma
+> frase**, sem as secções mais recentes do changelog e com a lista de migrações de instalação
+> desactualizada em 10 ficheiros (parava em `v41`, quando o repositório já tinha migrações reais
+> até `v51`). Este documento reflecte o estado do código tal como está no export mais recente
+> disponível — não o histórico ronda-a-ronda, que passa a viver apenas na secção "Histórico de
+> Versões" no fim.
 
-> 📌 **Nota de versão (UI/UX + bugs de produção):** auditoria de UI/UX (6 pontos de descoberta/conversão, todos
-> resolvidos) + correcção de três bugs relatados directamente em produção: crédito grátis/de
-> afiliado a ficar preso a 0 até reload manual, a app a recarregar-se sozinha ao detectar um
-> deploy novo (agora só avisa, nunca força), e um `SyntaxError` em `api/admin/index.js`
-> (função duplicada) que tirava **toda** a API de admin do ar. Ver secção "Alterações — v32"
-> abaixo para o detalhe completo.
+> ⚠️ **Acção urgente e não resolvida — plano Vercel:** este projecto processa pagamentos
+> (`api/process-payment.js`, tabela `transactions`). Os Termos de Serviço da Vercel definem
+> **qualquer fluxo de cobrança a visitantes do site** como uso comercial, não permitido no plano
+> Hobby — apenas no Pro (US$20/mês) ou Enterprise. Esta recomendação já aparece em, pelo menos,
+> três auditorias anteriores e continua sem evidência de ter sido resolvida. Adicionalmente, nos
+> Termos da Vercel, projectos em Hobby (ou em trial Pro) concedem à Vercel o direito de usar o
+> conteúdo do site para treinar modelos de IA — relevante porque esta plataforma processa dados
+> pessoais sensíveis (BI, NUIT, moradas, procurações, contratos).
 
-> 📌 **Nota de versão (Agosto/2026):** ronda de auditoria de segurança ponto-a-ponto.
-> Confirmou-se que RLS, chaves, comprovativos privados, validação do painel admin, sanitização
-> de templates da comunidade e limpeza de IndexedDB já estavam correctamente implementados em
-> rondas anteriores. Duas lacunas novas foram fechadas: mascaragem automática de BI/NUIT/telefone/
-> e-mail antes de qualquer envio a fornecedores de IA externos (`api/_lib/piiRedaction.js`), e
-> restrição de CORS + verificação de assinatura binária de ficheiros em `api/convert.js`,
-> `api/extract-template.js` e `api/partners.js` (antes abertos a qualquer origem). Ver secção
-> "Alterações — v30" e "Segurança" abaixo para o detalhe completo, incluindo o que fica por
-> verificar fora do alcance de uma auditoria de código (migrations aplicadas em produção,
-> `npm audit`, cabeçalhos HTTP reais do site).
-
-> 📌 **Nota de versão (29 de Julho/2026):** eliminação completa da dependência do
-> SDK `@supabase/supabase-js` (e do pacote `ws`) em todo o projecto. `api/admin/index.js` e as
-> secções de Afiliados e Templates de `api/misc.js` eram os últimos ficheiros a ainda
-> instanciar o SDK (com transporte `ws` explícito, necessário em Node.js < 22 sem WebSocket
-> nativo) só para usar `.rpc()`, `.auth.getUser()` e as operações Admin API — foram migrados
-> para o wrapper REST puro `api/_lib/supabaseAdmin.js`, o mesmo padrão já usado no resto do
-> projecto desde a v24. Isto também elimina um bug de runtime real: em Node.js 20 sem a opção
-> `realtime: { transport: ws }`, o SDK lançava `"Node.js 20 detected without native WebSocket
-> support"` ao instanciar o cliente — o erro visível ao registar parceiros/afiliados e ao gerir
-> templates. `@supabase/supabase-js` e `ws` foram removidos do `package.json` — o projecto
-> já não tem nenhuma dependência do SDK oficial da Supabase, só `fetch` nativo. Ver secção
-> "Alterações — v29" abaixo. O histórico de auditorias anteriores está preservado nas secções
-> abaixo (v12, v13–v16, v17–v24, v25, v26, v27, v28).
-
-
-> ⚠️ **Acção urgente — plano Vercel:** este projecto processa pagamentos (`api/process-payment.js`,
-> tabela `transactions`). Os Termos de Serviço da Vercel definem **qualquer fluxo de cobrança a
-> visitantes do site** como uso comercial, que **não é permitido no plano Hobby** — apenas no Pro
-> (US$20/mês) ou Enterprise. Um projecto no plano errado pode ser suspenso sem aviso prévio.
-> Recomenda-se a migração para o plano Pro **antes** de qualquer campanha de crescimento,
-> independentemente do número de utilizadores.
->
-> **Adicional (confirmado nesta auditoria):** nos Termos de Serviço da Vercel, projectos no
-> plano **Hobby (ou em trial Pro)** concedem à Vercel o direito de usar o conteúdo do site para
-> treinar modelos de IA e partilhá-lo com terceiros para esse fim ("Model Training"). Isto só
-> deixa de se aplicar automaticamente no plano **Pro pago** (não no trial). Como esta plataforma
-> processa dados pessoais sensíveis (números de BI, moradas, dados de procurações e contratos),
-> a migração para o Pro deve ser tratada como prioridade assim que houver qualquer receita
-> consistente — não apenas como requisito comercial da Vercel, mas como salvaguarda de
-> protecção de dados dos utilizadores.
->
-> *(Não existe ainda um `ROADMAP-ESCALA.md` neste repositório — a referência a esse ficheiro em
-> versões anteriores deste README apontava para um documento nunca criado. Recomenda-se criá-lo
-> com o roteiro de escala, ou remover a referência até lá.)*
+> ⚠️ **`ROADMAP-ESCALA.md` continua por criar.** Não existe no repositório. Existe apenas
+> `MzDocs-Pro-Roadmap-Marketing-Gratuito-Mocambique.md`, que é um documento diferente (marketing
+> orgânico, não escala técnica). Recomenda-se criar o ficheiro ou remover todas as referências a
+> ele.
 
 ---
 
-## ✨ Funcionalidades Principais
+## Índice
 
-| Funcionalidade | Descrição |
-|---|---|
-| **Geração com IA (5 providers)** | Corrida paralela entre Groq, Gemini, OpenRouter, Cerebras e NVIDIA NIM — o primeiro a responder "ganha", garantindo alta disponibilidade a custo zero |
-| **Amostra Grátis + Custo Progressivo** | `_previewMode: true` gera um extracto curto sem debitar créditos; documentos longos (trabalhos 6+ páginas) têm custo progressivo gerido pelo `LongDocumentEngine` |
-| **70 Templates Visuais** | 5 templates por serviço (14 serviços), com CSS próprio e layout profissional |
-| **Editor WYSIWYG** | Edição inline com preservação fiel do template (iframe + designMode) |
-| **Export PDF** | Abre janela de impressão com cores e backgrounds preservados (`print-color-adjust: exact`) |
-| **Export Word (.docx)** | `HTMLToDocxExporter` (OOXML real via `docx`, para templates HTML) e `WordExporter` (académico: Times 12pt, margens normalizadas, capa automática) |
-| **Export Excel** | Tabelas e orçamentos exportados como `.xls` |
-| **Assinatura Digital** | Canvas de assinatura inserido directamente no documento |
-| **Módulo Académico APA 7** | Citações, bibliography, TOC automático, upload PDF/URL |
-| **Extracção de Template por Imagem** | IA de visão extrai estrutura de qualquer imagem de documento |
-| **OCR (SmartOCRService v4)** | IA visual (Groq/Gemini) primeiro; Tesseract apenas como complemento; suporta imagem, PDF (pdf.js) e Word (mammoth.js) |
-| **Motor Jurídico RAG** | Busca vectorial (pgvector) sobre artigos de lei moçambicanos reais; usado pelos 5 serviços jurídicos (arrendamento, procuração, requerimento, residência, acta) em vez de citações estáticas — ver `docs/legal/VERIFICACAO-LEGAL.md` |
-| **Histórico Offline** | Documentos guardados em IndexedDB, sincronizados quando online |
-| **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola ou mKesh — upload do comprovativo com **verificação automática por IA visão** (aprovação imediata se confiança ≥ 85%) e fallback para WhatsApp/revisão manual |
-| **Reembolso Automático de Créditos** | Se a geração de IA falhar após o débito, o crédito é devolvido via RPC `refund_credit` |
-| **Preços Dinâmicos** | Pacotes de créditos (preços, créditos, validade) lidos de `system_settings` em tempo real via `api/_lib/packages.js` — alterar no admin reflecte imediatamente no checkout |
-| **Marketplace de Templates** | Galeria comunitária com preview A4 realista (usando `SampleData.js` + `A4Renderer`); submissão, avaliação (1–5★), partilha por token e aprovação pelo admin |
-| **Templates Oficiais Seed** | 70 templates oficiais inseridos na galeria via `migration_v22_seed_official_templates.sql` — galeria deixa de aparecer vazia |
-| **Sistema de Afiliados Pro** | Comissões automáticas por pacote, segmentação (papelaria/cyber/universidade/explicação/digitador), níveis (bronze→diamante), ranking, notificações e detecção de fraude |
-| **Rede de Parceiros** | Papelarias/cyber cafés **e advogados** (NOVO v47) parceiros listados perto do utilizador (`parceiros.html`), com código de acesso próprio (NOVO v46) e anti-abuso nas avaliações (NOVO v45) |
-| **Avaliações Públicas** | NOVO (v44): avaliação ⭐ 1–5 visível publicamente, alimenta "O que dizem os utilizadores" |
-| **Blog / SEO** | CMS de artigos com geração assistida por IA (`blog_posts`, `blog_categories`); publicação automática de HTML estático no GitHub |
-| **Painel Admin** | Analytics em tempo real, feedback, utilizadores, pagamentos, parceiros, configurações (incluindo preços dinâmicos), Finanças ("Valor Levantável" — v37, agora com Identidade Fiscal — NOVO v42), Kit de Marketing dos afiliados (v41) e recibos de pagamento a afiliados (NOVO v43) |
-| **Página de Conta (`perfil.html`)** | NOVO (v25): dados pessoais, segurança (email/password), avatar, plano/créditos e documentos recentes — Comprar Créditos e Ver Arquivo abrem em modal na própria página, sem navegar para a home |
-| **PWA** | Instalável em Android e iOS, funciona offline; precache corrigido (33 ficheiros adicionados em v21) |
+1. [Funcionalidades principais](#1-funcionalidades-principais)
+2. [Arquitectura e stack](#2-arquitectura-e-stack)
+3. [Motor de IA — geração multi-provider com auto-cura](#3-motor-de-ia--geração-multi-provider-com-auto-cura)
+4. [Serviços e templates](#4-serviços-e-templates)
+5. [Estrutura do projecto](#5-estrutura-do-projecto)
+6. [Deploy — passo a passo completo](#6-deploy--passo-a-passo-completo)
+7. [Segurança](#7-segurança)
+8. [Pagamentos e créditos](#8-pagamentos-e-créditos)
+9. [Sistema de afiliados e rede de parceiros](#9-sistema-de-afiliados-e-rede-de-parceiros)
+10. [Limites do Vercel Hobby](#10-limites-do-vercel-hobby)
+11. [Testes](#11-testes)
+12. [Dívida técnica e problemas conhecidos (honesto, sem filtro)](#12-dívida-técnica-e-problemas-conhecidos-honesto-sem-filtro)
+13. [Conformidade legal (Moçambique)](#13-conformidade-legal-moçambique)
+14. [Histórico de versões](#14-histórico-de-versões)
 
 ---
 
-## 🗂️ Estrutura do Projecto
+## 1. Funcionalidades principais
 
-```
-MzDocs-Pro/
-├── api/                               # 12 Serverless Functions (Vercel Hobby — limite 12, sem margem)
-│   ├── _lib/                          # Helpers partilhados (prefixo "_" — não contam para o limite)
-│   │   ├── supabaseAdmin.js           # Cliente Supabase via fetch puro (REST + Auth API + Storage),
-│   │   │                              #   sem @supabase/supabase-js nem 'ws'
-│   │   ├── visionAI.js                # IA visão (Gemini → OpenRouter fallback),
-│   │   │                              #   partilhado entre extract-template.js e misc.js
-│   │   ├── legalSearch.js             # NOVO (v17): busca vectorial pgvector para o Motor Jurídico RAG
-│   │   ├── packages.js                # Única fonte de verdade dos pacotes de créditos
-│   │   │                              #   (lê de system_settings — eliminou duplicação em 5 locais)
-│   │   ├── rateLimit.js               # Rate-limit via Upstash Redis (com fallback Map local),
-│   │   │                              #   partilhado por vários endpoints (verify-receipt, legal-search,
-│   │   │                              #   convert, extract-template, partners)
-│   │   ├── aiProviderRegistry.js      # Lista/config dos providers de IA usados em generate-document.js
-│   │   ├── aiProvidersCatalog.js      # Catálogo exposto ao painel admin (monitorização de providers)
-│   │   ├── modelDiscovery.js          # Descoberta de modelos disponíveis por provider
-│   │   ├── modelHealth.js             # Estado de saúde por modelo (desactiva automaticamente
-│   │   │                              #   modelos que estejam a falhar, ver migration_v27)
-│   │   ├── contentModeration.js       # Moderação de conteúdo (templates/blog submetidos)
-│   │   ├── blogTemplate.js            # Template HTML das páginas de blog/SEO publicadas
-│   │   ├── webpush.js                 # Envio de notificações push via VAPID
-│   │   └── piiRedaction.js            # NOVO (v30 — auditoria de segurança Ago/2026): mascara BI,
-│   │                                  #   NUIT, telefone e e-mail identificados no prompt ANTES de o
-│   │                                  #   enviar a qualquer fornecedor de IA externo; restaura os
-│   │                                  #   valores reais no texto devolvido. Usado por generate-document.js
-│   ├── admin/
-│   │   └── index.js                   # v2.2 — Dashboard, analytics, feedback, pagamentos,
-│   │                                  #   blog/páginas estáticas, gerador de artigos com IA,
-│   │                                  #   gestão de templates e afiliados
-│   │                                  #   🟢 sem @supabase/supabase-js/'ws' desde a v29
-│   ├── auth/
-│   │   └── index.js                   # v2.1 — Login, registo, reset password
-│   ├── generate-document.js           # v2.2 — 5 providers IA + amostra grátis + custo progressivo
-│   │                                  #   + reembolso automático em falha total + mascaragem de PII
-│   │                                  #   antes de enviar à IA (NOVO v30, ver api/_lib/piiRedaction.js)
-│   ├── extract-template.js            # v2.1 — Extracção de template via imagem (IA visão);
-│   │                                  #   CORS restrito a SITE_URL desde v30 (era wildcard '*')
-│   ├── verify-credits.js              # v3.0 — Verificar saldo de créditos
-│   ├── deduct-credit.js               # v3.0 — Debitar/reembolsar crédito (fetch puro, sem 'ws')
-│   ├── process-payment.js             # v5.0 — Pagamento manual multi-carteira + registo de transação
-│   ├── partners.js                    # v2.1 — API da Rede de Parceiros; CORS restrito a SITE_URL
-│   │                                  #   desde v30 (era wildcard '*')
-│   ├── convert.js                     # v1.1 — Conversão de ficheiros (OCR / extracção de texto);
-│   │                                  #   desde v30: CORS restrito a SITE_URL + verificação de
-│   │                                  #   assinatura binária (magic bytes) do ficheiro enviado,
-│   │                                  #   em vez de confiar só na extensão do nome do ficheiro
-│   ├── delete-temp-account.js         # v10.0 — Direito ao esquecimento: contas 'avulso' (regra
-│   │                                  #   original) + contas normais via { confirmDeletion: true }
-│   │                                  #   (NOVO v31); rate limiting; transactions anonimizadas
-│   │                                  #   (não apagadas — obrigação fiscal), documents em CASCADE
-│   ├── cleanup-temp-accounts.js       # v9.0 — Cron diário: limpeza automática de contas expiradas
-│   └── misc.js                        # v3.2 — Router auxiliar:
-│                                      #   /api/config · /api/ocr-analyze · /api/verify-receipt
-│                                      #   /api/legal-search (Motor Jurídico RAG)
-│                                      #   /api/page-view · sitemap.xml
-│                                      #   /api/affiliate/* (register/dashboard/click/withdraw/
-│                                      #     check/ranking/notifications)
-│                                      #   /api/templates/* (list/gallery/mine/saved/save/submit/
-│                                      #     rate/download/use/approve/reject/pending/report/
-│                                      #     share-token/by-token/delete)
-│                                      #   🟢 sem SDK/'ws' desde a v29 (ex-makeSdkClient())
-│
-├── assets/
-│   ├── js/
-│   │   ├── academic/
-│   │   │   ├── AcademicEngine.js      # APA 7: citações, bibliography, TOC, PDF/URL
-│   │   │   └── AcademicUI.js          # Painel de referências + upload PDF/URL
-│   │   ├── admin/
-│   │   │   ├── AdminApp.js            # Painel admin completo (utilizadores, pagamentos,
-│   │   │   │                          #   afiliados, templates, configurações/preços)
-│   │   │   ├── AdminDashboard.js      # Widget de analytics em tempo real
-│   │   │   └── AdminTransactions.js   # Gestão de transações/pagamentos
-│   │   ├── analytics/
-│   │   │   └── Analytics.js           # GA4 + Facebook Pixel + Microsoft Clarity
-│   │   ├── auth/
-│   │   │   ├── AuthGuard.js           # Protecção de rotas
-│   │   │   ├── AuthManager.js         # Autenticação Supabase
-│   │   │   └── AuthUI.js              # UI de login/registo
-│   │   ├── components/
-│   │   │   ├── DocumentEditor.js      # Editor WYSIWYG + iframe designMode p/ templates
-│   │   │   ├── DocumentEditorStyles.js# Estilos injectados no iframe do editor
-│   │   │   ├── HTMLPDFExporter.js     # PDF via impressão (preserva cores de fundo)
-│   │   │   ├── HTMLToDocxExporter.js  # Word real (.docx / OOXML) via biblioteca `docx`
-│   │   │   │                          #   (para templates HTML com sidebar/2 colunas)
-│   │   │   ├── WordExporter.js        # Word académico real (.docx) via `docx`:
-│   │   │   │                          #   Times 12pt, margens normalizadas, capa automática
-│   │   │   ├── PDFExporter.js         # PDF via jsPDF (documentos sem template)
-│   │   │   ├── ExcelExporter.js       # Export Excel (.xls)
-│   │   │   └── pageSimulationScript.js# Script injectado no iframe do preview A4
-│   │   ├── controllers/
-│   │   │   ├── DocumentController.js  # Orquestra geração + editor + templates + export
-│   │   │   ├── TemplateController.js  # Gestão de templates do marketplace
-│   │   │   ├── HistoryController.js   # Histórico de documentos (IndexedDB)
-│   │   │   ├── OCRController.js       # OCR via SmartOCRService
-│   │   │   └── PaymentController.js   # Fluxo de pagamento manual multi-carteira
-│   │   ├── convert/
-│   │   │   └── FileConverter.js       # Conversão de ficheiros no cliente
-│   │   ├── marketplace/
-│   │   │   ├── TemplateLibrary.js     # Reexporta o agregado de templates/index.js
-│   │   │   ├── TemplatePicker.js      # Modal de escolha com preview A4 em tempo real
-│   │   │   ├── SampleData.js          # NOVO: dados de exemplo realistas por categoria,
-│   │   │   │                          #   para preview convincente na galeria comunitária
-│   │   │   └── templates/             # 1 ficheiro por categoria (cv.js, carta.js, ...)
-│   │   │       ├── index.js           # Agregador de todos os 14 ficheiros de categoria
-│   │   │       ├── cv.js · carta.js · acta.js · arrendamento.js · licenca.js
-│   │   │       ├── orcamento.js · planonegocio.js · prestacao.js · procuracao.js
-│   │   │       ├── recibo.js · recomendacao.js · requerimento.js · residencia.js
-│   │   │       └── trabalho.js
-│   │   ├── models/
-│   │   │   └── Models.js
-│   │   ├── partners/
-│   │   │   └── NearbyPartners.js      # Lista/mapa de parceiros próximos
-│   │   ├── services/
-│   │   │   ├── ServiceDefinitions.js  # 17 serviços (14 com templates + 3 via WhatsApp)
-│   │   │   ├── Services.js            # Orquestra chamadas à API de geração; desde v31 mascara
-│   │   │   │                          #   nome/BI/NUIT/morada/contacto (campos estruturados do
-│   │   │   │                          #   formulário) antes de montar o prompt — ver piiShield.js
-│   │   │   ├── LegalContext.js        # NOVO (v17): ponte frontend ↔ /api/legal-search (RAG)
-│   │   │   ├── LongDocumentEngine.js  # v2.0: motor de geração em cadeia para docs longos;
-│   │   │   │                          #   débito APÓS planeamento (fix: crédito perdido em falha)
-│   │   │   ├── MPesaService.js        # Detecção de carteira por prefixo de número
-│   │   │   ├── PaymentService.js      # Pacotes (lê de /api/config), validação de telefone
-│   │   │   └── SmartOCRService.js     # v4.0: IA visual primeiro, Tesseract como complemento
-│   │   │   └── prompts/               # 1 ficheiro de prompt por categoria (v17+)
-│   │   │       ├── index.js           # Agregador; prompts jurídicos usam LegalContext (RAG)
-│   │   │       ├── piiShield.js       # NOVO (v31): mascara/repõe campos sensíveis do formData —
-│   │   │       │                      #   complementa api/_lib/piiRedaction.js (que actua sobre o
-│   │   │       │                      #   texto já montado, por padrão; este actua sobre os campos
-│   │   │       │                      #   estruturados, por nome do campo — nome, morada, papéis
-│   │   │       │                      #   como outorgante/procurador/senhorio, etc.)
-│   │   │       └── [14 ficheiros: acta.js, arrendamento.js, carta.js, cv.js, licenca.js,
-│   │   │           orcamento.js, planonegocio.js, prestacao.js, procuracao.js, recibo.js,
-│   │   │           recomendacao.js, requerimento.js, residencia.js, trabalho.js]
-│   │   ├── utils/
-│   │   │   ├── A4Renderer.js          # Motor de preview A4 (renderA4Pages, _fillTemplate,
-│   │   │   │                          #   parser GFM Markdown completo incluindo tabelas)
-│   │   │   ├── Formatter.js           # Formatação / moeda / validatePhone / detectWallet
-│   │   │   ├── IndexedDB.js           # Persistência offline de documentos
-│   │   │   ├── Sanitizer.js           # Sanitização HTML (tags semânticas HTML5)
-│   │   │   └── Storage.js             # Abstracção de localStorage
-│   │   └── views/
-│   │       └── Views.js               # Renderização de resultados + preview iframe
-│   │   ├── app.js                     # Ponto de entrada principal
-│   │   └── homeController.js          # Controller da página principal
-│   └── css/
-│       ├── styles.css                 # Estilos globais
-│       ├── editor.css                 # Estilos do editor WYSIWYG
-│       ├── admin.css                  # Estilos do painel admin
-│       └── auth.css                   # Estilos de autenticação
-│
-├── supabase/
-│   ├── schema.sql                     # Schema base (⚠️ desactualizado — usar migrations por ordem)
-│   ├── migration_v8_1_blog_pages.sql
-│   ├── migration_v8_2_admin_tables.sql
-│   ├── migration_v8_pricing_temp_accounts.sql
-│   ├── migration_v9_analytics_feedback.sql
-│   ├── migration_v10_affiliates.sql
-│   ├── migration_v10_online_userid.sql
-│   ├── migration_v11_marketplace.sql
-│   ├── migration_v12_refund_credit.sql
-│   ├── migration_v12_community_templates.sql
-│   ├── migration_v13_fix_signup_credits.sql
-│   ├── migration_v14_affiliates_pro.sql
-│   ├── migration_v15_receipt_verification.sql
-│   ├── migration_v16_fix_signup_name_phone.sql
-│   ├── migration_v17_legal_rag.sql            # pgvector + tabela legal_articles + busca semântica
-│   ├── migration_v20_lei_associacoes_cooperativas.sql  # Seed: leis das associações/cooperativas
-│   │                                                   # (gap v18/v19 é real no repositório)
-│   ├── migration_v21_dynamic_signup_credits.sql        # Trigger lê free_credits_normal de system_settings
-│   ├── migration_v22_seed_official_templates.sql       # Seed: 70 templates oficiais na galeria
-│   ├── migration_v23_fix_gallery_view_html_css.sql     # Corrige view v_templates_gallery (faltava
-│   │                                                   #   template_html/css → preview genérico)
-│   ├── migration_v24_secure_orphan_credit_packages.sql # RLS na tabela credit_packages (estava
-│   │                                                   #   sem políticas desde v8 — escrevível por anon)
-│   ├── migration_v25 … v47                             # Marketing Analytics, QR codes, Funnel/CRM,
-│   │                                                   #   push notifications, afiliados (tiers/bónus),
-│   │                                                   #   Finanças, Marketplace (split de créditos),
-│   │                                                   #   limites de uso por documento, Kit de Marketing,
-│   │                                                   #   Identidade Fiscal, recibos de afiliados,
-│   │                                                   #   avaliações públicas, código de acesso de
-│   │                                                   #   parceiro, advogados como parceiros —
-│   │                                                   #   ver secções "Alterações — v25" a "v28" abaixo
-│   ├── migration_v48_lpd_compliance.sql                # NOVO: consent_logs (prova de consentimento) +
-│   │                                                   #   retenção definida, preparação para a nova Lei
-│   │                                                   #   de Protecção de Dados Pessoais (ainda em
-│   │                                                   #   votação na Assembleia da República)
-│   ├── migration_v49_secure_affiliate_receipts.sql     # CORRECÇÃO DE SEGURANÇA: bucket de storage
-│   │                                                   #   "affiliate-receipts" (comprovativos de
-│   │                                                   #   pagamento M-Pesa) passou de público para
-│   │                                                   #   privado, acesso só via signed URL (5 min)
-│   ├── migration_v50_protect_sensitive_profile_columns.sql # RLS reforçada nas colunas sensíveis de
-│   │                                                   #   `profiles` (BI, NUIT, morada)
-│   └── supabase-partners-setup.sql            # Tabela `partners` (Rede de Parceiros)
-│
-├── tests/
-│   ├── auth.test.js                   # Testes unitários AuthManager / AuthUI (jsdom)
-│   ├── ocrSchemaAlignment.test.js     # Garante alinhamento schema OCR ↔ campos do formulário
-│   └── rateLimit.test.js              # Testes para api/_lib/rateLimit.js
-│
-├── docs/
-│   └── legal/
-│       ├── VERIFICACAO-LEGAL.md       # Histórico de erros em citações legais corrigidos pelo RAG
-│       └── textos-fonte/              # Textos oficiais de leis (ex: lei-associacoes.txt)
-│
-├── pages/                             # Páginas SEO estáticas (geradas pelo admin via GitHub API)
-├── afiliado.html                      # Painel de afiliados
-├── admin.html                         # Painel administrativo
-├── admin-parceiros.html               # Gestão da Rede de Parceiros (admin)
-├── parceiros.html                     # Listagem pública de parceiros
-├── parceiro-portal.html               # Portal de acesso do próprio parceiro (papelaria/advogado) —
-│                                      #   login por código de acesso próprio (v46), sem passar por
-│                                      #   conta de utilizador normal
-├── blog.html                          # Página pública do blog/CMS (artigos gerados/publicados)
-├── templates.html                     # Galeria comunitária de templates — inclui agora os modais
-│                                      #   de Resultado/Créditos/Histórico (v25, ver abaixo)
-├── perfil.html                        # NOVO (v25): página de conta do utilizador — dados pessoais,
-│                                      #   segurança (email/password), avatar, plano/créditos,
-│                                      #   documentos recentes clicáveis; Créditos e Arquivo abrem
-│                                      #   em modal na própria página (payOverlay/historyOverlay
-│                                      #   embutidos), sem navegar para "/"
-├── index.html                         # App principal (PWA)
-├── offline.html                       # Página offline
-├── legal.html                         # Conformidade legal (Lei n.º 58/2021)
-├── sw.js                              # Service Worker; CACHE_VERSION é reescrita automaticamente
-│                                      #   a cada deploy por scripts/inject-version.js (formato
-│                                      #   v<sha-git-7-chars>-<YYYYMMDD>) — o valor no repositório
-│                                      #   é só um placeholder, não reflecte a versão em produção
-├── manifest.json                      # PWA manifest
-├── vercel.json                        # 12 functions + rewrites + crons + CSP (img-src inclui
-│                                      #   https://*.supabase.co desde v25 — necessário para os
-│                                      #   avatares de perfil carregados do Supabase Storage)
-├── package.json                       # v11.0.0
-└── scripts/
-    └── inject-version.js              # Actualiza CACHE_VERSION automaticamente a cada deploy
-```
+| Funcionalidade | Descrição | Estado verificado |
+|---|---|---|
+| **Geração com IA — 13 providers registados** | Corrida paralela com fallback automático; ver secção 3 | ✅ Código confirmado — muito além dos "5 providers" descritos em versões antigas deste README |
+| **Descoberta de modelos ao vivo** | Antes de confiar numa lista fixa de modelos, o sistema consulta `GET /models` do próprio provider e usa o catálogo real | ✅ `api/_lib/modelDiscovery.js` |
+| **Disjuntor (circuit breaker) por modelo** | Desliga automaticamente um modelo específico que esteja a falhar — 7 dias se for descontinuação permanente, com backoff crescente (10min→30min→2h) se for falha transitória | ✅ `api/_lib/modelHealth.js` |
+| **Amostra Grátis + Custo Progressivo** | `_previewMode: true` gera um extracto curto sem debitar créditos; documentos longos (6+ páginas) têm custo progressivo via `LongDocumentEngine` | ✅ |
+| **18 serviços** (16 com geração por IA, 2 encaminhados por WhatsApp) | Ver secção 4 — número real supera os "17 serviços / 14 com IA" de versões anteriores deste documento | ✅ `ServiceDefinitions.js` |
+| **70+ Templates Visuais** | 5 templates por serviço nos 14 serviços "clássicos", com CSS próprio | ✅ |
+| **Editor WYSIWYG** | Edição inline com preservação fiel do template (iframe + `designMode`) | ✅ |
+| **Export PDF / Word (.docx real) / Excel (.xls)** | `HTMLToDocxExporter` e `WordExporter` geram OOXML real via biblioteca `docx`, não HTML disfarçado | ✅ |
+| **Assinatura Digital (canvas)** | Inserida directamente no documento — **sem validade jurídica plena** sem certificação nos termos da Lei n.º 3/2017 (ver secção 13) | ✅ |
+| **Módulo Académico APA 7** | Citações, bibliografia, TOC automático, upload PDF/URL | ✅ |
+| **Extracção de Template por Imagem** | IA de visão extrai estrutura de qualquer imagem de documento | ✅ |
+| **OCR (SmartOCRService v4)** | IA visual primeiro (Groq/Gemini), Tesseract como complemento; suporta imagem, PDF (`pdf.js`) e Word (`mammoth.js`) | ✅ |
+| **Digitalizar Documento (`transcricao`)** | Serviço dedicado a fotografar um trabalho manuscrito/vários ficheiros e devolver texto digitado e formatado | ✅ Novo serviço, não documentado em versões anteriores deste README |
+| **Motor Jurídico RAG** | Busca vectorial (pgvector) sobre artigos de lei moçambicanos reais para os serviços jurídicos, em vez de citações estáticas | ✅ |
+| **Histórico Offline** | IndexedDB, sincronizado quando online | ✅ |
+| **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola, mKesh — upload de comprovativo com verificação automática por IA de visão (aprovação se confiança ≥ 0.85) e fallback WhatsApp | ✅ |
+| **Reembolso Automático de Créditos** | Se a geração falhar após o débito, o crédito é devolvido via RPC `refund_credit` | ✅ |
+| **Preços Dinâmicos** | Pacotes lidos de `system_settings` em tempo real (`api/_lib/packages.js`) | ✅ |
+| **Marketplace de Templates** | Galeria comunitária, preview A4 realista, submissão/avaliação/partilha, repartição de receita 60–70% para o criador | ✅ |
+| **Sistema de Afiliados Pro** | Segmentação, níveis, bónus por tier, detecção de fraude — ver secção 9 | ✅ |
+| **Rede de Parceiros (incl. advogados)** | Papelarias, cyber cafés e advogados parceiros, com código de acesso próprio | ✅ |
+| **Avaliações Públicas** | ⭐ 1–5, com moderação de conteúdo automática (`contentModeration.js`) | ✅ |
+| **Créditos Bónus / Promoções (NOVO)** | Admin pode conceder um bónus de créditos (ex.: "+5 este mês") somado aos créditos grátis normais no registo | ✅ Mas ver nota honesta na secção 12 — o prazo de validade do bónus é guardado e nunca aplicado |
+| **Painel Admin** | Analytics, feedback, utilizadores, pagamentos, parceiros, preços dinâmicos, Finanças com Identidade Fiscal, Kit de Marketing, recibos de afiliados | ✅ |
+| **Blog / SEO** | CMS com geração assistida por IA; publicação automática de HTML estático directamente no GitHub via Contents API | ✅ |
+| **PWA** | Instalável, funciona offline, `CACHE_VERSION` auto-gerado a cada deploy | ✅ |
 
 ---
 
-## 🚀 Deploy
+## 2. Arquitectura e stack
 
-### 1. Pré-requisitos
-- Conta Vercel (Hobby ou Pro — ver aviso comercial no topo)
-- Projecto Supabase com extensão `pgvector` activada (necessária para o Motor Jurídico RAG — v17)
-- Pelo menos uma conta de IA (quanto mais, maior a disponibilidade):
-  Groq, Google AI Studio (Gemini), OpenRouter, Cerebras e/ou NVIDIA NIM — todas têm tier gratuito
-- ~~Conta M-Pesa API~~ — **não é necessária.** Os pagamentos são confirmados por upload de
-  comprovativo com verificação por IA ou manualmente. `MPESA_API_KEY`/`MPESA_SERVICE_CODE` são
-  opcionais (apenas alteram a etiqueta "sandbox"/"produção" na interface).
-- Opcional: conta CloudConvert (conversão de ficheiros), Upstash Redis (rate-limit persistente),
-  Personal Access Token do GitHub (publicação automática de páginas SEO)
-
-### 2. Variáveis de Ambiente (Vercel)
-
-```
-# Obrigatórias
-SUPABASE_URL=https://xxxx.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-
-# IA — pelo menos 1 chave é obrigatória; quantas mais, maior a disponibilidade
-GROQ_API_KEY=gsk_...
-GEMINI_API_KEY=AIza...
-OPENROUTER_API_KEY=sk-or-...
-CEREBRAS_API_KEY=csk-...
-NVIDIA_API_KEY=nvapi-...
-
-SITE_URL=https://mzdocs.co.mz
-
-# Notificações Push — obrigatórias para /api/_lib/webpush.js (sem fallback;
-# falha com erro explícito se ausentes). Gerar par de chaves VAPID uma vez
-# (ex: `npx web-push generate-vapid-keys`) e nunca as regenerar depois de
-# utilizadores já terem subscrito, ou as subscrições existentes deixam de
-# funcionar.
-VAPID_PUBLIC_KEY=...
-VAPID_PRIVATE_KEY=...
-VAPID_SUBJECT=mailto:suporte.mzdocs@gmail.com   # tem este valor por defeito se omitido
-
-# Opcionais
-MPESA_API_KEY=...                  # apenas para detectar modo sandbox/produção
-MPESA_SERVICE_CODE=...             # ⚠️ nome real no código (não "MPESA_SERVICE_PROVIDER_CODE")
-WA_SUPPORT_NUMBER=258858695506     # WhatsApp de suporte (tem este valor por defeito)
-CLOUDCONVERT_API_KEY=...           # necessário para api/convert.js em modo cloud
-LIBREOFFICE=false                  # true apenas em VPS com LibreOffice (não aplicável no Vercel)
-CRON_SECRET=...                    # protege /api/cleanup-temp-accounts contra invocação externa
-UPSTASH_REDIS_REST_URL=...         # rate-limit persistente entre instâncias serverless
-UPSTASH_REDIS_REST_TOKEN=...       #   (sem isto, cai num Map local por instância — menos seguro)
-GITHUB_OWNER=...                   # publicação automática de páginas SEO
-GITHUB_REPO=...
-GITHUB_TOKEN=...                   # Personal Access Token com escrita no repositório
-TERMS_VERSION=2026-07              # versão dos Termos registada em profiles.consent_terms_version
-                                    #   (tem este valor por defeito; sobe manualmente ao publicar
-                                    #   uma nova versão dos Termos)
-INDEXNOW_KEY=...                   # notifica motores de busca (Bing/etc.) ao publicar artigos;
-                                    #   tem uma chave por defeito no código, mas gerar uma própria
-                                    #   é recomendado antes de lançar em produção
-```
-
-> ⚠️ **Variáveis sem efeito (não usar):** `ADMIN_EMAILS` e `MPESA_PUBLIC_KEY` aparecem em versões
-> antigas deste README mas **não são lidas em nenhum ficheiro do código**. O estado de administrador
-> é controlado pela coluna `profiles.is_admin` — ver `supabase/EXECUTAR_promote_admin.sql`.
-
-### 3. Migrações Supabase
-Execute por ordem no SQL Editor do Supabase:
-
-```sql
--- 1. Schema base
-schema.sql
-
--- 2. Blog e páginas admin
-migration_v8_1_blog_pages.sql
-migration_v8_2_admin_tables.sql
-
--- 3. Planos e contas temporárias
-migration_v8_pricing_temp_accounts.sql
-
--- 4. Analytics e feedback
-migration_v9_analytics_feedback.sql
-
--- 5. Sistema de afiliados (base)
-migration_v10_affiliates.sql
-
--- 6. Online sessions com user_id + Realtime
-migration_v10_online_userid.sql
-
--- 7. Template Marketplace (schema base)
-migration_v11_marketplace.sql
-
--- 8. Rede de Parceiros
-supabase-partners-setup.sql
-
--- 9. Reembolso automático de créditos + tabela credit_logs
-migration_v12_refund_credit.sql
-
--- 10. Marketplace comunitário (submissão, avaliação, destaque, partilha, template_uses)
-migration_v12_community_templates.sql
-
--- 11. Corrige bónus de registo: 1 crédito / 30 dias
-migration_v13_fix_signup_credits.sql
-
--- 12. Sistema de Afiliados Pro (segmentação, níveis, metas, anti-fraude)
-migration_v14_affiliates_pro.sql
-
--- 13. Verificação automática de comprovativos (colunas novas em `transactions`)
-migration_v15_receipt_verification.sql
-
--- 14. Corrige perfis criados sem nome/telefone
-migration_v16_fix_signup_name_phone.sql
-
--- 15. Motor Jurídico RAG: pgvector, tabela legal_articles, função search_legal_articles
---     ⚠️ Requer extensão pgvector activada no Supabase (Dashboard → Extensions)
-migration_v17_legal_rag.sql
-
--- 16. Seed: textos da Lei das Associações e Cooperativas (dados para o RAG)
-migration_v20_lei_associacoes_cooperativas.sql
-
--- 17. Créditos de registo dinâmicos (trigger lê de system_settings em vez de valor fixo)
-migration_v21_dynamic_signup_credits.sql
-
--- 18. Seed: 70 templates oficiais na galeria comunitária (galeria deixa de aparecer vazia)
-migration_v22_seed_official_templates.sql
-
--- 19. Corrige view v_templates_gallery (faltavam colunas template_html/css → preview genérico)
-migration_v23_fix_gallery_view_html_css.sql
-
--- 20. RLS na tabela credit_packages (estava sem políticas — escrevível por anon desde v8)
-migration_v24_secure_orphan_credit_packages.sql
-
--- 21. Corrige estados de transacção inconsistentes
-migration_v25_fix_transaction_status.sql
-
--- 22. Agendamento de publicação do blog
-migration_v26_blog_scheduling.sql
-
--- 23. Monitorização dos providers de IA (uptime/latência por provider)
-migration_v27_ai_provider_monitoring.sql
-
--- 24. Coluna published_at em blog_pages
-migration_v28_blog_pages_published_at.sql
-
--- 25. Página de perfil público do utilizador
-migration_v29_user_profile_page.sql
-
--- 26. Marketing Analytics — Fase 1: visitas, eventos, fontes
-migration_v30_marketing_analytics.sql
-
--- 27. Marketing Analytics — Fase 2: atribuição de compras à fonte de marketing
---     ⚠️ Ficheiro corrompido/vazio no export usado na auditoria de 11/Jul/2026 — confirmar
---     no Supabase se já foi aplicado antes de tentar correr novamente
-migration_v31_marketing_purchase_attribution.sql
-
--- 28. Marketing Analytics — Fase 3: QR codes geridos no admin
-migration_v32_marketing_qrcodes.sql
-
--- 29. Marketing Analytics — Fase 4: funil de conversão + timeline/CRM por utilizador
-migration_v33_funnel_crm.sql
-
--- 30. Marketing Analytics — Fase 5: campanhas, metas e notificações administrativas
-migration_v34_campaigns_goals_notifications.sql
-
--- 31. Notificações push reais (VAPID)
-migration_v35_push_notifications.sql
-
--- 32. Bónus de comissão por tier + crédito de boas-vindas por registo via afiliado
-migration_v36_tier_bonus_and_referral_signup.sql
-
--- 33. Finanças: despesas operacionais + "Valor Levantável"
-migration_v37_finance_expenses.sql
-
--- 34. Templates: corrige aprovação/rejeição + repartição de vendas com o criador
-migration_v38_template_marketplace_split.sql
-
--- 35. Templates: preço sempre em créditos (remove price_mzn)
---     ⚠️ Executar SÓ depois da v38
-migration_v39_template_credits_only.sql
-
--- 36. Limites de uso por documento (downloads + edições)
---     ⚠️ Executar depois das v37/v38/v39
-migration_v40_document_usage_limits.sql
-
--- 37. Kit de Marketing dinâmico para afiliados (QR pessoal por peça)
-migration_v41_marketing_materials.sql
-
--- 38. Identidade fiscal da empresa (nome legal, NUIT, morada, regime, início
---     do exercício) para o cabeçalho dos relatórios de Finanças
-migration_v42_finance_fiscal_identity.sql
-
--- 39. Recibos de pagamento (levantamento) a afiliados
-migration_v43_affiliate_payout_receipts.sql
-
--- 40. Avaliações públicas (reviews)
-migration_v44_public_reviews.sql
-
--- 41. Anti-abuso nas avaliações de parceiros
-migration_v45_partner_ratings_antiabuso.sql
-
--- 42. Código de acesso de parceiro
---     ⚠️ Existem DOIS ficheiros "v46" no repositório — este e o seguinte.
---     Não é o mesmo número de migração aplicado duas vezes: são dois ficheiros
---     SQL distintos que, por lapso, ficaram com o mesmo número de versão no
---     nome. Correm ambos sem conflito (nomes de ficheiro diferentes), mas
---     RECOMENDA-SE renomear um deles (ex: para v51 — v48/v49/v50 já estão
---     ocupados desde esta ronda) antes da próxima ronda de migrações, para
---     não assumir por engano que "já correu a v46" tendo corrido apenas um
---     dos dois.
-migration_v46_partner_access_code.sql
-
--- 43. Corrige violação de chave estrangeira no registo de documentos
---     ⚠️ Ver aviso de numeração duplicada acima (também "v46")
-migration_v46_fix_document_insert_fk_violation.sql
-
--- 44. Área Jurídica: advogados como parceiros (reaproveita a tabela `partners`
---     já existente — coluna `type` ('papelaria'|'advogado'), `credential_number`
---     = nº de inscrição na Ordem dos Advogados de Moçambique, conferido
---     manualmente pelo admin antes de aprovar; nunca há validação automática)
-migration_v47_partners_advogados.sql
-
--- 45. LPD/RGPD: consent_logs (prova de consentimento), colunas
---     consent_terms_at/version em profiles, purge_expired_documents()
---     (âmbito realista: só limpa consent_logs >5 anos e registos órfãos —
---     nunca o arquivo de documentos dos utilizadores) + remediação:
---     limpa profiles.temp_password já gravado em texto simples (ver v50)
---     ⚠️ Havia dois ficheiros "v48" neste repositório (um quase cópia do
---     outro, com uma secção extra de remediação) — consolidados num único
---     ficheiro nesta ronda; se já tiver corrido o antigo "-1" antes desta
---     data, confirme se a secção 5 (remoção de temp_password) já foi
---     aplicada antes de correr este ficheiro de novo.
-migration_v48_lpd_compliance.sql
-
--- 46. CORRECÇÃO DE SEGURANÇA: bucket de storage "affiliate-receipts"
---     (comprovativos de pagamento M-Pesa) passa de público para privado,
---     acesso só via signed URL (5 min)
-migration_v49_secure_affiliate_receipts.sql
-
--- 47. RLS reforçada nas colunas sensíveis de `profiles` (BI, NUIT, morada)
-migration_v50_protect_sensitive_profile_columns.sql
-```
-
-> ⚠️ Existem ainda vários ficheiros avulsos na pasta `supabase/` (`EMERGENCIA_*`,
-> `EXECUTAR_AGORA_*`, `migration_fix_*`, `migration_add_*`, `polices.sql`, `transactions.sql`)
-> aplicados directamente em produção ao longo do tempo. Para uma instalação limpa, execute apenas
-> a lista acima por ordem. Recomenda-se gerar um `schema_CURRENT.sql` a partir do Dashboard do
-> Supabase (Database → Schema) como referência canónica.
-
-### 4. Push para GitHub → Vercel faz deploy automático
+- **Frontend:** HTML/CSS/JS puro (sem framework pesado), organizado em `assets/js/` por
+  domínio (`controllers/`, `services/`, `components/`, `marketplace/`, `academic/`, `auth/`,
+  `admin/`, `partners/`, `utils/`, `views/`).
+- **Backend:** 12 Serverless Functions na Vercel — o número exacto e físico permitido pelo plano
+  Hobby, confirmado em `vercel.json` (`functions: {...}` tem exactamente 12 entradas). Ficheiros
+  dentro de `api/_lib/` são helpers partilhados e **não contam** para este limite.
+- **Base de dados:** Supabase (PostgreSQL) com extensão `pgvector` para o Motor Jurídico RAG.
+- **Cliente Supabase:** 100% via `fetch` nativo (`api/_lib/supabaseAdmin.js`) — **confirmado**
+  que não existe nenhum `require()`/`import` activo de `@supabase/supabase-js` nem de `ws` em
+  nenhum ficheiro de `api/`; `package.json` também não lista nenhuma das duas dependências.
+  (Referências a essas bibliotecas que ainda aparecem em `api/admin/index.js` e `api/misc.js`
+  são **comentários históricos**, não código a correr.)
+- **Rate limiting:** Upstash Redis, com fallback para `Map` local em memória se as variáveis
+  `UPSTASH_REDIS_REST_URL`/`_TOKEN` não estiverem definidas.
+- **Migrações:** mais de 50 ficheiros SQL versionados em `supabase/`, de `schema.sql` +
+  `migration_v8_*` até `migration_v51_bonus_credits.sql`, mais um conjunto de ficheiros avulsos
+  sem numeração sequencial (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `migration_fix_*`,
+  `migration_add_*`) aplicados directamente em produção ao longo do tempo — ver secção 12.
 
 ---
 
-## 🎨 Template Engine
+## 3. Motor de IA — geração multi-provider com auto-cura
 
-### Fluxo completo:
-```
-Seleccionar Serviço → Preencher Formulário → [Amostra Grátis] → Gerar com IA
-  → [Escolher Modelo] → Preview A4 em tempo real
-    → [Preview / Editar / Download PDF / Word / Excel / Assinar]
-```
+Este é o subsistema mais sofisticado do projecto e o que mais mudou desde as descrições
+anteriores deste README ("5 providers em corrida paralela"). O estado real, confirmado em
+`api/_lib/aiProviderRegistry.js`, é:
 
-### 70 Templates prontos (5 por serviço):
+### 3.1. 13 providers registados (fonte única de verdade)
 
-| Serviço | Chave | Templates |
-|---------|-------|-----------|
-| Trabalho Escolar / Académico | `trabalho` | académico, moderno, UEM, técnico, criativo |
-| Currículo (CV) | `cv` | clássico, moderno, executivo, jovem, académia |
-| Carta Formal | `carta` | clássica, corporativa, ministerial, moderna, candidatura |
-| Orçamento de Obra | `orcamento` | profissional, simples, construtora, engenharia, M-Pesa |
-| Contrato de Arrendamento | `arrendamento` | legal, moderno, comercial, simplificado, bilíngue |
-| Contrato Prestação de Serviços | `prestacao` | jurídico, freelancer, empresa, construção, TI |
-| Procuração / Mandato | `procuracao` | notarial, bancária, geral, imóvel, judicial |
-| Requerimento Oficial | `requerimento` | formal, escola, saúde, migração, finanças |
-| Declaração de Residência | `residencia` | junta, formal, auto, empresa, bilhetão |
-| Plano de Negócios | `planonegocio` | banco, startup, ONG, agricultura, executivo |
-| Recibo / Factura | `recibo` | simples, factura, loja, pro-forma, serviço |
-| Carta de Recomendação | `recomendacao` | emprego, académica, institucional, pessoal, bolsa |
-| Pedido de Licença | `licenca` | comercial, construção, evento, transporte, ambiental |
-| Acta de Reunião | `acta` | formal, associação, empresarial, condomínio, escolar |
+| Provider | Tier | Activação |
+|---|---|---|
+| Groq | Generoso (grátis) | `GROQ_API_KEY` |
+| Cerebras | Generoso (grátis) | `CEREBRAS_API_KEY` |
+| Google Gemini | Médio | `GEMINI_API_KEY` |
+| OpenRouter | Médio | `OPENROUTER_API_KEY` |
+| NVIDIA NIM | Reserva activa | `NVIDIA_API_KEY` |
+| Mistral | Reserva activa | (env var própria) |
+| SambaNova Cloud | Reserva activa | (env var própria) |
+| Together AI | Reserva activa | (env var própria) |
+| Fireworks AI | Reserva activa | (env var própria) |
+| Cloudflare Workers AI | — | (env var própria) |
+| GitHub Models | — | (env var própria) |
+| Hugging Face Inference | — | (env var própria) |
+| Cohere | — | (env var própria) |
 
-**Total: 70 templates integrados (14 serviços × 5) + galeria comunitária extensível.**
+**Princípio de desenho:** assim que a variável de ambiente correspondente a um provider existir
+na Vercel, esse provider **entra automaticamente** na corrida paralela — não é preciso editar
+`generate-document.js` para "ligar" uma chave nova. Isto substitui o desenho antigo em que
+`generate-document.js` e `aiProvidersCatalog.js` tinham, cada um, a sua própria lista
+dessincronizada de providers e modelos.
 
-> Existem **17 serviços** ao todo — os 14 acima têm templates visuais e geração por IA; mais 3
-> (`impressao`, `foto`, `conversao`) não geram documento por IA — são pedidos encaminhados via
-> WhatsApp (ver `ServiceDefinitions.js`).
->
-> Cada categoria vive no seu próprio ficheiro em
-> `assets/js/marketplace/templates/<categoria>.js`, agregados por `templates/index.js`.
-> `TemplateLibrary.js` apenas reexporta esse agregado.
+### 3.2. Descoberta de modelos ao vivo (`modelDiscovery.js`)
 
-### Adicionar novo template:
+Em vez de confiar cegamente numa lista curada e estática de modelos por provider, o sistema
+consulta o endpoint `GET /models` de cada provider e cruza com a lista curada. Se um modelo
+curado já não existir no catálogo real (ex.: a Cerebras já reduziu o seu catálogo público a
+apenas 2 modelos de um dia para o outro, sem aviso, várias vezes em 2026), é saltado
+automaticamente. Falha de forma totalmente silenciosa — qualquer problema (timeout, chave
+inválida, provider sem suporte a `/models`) devolve `null` e o sistema usa a lista curada tal
+como estava.
+
+### 3.3. Disjuntor por modelo (`modelHealth.js`)
+
+Memoriza falhas recentes de cada combinação `provider + modelo` e diz ao motor de corrida quais
+saltar, sem intervenção manual:
+
+- **Falha permanente** (mensagens como "decommissioned", "model not found", "no endpoints
+  found") → modelo desactivado por 7 dias.
+- **Falha transitória** (timeouts, erros 5xx, respostas vazias) → só desactiva depois de 3
+  falhas **seguidas**, com backoff crescente (10 min → 30 min → 2 h), para não penalizar um
+  modelo por um azar pontual.
+
+### 3.4. Protecção de dados pessoais antes de qualquer IA externa (duas camadas)
+
+1. **`api/_lib/piiRedaction.js`** (servidor) — actua sobre o texto já montado, por **padrão**
+   (regex): apanha BI/NUIT/telefone/e-mail mesmo dentro de texto livre.
+2. **`assets/js/services/prompts/piiShield.js`** (browser) — actua sobre **campos estruturados
+   do formulário**, por nome do campo (`nome`, `bi*`, `nuit`, `telefone`, `morada`, papéis como
+   `outorgante`/`procurador`/`senhorio`), substituindo por marcadores opacos antes do prompt sair
+   do browser; só é reposto no documento final, também no browser.
+
+Nenhuma das duas camadas cobre dados pessoais escritos à mão dentro de um campo de texto livre
+não reconhecido como sensível (ex.: um nome mencionado dentro do campo "Finalidade" de uma
+procuração) — isto exigiria reconhecimento de entidades nomeadas (NER), fora do âmbito actual.
+
+---
+
+## 4. Serviços e templates
+
+Confirmado directamente em `assets/js/services/ServiceDefinitions.js` — **18 serviços no
+total**, dos quais **16 geram documento por IA** (`hasAI: true`) e **2 são encaminhados por
+WhatsApp** (`hasAI: false`):
+
+| Serviço (chave) | Título | Gera por IA? |
+|---|---|---|
+| `cv` | Currículo (CV) | ✅ |
+| `trabalho` | Trabalho Escolar/Académico | ✅ |
+| `transcricao` | Digitalizar Documento (manuscrito → digitado) | ✅ |
+| `carta` | Carta Formal | ✅ |
+| `arrendamento` | Contrato de Arrendamento | ✅ |
+| `requerimento` | Requerimento Oficial | ✅ |
+| `recibo` | Recibo / Factura | ✅ |
+| `procuracao` | Procuração / Mandato | ✅ |
+| `orcamento` | Orçamento de Obra | ✅ |
+| `residencia` | Declaração de Residência | ✅ |
+| `prestacao` | Contrato de Prestação de Serviços | ✅ |
+| `recomendacao` | Carta de Recomendação | ✅ |
+| `planonegocio` | Plano de Negócios | ✅ |
+| `licenca` | Pedido de Licença | ✅ |
+| `acta` | Acta de Reunião | ✅ |
+| `conversao` | Conversão de ficheiro (consome 1 crédito) | ✅ |
+| `impressao` | Pedido de impressão | ❌ (WhatsApp) |
+| `foto` | Foto tipo passe / documento | ❌ (WhatsApp) |
+
+Os **14 serviços "clássicos"** (todos acima excepto `transcricao` e `conversao`, que são mais
+recentes e não têm galeria de 5 templates visuais próprios) têm 5 templates cada, com CSS e
+layout próprios, num ficheiro dedicado em `assets/js/marketplace/templates/<categoria>.js`,
+agregados por `templates/index.js`.
+
+### Adicionar um novo template
+
 ```js
 // Em assets/js/marketplace/templates/cv.js
 // Adicionar ao array TEMPLATES exportado por esse ficheiro
-// (NÃO editar TemplateLibrary.js directamente)
+// (NÃO editar TemplateLibrary.js directamente — é só um reexport)
 export const TEMPLATES = [
   // ...templates existentes...
   {
     id: 'cv-novo',
     name: 'Meu Template',
     description: 'Descrição curta',
-    preview: {
-      accent: '#3B82F6', bg: '#fff',
-      font: 'sans-serif', headerBg: '#3B82F6', headerColor: '#fff'
-    },
+    preview: { accent: '#3B82F6', bg: '#fff', font: 'sans-serif', headerBg: '#3B82F6', headerColor: '#fff' },
     htmlTemplate: `<div class="cv-page cv-two-col">...</div>`,
   },
 ];
@@ -645,663 +223,460 @@ export const TEMPLATES = [
 
 ---
 
-## 📝 Editor de Documentos
+## 5. Estrutura do projecto
 
-O `DocumentEditor` abre um modal completo após a geração:
-
-### Modos de edição:
-- **Preview** — iframe A4 fiel ao template (motor `A4Renderer` — mesmo usado no TemplatePicker e na galeria)
-- **Editar** — para documentos markdown: editor WYSIWYG com toolbar rica; para templates HTML com layout estruturado: iframe com `designMode='on'` que preserva cores, colunas e tipografia
-
-### Toolbar disponível:
-Fonte · Tamanho · **B** · *I* · U · S · Alinhamentos · Lista · Lista numerada · Recuo · Parágrafo/Título · Cor de texto · Fundo · Tabela · HR · Undo/Redo
-
-### Export no editor:
-| Formato | Motor | Fidelidade |
-|---------|-------|-----------|
-| PDF | `HTMLPDFExporter` (impressão) | Cores de fundo preservadas (`print-color-adjust: exact`) |
-| Word (.docx) — template HTML | `HTMLToDocxExporter` | OOXML real, sidebar/2 colunas preservadas |
-| Word (.docx) — documento académico | `WordExporter` | Times 12pt, margens normalizadas, capa automática |
-| Excel | `ExcelExporter` | Tabelas e orçamentos |
-
----
-
-## 📚 Módulo Académico (APA 7)
-
-### API disponível:
-```js
-import { AcademicEngine } from './assets/js/academic/AcademicEngine.js';
-
-// Referência APA 7 completa
-AcademicEngine.generateAPA7({
-  type: 'book',
-  authors: [{ last: 'Mondlane', first: 'Eduardo' }],
-  year: '1969',
-  title: 'Lutar por Moçambique',
-  publisher: 'Nosso Tempo'
-});
-// → Mondlane, E. (1969). *Lutar por Moçambique*. Nosso Tempo.
-
-// Citação in-text
-AcademicEngine.generateCitation({ authors: [{ last: 'Mondlane' }], year: '1969' }, '45');
-// → (Mondlane, 1969, p. 45)
-
-// Gerar trabalho científico (prompt para IA)
-AcademicEngine.generateScientificPaper(
-  { tema: '...', nivel: 'Licenciatura', disciplina: '...', paginas: 15 },
-  sources
-);
-
-// Índice automático
-AcademicEngine.generateTableOfContents(markdownContent);
-
-// Secção de referências
-AcademicEngine.generateBibliography(sources);
+```
+MzDocs-Pro/
+├── api/                                # 12 Serverless Functions (Vercel Hobby — limite físico atingido)
+│   ├── _lib/                           # Helpers partilhados (prefixo "_" — não contam para o limite)
+│   │   ├── supabaseAdmin.js            # Cliente Supabase via fetch puro (REST + Auth API)
+│   │   ├── aiProviderRegistry.js       # Fonte única de verdade: 13 providers de IA
+│   │   ├── aiProvidersCatalog.js       # Alimenta o painel "IA Providers" do admin (mesma fonte)
+│   │   ├── modelDiscovery.js           # Descoberta ao vivo de modelos disponíveis por provider
+│   │   ├── modelHealth.js              # Disjuntor por modelo (falhas permanentes/transitórias)
+│   │   ├── visionAI.js                 # IA de visão (Gemini → OpenRouter fallback)
+│   │   ├── legalSearch.js              # Busca vectorial pgvector para o Motor Jurídico RAG
+│   │   ├── packages.js                 # Única fonte de verdade dos pacotes de créditos
+│   │   ├── piiRedaction.js             # Mascaragem de PII no texto (servidor)
+│   │   ├── contentModeration.js        # Filtro de conteúdo abusivo em avaliações públicas
+│   │   ├── rateLimit.js                # Rate-limit via Upstash Redis (fallback Map local)
+│   │   └── webpush.js                  # Notificações push via VAPID
+│   ├── admin/index.js                  # Dashboard, analytics, feedback, blog, templates, afiliados, finanças
+│   ├── auth/index.js                   # Login, registo, reset password
+│   ├── generate-document.js            # 13 providers IA + amostra grátis + custo progressivo + reembolso
+│   ├── extract-template.js             # Extracção de template via imagem (IA visão)
+│   ├── verify-credits.js               # Verificar saldo de créditos
+│   ├── deduct-credit.js                # Debitar/reembolsar crédito
+│   ├── process-payment.js              # Pagamento manual multi-carteira + registo de transacção
+│   ├── partners.js                     # API da Rede de Parceiros
+│   ├── convert.js                      # Conversão de ficheiros (OCR / extracção de texto)
+│   ├── delete-temp-account.js          # Direito ao esquecimento / limpeza de conta
+│   ├── cleanup-temp-accounts.js        # Cron diário: limpeza automática de contas expiradas
+│   └── misc.js                         # Router auxiliar: config, ocr-analyze, verify-receipt,
+│                                        #   legal-search, page-view, sitemap.xml, /api/affiliate/*,
+│                                        #   /api/templates/*
+│
+├── assets/
+│   ├── js/
+│   │   ├── academic/          # APA 7 (AcademicEngine, AcademicUI)
+│   │   ├── admin/              # AdminApp, AdminDashboard, AdminTransactions
+│   │   ├── analytics/          # GA4 + Facebook Pixel + Microsoft Clarity
+│   │   ├── auth/                # AuthGuard, AuthManager, AuthUI
+│   │   ├── components/         # Editor WYSIWYG + exportadores PDF/Word/Excel
+│   │   ├── controllers/        # Document/Template/History/OCR/Payment controllers
+│   │   ├── convert/            # FileConverter (conversão no cliente)
+│   │   ├── marketplace/        # TemplateLibrary, TemplatePicker, SampleData, templates/ (14 ficheiros)
+│   │   ├── models/              # Models.js
+│   │   ├── partners/           # NearbyPartners.js
+│   │   ├── services/
+│   │   │   ├── ServiceDefinitions.js   # 18 serviços (16 com IA + 2 via WhatsApp)
+│   │   │   ├── Services.js              # Orquestra chamadas à API de geração; aplica piiShield
+│   │   │   ├── LegalContext.js          # Ponte frontend ↔ /api/legal-search
+│   │   │   ├── LongDocumentEngine.js    # Documentos longos, débito após planeamento
+│   │   │   ├── MPesaService.js          # Detecção de carteira por prefixo de número
+│   │   │   ├── PaymentService.js
+│   │   │   ├── SmartOCRService.js
+│   │   │   └── prompts/                 # 1 ficheiro de prompt por categoria + piiShield.js
+│   │   ├── utils/               # A4Renderer, Formatter, IndexedDB, Sanitizer, Storage
+│   │   └── views/               # Views.js
+│   │   ├── app.js               # Ponto de entrada principal
+│   │   └── homeController.js
+│   └── css/
+│
+├── supabase/
+│   ├── schema.sql                              # ⚠️ Desactualizado — usar migrations por ordem
+│   ├── migration_v8_* … migration_v51_bonus_credits.sql   # Cadeia principal, ver secção 6
+│   └── EMERGENCIA_*, EXECUTAR_AGORA_*, migration_fix_*, migration_add_*, polices.sql, transactions.sql
+│                                               # ⚠️ Ficheiros avulsos aplicados directamente em
+│                                               #   produção, sem numeração sequencial — ver secção 12
+│
+├── tests/
+│   ├── auth.test.js                # 120 linhas
+│   ├── ocrSchemaAlignment.test.js  # 100 linhas
+│   └── rateLimit.test.js           # 61 linhas
+│                                   # Total: 281 linhas de teste para ~11.650 linhas de código em api/
+│
+├── docs/legal/                     # VERIFICACAO-LEGAL.md + textos-fonte das leis usadas no RAG
+├── pages/                          # Páginas SEO estáticas (geradas pelo admin via GitHub API)
+├── afiliado.html · admin.html · admin-parceiros.html · parceiros.html · templates.html
+├── perfil.html · index.html · offline.html · legal.html · blog.html
+├── sw.js                           # CACHE_VERSION reescrita automaticamente a cada deploy
+├── manifest.json · vercel.json · package.json (v11.0.0) · package-lock.json
+└── scripts/inject-version.js
 ```
 
 ---
 
-## ⚖️ Motor Jurídico RAG (v17)
+## 6. Deploy — passo a passo completo
 
-O Motor Jurídico substitui citações de lei estáticas (que continham erros — ver `docs/legal/VERIFICACAO-LEGAL.md`) por artigos de lei moçambicanos **reais**, recuperados via busca vectorial.
+### 6.1. Pré-requisitos
 
-### Arquitectura:
+- Conta Vercel (Hobby ou Pro — ver aviso comercial no topo deste documento).
+- Projecto Supabase com extensão `pgvector` activada (Dashboard → Extensions) — necessária para
+  o Motor Jurídico RAG.
+- Pelo menos **uma** chave de IA (quantas mais, maior a disponibilidade e mais resiliente o
+  disjuntor de modelos): Groq, Google AI Studio (Gemini), OpenRouter, Cerebras, NVIDIA NIM,
+  Mistral, SambaNova, Together AI, Fireworks AI, Cloudflare Workers AI, GitHub Models, Hugging
+  Face, Cohere.
+- **Não é necessária** conta M-Pesa API — os pagamentos são confirmados por upload de
+  comprovativo (IA ou manual). `MPESA_API_KEY`/`MPESA_SERVICE_CODE` são opcionais, apenas
+  alteram a etiqueta "sandbox"/"produção" na interface.
+- Opcional: CloudConvert (conversão de ficheiros), Upstash Redis (rate-limit persistente),
+  Personal Access Token do GitHub (publicação automática de páginas SEO).
+
+### 6.2. Variáveis de ambiente (Vercel)
+
 ```
-Prompt builder (arrendamento/procuracao/requerimento/residencia/acta)
-  → LegalContext.js (frontend) → POST /api/legal-search
-    → api/_lib/legalSearch.js → pgvector (tabela legal_articles, embeddings de 768 dim)
-      → artigos relevantes com score de confiança
-        → incluídos no prompt com indicação "ARTIGO REAL"
-        → se confiança < threshold → modelo avisado para não inventar citação
-```
+# Obrigatórias
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-### Tabelas Supabase (migration_v17):
-- `legal_articles` — artigos indexados com embedding vectorial
-- `legal_sources` — diplomas legais (lei, decreto, portaria) com metadados
-- `search_legal_articles(query_embedding, match_threshold, match_count)` — função RPC de busca
+# IA — pelo menos 1 obrigatória; até 13 possíveis (ver secção 3.1)
+GROQ_API_KEY=gsk_...
+GEMINI_API_KEY=AIza...
+OPENROUTER_API_KEY=sk-or-...
+CEREBRAS_API_KEY=csk-...
+NVIDIA_API_KEY=nvapi-...
+# + Mistral / SambaNova / Together / Fireworks / Cloudflare / GitHub Models / Hugging Face / Cohere
+#   (ver nomes exactos das env vars em api/_lib/aiProviderRegistry.js)
 
-### Comportamento em falha:
-`LegalContext.js` **nunca bloqueia** a geração. Se `/api/legal-search` falhar ou demorar mais que o timeout, devolve `null` e o prompt usa o texto base sem citações — o documento é sempre gerado.
+SITE_URL=https://mzdocs.co.mz
 
----
-
-## 🖼️ Extracção de Template por Imagem
-
-O endpoint `POST /api/extract-template` aceita uma imagem (base64) e usa IA de visão (Gemini 2.5 Flash → OpenRouter fallback) para extrair a estrutura do documento e devolver um template `{ css, htmlTemplate }` pronto a usar.
-
-```js
-const result = await fetch('/api/extract-template', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ imageBase64: '...', mimeType: 'image/jpeg' })
-});
-const { css, htmlTemplate } = await result.json();
-```
-
----
-
-## 🏪 Template Marketplace (API)
-
-A galeria comunitária (`templates.html`) mostra preview A4 realista usando `SampleData.js` (dados de exemplo por categoria) renderizado pelo mesmo motor `A4Renderer` + `_fillTemplate` já usado no TemplatePicker — não é uma simulação separada.
-
-### Endpoints disponíveis (todos via `/api/templates/<action>`):
-
-| Action | Método | Auth | Descrição |
-|--------|--------|------|-----------|
-| `list` | GET | Público | Listar templates aprovados (legado) |
-| `gallery` | GET | Público | Galeria paginada com filtros (usa `v_templates_gallery`) |
-| `mine` | GET | Token | Templates submetidos pelo utilizador autenticado |
-| `saved` | GET | Token | Templates guardados pelo utilizador |
-| `save` | POST | Token | Guardar/desguardar template |
-| `submit` | POST | Token | Submeter novo template |
-| `rate` | POST | Token | Avaliar (1–5 estrelas) |
-| `download` | POST | Público | Registar download |
-| `use` | POST | Token | Registar uso de template (tabela `template_uses`) |
-| `approve` | POST | Admin | Aprovar template |
-| `reject` | POST | Admin | Rejeitar template com nota |
-| `pending` | GET | Admin | Templates pendentes de aprovação |
-| `report` | POST | Token | Reportar template |
-| `share-token` | POST | Token | Gerar token de partilha por link |
-| `by-token` | GET | Público | Obter template via share token |
-| `delete` | POST | Token/Admin | Remover template |
-
-### Workflow de aprovação:
-```
-Utilizador submete → status: "pending"
-Admin aprova       → status: "approved" + is_public: true → aparece na galeria
-Admin rejeita      → status: "rejected" + nota de rejeição
+# Opcionais
+MPESA_API_KEY=...
+MPESA_SERVICE_CODE=...              # ⚠️ nome real no código (não "MPESA_SERVICE_PROVIDER_CODE")
+WA_SUPPORT_NUMBER=258858695506
+CLOUDCONVERT_API_KEY=...
+LIBREOFFICE=false                   # true apenas em VPS com LibreOffice
+CRON_SECRET=...                     # protege /api/cleanup-temp-accounts
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+GITHUB_OWNER=...
+GITHUB_REPO=...
+GITHUB_TOKEN=...                    # PAT com escrita no repositório — tratar como Service Role Key
 ```
 
-### Templates Oficiais:
-`migration_v22_seed_official_templates.sql` insere os 70 templates oficiais na tabela `templates_custom` com `template_type = 'official'` e `status = 'approved'`, para que a galeria nunca apareça vazia numa instalação nova.
+> ⚠️ **Variáveis sem efeito (não usar):** `ADMIN_EMAILS` e `MPESA_PUBLIC_KEY` não são lidas em
+> nenhum ficheiro de código. O estado de administrador é controlado pela coluna
+> `profiles.is_admin` — ver `supabase/EXECUTAR_promote_admin.sql`.
 
-### Preço sempre em créditos (v38/v39)
+### 6.3. Migrações Supabase — lista completa e actualizada (v8 → v51)
 
-A tabela acima cobre o consumo público/do utilizador (`/api/templates/<action>`). A **moderação e o preço** são geridos à parte, pelo admin, via `/api/admin/templates` (GET lista com filtro `status`, POST/PUT actualiza um ou vários):
+Execute por ordem no SQL Editor do Supabase:
 
-- **v38** — corrigiu o Aprovar/Rejeitar (faltavam as colunas `approved_at`/`rejected_at`) e introduziu a repartição de receita: quando um template de outro utilizador é usado, **60%–70% da venda vai para o criador** e o resto para a plataforma (`author_share_percent`, sempre validado por `CHECK` na base de dados, nunca só no servidor).
-- **v39** — o preço passou a ser **sempre em créditos** (`credit_cost`, a mesma moeda usada em toda a plataforma), nunca um valor MZN fixo definido pelo criador/admin. A coluna `price_mzn` foi **removida** de `templates_custom`; o equivalente em MZN mostrado no painel admin (`≈ X MZN`) é só informativo, calculado ao vivo a partir da taxa média dos pacotes de créditos activos (`estimateMznPerCredit()` em `api/_lib/packages.js` — a mesma fonte de verdade usada no checkout). `/api/admin/templates` devolve esse valor como `mzn_per_credit` (taxa) e `mzn_equivalent` (por template).
-  > 🐛 Corrigido nesta auditoria: o handler de `/api/admin/templates` tinha ficado a meio desta migração — continuava a fazer `SELECT`/`UPDATE` de `price_mzn`, causando **500 "column templates_custom.price_mzn does not exist"** em toda a secção "Templates do Marketplace" do admin, e nunca devolvia `mzn_per_credit`/`mzn_equivalent` (que `AdminApp.js` já esperava).
+```
+-- Base
+schema.sql                                          -- ⚠️ desactualizado; use-o só como ponto de partida
 
----
+-- Fundação (v8–v16)
+migration_v8_1_blog_pages.sql
+migration_v8_2_admin_tables.sql
+migration_v8_pricing_temp_accounts.sql
+migration_v9_analytics_feedback.sql
+migration_v10_affiliates.sql
+migration_v10_online_userid.sql
+migration_v11_marketplace.sql
+supabase-partners-setup.sql
+migration_v12_refund_credit.sql
+migration_v12_community_templates.sql
+migration_v13_fix_signup_credits.sql
+migration_v14_affiliates_pro.sql
+migration_v15_receipt_verification.sql
+migration_v16_fix_signup_name_phone.sql
 
-## 📊 Analytics em Tempo Real
+-- Motor Jurídico RAG + consolidação (v17–v24)
+migration_v17_legal_rag.sql                          -- requer pgvector activo
+migration_v20_lei_associacoes_cooperativas.sql        -- gap v18/v19 é real no repositório
+migration_v21_dynamic_signup_credits.sql
+migration_v22_seed_official_templates.sql
+migration_v23_fix_gallery_view_html_css.sql
+migration_v24_secure_orphan_credit_packages.sql
 
-- **Online Agora**: Supabase Realtime (`postgres_changes` em `online_sessions`)
-- **Visitas**: POST automático a cada carregamento + heartbeat a cada 90s
-- **Session ID**: `localStorage` para persistência entre recargas
-- **Fallback**: Polling a cada 20s se WebSocket falhar
-- **Tracking externo**: GA4, Facebook Pixel, Microsoft Clarity via `Analytics.js`
+-- Correcções e agendamento (v25–v29)
+migration_v25_fix_transaction_status.sql
+migration_v26_blog_scheduling.sql
+migration_v27_ai_provider_monitoring.sql
+migration_v28_blog_pages_published_at.sql
+migration_v29_user_profile_page.sql
 
----
+-- Marketing Analytics (v30–v34)
+migration_v30_marketing_analytics.sql
+migration_v31_marketing_purchase_attribution.sql      -- ⚠️ confirmar no Supabase se já foi aplicada;
+                                                       --   auditorias anteriores assinalaram risco de
+                                                       --   export corrompido/vazio deste ficheiro
+migration_v32_marketing_qrcodes.sql
+migration_v33_funnel_crm.sql
+migration_v34_campaigns_goals_notifications.sql
 
-## 📰 Blog / CMS + Publicação Automática de Páginas SEO
+-- Push, afiliados avançados, finanças, templates, limites (v35–v41)
+migration_v35_push_notifications.sql
+migration_v36_tier_bonus_and_referral_signup.sql
+migration_v37_finance_expenses.sql
+migration_v38_template_marketplace_split.sql
+migration_v39_template_credits_only.sql               -- executar SÓ depois da v38
+migration_v40_document_usage_limits.sql               -- depois das v37/v38/v39
+migration_v41_marketing_materials.sql
 
-O admin (`admin.html`) tem um CMS de artigos (tabela `blog_pages`) com geração de conteúdo assistida por IA. Quando uma página é publicada com `published: true`, `api/admin/index.js` (função `_generateStaticPage`) **gera um HTML estático e publica-o directamente no repositório GitHub** via GitHub Contents API:
+-- Identidade fiscal, recibos, avaliações, parceiros (v42–v47)
+migration_v42_finance_fiscal_identity.sql
+migration_v43_affiliate_payout_receipts.sql
+migration_v44_public_reviews.sql
+migration_v45_partner_ratings_antiabuso.sql
+migration_v46_partner_access_code.sql
+migration_v46_fix_document_insert_fk_violation.sql    -- ⚠️ SEGUNDO ficheiro "v46" — nome duplicado
+                                                       --   por lapso, não é a mesma migração repetida;
+                                                       --   ambos podem ser corridos sem conflito, mas
+                                                       --   recomenda-se renomear um deles
+migration_v47_partners_advogados.sql
 
-1. Gera `pages/<slug>/index.html` com `title`, `meta_description` e `content_html`.
-2. Faz `PUT /repos/<owner>/<repo>/contents/pages/<slug>/index.html` — cria ou actualiza o ficheiro com commit directo no branch por omissão.
-3. O push ao GitHub despoleta automaticamente um novo deploy no Vercel.
+-- Protecção de dados pessoais e segurança (v48–v50)
+migration_v48_lpd_compliance.sql                      -- consent_logs, direito ao esquecimento,
+                                                       --   deprecia profiles.temp_password
+migration_v49_secure_affiliate_receipts.sql           -- bucket privado + signed URL 5min
+migration_v50_protect_sensitive_profile_columns.sql   -- RLS reforçada em BI/NUIT/morada
 
-**Requer** `GITHUB_OWNER`, `GITHUB_REPO` e `GITHUB_TOKEN`. Sem elas, a publicação no `blog_pages` funciona normalmente, apenas sem gerar o HTML estático.
+-- Créditos bónus (v51 — mais recente)
+migration_v51_bonus_credits.sql                       -- ver nota honesta na secção 12
+```
 
-> ⚠️ É um commit directo (sem revisão). Trate o `GITHUB_TOKEN` com o mesmo cuidado que a `SUPABASE_SERVICE_ROLE_KEY`.
+> ⚠️ Existem ainda vários ficheiros avulsos em `supabase/` (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`,
+> `migration_fix_*`, `migration_add_*`, `polices.sql`, `transactions.sql`) aplicados directamente
+> em produção ao longo do tempo, fora desta cadeia numerada. Para uma instalação limpa, siga
+> apenas a lista acima. Recomenda-se gerar um `schema_CURRENT.sql` a partir do Supabase Dashboard
+> (Database → Schema) como referência canónica única.
 
----
+### 6.4. Deploy
 
-## 🤝 Sistema de Afiliados
-
-| Endpoint | Descrição |
-|----------|-----------|
-| `POST /api/affiliate/register` | Pedir código de afiliado |
-| `GET /api/affiliate/dashboard` | Painel com ganhos e cliques |
-| `POST /api/affiliate/click` | Registar clique (deduplicado por hash de IP) |
-| `POST /api/affiliate/withdraw` | Pedir levantamento M-Pesa |
-| `GET /api/affiliate/check?ref=` | Validar link publicamente |
-| `GET /api/affiliate/ranking` | Ranking de afiliados do mês |
-| `GET /api/affiliate/notifications` | Notificações do afiliado |
-| `GET /api/affiliate/materials` | **NOVO (v41)** — Lista os materiais de marketing activos enviados pelo admin |
-| `GET /api/affiliate/qrcode` | **NOVO (v41)** — Gera (em memória) o PNG do QR code pessoal do afiliado |
-
-**Comissões por pacote** (configurável em `system_settings`, chave `aff_rate_<pacote>`):
-Avulso 10% · Starter 15% · Básico 15% · Pro 20% · Empresa 20%.
-
-### Kit de Marketing dinâmico (v41)
-
-O admin envia materiais de marketing (panfletos/banners, com vídeo/áudio/PDF já previstos no esquema) a partir do painel (`admin.html` → "Kit de Marketing"), marcando visualmente sobre a imagem uma **zona de QR Code** (obrigatória) e, opcionalmente, uma **zona de texto** — ambas gravadas em percentagem (0–100) da imagem original, para funcionarem em qualquer resolução.
-
-Quando um afiliado abre a sua área de Marketing (`afiliado.html`), cada peça é **composta no seu próprio browser** (via `<canvas>`) com o SEU QR code pessoal (e opcionalmente o seu código/nome) colado exactamente nessa zona — nenhuma cópia por afiliado fica gravada na base de dados; a composição acontece em tempo real a partir do material original + `/api/affiliate/qrcode`.
-
-- **Tabela:** `marketing_materials` (`migration_v41_marketing_materials.sql`).
-- **Gestão (admin):** `/api/admin/marketing-materials` — GET lista tudo, POST cria, PUT actualiza (incluindo activar/desactivar), DELETE remove. Implementado em `AdminApp.js` (`_loadMaterials`, `_openMaterialForm`, editor de arrastar/redimensionar as zonas de QR/texto, `_saveMaterial`, `_deleteMaterial`).
-- **Consumo (afiliado):** `/api/affiliate/materials` (lista o que está activo) + `/api/affiliate/qrcode` (QR pessoal via biblioteca `qrcode`, já usada no projecto para os QR codes gerais do admin).
-  > 🐛 Corrigido nesta auditoria: o botão "➕ Novo Material" já existia em `admin.html` mas chamava uma função (`adminApp._openMaterialForm`) que nunca tinha sido escrita — e `afiliado.html` já chamava as duas rotas de afiliado acima, que caíam sempre no `default` de `handleAffiliate` (404 "Acção não encontrada"). O Kit de Marketing tinha o desenho completo (SQL + HTML) mas nenhuma das duas pontas de código a servi-lo.
-
-### Afiliados Pro (v14)
-
-- **Segmentos** (`aff_segment`): `papelaria` · `cyber` · `universidade` · `explicacao` · `digitador` · `individual` — bónus configurável por segmento (`aff_bonus_papelaria` = +5%, `aff_bonus_cyber` = +3%, `aff_bonus_universidade` = +5%).
-- **Níveis** (`aff_tier`): 🥉 bronze → 🥈 prata (5+ conversões) → 🥇 ouro (20+) → 💎 diamante (50+), calculados por `update_affiliate_tier()`. Diamante reduz o mínimo de levantamento para metade.
-- **Bónus de comissão por tier (NOVO — v36)**: soma-se à taxa base + bónus de segmento — Bronze +0% · Prata +2% · Ouro +5% · Diamante +8% (`aff_tier_bonus_<tier>`). Antes da v36, `afiliado.html` já prometia isto ao utilizador mas `process_affiliate_commission_v2` nunca lia o tier — um afiliado Diamante ganhava sempre a mesma % que um Bronze do mesmo segmento.
-- **Crédito de boas-vindas por registo via link (NOVO — v36)**: `aff_bonus_signup` concede créditos extra a quem se regista com `?ref=<código>`, via `grant_referral_signup_bonus()`. A chave já existia desde a v10 mas nunca era lida em lado nenhum — configuração morta até agora.
-- **🐛 Bug crítico corrigido (v36):** `profiles.referred_by` nunca era gravado no caminho normal do signup em `api/auth/index.js` — só era incluído no PATCH de *fallback*, que praticamente nunca corre. Ou seja, comissões de afiliado por compras de utilizadores registados via link podiam estar a falhar silenciosamente para **todos** os registos normais desde que o programa de afiliados existe. Corrigido em paralelo em `api/auth/index.js` e na migration `v36`. Recomenda-se conferir manualmente na Supabase se há afiliados com cliques/registos aparentes mas sem comissões correspondentes, para compensar casos afectados.
-- **Anti-fraude**: tabela `affiliate_fraud_flags` com eventos (`self_referral`, `ip_burst`, `fake_clicks`, `suspicious_conversion`) e severidade.
-- **Recibos de pagamento a afiliados (NOVO — v43)**: cada levantamento confirmado pelo admin gera um recibo formal registado (`migration_v43_affiliate_payout_receipts.sql`), dando ao afiliado e ao dono da plataforma um registo auditável de cada comissão efectivamente paga — útil tanto para reclamações de afiliados como para a contabilidade da plataforma (ver secção "Finanças" abaixo).
-
----
-
-## ⭐ Avaliações Públicas e Reforço da Rede de Parceiros (v44–v46)
-
-- **Avaliações públicas (NOVO — v44)**: `migration_v44_public_reviews.sql` introduz um sistema de avaliação (⭐ 1–5) visível publicamente — usado tanto para a experiência geral da plataforma como, potencialmente, para parceiros individuais (ver ponto seguinte). Alimenta a secção "O que dizem os utilizadores" já existente em `index.html`.
-- **Anti-abuso nas avaliações de parceiros (NOVO — v45)**: `migration_v45_partner_ratings_antiabuso.sql` acrescenta protecções contra avaliações falsas/manipuladas dirigidas a parceiros (papelarias, cyber cafés, e agora advogados) — importante à medida que a Rede de Parceiros cresce e passa a ter concorrência entre parceiros na mesma zona.
-- **Código de acesso de parceiro (NOVO — v46)**: `migration_v46_partner_access_code.sql` dá a cada parceiro um código de acesso próprio, usado para autenticação/gestão do seu perfil sem precisar de login completo de utilizador — simplifica o onboarding de papelarias/cyber cafés/advogados que só precisam de gerir o seu perfil, e não o resto da plataforma.
-
-> ⚠️ **Aviso de numeração:** existem dois ficheiros diferentes chamados "v46" no repositório — `migration_v46_partner_access_code.sql` (acima) e `migration_v46_fix_document_insert_fk_violation.sql` (sem relação temática com parceiros — corrige uma violação de chave estrangeira no registo de documentos). Não é a mesma migração corrida duas vezes; são dois ficheiros SQL distintos com o mesmo número por lapso de nomenclatura. Ambos podem ser corridos sem conflito (nomes de ficheiro diferentes), mas recomenda-se renomear um deles (ex: para `v48`) antes da próxima ronda de migrações.
-
----
-
-## ⚖️ Área Jurídica: Advogados como Parceiros (v47)
-
-A Rede de Parceiros (antes só papelarias/cyber cafés) passou a suportar um segundo tipo de parceiro: **advogados**. Reaproveita a tabela `partners` já existente em vez de criar uma tabela nova — mantém um único endpoint (`api/partners.js`) e respeita o limite de 12 funções serverless do plano Vercel Hobby.
-
-- **Coluna `type`** em `partners`: `'papelaria'` (comportamento antigo, valor por omissão para registos existentes) ou `'advogado'`.
-- **Campos exclusivos de advogado**: `credential_number` (nº de inscrição na Ordem dos Advogados de Moçambique — OAM) e `bio`. Ficam `NULL` para papelarias.
-  > ⚠️ Não existe API pública para validar o número da OAM automaticamente — a conferência é **sempre manual pelo admin** antes de aprovar um parceiro do tipo advogado. Nunca automatizar esta validação.
-- **Áreas de actuação**: para `type='advogado'`, a coluna `services` (já `text[]`) passa a guardar áreas jurídicas em vez de tipos de impressão — `civil`, `laboral`, `comercial`, `familia`, `penal`, `imobiliario`, `fiscal`, `sucessorio`. A lista branca por tipo está em `api/partners.js` (`VALID_SERVICES`).
-- **Índice** `partners_type_status_active` para filtrar rapidamente por tipo nas buscas "perto de si" e no painel admin.
-
-Posicionamento recomendado (ver auditoria de marketing): esta funcionalidade transforma um risco reputacional real — a percepção de que a plataforma "faz trabalho jurídico sem ser advogado" — numa vantagem: o MzDocs gera o rascunho correcto e formatado, o advogado parceiro faz a revisão paga e, quando necessário, o reconhecimento notarial. Isto dá mais clientes ao advogado em vez de lhe tirar trabalho.
+Push para o branch principal no GitHub → a Vercel faz deploy automático. Publicações de páginas
+SEO feitas pelo admin (blog) também fazem commit directo no repositório e disparam um novo
+deploy.
 
 ---
 
-## ⚙️ Limites Vercel Hobby
+## 7. Segurança
 
-> ⚠️ Ver aviso sobre uso comercial no topo deste documento.
+- RLS activo em todas as tabelas Supabase, incluindo `credit_packages` (corrigido em v24) e
+  colunas sensíveis de `profiles` (BI, NUIT, morada — reforçado em v50).
+- Tokens JWT validados em todos os endpoints privados via `api/_lib/supabaseAdmin.js`.
+- IPs hasheados (SHA-256) para tracking de cliques — sem dados pessoais em claro.
+- `Sanitizer.js` com lista explícita de tags HTML5 permitidas.
+- Service Role Key nunca exposta ao cliente; erros internos do Supabase nunca devolvidos ao
+  cliente (apenas em logs do servidor).
+- Rate limiting via Upstash Redis, com fallback gracioso para `Map` local.
+- Contas temporárias limpas automaticamente via cron diário.
+- Mascaragem de PII em duas camadas antes de qualquer envio a fornecedores de IA externos (ver
+  secção 3.4).
+- `profiles.temp_password` deixou de ser gravado em texto simples (v48) — nova acção
+  `regenerate-temp-password` gera password nova, actualiza-a de facto no Supabase Auth, e
+  devolve-a **uma única vez** na resposta.
+- Bucket de comprovativos de pagamento a afiliados (`affiliate-receipts`) é privado, sem URLs
+  públicas — acesso só via signed URL de 5 minutos (v49).
+- Registo exige consentimento explícito aos Termos de Serviço, gravado em `consent_logs` com IP,
+  hora e versão dos termos (v48).
+- Filtro de conteúdo abusivo (`contentModeration.js`) em avaliações públicas: `clean` (aprovação
+  automática) / `flagged` (revisão humana) / `blocked` (rejeitado de imediato).
 
-| Recurso | Limite | Usado |
-|---------|--------|-------|
-| Serverless Functions | 12 | **12** ✅ (sem margem — `api/_lib/` não conta, prefixo `_`) |
-| `generate-document.js` | 60s | — |
-| `extract-template.js` | 60s | — |
-| `convert.js` | 60s | — |
-| `process-payment.js` | 30s | — |
-| Restantes | 10–30s | — |
-| Bandwidth | 100 GB/mês | — |
-
-> **Regra:** Toda nova lógica de API deve ir em `api/misc.js` ou em functions existentes. Helpers partilhados vão em `api/_lib/`. Não criar novos ficheiros `.js` em `api/` sem verificar o limite de 12.
-
----
-
-## 📱 PWA
-
-- Service Worker com cache estratégico (`CACHE_VERSION` actualizada automaticamente a cada deploy por `scripts/inject-version.js`, ex.: `v21-20260629`)
-- **Correcção v21 (20260629):** 33 ficheiros estavam ausentes do precache — ficheiros de prompts (`services/prompts/*.js`), templates do marketplace (`marketplace/templates/*.js`), `SampleData.js` e `LegalContext.js` — o que quebrava a geração de documentos em modo offline. Todos adicionados ao precache nesta versão.
-- Funciona offline — documentos pendentes sincronizam quando a internet volta
-- Instalável em Android e iOS (atalhos para CV, Carta, Trabalho, Orçamento)
-- Background sync para documentos gerados offline
-
----
-
-## 🔒 Segurança
-
-> Última auditoria completa: Agosto/2026 (v30–v31). Ver "Alterações — v30" e "Alterações — v31"
-> para o detalhe de cada correcção.
-> Nenhuma auditoria de código garante segurança "100%" — isto cobre o que é verificável no
-> repositório; configuração de produção (migrations aplicadas, variáveis de ambiente, backups,
-> 2FA no painel admin, resposta a incidentes) fica fora do que um ficheiro de código consegue provar.
-
-**Acesso a dados (Supabase)**
-- RLS activado e verificado nas 49 tabelas do schema (incluindo `credit_packages`, corrigido em v24) — cada política restringe a `auth.uid() = user_id`, excepto rotas de admin com política própria
-- Colunas sensíveis de `profiles` (BI, NUIT, morada) com protecção reforçada desde `migration_v50`
-- Service Role Key (que ignora RLS) usada **só no servidor**, via `api/_lib/supabaseAdmin.js` — nunca enviada a nenhum ficheiro que corre no browser
-- Frontend usa sempre a `anon key`, nunca a `service_role`
-
-**Comprovativos e ficheiros**
-- Bucket de comprovativos de pagamento a afiliados (`affiliate-receipts`) é **privado**, sem URLs públicas — acesso só via signed URL de 5 minutos, gerada no servidor (`migration_v49`)
-- Uploads em `api/convert.js` verificados por assinatura binária (magic bytes), não só pela extensão do nome do ficheiro (NOVO v30)
-
-**Painel administrativo**
-- Toda a leitura/escrita de dados no painel passa por `validateAdmin()` no servidor (`api/admin/index.js`), verificado por JWT + tabela `profiles` — nunca só escondido no frontend
-- Preview de templates submetidos, dentro do próprio admin, é sanitizado (`Sanitizer.js`) antes de ser escrito em qualquer documento/janela
-
-**Conteúdo de terceiros (templates da comunidade)**
-- `Sanitizer.js` remove tags/atributos perigosos (`<script>`, handlers `on*`, `javascript:`, CSS malicioso) de todo o conteúdo submetido por utilizadores, antes de qualquer renderização
-- Preview A4 (`A4Renderer.js`) corre em iframe com `sandbox="allow-same-origin"` **sem** `allow-scripts` — mesmo que um template malicioso escape à sanitização, nenhum script consegue executar dentro do preview
-- Moderação manual antes de qualquer template ficar público na galeria
-
-**Dispositivos partilhados (papelarias/cyber cafés)**
-- `authManager.signOut()` limpa o histórico local (IndexedDB, via `offlineDB.clearAll()`) ao terminar sessão — protege o próximo cliente a usar o mesmo computador
-
-**Fornecedores de IA externos**
-- Antes de qualquer prompt ser enviado a Groq/Gemini/OpenRouter/Cerebras/NVIDIA NIM/etc., `api/_lib/piiRedaction.js` mascara números de BI, NUIT (com contexto), telefone e e-mail identificados no texto, substituindo-os por marcadores opacos — os valores reais só são repostos no documento final, do lado do servidor (v30). Camada complementar, do lado do browser, desde v31: `assets/js/services/prompts/piiShield.js` mascara nome/morada/papéis nomeados (outorgante, procurador, senhorio, etc.) por **nome do campo do formulário**, antes de o prompt sair do browser — cobre o que a mascaragem por padrão de texto não consegue reconhecer. Nenhuma das duas é uma garantia absoluta nem substituto da minimização de dados no desenho dos formulários; nenhuma protege dados pessoais escritos à mão dentro de um campo de texto livre não reconhecido como sensível
-- Política de retenção/treino de cada fornecedor documentada em `legal.html` (corrigida em v31 — lista completa dos 10 fornecedores realmente activos, antes só listava 5), incluindo o facto de que nem todos oferecem retenção zero no nível gratuito
-
-**Dados pessoais e consentimento (LPD/RGPD)**
-- Registo exige consentimento explícito aos Termos de Serviço (`consentTerms: true`), gravado em `consent_logs` com IP, hora e versão dos termos (`api/auth/index.js`, `migration_v48`) — NOVO v31
-- Direito ao esquecimento self-service para qualquer conta (não só `avulso`) via `api/delete-temp-account.js` — `transactions` anonimizada (obrigação fiscal), `documents` removido por `CASCADE`, botão dedicado em `perfil.html` com dupla confirmação — NOVO v31
-- `profiles.temp_password` (password de contas `avulso` em texto simples, lida directamente pelo painel admin) deixou de ser gravado — substituído por `regenerate-temp-password`, que gera e devolve uma password nova uma única vez, sem a persistir — NOVO v31
-
-**Rede/endpoints**
-- CORS restrito à origem do site (`SITE_URL`) em todos os endpoints — `api/convert.js`, `api/extract-template.js` e `api/partners.js` usavam `Access-Control-Allow-Origin: '*'` até v30 (corrigido: um site externo podia embutir estes endpoints, que chamam APIs pagas, no browser de visitantes seus)
-- Rate limiting via Upstash Redis (com fallback gracioso para Map local) — dados de rate-limit expiram automaticamente (TTL), não ficam persistidos numa tabela exportável
-- IPs de tracking de cliques (afiliados) guardados com hash SHA-256, não em texto simples
-- Erros internos do Supabase nunca devolvidos ao cliente — apenas em logs do servidor
-- Contas temporárias limpas automaticamente via cron diário
-- `unsafe-inline` presente em `script-src` do CSP (`vercel.json`) — necessário enquanto o projecto usar scripts inline; não migrado para CSP com nonce nesta ronda (fica como melhoria futura, ver "Verificação em falta" abaixo)
-
-**Verificação em falta (não coberta por auditoria de código)**
-- Confirmar que as migrations `v43`–`v50` foram mesmo executadas no Supabase de produção, não só commitadas no repositório
-- `npm audit` às dependências
-- Cabeçalhos HTTP realmente servidos em produção (`mzdocs.co.mz`) — o que está em `vercel.json` pode não reflectir o último deploy
-- CSP com nonce (eliminar `unsafe-inline`), 2FA no painel admin, processo de resposta a incidentes
+**O que uma auditoria de código não consegue confirmar sozinha** (precisa de acesso à
+infra-estrutura real): se todas as migrações foram de facto aplicadas em produção, cabeçalhos
+HTTP reais servidos pelo site (CSP efectivo, HSTS), e o resultado de um `npm audit` real sobre as
+dependências do `package-lock.json`.
 
 ---
 
-## 💳 Pagamentos
+## 8. Pagamentos e créditos
 
-### Pacotes de créditos
-
-> **Nota (v24):** os preços abaixo são os valores de seed. Podem ser alterados pelo admin em Configurações → Preços, e reflectem-se imediatamente no checkout via `api/_lib/packages.js` (sem redeploy).
+### Pacotes (valores de seed, editáveis no admin sem redeploy)
 
 | Pacote | Créditos | Preço | MZN/crédito | Notas |
-|--------|----------|-------|--------------|-------|
+|---|---|---|---|---|
 | Avulso | 3 | 50 MZN | 16.67 | Conta temporária, válida 7 dias |
 | Starter | 10 | 120 MZN | 12.00 | — |
 | Básico | 25 | 280 MZN | 11.20 | Pacote mais popular |
 | Pro | 60 | 600 MZN | 10.00 | — |
 | Empresa | 150 | 1500 MZN | 10.00 | Multi-utilizador |
 
-> Não existe integração automática com a API de cobrança M-Pesa. `MPESA_API_KEY`/`MPESA_SERVICE_CODE` (se definidas) apenas alteram a etiqueta "sandbox"/"produção" na interface.
+Não existe integração automática com a API de cobrança M-Pesa — confirmado tanto na ausência de
+qualquer chamada a uma API de cobrança no código como na documentação.
 
 ### Fluxo de confirmação — duas vias
 
-**1. Verificação automática por IA visão (caminho principal)**
-1. Utilizador escolhe pacote, introduz número moçambicano válido (prefixos `82–87`); `api/process-payment.js` regista em `transactions` (status `pending`) com referência única.
-2. Upload do screenshot do comprovativo → `POST /api/verify-receipt`.
-3. `api/_lib/visionAI.js` (Gemini → OpenRouter fallback) analisa: extrai valor, referência, estado e pontuação de confiança (0.0–1.0).
-4. **Aprovação automática** se: confiança ≥ **0.85** *e* valor correcto (±1 MZN) *e* data ≤ 60 min *e* status de sucesso *e* hash do comprovativo não reutilizado. Créditos adicionados na hora via RPC `add_credits`.
-5. Se falhar qualquer verificação ou confiança < 0.85 → status `review_needed` para o admin confirmar no painel.
-6. Anti-abuso: máximo 3 uploads por IP por minuto (via `api/_lib/rateLimit.js`).
+**1. Verificação automática por IA de visão (caminho principal)**
+1. Utilizador escolhe pacote, introduz número moçambicano válido (prefixos 82–87);
+   `process-payment.js` regista em `transactions` (status `pending`).
+2. Upload do comprovativo → `POST /api/verify-receipt`.
+3. `visionAI.js` (Gemini → OpenRouter fallback) extrai valor, referência, estado e confiança.
+4. **Aprovação automática** se confiança ≥ 0.85 *e* valor correcto (±1 MZN) *e* data ≤ 60 min
+   *e* hash do comprovativo nunca reutilizado. Créditos creditados na hora via RPC `add_credits`.
+5. Caso contrário → `review_needed` para confirmação manual no admin.
+6. Anti-abuso: máximo 3 uploads por IP por minuto.
 
-**2. Fallback manual via WhatsApp (sempre disponível)**
-- Link pré-formatado (referência, pacote, valor, carteira detectada pelo prefixo) visível abaixo da área de upload.
-- Admin confirma manualmente em `admin.html`.
+**2. Fallback manual via WhatsApp** — link pré-formatado, confirmação manual pelo admin.
 
-### Reembolso automático de créditos
+### Reembolso automático
 
-Se a geração de IA falhar completamente (todos os providers indisponíveis), **o crédito é devolvido automaticamente**:
-1. `api/generate-document.js` chama `refund_credit(p_user_id, p_amount)` quando `Promise.any` rejeita.
-2. A RPC incrementa `profiles.credits` e regista em `credit_logs` com `action = 'refund'`.
-3. O cliente recebe `{ refunded: true, creditsRemaining }` e mostra notificação clara.
+Se a geração de IA falhar completamente (todos os providers indisponíveis), o crédito é devolvido
+automaticamente via RPC `refund_credit`, tanto em `generate-document.js` como no
+`LongDocumentEngine` para documentos longos.
 
-O mesmo mecanismo existe no `LongDocumentEngine` — se as fases 2/3 falharem após o débito, o crédito é reembolsado automaticamente.
-
----
-
-## 📄 Limites de Uso por Documento (v40)
-
-Cada documento gerado — grátis ou pago — passa a ter um número limitado de "tentativas": downloads do ficheiro final (PDF/Word/Excel) e edições manuais guardadas no editor integrado. O documento em si continua completo e sem marca de água desde o primeiro momento; o que é limitado é quantas vezes se pode voltar a mexer **naquele documento** depois de gerado, não a qualidade da primeira entrega.
+### Limites de uso por documento (por download/edição, não por qualidade)
 
 | Origem do crédito | Downloads | Edições |
 |---|---|---|
-| Plano Grátis (1º crédito, oferecido no registo) | 3 | 2 |
-| Planos pagos (starter/básico/pro/avulso) | 5 | 5 |
+| Plano Grátis (1.º crédito) | 3 | 2 |
+| Planos pagos | 5 | 5 |
 | Plano Empresa | ilimitado | ilimitado |
 
-Quando os limites de um documento se esgotam, o utilizador pode gastar 1 crédito da sua conta para desbloquear mais tentativas **naquele documento específico** (+3 downloads ou +2 edições — o mesmo valor-base do plano grátis, independentemente do plano original).
+Calculado inteiramente no servidor (trigger + funções `SECURITY DEFINER`); nunca a partir de
+valores enviados pelo browser.
 
-Os limites são calculados e aplicados inteiramente no servidor (trigger + funções `SECURITY DEFINER` a partir do histórico real em `credit_logs`) — nunca a partir de valores enviados pelo browser. Um `UPDATE` directo à tabela `documents` feito pelo cliente (ex: ao gravar o conteúdo editado) nunca consegue alterar os contadores de uso; só as funções da `migration_v40_document_usage_limits.sql` o conseguem fazer.
-
----
-
-## 💰 Finanças (v37)
-
-Separador "Finanças" do painel admin (`admin.html` → `AdminApp.js:_loadFinance`, `api/admin/index.js` acção `finance`), que mostra quanto dinheiro pode realmente ser levantado da plataforma:
+### Finanças ("Valor Levantável")
 
 ```
 Valor Levantável = Receita Total Confirmada
-                  − Saldo reservado para Afiliados (profiles.aff_balance)
-                  − Despesas Operacionais registadas (finance_expenses)
-                  − Já Levantado pelo dono (finance_withdrawals)
+                  − Saldo reservado para Afiliados
+                  − Despesas Operacionais registadas
+                  − Já Levantado pelo dono
 ```
 
-- **Despesas operacionais** (`finance_expenses`): domínio, hosting, providers de IA pagos ou outras, com opção de marcação como recorrente.
-- **Custos recorrentes configuráveis** em `system_settings` (chaves `finance_*`) — domínio anual, plano Vercel, orçamento de providers de IA — amortizados automaticamente por mês.
-- A taxa de câmbio USD→MZN usada para converter custos em dólar é sempre obtida em tempo real, nunca fixa no código ou na migração.
-
-### Identidade Fiscal (NOVO — v42)
-
-Cartão "🧾 Contabilidade / Dados Fiscais" no separador Finanças, alimentado por `migration_v42_finance_fiscal_identity.sql`, que adiciona a `system_settings` os campos:
-
-| Chave | Descrição |
-|---|---|
-| `fiscal_company_name` | Nome legal/comercial da empresa, impresso no cabeçalho dos relatórios fiscais |
-| `fiscal_nuit` | NUIT (Número Único de Identificação Tributária) |
-| `fiscal_address` | Morada fiscal |
-| `fiscal_regime` | Regime fiscal (ex: "Regime Simplificado — ISPC", "Regime Normal de IVA") |
-| `fiscal_year_start` | Início do exercício fiscal (normalmente 1 de Janeiro) |
-
-Nenhum valor vem preenchido por omissão — o admin preenche isto uma única vez. Estes dados são impressos no cabeçalho de `/api/admin?action=finance&sub=period-report` (relatório de período, para liquidação trimestral do ISPC ou, mais tarde, declaração de IRPC) e nas exportações CSV do livro de receita/despesas/levantamentos — reduz o trabalho de preparar a informação para o contabilista ou para a Autoridade Tributária.
+Inclui Identidade Fiscal (v42) e recibos formais de pagamento a afiliados a cada levantamento
+confirmado (v43).
 
 ---
 
-## 🛠️ Alterações — Auditoria Junho 2026 (v12)
+## 9. Sistema de afiliados e rede de parceiros
 
-| Ficheiro | Alteração |
-|---|---|
-| `api/_lib/supabaseAdmin.js` | **Novo.** Cliente Supabase via fetch puro, sem SDK/`ws`. |
-| `api/deduct-credit.js` | Reescrito (v3.0); novo modo `refund`. |
-| `api/generate-document.js` | Removido `require('ws')`; reembolso automático em falha total. |
-| `api/process-payment.js` | Reescrito (v3.0); erros do Supabase não expostos; aceita M-Pesa/e-Mola/mKesh. |
-| `assets/js/services/Services.js` | Envia `cost`; propaga `refunded`/`creditsRemaining` em erro. |
-| `assets/js/controllers/DocumentController.js` | Trata `err.refunded` — actualiza saldo e avisa utilizador. |
-| `supabase/migration_v12_refund_credit.sql` | **Novo.** RPC `refund_credit` + índice em `credit_logs`. |
-
----
-
-## 🛠️ Alterações — v13 a v16 (pós-auditoria)
-
-| Migração / Ficheiro | Alteração |
-|---|---|
-| `migration_v12_community_templates.sql` | Estende `templates_custom` (template_type, featured, share_token, template_uses...). |
-| `migration_v13_fix_signup_credits.sql` | Fix bug: trigger `handle_new_user()` atribuía 3 créditos em vez de 1 / 30 dias. |
-| `migration_v14_affiliates_pro.sql` | Afiliados Pro: segmentação, níveis, metas, `affiliate_fraud_flags`. |
-| `migration_v15_receipt_verification.sql` | Colunas de verificação em `transactions` + status `review_needed`. |
-| `migration_v16_fix_signup_name_phone.sql` | Fix: trigger `ON CONFLICT DO NOTHING` impedia salvar nome/telefone. |
-| `api/misc.js` → v3.0 | Nova rota `POST /api/verify-receipt`; rate-limit; hash SHA-256 anti-reutilização. |
-| `api/_lib/visionAI.js` | **Novo.** Helper de IA visão partilhado. |
-| `assets/js/marketplace/templates/*.js` | `TemplateLibrary.js` (~1600 linhas) dividido em 14 ficheiros + `templates/index.js`. |
+- **Comissões por pacote** (configurável): Avulso 10% · Starter 15% · Básico 15% · Pro 20% ·
+  Empresa 20%.
+- **Segmentos:** papelaria · cyber · universidade · explicação · digitador · individual — cada
+  um com bónus próprio.
+- **Níveis:** 🥉 bronze → 🥈 prata (5+ conversões) → 🥇 ouro (20+) → 💎 diamante (50+); diamante
+  reduz o mínimo de levantamento para metade.
+- **Bónus de comissão por tier:** Bronze +0% · Prata +2% · Ouro +5% · Diamante +8%.
+- **Crédito de boas-vindas** para quem se regista via link de afiliado.
+- **Anti-fraude:** tabela dedicada com eventos (`self_referral`, `ip_burst`, `fake_clicks`,
+  `suspicious_conversion`) e severidade.
+- **Kit de Marketing dinâmico:** o admin marca zonas de QR code/texto sobre uma imagem; cada
+  afiliado vê a peça composta no seu próprio browser (`<canvas>`) com o SEU QR pessoal — nenhuma
+  cópia por afiliado fica gravada na base de dados.
+- **Rede de Parceiros:** papelarias, cyber cafés **e advogados** (v47), com código de acesso
+  próprio (v46) e protecção anti-abuso nas avaliações (v45).
 
 ---
 
-## 🛠️ Alterações — v17 a v24 (Fase 2 + auditoria de consistência)
+## 10. Limites do Vercel Hobby
 
-| Migração / Ficheiro | Alteração |
-|---|---|
-| `migration_v17_legal_rag.sql` | **Motor Jurídico RAG:** pgvector, `legal_articles`, `legal_sources`, `search_legal_articles()`. |
-| `migration_v20_lei_associacoes_cooperativas.sql` | Seed de artigos da Lei das Associações e Cooperativas (corrige dois diplomas inexistentes que estavam nos prompts). |
-| `migration_v21_dynamic_signup_credits.sql` | Trigger `handle_new_user()` passou a ler `free_credits_normal`/`free_credits_expiry_days` de `system_settings`. |
-| `migration_v22_seed_official_templates.sql` | Insere 70 templates oficiais na galeria comunitária (`template_type = 'official'`). |
-| `migration_v23_fix_gallery_view_html_css.sql` | Corrige `v_templates_gallery` que omitia `template_html`/`template_css` → preview sempre genérico. |
-| `migration_v24_secure_orphan_credit_packages.sql` | Activa RLS em `credit_packages` (estava sem políticas desde v8 — legível e escrevível por anon). |
-| `api/_lib/legalSearch.js` | **Novo.** Busca vectorial pgvector para o Motor Jurídico. |
-| `api/_lib/packages.js` | **Novo.** Única fonte de verdade dos pacotes (eliminou duplicação em 5 locais). |
-| `api/_lib/rateLimit.js` | **Novo.** Rate-limit via Upstash Redis extraído para módulo partilhado. |
-| `assets/js/services/LegalContext.js` | **Novo.** Ponte frontend ↔ `/api/legal-search`. |
-| `assets/js/services/LongDocumentEngine.js` | v2.0: débito de crédito movido para DEPOIS do planeamento (fix: crédito perdido em falha de planeamento). |
-| `assets/js/marketplace/SampleData.js` | **Novo.** Dados de exemplo realistas por categoria para preview da galeria. |
-| `assets/js/services/SmartOCRService.js` | v4.0: IA visual primeiro; Tesseract apenas como complemento. |
-| `api/generate-document.js` | v2.1: modo amostra grátis (`_previewMode`); custo progressivo para docs longos. |
-| `sw.js` | CACHE_VERSION `v21-20260629`: 33 ficheiros adicionados ao precache (prompts, templates, SampleData, LegalContext). |
-| `tests/auth.test.js` | **Novo.** Testes unitários AuthManager/AuthUI. |
-| `tests/ocrSchemaAlignment.test.js` | **Novo.** Garante alinhamento schema OCR ↔ campos do formulário. |
-| `tests/rateLimit.test.js` | **Novo.** Testes para `api/_lib/rateLimit.js`. |
+| Recurso | Limite | Usado |
+|---|---|---|
+| Serverless Functions | 12 | **12 — sem margem** (`api/_lib/` não conta) |
+| `generate-document.js` / `extract-template.js` / `convert.js` | 60 s | — |
+| `process-payment.js` | 30 s | — |
+| Restantes | 10–30 s | — |
+| Bandwidth | 100 GB/mês | — |
+
+**Regra prática:** toda nova lógica de API deve ir em `api/misc.js` ou numa function já
+existente. Helpers partilhados vão em `api/_lib/`. Não criar novos ficheiros `.js` directamente
+em `api/` sem confirmar este limite primeiro.
 
 ---
 
-## 🛠️ Alterações — v25 (auditoria Julho 2026 — self-service de conta + bugs de produção)
+## 11. Testes
 
-Esta ronda partiu de reports directos de utilização em produção (não uma auditoria de código a frio), pelo que cada linha abaixo corresponde a um sintoma real observado no telemóvel.
+| Suite | Linhas | Cobre |
+|---|---|---|
+| `tests/auth.test.js` | 120 | AuthManager / AuthUI (jsdom) |
+| `tests/ocrSchemaAlignment.test.js` | 100 | Alinhamento schema OCR ↔ campos do formulário |
+| `tests/rateLimit.test.js` | 61 | `api/_lib/rateLimit.js` |
+| **Total** | **281** | — |
 
-| Ficheiro | Alteração |
-|---|---|
-| `perfil.html` | **Praticamente reescrito.** Antes, os botões "Comprar Créditos" e "Ver arquivo completo" apenas faziam `href="/"` — largavam o utilizador na home sem completar a acção. Agora incluem a marcação dos modais `payOverlay`/`historyOverlay` (mesmos IDs que `index.html`) e instanciam `PaymentController`/`HistoryController` directamente na página — Créditos e Arquivo abrem **sem sair do perfil**. Também: avatar com melhor feedback de erro (mensagens de erro deixam de desaparecer sozinhas ao fim de 6s), lista de "Documentos Recentes" tornada clicável (reutiliza o visualizador "lite" do `HistoryController`), select do Supabase passou a trazer `content` (antes só trazia metadados). |
-| `assets/js/app.js` | Removido o botão 👤 redundante no header (duplicava a função do avatar/"M", que já abre o dropdown). Dropdown do utilizador corrigido: "O Meu Perfil" e "Painel de Controlo" apontavam praticamente para o mesmo scroll (`/perfil.html` vs `/perfil.html#painel`, sendo `#painel` uma marca vazia colada ao topo) — agora "O Meu Perfil" vai à secção de Dados Pessoais (`#dados`) e "Painel de Controlo" fica no topo (KPIs + acções rápidas). Adicionado suporte a deep-links `?topup=1`/`?history=1` para abrir modais a partir de outras páginas. |
-| `assets/js/controllers/HistoryController.js` | O fallback para o visualizador "lite" (usado em páginas sem o editor A4 completo) confiava só em `window.docController` estar definido. Como `app.js` define essa variável em **qualquer** página onde é incluído — mesmo sem a marcação completa (caso de `templates.html`) — isso causava `TypeError: Cannot set properties of null` ao tentar escrever em `#resModel`/`#resMeta`, que não existiam nessa página. Guard reforçado: agora também confirma que `#resultOverlay`/`#resModel` existem mesmo no DOM antes de usar o editor completo. |
-| `assets/js/views/Views.js` | `_renderResultInner` escrevia directamente em `document.getElementById('resModel')`/`resMeta` sem verificar se existiam — blindado com verificação de nulidade, para nunca mais interromper a função a meio (o que deixava o modal com o título do documento anterior em vez do actual). |
-| `templates.html` | Três bugs distintos, todos reais: **(1)** a página carrega `app.js` completo (liga os botões 📁/⚡ do header) mas nunca tinha a marcação dos modais — cliques nesses botões não faziam nada; adicionada a marcação de `resultOverlay`/`payOverlay`/`historyOverlay`. **(2)** `openDetail(id)` chamava `renderTemplatePreview(t)` **antes** de preencher título/descrição, sem try/catch — se o preview de um template específico falhasse, a função parava a meio e o modal ficava a mostrar o título do último template aberto com sucesso (parecia que "todos os cards abrem o mesmo template"). Corrigido: texto preenchido primeiro, preview isolado num try/catch. **(3)** os cliques nos cards eram religados a cada "carregar mais"/filtro (`querySelectorAll(...).forEach(...)` sem limpar os anteriores), acumulando listeners duplicados nos cards mais antigos — substituído por um único listener delegado no grid. |
-| `api/misc.js` (`tplList`) | **Bug crítico, causa raiz real do ponto (2) acima.** A função ignorava por completo `req.query.id`. `templates.html` chama `/api/templates/list?id=eq.<uuid>&limit=1` para abrir um template específico, mas sem o filtro de `id` a query executada era sempre "ORDER BY downloads DESC LIMIT 1" — devolvia sempre o template mais descarregado do catálogo inteiro, fosse qual fosse o `id` pedido. Corrigido com validação estrita de formato UUID (evita injecção de filtros extra via query string) antes de aplicar `&id=eq.<uuid>` ao pedido ao Supabase. |
-| `vercel.json` (CSP) | A directiva `img-src` nunca incluiu `https://*.supabase.co` — os avatares (guardados no Supabase Storage) eram bloqueados pelo browser mesmo com o upload a funcionar correctamente (o erro só aparecia na consola: "Refused to load the image ... violates CSP"). Adicionado `https://*.supabase.co` ao `img-src`. |
-| `sw.js` (`CACHE_VERSION`) | Confirmado que já é auto-gerido por `scripts/inject-version.js` a cada deploy (`v<sha>-<data>`) — o bump manual feito durante o diagnóstico desta ronda era redundante mas inofensivo, dado que o build sempre sobrescreve o valor. |
-
-
-
-- **Migração para `api/_lib/supabaseAdmin.js` (estado actual):**
-  - ✅ Já migradas (sem `@supabase/supabase-js` nem `require('ws')`): `deduct-credit.js`, `process-payment.js`, `generate-document.js`, `auth/index.js`, `verify-credits.js`, `partners.js`, `delete-temp-account.js`, `cleanup-temp-accounts.js`.
-  - ✅ Nunca precisaram do SDK: `extract-template.js`, `convert.js`.
-  - 🟡 **Parcialmente migrado:** `misc.js` — usa `supabaseAdmin.js` na maioria das rotas, mas mantém `makeSdkClient()` interno (SDK + `ws`) para `handleAffiliate` e `handleTemplates`.
-  - ❌ ~~Ainda não migrado: `api/admin/index.js` — usa `@supabase/supabase-js` + `require('ws')` integralmente (75 KB, o maior ficheiro de API; migrar requer mais cuidado).~~ **Resolvido na v29** — ver secção "Alterações — v29".
-
-- **Blog / CMS** (`api/admin/index.js`, `blog_pages`) — geração de artigos por IA e fluxo de publicação automática para GitHub não foram revistos a fundo.
-
-- **Painel Admin completo** (`admin.html`, `AdminApp.js`) — gestão de utilizadores, confirmação manual de pagamentos, analytics, feedback e logs testados superficialmente.
-
-- **Sistema de Afiliados** — apenas a integridade do débito/reembolso de créditos foi verificada; o cálculo de comissões, níveis e levantamentos não foi auditado a fundo.
-
-- **Rede de Parceiros** (`api/partners.js`, `parceiros.html`, `admin-parceiros.html`) — fluxo de cadastro, geolocalização e exibição no mapa não foram testados.
-
-- **Conteúdo do Motor Jurídico RAG** — apenas a Lei das Associações/Cooperativas tem seed nos ficheiros de migração. Os restantes diplomas jurídicos (Lei do Arrendamento, Código Civil, etc.) precisam de ser adicionados à tabela `legal_articles` manualmente ou via script.
-
-- **Consolidação do schema SQL** — a pasta `supabase/` tem vários ficheiros avulsos (`EMERGENCIA_*`, `EXECUTAR_*`, `migration_fix_*`, etc.) aplicados directamente em produção. Recomenda-se gerar um `schema_CURRENT.sql` a partir do Dashboard do Supabase como referência canónica.
+**Honestamente:** 281 linhas de teste para ~11.650 linhas de código só em `api/` é uma cobertura
+fina. Geração de documentos, pagamentos, afiliados e o Motor Jurídico RAG — as áreas de maior
+exposição financeira e legal do produto — não têm nenhum teste automatizado dedicado hoje.
 
 ---
 
-## 🛠️ Alterações — v26 (Marketing Analytics, Push real, correcções de afiliados)
+## 12. Dívida técnica e problemas conhecidos (honesto, sem filtro)
 
-Ronda de trabalho de 10–11 de Julho/2026, cobrindo três frentes: o sistema de Marketing
-Analytics completo (5 fases), notificações push reais, e uma auditoria dedicada ao sistema de
-afiliados que encontrou uma falha silenciosa a afectar comissões desde sempre.
-
-| Ficheiro / Migração | Alteração |
-|---|---|
-| `migration_v30_marketing_analytics.sql` | Fase 1 — fundação: tabelas `marketing_visits`, `marketing_events`, `marketing_sources`, agregação diária, sem duplicar `page_views`/`online_sessions` (v9) nem `ai_provider_daily_usage` (v27) já existentes. |
-| `migration_v31_marketing_purchase_attribution.sql` | Fase 2 — liga compras confirmadas à fonte de marketing que originou a visita. |
-| `migration_v32_marketing_qrcodes.sql` | Fase 3 — QR codes geridos no admin, registados como `marketing_sources` (`type='qr'`), reaproveitando a agregação já construída nas fases 1–2. |
-| `migration_v33_funnel_crm.sql` | Fase 4 — dashboard de funil (visita → registo → documento gerado → compra, com taxa de conversão por passo) e timeline/CRM por utilizador, incluindo actividade anónima pré-registo. |
-| `migration_v34_campaigns_goals_notifications.sql` | Fase 5 — campanhas, metas e notificações administrativas. |
-| `assets/js/services/MarketingTracker.js` | **NOVO.** Módulo cliente que alimenta as 5 fases acima. |
-| `migration_v35_push_notifications.sql` + `api/_lib/webpush.js` | **NOVO.** Notificações push reais (Android/Chrome) via infraestrutura VAPID — tabela `push_subscriptions` para subscrições de clientes e admins. Funciona com a app fechada, uma vez instalada como PWA. |
-| `migration_v36_tier_bonus_and_referral_signup.sql` | Ver detalhe completo na secção "Sistema de Afiliados" acima — bónus de comissão por tier, crédito de boas-vindas por registo via link, e correcção do bug crítico de `referred_by` nunca gravado no signup normal. |
-| `admin.html` / `AdminApp.js` | Correcção de incompatibilidade de classes CSS que deixava modais do admin sem estilo (apareciam "nus", sem layout). |
-| `afiliado.html` | Removidas promessas de marketing sem implementação correspondente no código (a página tinha texto a anunciar funcionalidades que não existiam ainda — corrigido para reflectir só o que está realmente activo). |
-| `index.html` / `assets/js/app.js` | Removido por completo o banner morto `#sandboxBar` ("Modo Sandbox — Pagamentos M-Pesa não são reais") e o código JS que o mantinha forçosamente oculto. Resquício do antigo modo M-Pesa automático (nunca usado em produção — o projecto é 100% pagamento manual via WhatsApp); já estava sempre oculto por CSS + JS, mas mantinha-se como marcação morta e um pequeno risco caso a linha que o oculta fosse alguma vez removida por engano. |
-
-> ⚠️ **Nota sobre `migration_v31_marketing_purchase_attribution.sql`:** o ficheiro tal como está
-> neste repositório contém apenas bytes nulos (ficheiro corrompido/vazio no export usado para
-> esta auditoria). Confirmar no Supabase se a migração já foi aplicada em produção antes de a
-> tentar correr novamente; se não tiver o SQL original, recriar a partir do histórico do
-> Supabase Dashboard ou do commit correspondente no GitHub.
-
----
-
-## 🛠️ Alterações — v27 (Finanças, Templates em créditos, Limites de uso, Kit de Marketing)
-
-Ronda de trabalho de 17 de Julho/2026. Cobre as migrações `v37` a `v41` (já existentes no
-repositório mas nunca antes documentadas neste README) e uma auditoria dedicada aos dois
-pontos que ainda estavam incompletos entre o código e essas migrações — a secção "Templates
-do Marketplace" e o Kit de Marketing dos afiliados, ambos rebentando em produção.
-
-| Ficheiro / Migração | Alteração |
-|---|---|
-| `migration_v37_finance_expenses.sql` | **NOVO.** Despesas operacionais (`finance_expenses`) e cálculo de "Valor Levantável" — ver secção "Finanças" acima. |
-| `migration_v38_template_marketplace_split.sql` | **NOVO.** Colunas `approved_at`/`rejected_at` em `templates_custom` (faltavam desde sempre) e repartição de vendas 60%–70% para o criador do template (`author_share_percent`). |
-| `migration_v39_template_credits_only.sql` | **NOVO.** Remove `templates_custom.price_mzn` — o preço passa a ser sempre `credit_cost`; `process_template_sale` passa a receber o valor em MZN já calculado pela API (`credit_cost × taxa MZN/crédito do momento`) em vez de o ler de `price_mzn`. |
-| `migration_v40_document_usage_limits.sql` | **NOVO.** Limites de downloads/edições por documento gerado — ver secção "Limites de Uso por Documento" acima. |
-| `migration_v41_marketing_materials.sql` | **NOVO.** Tabela `marketing_materials` para o Kit de Marketing dos afiliados — ver secção "Kit de Marketing dinâmico" acima. |
-| `api/admin/index.js` | 🐛 **Corrigido:** `handleTemplates` (rota `/api/admin/templates`) ainda seleccionava e gravava `price_mzn`, coluna removida pela `migration_v39` — causava 500 ("column templates_custom.price_mzn does not exist") em toda a secção "Templates do Marketplace" do admin. Passa a calcular `mzn_per_credit`/`mzn_equivalent` ao vivo via `api/_lib/packages.js`, como o `AdminApp.js` já esperava. · **Novo:** rota `/api/admin/marketing-materials` (GET/POST/PUT/DELETE) para o CRUD dos materiais do Kit de Marketing. |
-| `api/misc.js` | **Novo:** rotas `materials` e `qrcode` em `handleAffiliate` (`/api/affiliate/materials`, `/api/affiliate/qrcode`) — antes inexistentes; `afiliado.html` já as chamava, mas caíam sempre no `default` (404 "Acção não encontrada"). |
-| `assets/js/admin/AdminApp.js` | **Novo:** gestão completa do Kit de Marketing — `_loadMaterials`, `_openMaterialForm`/`_closeMaterialForm`, upload e pré-visualização de imagem, editor visual de arrastar/redimensionar as zonas de QR e de texto (`_setupMatZoneDragging`), `_saveMaterial`, `_toggleMaterialActive`, `_deleteMaterial`. O botão "➕ Novo Material" já existia em `admin.html` desde a `v41`, mas chamava `adminApp._openMaterialForm()`, uma função que nunca tinha sido escrita. |
-
-> ✅ **Acção necessária:** se ainda não foram corridas em produção, executar no SQL Editor do
-> Supabase, por esta ordem: `migration_v37_finance_expenses.sql` → `migration_v38_template_
-> marketplace_split.sql` → `migration_v39_template_credits_only.sql` → `migration_v40_
-> document_usage_limits.sql` → `migration_v41_marketing_materials.sql`. Sem elas, os erros 500
-> descritos acima voltam a acontecer mesmo com o código já corrigido.
+- **Plano Vercel Hobby** a processar pagamentos comerciais — não permitido pelos Termos da
+  Vercel; sem margem de functions para crescer. Ver aviso no topo.
+- **`ROADMAP-ESCALA.md`** referenciado (nesta e em versões anteriores) mas nunca criado.
+- **`schema.sql` central desactualizado** — a única fonte fiável do schema real é a cadeia
+  completa de migrações; recomenda-se gerar `schema_CURRENT.sql` a partir do Supabase Dashboard.
+- **Ficheiros de migração avulsos** (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `migration_fix_*`,
+  `migration_add_*`) aplicados directamente em produção, sem posição clara na cadeia numerada
+  principal.
+- **Duas migrações chamadas "v46"** coexistem no repositório por lapso de nomenclatura — não é a
+  mesma migração corrida duas vezes, são dois ficheiros distintos; recomenda-se renomear um.
+- **`migration_v31_marketing_purchase_attribution.sql`** foi assinalada em auditorias anteriores
+  como possivelmente corrompida/vazia no export usado nessa altura — confirmar directamente no
+  Supabase Dashboard se já foi aplicada antes de a tentar correr de novo.
+- **Cobertura de testes fina** face ao volume de código (ver secção 11).
+- **`bonus_credits_expiry_days` (v51) é guardado mas nunca aplicado** — nenhum crédito (grátis,
+  bónus ou comprado) expira automaticamente hoje; a coluna existe apenas para mostrar uma data ao
+  utilizador. Construir a expiração real exigiria um livro-razão de créditos por concessão (cada
+  lote com a sua própria validade) em vez do único número acumulado que `profiles.credits` é
+  hoje — mudança maior, fora do âmbito da v51. Este ponto está documentado de forma honesta no
+  próprio comentário SQL da migração, e é reproduzido aqui para não se perder.
+- **Templates visuais continuam em 70** (14 serviços × 5) apesar do número total de serviços já
+  ter crescido para 18 — `transcricao` e `conversao` ainda não têm galeria de templates própria.
 
 ---
 
-## 🛠️ Alterações — v28 (Auditoria Julho 2026 — sincronização do README com v42–v47)
+## 13. Conformidade legal (Moçambique)
 
-Ronda de trabalho de 27 de Julho/2026. Ao contrário das rondas anteriores, esta não corrigiu
-bugs de código — o código e as migrações `v42` a `v47` já estavam correctas e activas em
-produção. O que faltava era **este README**, que tinha parado na `v41` (ronda de 17 de Julho)
-enquanto seis migrações novas já tinham sido escritas e aplicadas sem nunca serem
-documentadas. Esta ronda é exclusivamente de documentação e de duas correcções de higiene do
-repositório.
+Confirmado directamente em `legal.html`: a plataforma cita a **Lei n.º 3/2017, de 9 de Janeiro
+(Lei das Transacções Electrónicas)** e reconhece explicitamente que **Moçambique ainda não tem
+lei de protecção de dados pessoais autónoma em vigor** — existe uma proposta aprovada pelo
+Conselho de Ministros em Março/2026, pendente de votação final na Assembleia da República.
+Entretanto, adopta boas práticas alinhadas com essa proposta e com a Convenção de Malabo
+(ratificada por Moçambique).
 
-| Ficheiro / Migração | Alteração |
-|---|---|
-| `migration_v42_finance_fiscal_identity.sql` | Documentado. Identidade fiscal da empresa (nome legal, NUIT, morada, regime, início do exercício) para os relatórios de Finanças — ver secção "Finanças". |
-| `migration_v43_affiliate_payout_receipts.sql` | Documentado. Recibos formais para levantamentos de comissão de afiliados — ver secção "Sistema de Afiliados". |
-| `migration_v44_public_reviews.sql` | Documentado. Avaliações públicas ⭐ 1–5 — ver nova secção "Avaliações Públicas e Reforço da Rede de Parceiros". |
-| `migration_v45_partner_ratings_antiabuso.sql` | Documentado. Protecção contra avaliações falsas dirigidas a parceiros — mesma secção acima. |
-| `migration_v46_partner_access_code.sql` | Documentado. Código de acesso próprio por parceiro — mesma secção acima. |
-| `migration_v46_fix_document_insert_fk_violation.sql` | Documentado. Corrige violação de chave estrangeira no registo de documentos. **Nota de higiene:** partilha o número de versão "46" com o ficheiro anterior sem relação temática — recomenda-se renomear um dos dois (ex: para `v48`) na próxima ronda, para evitar assumir por engano que só existe uma migração "v46". |
-| `migration_v47_partners_advogados.sql` | Documentado. Advogados como parceiros na Rede de Parceiros, com nº de inscrição na OAM conferido manualmente — ver nova secção "Área Jurídica: Advogados como Parceiros". |
-| `README.md` | Actualizado de v27 para v28: nota de versão, lista de migrações do Deploy, tabela de Funcionalidades Principais, tabela de Versões, e aviso sobre o link morto para `ROADMAP-ESCALA.md` (ficheiro nunca criado). |
+Nota fiscal (`legal.html`): desde 1 de Janeiro de 2026 (Lei n.º 9/2025, de 29 de Dezembro), o
+ISPC deixou de ter taxa única de 3% — passou a taxas progressivas (3–20%), com permanência
+máxima de 5 anos no regime e isenção quando o imposto apurado for inferior a 500 MT. O
+enquadramento fiscal exacto desta plataforma ainda está a ser confirmado com um contabilista.
 
-> 📌 **Nota sobre o aviso do plano Vercel:** esta ronda também reforçou o aviso já existente
-> sobre o plano Hobby vs. Pro no topo do README com um ponto adicional confirmado numa
-> auditoria externa: nos Termos de Serviço da Vercel, o plano Hobby (e o trial Pro) concedem à
-> Vercel o direito de usar o conteúdo do site para treinar modelos de IA. Dado que este projecto
-> processa dados pessoais sensíveis (BI, procurações, contratos), isto reforça — não substitui —
-> a recomendação já existente de migrar para o Pro assim que houver receita consistente.
+**Assinatura digital em canvas** não tem validade jurídica plena sem certificação nos termos da
+Lei n.º 3/2017 — recomenda-se tornar isto explícito no momento em que o utilizador assina, não
+apenas nos Termos de Serviço.
+
+**Alinhamento marketing ↔ produto:** os materiais impressos (panfletos, cartazes) usam a
+expressão "100% Legal" de forma mais absoluta do que a cautela que o próprio `legal.html`
+demonstra. Recomenda-se suavizar essa linguagem no material impresso para reflectir a mesma
+cautela.
 
 ---
 
-## 🛠️ Alterações — v29 (eliminação total do SDK `@supabase/supabase-js`)
+## 14. Histórico de versões
 
-Ronda de 29 de Julho/2026. Fecha a última dívida técnica identificada na auditoria de v28
-(ficheiro `api/admin/index.js`, então o maior do projecto e o único ainda a depender do SDK
-oficial da Supabase em vez do padrão REST puro já usado em todo o resto da API desde a v24).
+O histórico detalhado ronda-a-ronda (v12 até v31) descrevia, ficheiro a ficheiro, cada correcção
+desde Junho/2026. Esse histórico longo foi **retirado deste README** porque a versão anterior do
+documento tinha ficado literalmente cortada a meio dessa secção, sem nunca chegar às rondas mais
+recentes — o que causava mais confusão do que valor. Um resumo das rondas mais significativas:
 
-| Ficheiro | Alteração |
+| Ronda | Foco |
 |---|---|
-| `api/admin/index.js` | Removida a função `getAdminClient()` (que instanciava `createClient()` com `realtime: { transport: ws }`) e o parâmetro `supabase` de todas as funções do ficheiro. `validateAdmin()` e todos os handlers passam a usar só as funções REST de `api/_lib/supabaseAdmin.js`. Ficheiro passou de 3.914 para 3.760 linhas. |
-| `api/misc.js` | Removida `makeSdkClient()` (mesmo padrão SDK+`ws`, usada só nas secções de **Afiliados** e **Templates**). Migradas para o wrapper REST puro, alinhando com o resto do ficheiro. |
-| `api/_lib/supabaseAdmin.js` | Adicionadas 8 funções novas ao wrapper REST, necessárias para cobrir tudo o que só o SDK fazia antes: `del`, `upsert`, `countRows` (equivalente a `.select('*', { count:'exact', head:true })`), `adminGetUserById`, `adminUpdateUserById` (Auth Admin API), `storageUpload` e `storageGetPublicUrl` (Supabase Storage via REST). |
-| `admin-parceiros.html` | Corrigido nome das chaves de configuração lidas de `getConfig()`: `supaUrl`/`supaAnon` → `supabaseUrl`/`supabaseAnonKey`, alinhando com o resto do frontend. |
-| `package.json` | Removidas as dependências `@supabase/supabase-js` e `ws` — deixam de ser necessárias em qualquer parte do projecto. |
+| v12 (Jun/2026) | Cliente Supabase via fetch puro; reembolso automático de créditos |
+| v13–v16 | Correcções de bugs pós-auditoria (créditos de registo, templates comunitários) |
+| v17–v24 | Motor Jurídico RAG; seed de 70 templates oficiais; RLS em `credit_packages` |
+| v25 | Self-service de conta (`perfil.html`); vários bugs de produção corrigidos |
+| v26 | Marketing Analytics (fundação); push notifications reais; bug crítico de `referred_by` corrigido |
+| v27 | Finanças ("Valor Levantável"); templates sempre em créditos; limites de uso por documento; Kit de Marketing |
+| v28–v29 | Sincronização do README; eliminação total do SDK `@supabase/supabase-js`/`ws` |
+| v30–v31 | Auditoria de segurança dedicada; mascaragem de PII em duas camadas; LPD/consentimento; correcção do `temp_password` em texto simples |
+| v32–v33 (mencionadas no cabeçalho da versão anterior deste documento, mas nunca documentadas em detalhe) | CSP hardening (remoção de handlers inline); correcção de 3 bugs de produção — não foi possível reconstruir o detalhe exacto a partir do ficheiro cortado; recomenda-se ao autor original completar esta linha manualmente se o detalhe ainda for relevante |
+| v34–v47 (via migrações) | Marketing Analytics completo; Finanças com Identidade Fiscal; recibos de afiliados; avaliações públicas; anti-abuso; parceiros advogados |
+| v48–v51 | Conformidade LPD (consentimento, direito ao esquecimento); protecção reforçada de dados sensíveis; recibos seguros; créditos bónus/promoções |
 
-**Porque isto importa:** para além de reduzir dependências (menos superfície de ataque, menos peso no bundle das funções serverless, relevante no limite de tamanho do Vercel Hobby), esta migração corrige um bug de produção real e não apenas cosmético: em Node.js 20 (o runtime que a Vercel usa por omissão em projectos mais antigos) sem a opção `realtime: { transport: ws }` explícita, `@supabase/supabase-js` lançava `"Node.js 20 detected without native WebSocket support"` **no próprio momento de `createClient()`**, antes de qualquer pedido — isto causava falhas visíveis ao registar parceiros/afiliados e ao gerir templates sempre que o transporte `ws` não estava correctamente configurado. Com o wrapper REST puro, esse cenário deixa de poder acontecer, porque nunca há um `RealtimeClient` a ser instanciado.
+| Componente | Versão |
+|---|---|
+| `package.json` | `11.0.0` |
+| `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy (`v<sha-git-7-chars>-<YYYYMMDD>`) |
+| Migrações Supabase | até `migration_v51_bonus_credits.sql`, mais ficheiros avulsos não numerados |
+| Serviços | 18 (16 com IA + 2 via WhatsApp) |
+| Templates visuais integrados | 70 (14 serviços × 5) |
+| Providers de IA registados | 13 |
 
 ---
 
-## 🛠️ Alterações — v30 (Auditoria de Segurança Agosto 2026)
-
-Ronda de verificação ponto-a-ponto dos riscos identificados numa auditoria externa ao projecto,
-mais uma segunda passagem de auditoria aos endpoints não cobertos por essa primeira lista
-(`convert.js`, `extract-template.js`, `partners.js`). A maior parte dos riscos originais já
-tinha sido corrigida em rondas anteriores (RLS em todas as tabelas, comprovativos privados com
-signed URLs desde v49, `validateAdmin()` em todos os handlers do admin, `Sanitizer.js` + iframe
-sandboxed nos templates da comunidade, limpeza de IndexedDB no logout) — confirmados novamente
-nesta ronda, sem alterações de código necessárias. Dois pontos novos, ainda por corrigir, foram
-tratados agora:
-
-| Ficheiro | Alteração |
-|---|---|
-| `api/_lib/piiRedaction.js` | **NOVO.** Mascara BI, NUIT (com contexto), telefone e e-mail identificados no texto do prompt antes de o enviar a qualquer fornecedor de IA externo; restaura os valores reais no texto devolvido. Testado com casos reais (separadores diferentes, falsos positivos como telefone/valor monetário) — restauração byte-a-byte confirmada. |
-| `api/generate-document.js` | Chama `redactSensitive()` sobre `finalPrompt` antes de o enviar a qualquer provider, e `restoreSensitive()` sobre a resposta antes de a devolver ao utilizador. |
-| `legal.html` | Parágrafo "Fornecedores de IA" da Política de Privacidade actualizado para descrever com precisão a mascaragem automática, em vez da formulação anterior ("não enviamos deliberadamente..."). |
-| `api/convert.js` | CORS restrito a `SITE_URL` (era `Access-Control-Allow-Origin: '*'`, sem qualquer autenticação — permitia que sites externos embutissem este endpoint, que chama a API paga CloudConvert, no browser dos seus próprios visitantes). Adicionada verificação de assinatura binária (magic bytes) para PDF/JPG/PNG/DOCX/XLSX/PPTX — antes só a extensão do nome do ficheiro era validada. |
-| `api/extract-template.js` | Mesma correcção de CORS (chama IA de visão, também paga). |
-| `api/partners.js` | Mesma correcção de CORS, por consistência (rotas de registo/avaliação/login são públicas e sem token). |
-
-**O que ficou confirmado, sem necessidade de alterar código:**
-RLS nas 49 tabelas · Service Role Key nunca no frontend · comprovativos privados com signed URLs
-· `validateAdmin()` em todos os handlers de dados do admin (excepto `handleFeedback`, que é
-submissão pública por desenho, não leitura de dados) · `Sanitizer.js` + iframe `sandbox=
-"allow-same-origin"` sem `allow-scripts` nos previews de templates · limpeza de IndexedDB no
-logout · rate limiting com TTL (sem persistência exportável de IPs de fraude).
-
-**Por verificar, fora do alcance de uma auditoria de código** (ver "Verificação em falta" na
-secção Segurança): migrations `v43`–`v50` aplicadas mesmo em produção, `npm audit`, cabeçalhos
-HTTP reais servidos por `mzdocs.co.mz`.
-
----
-
-## 🛠️ Alterações — v31 (Protecção de Dados Pessoais — LPD/RGPD)
-
-Ronda dedicada especificamente aos dados pessoais dos utilizadores — consentimento no registo,
-direito ao esquecimento, e uma segunda camada de protecção junto dos fornecedores de IA que
-complementa a mascaragem por padrão de texto já feita em `api/_lib/piiRedaction.js` (v30).
-
-| Ficheiro | Alteração |
-|---|---|
-| `api/auth/index.js` | Signup passa a exigir `consentTerms === true`; consentimento gravado em `consent_logs` (IP, hora, versão dos termos — `migration_v48`). Rate limiting adicionado a signin/signup/reset-password (não tinham nenhum antes). |
-| `api/delete-temp-account.js` (→ v10.0) | Direito ao esquecimento estendido a **todas** as contas, não só `avulso` — conta normal autenticada pode pedir eliminação definitiva enviando `{ confirmDeletion: true }`. `transactions.user_id` é anonimizado (`SET NULL`), não apagado — os registos têm de sobreviver por obrigação fiscal/contabilística; `documents` é removido via `ON DELETE CASCADE` já existente no schema. |
-| `perfil.html` | Botão "Eliminar a minha conta definitivamente" (antes só existia um link de WhatsApp para pedir manualmente). Dupla confirmação: `confirm()` do browser + escrever "ELIMINAR" antes de chamar a API. |
-| `api/misc.js`, `api/admin/index.js`, `assets/js/admin/AdminApp.js` | **Correcção de segurança:** `profiles.temp_password` guardava a password das contas `avulso` em **texto simples**, lida directamente pelo painel de admin — exposta por inteiro em caso de fuga da base de dados ou de uma sessão de admin comprometida. Deixou de ser gravado; nova acção `regenerate-temp-password` gera uma password nova, actualiza-a de facto no Supabase Auth (`adminUpdateUserById`), e devolve-a **uma única vez** na resposta — nunca fica persistida em claro. `migration_v48` limpa os valores já gravados (`UPDATE profiles SET temp_password = NULL`) e marca a coluna como `DEPRECATED`. |
-| `legal.html` | Citação da lei corrigida: o texto anterior misturava três números de lei diferentes e inconsistentes (`3/2017`, `58/2021`, `3/2022`) — os dois últimos não correspondem a nenhuma legislação moçambicana real encontrada. Passou a citar consistentemente a Lei n.º 3/2017 (Lei das Transacções Electrónicas), com nota honesta de que Moçambique ainda não tem lei de protecção de dados autónoma em vigor (proposta aprovada em Conselho de Ministros em Março/2026, pendente de votação final). Lista de subprocessadores de IA corrigida para os 10 fornecedores realmente activos no código (`aiProviderRegistry.js`) — antes só listava 5. |
-| `assets/js/services/prompts/piiShield.js` | **NOVO.** Mascara os valores de campos do formulário identificados como dados pessoais — por **nome do campo** (`nome`, `bi*`, `nuit`, `telefone`, `morada`, e papéis nomeados como `outorgante`/`procurador`/`senhorio`/`locatário`/etc., construído a partir do catálogo real de campos em `ServiceDefinitions.js`) — substituindo-os por marcadores opacos (`[[DADO_N]]`) **antes** de o prompt sair do browser. Os valores reais nunca chegam ao servidor nem a nenhum fornecedor de IA; só são repostos no documento final, também no browser. |
-| `assets/js/services/Services.js` | `_buildPrompt()` aplica `maskFormData()` a todo o formData antes de montar o prompt (`data` passa a referir-se sempre à versão mascarada dentro da função); `generate()` e `previewDocument()` repõem os valores reais via `_unmaskResult()`, com aviso (`_piiUnmaskWarning`) se algum marcador não voltar correctamente na resposta do modelo. |
-
-**Como as duas camadas de mascaragem se complementam (não colidem):**
-`piiRedaction.js` (servidor, v30) actua sobre o **texto já montado**, por **padrão** — apanha
-BI/NUIT/telefone/e-mail mesmo dentro de um campo de texto livre, mas não consegue reconhecer
-nomes nem moradas (não há regex fiável para isso). `piiShield.js` (browser, v31) actua sobre os
-**campos estruturados do formulário**, por **nome do campo** — cobre nome/morada/papéis com
-fiabilidade total nesses campos, mas só protege o que o sistema já sabe à partida que é um campo
-sensível. Os formatos de marcador são distintos (`‹‹BI_1››` vs `[[DADO_N]]`), por isso as duas
-substituições e restaurações correm sem interferir uma com a outra.
-
-**Limitação partilhada pelas duas camadas, documentada e não escondida:** nenhuma protege dados
-pessoais escritos à mão dentro de um campo de texto livre não reconhecido como sensível (ex:
-"motivo: para o meu filho João Machava, BI 110234567..." dentro de um campo "Finalidade"). Isto
-exigiria reconhecimento de entidades nomeadas (NER), uma técnica bem menos fiável do que as duas
-usadas aqui, e fica fora do âmbito desta ronda.
-
-**Nota sobre a abordagem escolhida:** chegou a ser desenhada uma variante que bloqueava por
-omissão os fornecedores com política de treino menos clara (Gemini free tier, NVIDIA NIM hosted,
-Mistral tier "Experiment", SambaNova), só os usando como último recurso. Foi descartada a favor
-da mascaragem (`piiRedaction.js` + `piiShield.js` acima) — a qualidade de resposta de todos os
-fornecedores configurados importa mais para o produto do que restringir o conjunto disp
+*MzDocs Pro — Desenvolvido por Manuel Amad Charifo · [mzdocs.co.mz](https://mzdocs.co.mz)*
