@@ -20,6 +20,7 @@ import * as recomendacao from './recomendacao.js';
 import * as planonegocio from './planonegocio.js';
 import * as licenca from './licenca.js';
 import * as acta from './acta.js';
+import * as transcricao from './transcricao.js';
 
 // Equivalente ao antigo `const builders = { trabalho: () => {...}, cv: () => {...}, ... }`
 export const PROMPT_BUILDERS = {
@@ -37,6 +38,7 @@ export const PROMPT_BUILDERS = {
   planonegocio: planonegocio.buildPrompt,
   licenca: licenca.buildPrompt,
   acta: acta.buildPrompt,
+  transcricao: transcricao.buildPrompt,
 };
 
 // Equivalente ao antigo `const blocks = { cv: () => `...`, carta: () => {...}, ... }`
@@ -55,4 +57,5 @@ export const DATA_BLOCK_BUILDERS = {
   planonegocio: planonegocio.buildDataBlock,
   licenca: licenca.buildDataBlock,
   acta: acta.buildDataBlock,
+  transcricao: transcricao.buildDataBlock,
 };
