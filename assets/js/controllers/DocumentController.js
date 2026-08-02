@@ -297,25 +297,29 @@ export class DocumentController {
    if (isAcademic) this._refreshAcademicPreCount();
  }
 
- // NOVO: rascunho manuscrito com várias páginas — só para "Trabalho Escolar".
- // Um trabalho escolar manuscrito normalmente tem várias folhas (não cabe
- // numa única foto), por isso só aqui permitimos seleccionar/fotografar
- // várias imagens de uma vez; nos outros serviços mantém-se 1 foto (a
- // maioria é um documento de 1 página — CV, carta, requerimento, etc. — e
- // limitar a 1 evita custo extra de IA sem necessidade real).
+ // NOVO: rascunho manuscrito com várias páginas — "trabalho" (Trabalho
+ // Escolar) e "transcricao" (Digitalizar Documento). Um trabalho manuscrito
+ // ou um documento espalhado por vários ficheiros normalmente tem várias
+ // folhas (não cabe numa única foto), por isso só aqui permitimos
+ // seleccionar/fotografar várias imagens de uma vez; nos outros serviços
+ // mantém-se 1 foto (a maioria é um documento de 1 página — CV, carta,
+ // requerimento, etc. — e limitar a 1 evita custo extra de IA sem
+ // necessidade real).
  const ocrInput = document.getElementById('ocrInput');
  const ocrCard  = document.querySelector('#ocrZone .ocr-card p');
  const btnCamEl = document.getElementById('btnCam');
  const btnFileEl = document.getElementById('btnFile');
- const isMultiPageDraft = key === 'trabalho';
+ const isMultiPageDraft = key === 'trabalho' || key === 'transcricao';
  if (ocrInput) {
    if (isMultiPageDraft) ocrInput.setAttribute('multiple', '');
    else ocrInput.removeAttribute('multiple');
  }
  if (ocrCard) {
-   ocrCard.textContent = isMultiPageDraft
-     ? 'Fotografe todas as páginas (pode seleccionar várias fotos de uma vez) e o sistema transforma em documento digital'
-     : 'Fotografe e o sistema transforma em documento digital';
+   ocrCard.textContent = key === 'transcricao'
+     ? 'Fotografe todas as páginas do documento (manuscrito ou em vários ficheiros) e receba-o já digitado, formatado e pronto a imprimir'
+     : isMultiPageDraft
+       ? 'Fotografe todas as páginas (pode seleccionar várias fotos de uma vez) e o sistema transforma em documento digital'
+       : 'Fotografe e o sistema transforma em documento digital';
  }
  if (btnCamEl) btnCamEl.textContent = isMultiPageDraft ? '📸 Tirar Fotos' : '📸 Tirar Foto';
  if (btnFileEl) btnFileEl.textContent = isMultiPageDraft ? '📁 Escolher Ficheiros' : '📁 Escolher Ficheiro';
@@ -509,7 +513,19 @@ export class DocumentController {
  const data = DocumentView.collectData(svc.fields);
  const missing = Validator.required(svc.fields, data);
  if (missing) { NotificationView.warn(`⚠️ Campo obrigatório: ${missing}`); return; }
- const cost = svc.cost || 1;
+ // NOVO: custo dinâmico para serviços com dynamicCostPerPage (ex:
+ // "transcricao"/Digitalizar Documento) — cobra por página fotografada em
+ // vez de custo fixo, para ser justo com o consumo real de IA de um
+ // documento longo. Sem páginas OCR (texto colado directamente), usa o
+ // custo mínimo de 1 crédito como qualquer outro documento. O tecto de 10
+ // créditos por operação é imposto de qualquer forma no servidor
+ // (api/deduct-credit.js VALID_COSTS), esta é só a mesma regra replicada
+ // no cliente para não tentar cobrar um valor que o servidor vai rejeitar.
+ let cost = svc.cost || 1;
+ if (svc.dynamicCostPerPage) {
+   const pages = this.docModel.ocrPageCount || 0;
+   cost = pages > 0 ? Math.min(10, Math.max(1, Math.ceil(pages / svc.dynamicCostPerPage))) : 1;
+ }
  if (!this.creditModel.canConsume(cost)) {
   const isGuest = !window.authManager?.isAuthenticated();
   window.paymentController?.showPricing(isGuest);
