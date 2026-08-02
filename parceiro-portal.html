@@ -73,12 +73,18 @@
 
 <header class="hdr">
   <a href="/" class="hdr-logo">
-    <img src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-    <div style="display:none;align-items:center;gap:8px">
+    <img id="siteLogo" src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;">
+    <div id="siteLogoFallback" style="display:none;align-items:center;gap:8px">
       <div class="hdr-badge">📄</div>
       <div class="hdr-name">Mz<span>Docs</span> Pro</div>
     </div>
   </a>
+  <script>
+  document.getElementById('siteLogo').addEventListener('error', function(){
+    this.style.display = 'none';
+    document.getElementById('siteLogoFallback').style.display = 'flex';
+  });
+  </script>
   <button class="btn-back" id="btnLogout" style="display:none" data-action="doLogout">🚪 Sair</button>
 </header>
 
