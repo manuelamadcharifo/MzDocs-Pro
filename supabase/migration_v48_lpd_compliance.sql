@@ -103,3 +103,18 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- api/cleanup-temp-accounts.js para chamar `select purge_expired_documents()`
 -- no fim da execução diária, em vez de criar um cron novo (o plano Hobby só
 -- permite crons limitados e o ficheiro já corre todos os dias à mesma hora).
+
+-- ── 5) REMEDIAÇÃO — remover passwords em texto limpo já gravadas ──────────
+-- Achado da auditoria de segurança de Julho/2026: profiles.temp_password
+-- guardava a password das contas 'avulso' em texto simples (não hash), lida
+-- directamente pelo painel de admin (assets/js/admin/AdminApp.js). Corrigido
+-- no código (api/misc.js, api/admin/index.js — deixou de gravar; nova acção
+-- 'regenerate-temp-password' substitui a leitura antiga), mas os valores já
+-- gravados na base de dados continuam expostos até esta limpeza correr.
+UPDATE public.profiles SET temp_password = NULL WHERE temp_password IS NOT NULL;
+
+COMMENT ON COLUMN public.profiles.temp_password IS
+  'DEPRECATED desde Julho/2026 — deixou de ser populado (risco de segurança: '
+  'texto limpo). Mantido apenas por compatibilidade com leituras antigas; '
+  'pode ser removido (DROP COLUMN) numa migration futura depois de confirmar '
+  'que nenhum código antigo em produção ainda o lê.';
