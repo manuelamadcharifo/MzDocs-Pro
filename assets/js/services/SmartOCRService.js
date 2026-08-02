@@ -581,6 +581,14 @@ export class SmartOCRService {
         { id:'paginas',     label:'Páginas pretendidas',      type:'number' },
         { id:'requisitos',  label:'Instruções do professor',  type:'textarea' },
       ],
+      // NOVO: schema mínimo para "Digitalizar Documento" — ao contrário de
+      // 'trabalho', este serviço não tenta extrair muitos campos (o
+      // objectivo é transcrição fiel, não preenchimento de formulário);
+      // só tenta detectar um título, se a capa/primeira página tiver um
+      // claramente visível, para poupar o utilizador de o digitar à mão.
+      transcricao: [
+        { id:'titulo', label:'Título do documento', type:'text' },
+      ],
     };
     return S[serviceType] || [];
   }
