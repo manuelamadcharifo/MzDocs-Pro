@@ -2,6 +2,23 @@
 // Módulo de conversão de ficheiros no próprio MzDocs
 // Usado pelo DocumentController ao abrir o serviço "conversao"
 
+// CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
+// vez de onclick="..."/onchange="..." inline — mesma lógica usada em
+// AdminApp.js. Módulos ES só correm o código de topo uma vez (são
+// singleton/cacheados), por isso é seguro instalar aqui mesmo sem classe.
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  if (el.dataset.action === 'convOpenFilePicker') { document.getElementById('convFile').click(); return; }
+  if (el.dataset.action === 'convStart')          { window._mzConvStart(); return; }
+});
+document.addEventListener('change', (e) => {
+  const el = e.target.closest('[data-change-action]');
+  if (!el) return;
+  if (el.dataset.changeAction === 'convTypeChange') { window._mzConvTypeChange(); return; }
+  if (el.dataset.changeAction === 'convFileChange')  { window._mzConvFileChange(el); return; }
+});
+
 const MAX_MB   = 10;
 const MAX_BYTES = MAX_MB * 1024 * 1024;
 
@@ -24,16 +41,16 @@ export function buildConverterHTML() {
     <div class="conv-wrap" id="convWrap">
       <div class="conv-format-row">
         <span class="conv-fmt-label">Converter</span>
-        <select class="conv-fmt-sel" id="convType" onchange="window._mzConvTypeChange()">
+        <select class="conv-fmt-sel" id="convType" data-change-action="convTypeChange">
           ${opts}
         </select>
       </div>
 
-      <div class="conv-drop" id="convDrop" onclick="document.getElementById('convFile').click()">
+      <div class="conv-drop" id="convDrop" data-action="convOpenFilePicker">
         <div class="conv-drop-ico">☁️</div>
         <div class="conv-drop-title">Clique ou arraste o ficheiro aqui</div>
         <div class="conv-drop-sub" id="convDropSub">Formatos aceites: .doc, .docx · Máx. ${MAX_MB}MB</div>
-        <input type="file" id="convFile" accept=".doc,.docx" onchange="window._mzConvFileChange(this)"/>
+        <input type="file" id="convFile" accept=".doc,.docx" data-change-action="convFileChange"/>
       </div>
 
       <div class="conv-file-info" id="convFileInfo">
@@ -49,7 +66,7 @@ export function buildConverterHTML() {
         <div class="conv-prog-label" id="convProgLabel">A converter…</div>
       </div>
 
-      <button class="conv-btn-convert" id="convBtn" onclick="window._mzConvStart()">
+      <button class="conv-btn-convert" id="convBtn" data-action="convStart">
         ⚡ Converter agora
       </button>
 
