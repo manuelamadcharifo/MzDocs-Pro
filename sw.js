@@ -95,7 +95,9 @@ const navigationHandler = async (params) => {
             button{background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:12px;padding:.875rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;width:100%}</style>
             </head><body><div class="card"><h1>📡 Sem Ligação à Internet</h1>
             <p>Não foi possível carregar a página. Verifique a sua ligação de dados e tente novamente.</p>
-            <button onclick="location.reload()">🔄 Tentar Novamente</button></div></body></html>`,
+            <button id="btnRetry">🔄 Tentar Novamente</button></div></body>
+            <script>document.getElementById('btnRetry').addEventListener('click', () => location.reload());</script>
+            </html>`,
             { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         );
     }
