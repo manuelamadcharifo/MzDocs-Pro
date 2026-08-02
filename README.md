@@ -1,8 +1,14 @@
-# MzDocs Pro — v32
+# MzDocs Pro — v33
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA. PWA instalável, construída para o Vercel Hobby (limite: 12 functions), Supabase e pagamento manual por carteira móvel.
 
-> 📌 **Nota de versão (actual):** auditoria de UI/UX (6 pontos de descoberta/conversão, todos
+> 📌 **Nota de versão (actual):** conclusão da Fase 1 do CSP hardening — zero handlers inline
+> (`onclick`/`oninput`/`onchange`/`onfocus`/`onblur`/`onerror`) restantes em qualquer ficheiro do
+> código activo, confirmado por varredura a todo o repositório. Documentadas variáveis de ambiente
+> de push notifications que faltavam por completo. Ver secção "Alterações — v33" abaixo. **Ainda
+> por fazer:** testar manualmente antes de remover `unsafe-inline` do CSP em `vercel.json`.
+
+> 📌 **Nota de versão (UI/UX + bugs de produção):** auditoria de UI/UX (6 pontos de descoberta/conversão, todos
 > resolvidos) + correcção de três bugs relatados directamente em produção: crédito grátis/de
 > afiliado a ficar preso a 0 até reload manual, a app a recarregar-se sozinha ao detectar um
 > deploy novo (agora só avisa, nunca força), e um `SyntaxError` em `api/admin/index.js`
@@ -360,6 +366,15 @@ NVIDIA_API_KEY=nvapi-...
 
 SITE_URL=https://mzdocs.co.mz
 
+# Notificações Push — obrigatórias para /api/_lib/webpush.js (sem fallback;
+# falha com erro explícito se ausentes). Gerar par de chaves VAPID uma vez
+# (ex: `npx web-push generate-vapid-keys`) e nunca as regenerar depois de
+# utilizadores já terem subscrito, ou as subscrições existentes deixam de
+# funcionar.
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:suporte.mzdocs@gmail.com   # tem este valor por defeito se omitido
+
 # Opcionais
 MPESA_API_KEY=...                  # apenas para detectar modo sandbox/produção
 MPESA_SERVICE_CODE=...             # ⚠️ nome real no código (não "MPESA_SERVICE_PROVIDER_CODE")
@@ -372,6 +387,12 @@ UPSTASH_REDIS_REST_TOKEN=...       #   (sem isto, cai num Map local por instânc
 GITHUB_OWNER=...                   # publicação automática de páginas SEO
 GITHUB_REPO=...
 GITHUB_TOKEN=...                   # Personal Access Token com escrita no repositório
+TERMS_VERSION=2026-07              # versão dos Termos registada em profiles.consent_terms_version
+                                    #   (tem este valor por defeito; sobe manualmente ao publicar
+                                    #   uma nova versão dos Termos)
+INDEXNOW_KEY=...                   # notifica motores de busca (Bing/etc.) ao publicar artigos;
+                                    #   tem uma chave por defeito no código, mas gerar uma própria
+                                    #   é recomendado antes de lançar em produção
 ```
 
 > ⚠️ **Variáveis sem efeito (não usar):** `ADMIN_EMAILS` e `MPESA_PUBLIC_KEY` aparecem em versões
@@ -1283,20 +1304,4 @@ usadas aqui, e fica fora do âmbito desta ronda.
 omissão os fornecedores com política de treino menos clara (Gemini free tier, NVIDIA NIM hosted,
 Mistral tier "Experiment", SambaNova), só os usando como último recurso. Foi descartada a favor
 da mascaragem (`piiRedaction.js` + `piiShield.js` acima) — a qualidade de resposta de todos os
-fornecedores configurados importa mais para o produto do que restringir o conjunto disponível, e
-a mascaragem protege os dados independentemente de qual fornecedor acaba por responder primeiro
-na corrida (`raceAllProviders`). Não há por isso nenhum campo de classificação de risco por
-fornecedor no código — `aiProviderRegistry.js` não tem essa distinção.
-
-
-
-| Componente | Versão | Nota |
-|------------|--------|------|
-| `package.json` | `11.0.0` | — |
-| `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy | formato `v<sha-git-7-chars>-<YYYYMMDD>`, escrito por `scripts/inject-version.js` — o valor no repositório é só um placeholder |
-| `README.md` | `v32` (esta edição) | v31 documentou a ronda LPD/RGPD; **v32** documenta a auditoria de UI/UX (3.1–3.6) + bugs de crédito preso/reload forçado/API de admin fora do ar — ver "Alterações — v32" |
-| `api/_lib/piiRedaction.js` | `v1.0` | NOVO (v30): mascara BI/NUIT/telefone/e-mail antes de qualquer chamada a fornecedor de IA |
-| `assets/js/services/prompts/piiShield.js` | `v1.0` | NOVO (v31): mascara nome/morada/papéis nomeados por campo do formulário — complementa `piiRedaction.js` |
-| `assets/js/services/Services.js` | — | v31: `_buildPrompt()` mascara `data` via `piiShield.js` antes de montar o prompt; `generate()`/`previewDocument()` repõem os valores reais via `_unmaskResult()` |
-| `api/generate-document.js` | `v2.2` | v30: integra `piiRedaction.js` antes/depois da chamada aos providers |
-| `api/convert.js` | `v1.1` | v30: CORS restrito a `SITE_URL` + verificação de magic bytes (era sem versão explícita
+fornecedores configurados importa mais para o produto do que restringir o conjunto disp
