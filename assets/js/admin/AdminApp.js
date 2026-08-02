@@ -60,6 +60,149 @@ class AdminApp {
         rejectReceipt:      (d) => this._rejectReceipt(d.id),
         approveReceipt:     (d) => this._approveReceipt(d.id, d.user, Number(d.credits) || 0),
         reviewReceipt:      (d) => this._reviewReceipt(d.id, d.user, Number(d.credits) || 0, d.ref, Number(d.confidence) || 0, d.reason),
+        // Secção Utilizadores — modais de confirmação (CSP Fase 1, parte 4)
+        doAddCredits:       (d) => this._doAddCredits(d.id),
+        doSetCredits:       (d) => this._doSetCredits(d.id),
+        sendCredentialsWA:  (d) => this._sendCredentialsWA(d.id),
+        doCreateAvulso:     ()  => this._doCreateAvulso(),
+        doDeleteUser:       (d) => this._doDeleteUser(d.id),
+        doConfirmPayment:   (d) => this._doConfirm(d.id, d.user, Number(d.credits) || 0),
+        fixMissingPhones:   ()  => this.fixMissingPhones(),
+        // Secção Blog/Páginas SEO (CSP Fase 1, parte 4)
+        saveBlogQueueDate:      (d) => this._saveBlogQueueDate(d.id),
+        deleteBlogQueueItem:    (d) => this._deleteBlogQueueItem(d.id),
+        doRescheduleAll:        ()  => this._doRescheduleAll(),
+        doBulkSchedule:         ()  => this._doBulkSchedule(),
+        saveBlogAutogenSettings: () => this._saveBlogAutogenSettings(),
+        openPageEditor:         (d) => this.openPageEditor(d.id),
+        deletePage:             (d) => this.deletePage(d.id, d.title),
+        // Secção Feedback/Avaliações (CSP Fase 1, parte 4)
+        filterFeedback:     (d) => this._filterFeedback(d.service || null),
+        moderateReview:     (d) => this._moderateReview(d.id, d.status),
+        // Secção Fraude/Templates (CSP Fase 1, parte 4)
+        resolveFraud:           (d) => this._resolveFraud(d.id),
+        blockAffiliateFraud:    (d) => this._blockAffiliate(d.id, d.reason),
+        previewTemplate:        (d) => this._previewTemplate(d.id),
+        saveTemplatePricing:    (d) => this._saveTemplatePricing(d.id),
+        approveTemplate:        (d) => this._approveTemplate(d.id),
+        rejectTemplate:         (d) => this._rejectTemplate(d.id),
+        // Secção Marketing (QR codes, materiais) (CSP Fase 1, parte 4)
+        toggleQrCode:           (d) => this._toggleQrCode(d.id, d.active === 'true'),
+        openMaterialForm:       (d) => this._openMaterialForm(d.id),
+        toggleMaterialActive:   (d) => this._toggleMaterialActive(d.id, d.active === 'true'),
+        deleteMaterial:         (d) => this._deleteMaterial(d.id),
+        // Secção Campanhas/Metas (CSP Fase 1, parte 4)
+        toggleCampaign:         (d) => this._toggleCampaign(d.id, d.active === 'true'),
+        deleteCampaign:         (d) => this._deleteCampaign(d.id, d.name),
+        createCampaign:         ()  => this._createCampaign(),
+        openGoalForm:           (d) => this._openGoalForm(d.metric, Number(d.target) || 0),
+        saveGoal:               (d) => this._saveGoal(d.month),
+        // Secção Levantamentos de Templates / Finanças (CSP Fase 1, parte 4)
+        processTemplateWithdrawal: (d) => this._processTemplateWithdrawal(d.id, d.status),
+        deleteFinanceExpense:      (d) => this._deleteFinanceExpense(d.id),
+        deleteFinanceWithdrawal:   (d) => this._deleteFinanceWithdrawal(d.id),
+        printPeriodReport:         ()  => this._printPeriodReport(),
+        // Secção IA/Notificações (CSP Fase 1, parte 4)
+        toggleAiReserve:        (d) => this._toggleAiReserve(d.id),
+        sendPush:               ()  => this._sendPush(),
+        // ── admin.html: shell estático (CSP Fase 1, parte 5) ────────────────
+        // Ao contrário dos blocos acima (gerados dinamicamente por template
+        // string), estes botões existem uma única vez no HTML — a maior
+        // parte não precisa de data-id, só de data-action.
+        closeSidebar:            () => this.closeSidebar(),
+        openSidebar:             () => this.openSidebar(),
+        toggleNotifPanel:        () => this._toggleNotifPanel(),
+        openPushSendForm:        () => this._openPushSendForm(),
+        refresh:                 () => this.refresh(),
+        markAllNotifsRead:       () => this._markAllNotifsRead(),
+        enableAdminPush:         () => this._enableAdminPush(),
+        nav:                     (d) => this.nav(d.section),
+        exportUsers:             () => this._exportUsers(),
+        createAvulsoModal:       () => this.createAvulsoModal(),
+        exportTransactions:      () => this._exportTransactions(),
+        loadTransactions:        () => this._loadTransactions(),
+        loadDocuments:           () => this._loadDocuments(),
+        openBlogAutogenSettings: () => this.openBlogAutogenSettings(),
+        openBlogBulkSchedule:    () => this.openBlogBulkSchedule(),
+        openBlogRescheduleAll:   () => this.openBlogRescheduleAll(),
+        deleteAllPendingBlogQueue: () => this._deleteAllPendingBlogQueue(),
+        republishAllBlog:        () => this._republishAllBlog(),
+        // openPageEditor já existe acima (secção Blog/Páginas); aqui é
+        // chamado sem data-id (nova página) — d.id fica undefined, igual
+        // ao onclick="adminApp.openPageEditor()" original.
+        loadAnalytics:           () => this._loadAnalytics(),
+        closePageEditor:         () => this.closePageEditor(),
+        generateWithAI:          () => this.generateWithAI(),
+        savePage:                (d) => this.savePage(d.publish === 'true'),
+        generateRanking:         () => this._generateRanking(),
+        // _switchAffTab e _loadReviewsModeration precisam do próprio botão
+        // clicado (para alternar a classe/estilo "activo") — usam o 2.º
+        // argumento (el) que o dispatcher passa a todos os handlers.
+        switchAffTab:            (d, el) => this._switchAffTab(el, d.tab),
+        loadReviewsModeration:   (d) => this._loadReviewsModeration(d.status),
+        affFilter:               (d) => this._affFilter(d.status),
+        loadWithdrawals:         (d) => this._loadWithdrawals(d.status),
+        loadRankingAdmin:        () => this._loadRankingAdmin(),
+        closeAffDetailModal:     () => { document.getElementById('affDetailModal').style.display = 'none'; },
+        saveMaterial:            () => this._saveMaterial(),
+        closeMaterialForm:       () => this._closeMaterialForm(),
+        loadTemplates:           (d) => this._loadTemplates(d.status),
+        loadAiProviders:         () => this._loadAiProviders(),
+        openQrCreateForm:        () => this._openQrCreateForm(),
+        createQrCode:            () => this._createQrCode(),
+        closeQrCreateForm:       () => this._closeQrCreateForm(),
+        exportFunnel:            () => this._exportFunnel(),
+        loadFunnel:              () => this._loadFunnel(),
+        openCampaignForm:        () => this._openCampaignForm(),
+        loadFinance:             () => this._loadFinance(),
+        saveFinanceConfig:       () => this._saveFinanceConfig(),
+        addFinanceExpense:       () => this._addFinanceExpense(),
+        exportFinanceCsv:        (d) => this._exportFinanceCsv(d.kind),
+        addFinanceWithdrawal:    () => this._addFinanceWithdrawal(),
+        saveFiscalConfig:        () => this._saveFiscalConfig(),
+        setReportPreset:         (d) => this._setReportPreset(d.preset),
+        generatePeriodReport:    () => this._generatePeriodReport(),
+        loadTransactionLedger:   () => this._loadTransactionLedger(),
+        loadAffiliatePayouts:    () => this._loadAffiliatePayouts(),
+        saveSystemSettings:      () => this.saveSystemSettings(),
+        loadAuditLog:            () => this.loadAuditLog(),
+        diagnoseMissingPhones:   () => this.diagnoseMissingPhones(),
+        // fixMissingPhones já existe acima (secção Utilizadores)
+        // closeModal (botão) já existe acima; esta variante é só para o
+        // fundo do modal (overlay) — só fecha se o clique foi mesmo no
+        // fundo, nunca quando "borbulha" de um clique dentro do conteúdo
+        // do modal (replica o comportamento do onclick="closeModal(event)"
+        // original, que comparava e.target com o próprio overlay).
+        closeModalOverlay:       (d, el, e) => { if (e.target === el) this.closeModal(); },
+    };
+
+    // Segundo listener delegado, para o único caso de evento 'input' inline
+    // que restava (estimativa de MZN ao editar o preço em créditos de um
+    // template). Mesma lógica de _bindDelegatedEvents(), noutro tipo de
+    // evento — mantém um único listener global em vez de reatar por linha.
+    _inputActionHandlers = {
+        updateTplMznEstimate: (d) => this._updateTplMznEstimate(d.id),
+        // CSP Fase 1, parte 6 — campos de pesquisa/filtro em admin.html.
+        // filterDocs exige sempre o valor (lança erro se undefined); os
+        // outros lêem o próprio DOM se chamados sem argumento, mas passamos
+        // el.value de qualquer forma por ser mais directo e explícito.
+        filterUsersQuery: (d, el) => this.filterUsers(el.value),
+        filterDocsQuery:  (d, el) => this.filterDocs(el.value),
+        filterBlogQuery:  ()      => this.filterBlog(),
+        autoSlug:         ()      => this.autoSlug(),
+    };
+
+    _changeActionHandlers = {
+        // Selects/checkboxes — todos chamam sem argumento (lêem o próprio
+        // DOM internamente), excepto _onMaterialImageSelected, que precisa
+        // do evento nativo para aceder a event.target.files.
+        filterUsersType:          () => this.filterUsers(),
+        loadTransactions:         () => this._loadTransactions(),
+        filterBlogStatus:         () => this.filterBlog(),
+        toggleMaterialMediaFields: () => this._toggleMaterialMediaFields(),
+        onMaterialImageSelected:  (d, el, e) => this._onMaterialImageSelected(e),
+        toggleMaterialTextZone:   () => this._toggleMaterialTextZone(),
+        loadFunnel:               () => this._loadFunnel(),
     };
 
     _bindDelegatedEvents() {
@@ -67,7 +210,19 @@ class AdminApp {
             const el = e.target.closest('[data-action]');
             if (!el) return;
             const handler = this._actionHandlers[el.dataset.action];
-            if (handler) handler(el.dataset);
+            if (handler) handler(el.dataset, el, e);
+        });
+        document.addEventListener('input', (e) => {
+            const el = e.target.closest('[data-input-action]');
+            if (!el) return;
+            const handler = this._inputActionHandlers[el.dataset.inputAction];
+            if (handler) handler(el.dataset, el, e);
+        });
+        document.addEventListener('change', (e) => {
+            const el = e.target.closest('[data-change-action]');
+            if (!el) return;
+            const handler = this._changeActionHandlers[el.dataset.changeAction];
+            if (handler) handler(el.dataset, el, e);
         });
     }
 
@@ -587,7 +742,7 @@ class AdminApp {
             </div>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#3b82f6;color:#fff" onclick="adminApp._doAddCredits('${userId}')">✅ Confirmar</button>
+                <button style="background:#3b82f6;color:#fff" data-action="doAddCredits" data-id="${escapeHtml(userId)}">✅ Confirmar</button>
             </div>
         `);
         setTimeout(() => document.getElementById('mCredits')?.focus(), 100);
@@ -629,7 +784,7 @@ class AdminApp {
             </div>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#f59e0b;color:#000" onclick="adminApp._doSetCredits('${userId}')">✅ Guardar</button>
+                <button style="background:#f59e0b;color:#000" data-action="doSetCredits" data-id="${escapeHtml(userId)}">✅ Guardar</button>
             </div>
         `);
         setTimeout(() => document.getElementById('mCreditsSet')?.focus(), 100);
@@ -736,7 +891,7 @@ USING (EXISTS (
                 <p style="font-size:.75rem;color:#94a3b8">⚠️ Isto substitui a password anterior — partilhe já esta com o cliente pelo WhatsApp.</p>
                 <div class="modal-actions">
                     <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
-                    ${(data.phone || u.phone) ? `<button style="background:#25d366;color:#fff" onclick="adminApp._sendCredentialsWA('${userId}')">📱 Enviar WhatsApp</button>` : ''}
+                    ${(data.phone || u.phone) ? `<button style="background:#25d366;color:#fff" data-action="sendCredentialsWA" data-id="${escapeHtml(userId)}">📱 Enviar WhatsApp</button>` : ''}
                 </div>
             `);
         } catch (err) {
@@ -786,7 +941,7 @@ USING (EXISTS (
             </div>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#009A44;color:#fff" onclick="adminApp._doCreateAvulso()">✅ Criar conta</button>
+                <button style="background:#009A44;color:#fff" data-action="doCreateAvulso">✅ Criar conta</button>
             </div>
         `);
         setTimeout(() => document.getElementById('avPhone')?.focus(), 100);
@@ -841,7 +996,7 @@ USING (EXISTS (
             <p style="font-size:.9rem;margin:.75rem 0"><strong>Utilizador:</strong> ${userName}</p>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#ef4444;color:#fff" onclick="adminApp._doDeleteUser('${userId}')">🗑️ Eliminar definitivamente</button>
+                <button style="background:#ef4444;color:#fff" data-action="doDeleteUser" data-id="${escapeHtml(userId)}">🗑️ Eliminar definitivamente</button>
             </div>
         `);
     }
@@ -939,7 +1094,7 @@ USING (EXISTS (
             <p class="modal-sub">Adicionar <strong>${credits} créditos</strong> ao utilizador?</p>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#22c55e;color:#fff" onclick="adminApp._doConfirm('${txId}','${userId}',${credits})">✅ Confirmar</button>
+                <button style="background:#22c55e;color:#fff" data-action="doConfirmPayment" data-id="${escapeHtml(txId)}" data-user="${escapeHtml(userId)}" data-credits="${credits}">✅ Confirmar</button>
             </div>
         `);
     }
@@ -1176,7 +1331,7 @@ USING (EXISTS (
                 </div>`).join('')}
             </div>
             <div class="modal-actions">
-                <button style="background:#3b82f6;color:#fff" onclick="adminApp.fixMissingPhones()">🔧 Reparar</button>
+                <button style="background:#3b82f6;color:#fff" data-action="fixMissingPhones">🔧 Reparar</button>
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Fechar</button>
             </div>
         `);
@@ -1446,8 +1601,8 @@ USING (EXISTS (
                         </td>
                         <td><span style="background:#FEF9C3;color:#713F12;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">⏳ Agendado</span></td>
                         <td style="white-space:nowrap;">
-                            <button class="btn-ghost" style="font-size:12px;" onclick="adminApp._saveBlogQueueDate('${it.id}')">💾 Guardar</button>
-                            <button class="btn-ghost" style="font-size:12px;color:#ef4444;" onclick="adminApp._deleteBlogQueueItem('${it.id}')">🗑️</button>
+                            <button class="btn-ghost" style="font-size:12px;" data-action="saveBlogQueueDate" data-id="${escapeHtml(it.id)}">💾 Guardar</button>
+                            <button class="btn-ghost" style="font-size:12px;color:#ef4444;" data-action="deleteBlogQueueItem" data-id="${escapeHtml(it.id)}">🗑️</button>
                         </td>
                     </tr>`;
                 }).join('');
@@ -1543,7 +1698,7 @@ USING (EXISTS (
             </div>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#009A44;color:#fff" onclick="adminApp._doRescheduleAll()">🔀 Reagendar Tudo</button>
+                <button style="background:#009A44;color:#fff" data-action="doRescheduleAll">🔀 Reagendar Tudo</button>
             </div>
         `);
     }
@@ -1589,7 +1744,7 @@ USING (EXISTS (
             </div>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#009A44;color:#fff" onclick="adminApp._doBulkSchedule()">📅 Agendar</button>
+                <button style="background:#009A44;color:#fff" data-action="doBulkSchedule">📅 Agendar</button>
             </div>
         `);
     }
@@ -1658,7 +1813,7 @@ USING (EXISTS (
                 <p style="font-size:.75rem;color:#94a3b8;">Última geração automática: ${lastRunTxt}. O sistema verifica isto uma vez por dia.</p>
                 <div class="modal-actions">
                     <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                    <button style="background:#009A44;color:#fff" onclick="adminApp._saveBlogAutogenSettings()">💾 Guardar</button>
+                    <button style="background:#009A44;color:#fff" data-action="saveBlogAutogenSettings">💾 Guardar</button>
                 </div>
             `);
         } catch (err) {
@@ -1719,7 +1874,7 @@ USING (EXISTS (
             const aiBadge = p.ai_generated
                 ? '<span style="font-size:11px;">🤖</span>'
                 : '<span style="font-size:11px;color:#cbd5e1;">—</span>';
-            const safeTitle = (p.title || '').replace(/'/g, "\\'");
+            const safeTitle = escapeHtml(p.title || '');
             return '<tr>'
                 + '<td><strong>' + (p.title || '—') + '</strong></td>'
                 + '<td><code style="font-size:11px;background:#F1F5F9;padding:2px 6px;border-radius:4px;">' + p.slug + '</code></td>'
@@ -1728,9 +1883,9 @@ USING (EXISTS (
                 + '<td>' + aiBadge + '</td>'
                 + '<td style="font-size:12px;color:#64748b;">' + date + '</td>'
                 + '<td>'
-                + '<button class="btn-ghost" style="font-size:12px;" onclick="adminApp.openPageEditor(\'' + p.id + '\')">✏️ Editar</button> '
+                + '<button class="btn-ghost" style="font-size:12px;" data-action="openPageEditor" data-id="' + p.id + '">✏️ Editar</button> '
                 + '<a href="/pages/' + p.slug + '" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none;">🔗 Ver</a> '
-                + '<button class="btn-danger" style="font-size:12px;" onclick="adminApp.deletePage(\'' + p.id + '\',\'' + safeTitle + '\')">🗑️</button>'
+                + '<button class="btn-danger" style="font-size:12px;" data-action="deletePage" data-id="' + p.id + '" data-title="' + safeTitle + '">🗑️</button>'
                 + '</td>'
                 + '</tr>';
         }).join('');
@@ -2236,7 +2391,7 @@ USING (EXISTS (
 
         // Filtros de serviço
         const filterOptions = fbSummary.map(f =>
-            `<button onclick="adminApp._filterFeedback('${f.service}')"
+            `<button data-action="filterFeedback" data-service="${escapeHtml(f.service)}"
                 style="border:none;padding:3px 10px;border-radius:20px;cursor:pointer;font-size:.75rem;margin:2px;
                     background:${activeFilter === f.service ? '#3B82F6' : '#e2e8f0'};
                     color:${activeFilter === f.service ? '#fff' : '#374151'}">
@@ -2245,7 +2400,7 @@ USING (EXISTS (
         ).join('');
 
         const clearBtn = activeFilter
-            ? `<button onclick="adminApp._filterFeedback(null)"
+            ? `<button data-action="filterFeedback"
                 style="border:none;padding:3px 10px;border-radius:20px;cursor:pointer;font-size:.75rem;margin:2px;background:#fee2e2;color:#dc2626">
                 ✕ Limpar filtro
                </button>`
@@ -2346,8 +2501,8 @@ USING (EXISTS (
                         </div>
                         ${status === 'pending' ? `
                             <div style="display:flex;gap:6px;">
-                                <button type="button" onclick="adminApp._moderateReview('${r.id}','approved')" style="background:#dcfce7;color:#166534;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">✅ Aprovar</button>
-                                <button type="button" onclick="adminApp._moderateReview('${r.id}','rejected')" style="background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">❌ Rejeitar</button>
+                                <button type="button" data-action="moderateReview" data-id="${escapeHtml(r.id)}" data-status="approved" style="background:#dcfce7;color:#166534;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">✅ Aprovar</button>
+                                <button type="button" data-action="moderateReview" data-id="${escapeHtml(r.id)}" data-status="rejected" style="background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">❌ Rejeitar</button>
                             </div>` : ''}
                     </div>
                     ${r.comment ? `<p style="font-size:13px;color:#334155;margin:8px 0 0;">${r.comment.replace(/</g,'&lt;')}</p>` : '<p style="font-size:12px;color:#cbd5e1;margin:8px 0 0;">Sem comentário — só estrelas.</p>'}
@@ -2996,8 +3151,8 @@ USING (EXISTS (
                 </div>
                 <span style="background:${sevBg[f.severity]};color:${sevClr[f.severity]};border:1px solid currentColor;padding:3px 8px;border-radius:20px;font-size:10.5px;font-weight:700">${sevLbl[f.severity]}</span>
                 <div style="display:flex;gap:6px">
-                  <button onclick="adminApp._resolveFraud('${f.id}')" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">✅ Resolver</button>
-                  <button onclick="adminApp._blockAffiliate('${f.affiliate_id}','Suspenso por actividade suspeita detectada automaticamente.')" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">⛔ Bloquear</button>
+                  <button data-action="resolveFraud" data-id="${escapeHtml(f.id)}" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">✅ Resolver</button>
+                  <button data-action="blockAffiliateFraud" data-id="${escapeHtml(f.affiliate_id)}" data-reason="Suspenso por actividade suspeita detectada automaticamente." style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">⛔ Bloquear</button>
                 </div>
               </div>`).join('') + '</div>';
         } catch (err) {
@@ -3146,7 +3301,7 @@ USING (EXISTS (
 
                 return `<div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.07)">
                   <!-- Preview miniatura -->
-                  <div style="height:180px;background:#f1f5f9;overflow:hidden;position:relative;cursor:pointer" onclick="adminApp._previewTemplate('${tpl.id}')">
+                  <div style="height:180px;background:#f1f5f9;overflow:hidden;position:relative;cursor:pointer" data-action="previewTemplate" data-id="${escapeHtml(tpl.id)}">
                     <iframe srcdoc="${escapeHtml(`<!DOCTYPE html><html><head><meta charset='UTF-8'><style>*{box-sizing:border-box;margin:0;padding:0;}${previewCSS}</style></head><body>${previewHTML}</body></html>`)}"
                       style="width:794px;height:1123px;border:none;transform:scale(0.22);transform-origin:top left;pointer-events:none"
                       sandbox="allow-same-origin"></iframe>
@@ -3167,7 +3322,7 @@ USING (EXISTS (
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;flex-wrap:wrap">
                       <label style="font-size:11px;font-weight:700;color:#475569;white-space:nowrap">⭐ Créditos:</label>
                       <input type="number" id="tplCost-${tpl.id}" value="${tpl.credit_cost || 0}" min="0" max="50" step="1"
-                        oninput="adminApp._updateTplMznEstimate('${tpl.id}')"
+                        data-input-action="updateTplMznEstimate" data-id="${escapeHtml(tpl.id)}"
                         style="width:54px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:700;text-align:center"/>
                       <span id="tplMznEst-${tpl.id}" style="font-size:10.5px;color:#94a3b8;white-space:nowrap">≈ ${tpl.mzn_equivalent || 0} MZN</span>
                       <label style="font-size:11px;color:#475569;display:flex;align-items:center;gap:4px;white-space:nowrap;margin-left:4px">
@@ -3179,14 +3334,14 @@ USING (EXISTS (
                       <input type="number" id="tplShare-${tpl.id}" value="${tpl.author_share_percent || 65}" min="60" max="70" step="1"
                         style="width:54px;padding:4px 6px;border:1px solid #86efac;border-radius:6px;font-size:12px;font-weight:700;text-align:center"/>
                       <span style="font-size:10px;color:#166534">(60-70%; resto fica para a plataforma, sempre pago em créditos)</span>
-                      <button onclick="adminApp._saveTemplatePricing('${tpl.id}')"
+                      <button data-action="saveTemplatePricing" data-id="${escapeHtml(tpl.id)}"
                         style="margin-left:auto;padding:5px 10px;background:#0f172a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">Guardar</button>
                     </div>
                     <!-- Acções -->
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
-                      ${status !== 'approved' ? `<button onclick="adminApp._approveTemplate('${tpl.id}')" style="flex:1;padding:8px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">✅ Aprovar</button>` : ''}
-                      ${status !== 'rejected' ? `<button onclick="adminApp._rejectTemplate('${tpl.id}')" style="flex:1;padding:8px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">❌ Rejeitar</button>` : ''}
-                      <button onclick="adminApp._previewTemplate('${tpl.id}')" style="padding:8px 12px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">👁️</button>
+                      ${status !== 'approved' ? `<button data-action="approveTemplate" data-id="${escapeHtml(tpl.id)}" style="flex:1;padding:8px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">✅ Aprovar</button>` : ''}
+                      ${status !== 'rejected' ? `<button data-action="rejectTemplate" data-id="${escapeHtml(tpl.id)}" style="flex:1;padding:8px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">❌ Rejeitar</button>` : ''}
+                      <button data-action="previewTemplate" data-id="${escapeHtml(tpl.id)}" style="padding:8px 12px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">👁️</button>
                     </div>
                   </div>
                 </div>`;
@@ -3469,7 +3624,7 @@ USING (EXISTS (
                             <td>${q.active
                                 ? '<span style="background:#f0fdf4;color:#15803d;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">Activo</span>'
                                 : '<span style="background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">Inactivo</span>'}</td>
-                            <td><button onclick="adminApp._toggleQrCode('${q.id}', ${q.active})" style="font-size:11px;font-weight:700;color:#1d4ed8;background:none;border:none;cursor:pointer">${q.active ? 'Desactivar' : 'Activar'}</button></td>
+                            <td><button data-action="toggleQrCode" data-id="${escapeHtml(q.id)}" data-active="${q.active}" style="font-size:11px;font-weight:700;color:#1d4ed8;background:none;border:none;cursor:pointer">${q.active ? 'Desactivar' : 'Activar'}</button></td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
@@ -3516,9 +3671,9 @@ USING (EXISTS (
                         <div style="font-weight:800;font-size:13px;color:#0f172a;margin-bottom:2px">${m.title}</div>
                         <div style="font-size:11px;color:#94a3b8;margin-bottom:8px">${m.category} · ${m.media_type}${m.is_active ? '' : ' · <span style="color:#dc2626;font-weight:700">inactivo</span>'}</div>
                         <div style="display:flex;gap:6px;flex-wrap:wrap">
-                            <button onclick="adminApp._openMaterialForm('${m.id}')" style="flex:1;padding:7px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:11.5px;cursor:pointer">✏️ Editar</button>
-                            <button onclick="adminApp._toggleMaterialActive('${m.id}', ${m.is_active})" style="flex:1;padding:7px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:11.5px;cursor:pointer">${m.is_active ? '🚫 Desactivar' : '✅ Activar'}</button>
-                            <button onclick="adminApp._deleteMaterial('${m.id}')" style="padding:7px 10px;border:1.5px solid #fca5a5;border-radius:8px;background:#fef2f2;color:#b91c1c;font-weight:700;font-size:11.5px;cursor:pointer">🗑️</button>
+                            <button data-action="openMaterialForm" data-id="${escapeHtml(m.id)}" style="flex:1;padding:7px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:11.5px;cursor:pointer">✏️ Editar</button>
+                            <button data-action="toggleMaterialActive" data-id="${escapeHtml(m.id)}" data-active="${m.is_active}" style="flex:1;padding:7px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:11.5px;cursor:pointer">${m.is_active ? '🚫 Desactivar' : '✅ Activar'}</button>
+                            <button data-action="deleteMaterial" data-id="${escapeHtml(m.id)}" style="padding:7px 10px;border:1.5px solid #fca5a5;border-radius:8px;background:#fef2f2;color:#b91c1c;font-weight:700;font-size:11.5px;cursor:pointer">🗑️</button>
                         </div>
                     </div>
                 </div>`).join('');
@@ -4085,8 +4240,8 @@ USING (EXISTS (
                     </div>` : ''}
 
                     <div style="display:flex;gap:8px;margin-top:12px">
-                        <button class="btn-ghost" onclick="adminApp._toggleCampaign('${c.id}', ${c.active})">${c.active ? '⏸ Desactivar' : '▶️ Activar'}</button>
-                        <button class="btn-ghost" style="color:#dc2626" onclick="adminApp._deleteCampaign('${c.id}','${c.name.replace(/'/g,'')}')">🗑 Eliminar</button>
+                        <button class="btn-ghost" data-action="toggleCampaign" data-id="${escapeHtml(c.id)}" data-active="${c.active}">${c.active ? '⏸ Desactivar' : '▶️ Activar'}</button>
+                        <button class="btn-ghost" style="color:#dc2626" data-action="deleteCampaign" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">🗑 Eliminar</button>
                     </div>
                 </div>`;
             }).join('');
@@ -4111,7 +4266,7 @@ USING (EXISTS (
             </div>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#3b82f6;color:#fff" onclick="adminApp._createCampaign()">Criar Campanha</button>
+                <button style="background:#3b82f6;color:#fff" data-action="createCampaign">Criar Campanha</button>
             </div>
         `);
         const today = new Date().toISOString().split('T')[0];
@@ -4194,7 +4349,7 @@ USING (EXISTS (
                 <div class="stat-card" style="flex-direction:column;align-items:stretch;padding:16px">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                         <span style="font-weight:800;font-size:14px">${metricLabel[g.metric]}</span>
-                        <button class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="adminApp._openGoalForm('${g.metric}', ${g.target || 0})">${g.target ? '✏️ Editar' : '＋ Definir meta'}</button>
+                        <button class="btn-ghost" style="font-size:11px;padding:3px 8px" data-action="openGoalForm" data-metric="${escapeHtml(g.metric)}" data-target="${g.target || 0}">${g.target ? '✏️ Editar' : '＋ Definir meta'}</button>
                     </div>
                     ${g.target ? `
                         <div style="font-size:22px;font-weight:800;color:${g.achieved ? '#16a34a' : '#0f172a'}">${g.current.toLocaleString('pt-MZ')} <span style="font-size:13px;color:#94a3b8;font-weight:600">/ ${g.target.toLocaleString('pt-MZ')}</span></div>
@@ -4221,7 +4376,7 @@ USING (EXISTS (
             <input type="hidden" id="goalMetric" value="${metric}">
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#3b82f6;color:#fff" onclick="adminApp._saveGoal('${monthStr}')">Guardar</button>
+                <button style="background:#3b82f6;color:#fff" data-action="saveGoal" data-month="${escapeHtml(monthStr)}">Guardar</button>
             </div>
         `);
     }
@@ -4263,8 +4418,8 @@ USING (EXISTS (
                             <div style="color:#92400e;font-size:11px">📱 ${escapeHtml(w.mpesa_phone || '')} · ${new Date(w.created_at).toLocaleDateString('pt')}</div>
                         </div>
                         <div style="display:flex;gap:6px">
-                            <button onclick="adminApp._processTemplateWithdrawal('${w.id}', 'completed')" style="padding:6px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">✅ Pago</button>
-                            <button onclick="adminApp._processTemplateWithdrawal('${w.id}', 'rejected')" style="padding:6px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">❌ Rejeitar</button>
+                            <button data-action="processTemplateWithdrawal" data-id="${escapeHtml(w.id)}" data-status="completed" style="padding:6px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">✅ Pago</button>
+                            <button data-action="processTemplateWithdrawal" data-id="${escapeHtml(w.id)}" data-status="rejected" style="padding:6px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">❌ Rejeitar</button>
                         </div>
                     </div>
                 `).join('')
@@ -4416,7 +4571,7 @@ USING (EXISTS (
                             <div style="font-weight:700">${catLabel[x.category] || x.category} — ${(x.amount_mzn ?? 0).toLocaleString('pt-MZ')} MZN</div>
                             <div style="color:#94a3b8;font-size:11px">${x.description || ''} · ${x.occurred_at}</div>
                         </div>
-                        <button class="btn-ghost" style="padding:3px 8px;font-size:11px" onclick="adminApp._deleteFinanceExpense('${x.id}')">🗑️</button>
+                        <button class="btn-ghost" style="padding:3px 8px;font-size:11px" data-action="deleteFinanceExpense" data-id="${escapeHtml(x.id)}">🗑️</button>
                     </div>
                 `).join('')
                 : '<div style="color:#94a3b8;text-align:center;padding:12px 0">Nenhuma despesa registada.</div>';
@@ -4485,7 +4640,7 @@ USING (EXISTS (
                             <div style="font-weight:700">💸 ${(x.amount_mzn ?? 0).toLocaleString('pt-MZ')} MZN</div>
                             <div style="color:#94a3b8;font-size:11px">${x.note || ''} · ${x.withdrawn_at}</div>
                         </div>
-                        <button class="btn-ghost" style="padding:3px 8px;font-size:11px" onclick="adminApp._deleteFinanceWithdrawal('${x.id}')">🗑️</button>
+                        <button class="btn-ghost" style="padding:3px 8px;font-size:11px" data-action="deleteFinanceWithdrawal" data-id="${escapeHtml(x.id)}">🗑️</button>
                     </div>
                 `).join('')
                 : '<div style="color:#94a3b8;text-align:center;padding:12px 0">Nenhum levantamento registado.</div>';
@@ -4623,7 +4778,7 @@ USING (EXISTS (
                     <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#94a3b8;"><span>Levantamentos do dono no período</span><span>${fmt(d.withdrawals.total_mzn)} MZN</span></div>
                     <div style="font-size:11px;color:#94a3b8;margin-top:8px;">Gerado em ${new Date(d.generated_at).toLocaleString('pt-MZ')}</div>
                 </div>
-                <button type="button" onclick="adminApp._printPeriodReport()" style="margin-top:10px;padding:8px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button>
+                <button type="button" data-action="printPeriodReport" style="margin-top:10px;padding:8px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button>
             `;
         } catch (err) {
             if (out) out.innerHTML = `<div style="color:#dc2626;text-align:center;padding:16px 0">Erro: ${err.message}</div>`;
@@ -5002,7 +5157,7 @@ USING (EXISTS (
                 <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">env: <code>${r.envVarSuggestion}</code></div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <a href="${r.signupUrl}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:12px;padding:6px 10px;text-decoration:none">🔗 Obter chave</a>
-                    <button onclick="adminApp._toggleAiReserve('${r.id}')" style="font-size:12px;padding:6px 10px;border-radius:8px;border:1.5px solid ${r.activated ? '#16a34a' : '#cbd5e1'};background:${r.activated ? '#f0fdf4' : '#fff'};color:${r.activated ? '#15803d' : '#334155'};font-weight:700;cursor:pointer">
+                    <button data-action="toggleAiReserve" data-id="${escapeHtml(r.id)}" style="font-size:12px;padding:6px 10px;border-radius:8px;border:1.5px solid ${r.activated ? '#16a34a' : '#cbd5e1'};background:${r.activated ? '#f0fdf4' : '#fff'};color:${r.activated ? '#15803d' : '#334155'};font-weight:700;cursor:pointer">
                         ${r.activated ? '✅ Activado' : '☐ Marcar como activado'}
                     </button>
                 </div>
@@ -5115,7 +5270,7 @@ USING (EXISTS (
             </div>
             <div class="modal-actions">
                 <button style="background:#f1f5f9;color:#0f172a" data-action="closeModal">Cancelar</button>
-                <button style="background:#3b82f6;color:#fff" onclick="adminApp._sendPush()">Enviar</button>
+                <button style="background:#3b82f6;color:#fff" data-action="sendPush">Enviar</button>
             </div>
         `);
     }
