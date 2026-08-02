@@ -11,7 +11,7 @@
 <body>
 
 <!-- Overlay sidebar mobile -->
-<div id="sidebarOverlay" class="sidebar-overlay" onclick="adminApp.closeSidebar()"></div>
+<div id="sidebarOverlay" class="sidebar-overlay" data-action="closeSidebar"></div>
 
 <div id="adminApp" class="admin-app">
 
@@ -24,7 +24,7 @@
         <div class="brand-name">MzDocs Pro</div>
         <span class="brand-badge">Admin</span>
       </div>
-      <button class="sidebar-close" onclick="adminApp.closeSidebar()">✕</button>
+      <button class="sidebar-close" data-action="closeSidebar">✕</button>
     </div>
 
     <nav class="sidebar-nav">
@@ -109,15 +109,15 @@
 
     <!-- Top bar (mobile) -->
     <header class="admin-topbar">
-      <button class="hamburger" id="hamburgerBtn" onclick="adminApp.openSidebar()">☰</button>
+      <button class="hamburger" id="hamburgerBtn" data-action="openSidebar">☰</button>
       <h2 class="topbar-title" id="pageTitle">Dashboard</h2>
       <div class="topbar-right">
         <span id="adminDate" class="topbar-date"></span>
-        <button class="btn-refresh-top" id="notifBellBtn" onclick="adminApp._toggleNotifPanel()" title="Notificações" style="position:relative">
+        <button class="btn-refresh-top" id="notifBellBtn" data-action="toggleNotifPanel" title="Notificações" style="position:relative">
           🔔<span id="notifBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:#dc2626;color:#fff;font-size:10px;font-weight:800;border-radius:10px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px">0</span>
         </button>
-        <button class="btn-refresh-top" onclick="adminApp._openPushSendForm()" title="Enviar notificação push">📤</button>
-        <button class="btn-refresh-top" onclick="adminApp.refresh()" title="Actualizar">🔄</button>
+        <button class="btn-refresh-top" data-action="openPushSendForm" title="Enviar notificação push">📤</button>
+        <button class="btn-refresh-top" data-action="refresh" title="Actualizar">🔄</button>
       </div>
     </header>
 
@@ -125,11 +125,11 @@
     <div id="notifPanel" style="display:none;position:fixed;top:56px;right:12px;z-index:200;width:340px;max-width:92vw;max-height:70vh;overflow-y:auto;background:#fff;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.18);border:1px solid #e2e8f0">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #f1f5f9">
         <strong style="font-size:14px">🔔 Notificações</strong>
-        <button style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:700;cursor:pointer" onclick="adminApp._markAllNotifsRead()">Marcar todas como lidas</button>
+        <button style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:700;cursor:pointer" data-action="markAllNotifsRead">Marcar todas como lidas</button>
       </div>
       <div id="notifList"><div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">A carregar…</div></div>
       <div style="padding:10px 14px;border-top:1px solid #f1f5f9">
-        <button id="pushAdminToggleBtn" class="btn-ghost" style="width:100%;font-size:12px" onclick="adminApp._enableAdminPush()">🔔 Activar notificações neste telemóvel</button>
+        <button id="pushAdminToggleBtn" class="btn-ghost" style="width:100%;font-size:12px" data-action="enableAdminPush">🔔 Activar notificações neste telemóvel</button>
       </div>
     </div>
 
@@ -166,7 +166,7 @@
           <div class="stat-body">
             <div class="stat-value" id="statPending">—</div>
             <div class="stat-label">Pagamentos Pendentes</div>
-            <button class="stat-action" onclick="adminApp.nav('transactions')">Ver →</button>
+            <button class="stat-action" data-action="nav" data-section="transactions">Ver →</button>
           </div>
         </div>
       </div>
@@ -201,7 +201,7 @@
           <div class="stat-body">
             <div class="stat-value" id="statBlogPublished">—</div>
             <div class="stat-label">Artigos Publicados</div>
-            <button class="stat-action" onclick="adminApp.nav('blog')">Gerir →</button>
+            <button class="stat-action" data-action="nav" data-section="blog">Gerir →</button>
           </div>
         </div>
         <div class="stat-card">
@@ -217,7 +217,7 @@
             <div class="stat-value" id="statWithdrawable">—</div>
             <div class="stat-label">Valor Levantável</div>
             <div class="stat-sub" id="statWithdrawableSub" style="font-size:11px;color:#94a3b8;margin-top:2px;"></div>
-            <button class="stat-action" onclick="adminApp.nav('finance')">Ver detalhe →</button>
+            <button class="stat-action" data-action="nav" data-section="finance">Ver detalhe →</button>
           </div>
         </div>
       </div>
@@ -241,19 +241,19 @@
         <div class="search-wrap">
           <input type="search" id="searchUsers" class="search-input"
             placeholder="🔍 Nome, telemóvel ou email…"
-            oninput="adminApp.filterUsers(this.value)">
+            data-input-action="filterUsersQuery">
         </div>
         <div class="toolbar-right">
-          <select id="userTypeFilter" class="filter-select" onchange="adminApp.filterUsers()">
+          <select id="userTypeFilter" class="filter-select" data-change-action="filterUsersType">
             <option value="all">Todos</option>
             <option value="normal">👤 Normais</option>
             <option value="avulso">⏳ Avulso</option>
             <option value="admin">⭐ Admins</option>
             <option value="blocked">🚫 Bloqueados</option>
           </select>
-          <button class="btn-primary" onclick="adminApp.refresh()">🔄</button>
-          <button class="btn-ghost" title="Exportar CSV/Excel/PDF" onclick="adminApp._exportUsers()">⬇️ Exportar</button>
-          <button class="btn-success" onclick="adminApp.createAvulsoModal()" style="background:#009A44;color:#fff;border:none;border-radius:8px;padding:.45rem .9rem;font-size:.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.3rem">➕ Avulso</button>
+          <button class="btn-primary" data-action="refresh">🔄</button>
+          <button class="btn-ghost" title="Exportar CSV/Excel/PDF" data-action="exportUsers">⬇️ Exportar</button>
+          <button class="btn-success" data-action="createAvulsoModal" style="background:#009A44;color:#fff;border:none;border-radius:8px;padding:.45rem .9rem;font-size:.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.3rem">➕ Avulso</button>
         </div>
       </div>
 
@@ -286,16 +286,16 @@
     <section id="section-transactions" class="admin-section">
       <div class="section-toolbar">
         <div class="toolbar-filters">
-          <select id="filterStatus" class="filter-select" onchange="adminApp._loadTransactions()">
+          <select id="filterStatus" class="filter-select" data-change-action="loadTransactions">
             <option value="all">Todos os estados</option>
             <option value="pending">⏳ Pendentes</option>
             <option value="completed">✅ Confirmados</option>
             <option value="failed">❌ Falhados</option>
           </select>
-          <input type="date" id="filterDate" class="filter-select" onchange="adminApp._loadTransactions()">
+          <input type="date" id="filterDate" class="filter-select" data-change-action="loadTransactions">
         </div>
-        <button class="btn-ghost" title="Exportar CSV/Excel/PDF" onclick="adminApp._exportTransactions()">⬇️ Exportar</button>
-        <button class="btn-primary" onclick="adminApp._loadTransactions()">🔄</button>
+        <button class="btn-ghost" title="Exportar CSV/Excel/PDF" data-action="exportTransactions">⬇️ Exportar</button>
+        <button class="btn-primary" data-action="loadTransactions">🔄</button>
       </div>
 
       <div class="table-wrap">
@@ -315,8 +315,8 @@
     <section id="section-documents" class="admin-section">
       <div class="section-toolbar">
         <input type="search" id="searchDocs" class="search-input"
-          placeholder="🔍 Tipo, utilizador…" oninput="adminApp.filterDocs(this.value)">
-        <button class="btn-primary" onclick="adminApp._loadDocuments()">🔄</button>
+          placeholder="🔍 Tipo, utilizador…" data-input-action="filterDocsQuery">
+        <button class="btn-primary" data-action="loadDocuments">🔄</button>
       </div>
       <div class="table-wrap">
         <table class="admin-table">
@@ -336,8 +336,8 @@
       <!-- Toolbar -->
       <div class="section-toolbar">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <input type="search" id="searchBlog" class="search-input" placeholder="🔍 Pesquisar páginas…" oninput="adminApp.filterBlog()"/>
-          <select id="blogStatusFilter" class="filter-select" onchange="adminApp.filterBlog()">
+          <input type="search" id="searchBlog" class="search-input" placeholder="🔍 Pesquisar páginas…" data-input-action="filterBlogQuery"/>
+          <select id="blogStatusFilter" class="filter-select" data-change-action="filterBlogStatus">
             <option value="all">Todas</option>
             <option value="published">Publicadas</option>
             <option value="draft">Rascunhos</option>
@@ -345,12 +345,12 @@
           <span id="blogTotalCount" style="font-size:12px;color:#64748b;font-weight:600;white-space:nowrap;">0 artigos</span>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn-ghost" onclick="adminApp.openBlogAutogenSettings()">🤖 Geração Automática</button>
-          <button class="btn-ghost" onclick="adminApp.openBlogBulkSchedule()">📅 Agendar em Massa</button>
-          <button class="btn-ghost" onclick="adminApp.openBlogRescheduleAll()">🔀 Reagendar Pendentes</button>
-          <button class="btn-ghost" style="color:#ef4444;" onclick="adminApp._deleteAllPendingBlogQueue()">🗑️ Remover Todos Pendentes</button>
-          <button class="btn-ghost" title="Aplica o template mais recente (tracking + IndexNow) aos artigos já publicados" onclick="adminApp._republishAllBlog()">🔁 Republicar Todos</button>
-          <button class="btn-primary" onclick="adminApp.openPageEditor()">＋ Nova Página</button>
+          <button class="btn-ghost" data-action="openBlogAutogenSettings">🤖 Geração Automática</button>
+          <button class="btn-ghost" data-action="openBlogBulkSchedule">📅 Agendar em Massa</button>
+          <button class="btn-ghost" data-action="openBlogRescheduleAll">🔀 Reagendar Pendentes</button>
+          <button class="btn-ghost" style="color:#ef4444;" data-action="deleteAllPendingBlogQueue">🗑️ Remover Todos Pendentes</button>
+          <button class="btn-ghost" title="Aplica o template mais recente (tracking + IndexNow) aos artigos já publicados" data-action="republishAllBlog">🔁 Republicar Todos</button>
+          <button class="btn-primary" data-action="openPageEditor">＋ Nova Página</button>
         </div>
       </div>
 
@@ -417,7 +417,7 @@
       <div class="empty-state" id="blogEmpty" style="display:none">
         <div style="font-size:2.5rem;margin-bottom:12px;">📝</div>
         <p>Ainda não há páginas. Crie a sua primeira!</p>
-        <button class="btn-primary" style="margin-top:12px" onclick="adminApp.openPageEditor()">＋ Criar Página</button>
+        <button class="btn-primary" style="margin-top:12px" data-action="openPageEditor">＋ Criar Página</button>
       </div>
 
       <!-- Páginas Estáticas do Repositório -->
@@ -487,9 +487,9 @@
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
           <h3 class="chart-title" style="margin:0;">🛡️ Moderação de Avaliações Públicas</h3>
           <div style="display:flex;gap:6px;">
-            <button type="button" class="btn-sm btn-primary" id="revTabPending" data-status="pending" onclick="adminApp._loadReviewsModeration('pending', this)">⏳ Pendentes</button>
-            <button type="button" class="btn-sm" id="revTabApproved" data-status="approved" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0" onclick="adminApp._loadReviewsModeration('approved', this)">✅ Aprovadas</button>
-            <button type="button" class="btn-sm" id="revTabRejected" data-status="rejected" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca" onclick="adminApp._loadReviewsModeration('rejected', this)">❌ Rejeitadas</button>
+            <button type="button" class="btn-sm btn-primary" id="revTabPending" data-status="pending" data-action="loadReviewsModeration">⏳ Pendentes</button>
+            <button type="button" class="btn-sm" id="revTabApproved" data-status="approved" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0" data-action="loadReviewsModeration">✅ Aprovadas</button>
+            <button type="button" class="btn-sm" id="revTabRejected" data-status="rejected" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca" data-action="loadReviewsModeration">❌ Rejeitadas</button>
           </div>
         </div>
         <p style="font-size:12px;color:#64748b;margin:0 0 10px;">
@@ -529,7 +529,7 @@
       </div>
 
       <div style="margin-top:12px;text-align:right;">
-        <button class="btn-primary" onclick="adminApp._loadAnalytics()">🔄 Actualizar</button>
+        <button class="btn-primary" data-action="loadAnalytics">🔄 Actualizar</button>
       </div>
     </section>
 
@@ -540,7 +540,7 @@
         <!-- Header do editor -->
         <div style="background:#0F172A;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;">
           <h3 id="editorModalTitle" style="color:#fff;font-size:1rem;font-weight:700;margin:0;">✏️ Nova Página</h3>
-          <button onclick="adminApp.closePageEditor()" style="background:none;border:none;color:rgba(255,255,255,.6);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+          <button data-action="closePageEditor" style="background:none;border:none;color:rgba(255,255,255,.6);font-size:20px;cursor:pointer;line-height:1;">✕</button>
         </div>
 
         <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
@@ -571,7 +571,7 @@
                 <option value="600" selected>~600 palavras</option>
                 <option value="900">~900 palavras</option>
               </select>
-              <button id="btnGenerateAI" onclick="adminApp.generateWithAI()"
+              <button id="btnGenerateAI" data-action="generateWithAI"
                 style="background:#1D4ED8;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:.875rem;font-weight:700;cursor:pointer;white-space:nowrap;">
                 ✨ Gerar Artigo
               </button>
@@ -585,7 +585,7 @@
               <label style="font-size:.75rem;font-weight:600;color:#64748B;display:block;margin-bottom:4px;">Título <span style="color:#ef4444">*</span></label>
               <input type="text" id="pageTitle2" placeholder="Título do artigo"
                 style="width:100%;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:.9rem;font-family:inherit;"
-                oninput="adminApp.autoSlug()"/>
+                data-input-action="autoSlug"/>
             </div>
             <div>
               <label style="font-size:.75rem;font-weight:600;color:#64748B;display:block;margin-bottom:4px;">Slug (URL)</label>
@@ -618,11 +618,11 @@
 
           <!-- Footer do editor -->
           <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:4px;flex-wrap:wrap;">
-            <button onclick="adminApp.savePage(false)"
+            <button data-action="savePage" data-publish="false"
               style="background:#F1F5F9;border:1.5px solid #E2E8F0;border-radius:8px;padding:9px 18px;font-weight:600;font-size:.875rem;cursor:pointer;font-family:inherit;">
               💾 Guardar Rascunho
             </button>
-            <button onclick="adminApp.savePage(true)"
+            <button data-action="savePage" data-publish="true"
               style="background:#009A44;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;font-size:.875rem;cursor:pointer;font-family:inherit;">
               🚀 Publicar Página
             </button>
@@ -639,25 +639,25 @@
           <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin:0">🤝 Gestão de Afiliados Pro</h2>
           <p style="font-size:12px;color:#64748b;margin:4px 0 0">Aprovar, gerir levantamentos, antifraude e ranking</p>
         </div>
-        <button onclick="adminApp._generateRanking()" class="btn-sm" style="background:#7c3aed;color:#fff">🏆 Gerar Ranking</button>
+        <button data-action="generateRanking" class="btn-sm" style="background:#7c3aed;color:#fff">🏆 Gerar Ranking</button>
       </div>
 
       <!-- TABS admin afiliados -->
       <div style="display:flex;gap:6px;margin-bottom:16px;border-bottom:2px solid #e2e8f0;padding-bottom:0">
-        <button class="aff-admin-tab active" data-tab="aff-list" onclick="adminApp._switchAffTab(this,'aff-list')" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:#64748b;padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">👥 Afiliados</button>
-        <button class="aff-admin-tab" data-tab="aff-withdrawals" onclick="adminApp._switchAffTab(this,'aff-withdrawals')" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:#64748b;padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">💸 Levantamentos <span id="wdBadge" style="background:#ef4444;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:3px;font-weight:800;display:none">0</span></button>
-        <button class="aff-admin-tab" data-tab="aff-fraud" onclick="adminApp._switchAffTab(this,'aff-fraud')" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:#64748b;padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">🚨 Fraude <span id="fraudBadge" style="background:#ef4444;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:3px;font-weight:800;display:none">0</span></button>
-        <button class="aff-admin-tab" data-tab="aff-ranking" onclick="adminApp._switchAffTab(this,'aff-ranking')" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:#64748b;padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">🏆 Ranking</button>
+        <button class="aff-admin-tab active" data-tab="aff-list" data-action="switchAffTab" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:#64748b;padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">👥 Afiliados</button>
+        <button class="aff-admin-tab" data-tab="aff-withdrawals" data-action="switchAffTab" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:#64748b;padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">💸 Levantamentos <span id="wdBadge" style="background:#ef4444;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:3px;font-weight:800;display:none">0</span></button>
+        <button class="aff-admin-tab" data-tab="aff-fraud" data-action="switchAffTab" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:#64748b;padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">🚨 Fraude <span id="fraudBadge" style="background:#ef4444;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:3px;font-weight:800;display:none">0</span></button>
+        <button class="aff-admin-tab" data-tab="aff-ranking" data-action="switchAffTab" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:#64748b;padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">🏆 Ranking</button>
       </div>
 
       <!-- TAB: LISTA DE AFILIADOS -->
       <div id="aff-list" class="aff-admin-panel">
         <!-- Filtros -->
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-          <button onclick="adminApp._affFilter('all')" id="affBtnAll" class="btn-sm btn-primary">Todos</button>
-          <button onclick="adminApp._affFilter('pending')" id="affBtnPending" class="btn-sm" style="background:#fef9c3;color:#854d0e;border:1px solid #fde68a">⏳ Pendentes</button>
-          <button onclick="adminApp._affFilter('approved')" id="affBtnApproved" class="btn-sm" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0">✅ Aprovados</button>
-          <button onclick="adminApp._affFilter('blocked')" id="affBtnBlocked" class="btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5">⛔ Suspensos</button>
+          <button data-action="affFilter" data-status="all" id="affBtnAll" class="btn-sm btn-primary">Todos</button>
+          <button data-action="affFilter" data-status="pending" id="affBtnPending" class="btn-sm" style="background:#fef9c3;color:#854d0e;border:1px solid #fde68a">⏳ Pendentes</button>
+          <button data-action="affFilter" data-status="approved" id="affBtnApproved" class="btn-sm" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0">✅ Aprovados</button>
+          <button data-action="affFilter" data-status="blocked" id="affBtnBlocked" class="btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5">⛔ Suspensos</button>
         </div>
 
         <!-- Stats rápidos -->
@@ -694,9 +694,9 @@
       <!-- TAB: LEVANTAMENTOS -->
       <div id="aff-withdrawals" class="aff-admin-panel" style="display:none">
         <div style="display:flex;gap:8px;margin-bottom:14px">
-          <button onclick="adminApp._loadWithdrawals('pending')" class="btn-sm btn-primary">⏳ Pendentes</button>
-          <button onclick="adminApp._loadWithdrawals('completed')" class="btn-sm">✅ Concluídos</button>
-          <button onclick="adminApp._loadWithdrawals('rejected')" class="btn-sm" style="background:#fee2e2;color:#991b1b">❌ Rejeitados</button>
+          <button data-action="loadWithdrawals" data-status="pending" class="btn-sm btn-primary">⏳ Pendentes</button>
+          <button data-action="loadWithdrawals" data-status="completed" class="btn-sm">✅ Concluídos</button>
+          <button data-action="loadWithdrawals" data-status="rejected" class="btn-sm" style="background:#fee2e2;color:#991b1b">❌ Rejeitados</button>
         </div>
         <div class="card" style="overflow:hidden">
           <div id="withdrawalsAdminWrap" style="overflow-x:auto">
@@ -734,7 +734,7 @@
       <div id="aff-ranking" class="aff-admin-panel" style="display:none">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
           <input type="month" id="rankingMonth" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-family:inherit;font-size:13px;font-weight:600"/>
-          <button onclick="adminApp._loadRankingAdmin()" class="btn-sm btn-primary">Ver Ranking</button>
+          <button data-action="loadRankingAdmin" class="btn-sm btn-primary">Ver Ranking</button>
         </div>
         <div class="card" style="overflow:hidden">
           <div id="rankingAdminWrap">
@@ -746,7 +746,7 @@
       <!-- Modal detalhes afiliado -->
       <div id="affDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center;padding:16px">
         <div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;padding:24px;position:relative">
-          <button onclick="document.getElementById('affDetailModal').style.display='none'" style="position:absolute;top:12px;right:12px;background:#f1f5f9;border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:16px">✕</button>
+          <button data-action="closeAffDetailModal" style="position:absolute;top:12px;right:12px;background:#f1f5f9;border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:16px">✕</button>
           <div id="affDetailContent">A carregar…</div>
         </div>
       </div>
@@ -759,7 +759,7 @@
           <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">🖼️ Kit de Marketing dos Afiliados</h2>
           <p style="font-size:13px;color:#64748b">Envie panfletos/banners aqui — cada afiliado vê a mesma peça, mas com o QR code (e código) dele automaticamente colado por cima</p>
         </div>
-        <button onclick="adminApp._openMaterialForm()" style="padding:10px 16px;border:none;border-radius:10px;background:#0f172a;color:#fff;font-weight:700;font-size:13px;cursor:pointer">➕ Novo Material</button>
+        <button data-action="openMaterialForm" style="padding:10px 16px;border:none;border-radius:10px;background:#0f172a;color:#fff;font-weight:700;font-size:13px;cursor:pointer">➕ Novo Material</button>
       </div>
 
       <!-- Formulário de criação/edição -->
@@ -787,7 +787,7 @@
         </div>
         <div class="form-row">
           <label>Tipo de ficheiro</label>
-          <select id="matMediaType" onchange="adminApp._toggleMaterialMediaFields()">
+          <select id="matMediaType" data-change-action="toggleMaterialMediaFields">
             <option value="image">Imagem (upload directo + QR dinâmico)</option>
             <option value="video">Vídeo (link externo)</option>
             <option value="audio">Áudio (link externo)</option>
@@ -799,7 +799,7 @@
         <div id="matImageFields">
           <div class="form-row">
             <label>Imagem do material (JPEG/PNG, máx. ~3MB)</label>
-            <input type="file" id="matFileInput" accept="image/jpeg,image/png,image/webp" onchange="adminApp._onMaterialImageSelected(event)"/>
+            <input type="file" id="matFileInput" accept="image/jpeg,image/png,image/webp" data-change-action="onMaterialImageSelected"/>
           </div>
           <div id="matZoneEditorWrap" style="display:none;margin:10px 0">
             <p style="font-size:.78rem;color:#64748b;margin-bottom:8px">
@@ -816,7 +816,7 @@
               </div>
             </div>
             <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:#166534;margin-top:8px;cursor:pointer">
-              <input type="checkbox" id="matTextZoneToggle" onchange="adminApp._toggleMaterialTextZone()"/> Incluir zona de texto (nome/código do afiliado)
+              <input type="checkbox" id="matTextZoneToggle" data-change-action="toggleMaterialTextZone"/> Incluir zona de texto (nome/código do afiliado)
             </label>
             <div id="matTextZoneOptions" style="display:none;margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
               <select id="matTextField" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:.8rem">
@@ -849,8 +849,8 @@
         </div>
 
         <div style="display:flex;gap:10px;margin-top:12px">
-          <button onclick="adminApp._saveMaterial()" class="btn-primary" style="flex:1">💾 Guardar Material</button>
-          <button onclick="adminApp._closeMaterialForm()" style="padding:10px 16px;border:1.5px solid #cbd5e1;border-radius:10px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">Cancelar</button>
+          <button data-action="saveMaterial" class="btn-primary" style="flex:1">💾 Guardar Material</button>
+          <button data-action="closeMaterialForm" style="padding:10px 16px;border:1.5px solid #cbd5e1;border-radius:10px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">Cancelar</button>
         </div>
       </div>
 
@@ -868,9 +868,9 @@
           <p style="font-size:13px;color:#64748b">Aprove ou rejeite templates submetidos pelos utilizadores</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button onclick="window.adminApp._loadTemplates('pending')" style="padding:8px 14px;border:1.5px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#b45309;font-weight:700;font-size:13px;cursor:pointer">⏳ Pendentes</button>
-          <button onclick="window.adminApp._loadTemplates('approved')" style="padding:8px 14px;border:1.5px solid #16a34a;border-radius:8px;background:#f0fdf4;color:#15803d;font-weight:700;font-size:13px;cursor:pointer">✅ Aprovados</button>
-          <button onclick="window.adminApp._loadTemplates('rejected')" style="padding:8px 14px;border:1.5px solid #dc2626;border-radius:8px;background:#fef2f2;color:#b91c1c;font-weight:700;font-size:13px;cursor:pointer">❌ Rejeitados</button>
+          <button data-action="loadTemplates" data-status="pending" style="padding:8px 14px;border:1.5px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#b45309;font-weight:700;font-size:13px;cursor:pointer">⏳ Pendentes</button>
+          <button data-action="loadTemplates" data-status="approved" style="padding:8px 14px;border:1.5px solid #16a34a;border-radius:8px;background:#f0fdf4;color:#15803d;font-weight:700;font-size:13px;cursor:pointer">✅ Aprovados</button>
+          <button data-action="loadTemplates" data-status="rejected" style="padding:8px 14px;border:1.5px solid #dc2626;border-radius:8px;background:#fef2f2;color:#b91c1c;font-weight:700;font-size:13px;cursor:pointer">❌ Rejeitados</button>
         </div>
       </div>
       <div id="templates-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
@@ -894,7 +894,7 @@
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <span id="aiProvidersUpdatedAt" style="font-size:12px;color:#94a3b8"></span>
-          <button onclick="adminApp._loadAiProviders()" style="padding:8px 14px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔄 Actualizar</button>
+          <button data-action="loadAiProviders" style="padding:8px 14px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔄 Actualizar</button>
         </div>
       </div>
 
@@ -926,7 +926,7 @@
           <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">📱 QR Codes de Marketing</h2>
           <p style="font-size:13px;color:#64748b">Cada QR criado aqui já entra automaticamente no dashboard de Origens de Marketing (aba Analytics)</p>
         </div>
-        <button onclick="adminApp._openQrCreateForm()" style="padding:9px 16px;border:none;border-radius:10px;background:#0f172a;color:#fff;font-weight:800;font-size:13px;cursor:pointer">+ Criar QR Code</button>
+        <button data-action="openQrCreateForm" style="padding:9px 16px;border:none;border-radius:10px;background:#0f172a;color:#fff;font-weight:800;font-size:13px;cursor:pointer">+ Criar QR Code</button>
       </div>
 
       <!-- Formulário de criação (escondido por omissão) -->
@@ -936,8 +936,8 @@
         <div class="form-row"><label>Local</label><input type="text" id="qrLocation" placeholder="Ex: Campus UEM, Maputo"/></div>
         <div class="form-row"><label>Página de destino</label><input type="text" id="qrTargetPath" placeholder="/" value="/"/></div>
         <div style="display:flex;gap:8px;margin-top:10px">
-          <button onclick="adminApp._createQrCode()" style="padding:9px 16px;border:none;border-radius:8px;background:#16a34a;color:#fff;font-weight:800;font-size:13px;cursor:pointer">Criar</button>
-          <button onclick="adminApp._closeQrCreateForm()" style="padding:9px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">Cancelar</button>
+          <button data-action="createQrCode" style="padding:9px 16px;border:none;border-radius:8px;background:#16a34a;color:#fff;font-weight:800;font-size:13px;cursor:pointer">Criar</button>
+          <button data-action="closeQrCreateForm" style="padding:9px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">Cancelar</button>
         </div>
         <div id="qrCreateResult" style="margin-top:14px"></div>
       </div>
@@ -953,13 +953,13 @@
           <p style="font-size:13px;color:#64748b">Visitas → Registos → Documentos gerados → Compras, com taxa de conversão em cada passo</p>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <select id="funnelDays" class="filter-select" onchange="adminApp._loadFunnel()">
+          <select id="funnelDays" class="filter-select" data-change-action="loadFunnel">
             <option value="7">Últimos 7 dias</option>
             <option value="30" selected>Últimos 30 dias</option>
             <option value="90">Últimos 90 dias</option>
           </select>
-          <button class="btn-ghost" title="Exportar CSV/Excel/PDF" onclick="adminApp._exportFunnel()">⬇️ Exportar</button>
-          <button class="btn-primary" onclick="adminApp._loadFunnel()">🔄</button>
+          <button class="btn-ghost" title="Exportar CSV/Excel/PDF" data-action="exportFunnel">⬇️ Exportar</button>
+          <button class="btn-primary" data-action="loadFunnel">🔄</button>
         </div>
       </div>
 
@@ -1021,7 +1021,7 @@
           <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px">📣 Campanhas de Marketing</h2>
           <p style="font-size:13px;color:#64748b">Promoções com nome, período e meta — reutiliza o mesmo tracking de origem (?src=...) dos QR Codes</p>
         </div>
-        <button class="btn-primary" onclick="adminApp._openCampaignForm()">＋ Nova Campanha</button>
+        <button class="btn-primary" data-action="openCampaignForm">＋ Nova Campanha</button>
       </div>
       <div id="campaignsList"><div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">A carregar…</div></div>
     </section>
@@ -1048,7 +1048,7 @@
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <span id="financeFxLabel" style="font-size:12px;color:#94a3b8"></span>
-          <button onclick="adminApp._loadFinance()" style="padding:8px 14px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔄 Actualizar</button>
+          <button data-action="loadFinance" style="padding:8px 14px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔄 Actualizar</button>
         </div>
       </div>
 
@@ -1126,7 +1126,7 @@
               <label>Outras despesas mensais (MZN)</label>
               <input type="number" id="fin_other_monthly_mzn" min="0" step="0.01" placeholder="0"/>
             </div>
-            <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem" onclick="adminApp._saveFinanceConfig()">💾 Guardar Custos Recorrentes</button>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem" data-action="saveFinanceConfig">💾 Guardar Custos Recorrentes</button>
           </form>
           <div id="financeCostsBreakdown" style="margin-top:14px;font-size:12.5px;color:#475569;border-top:1px solid #f1f5f9;padding-top:12px"></div>
         </div>
@@ -1156,11 +1156,11 @@
             <label>Data</label>
             <input type="date" id="expDate"/>
           </div>
-          <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem" onclick="adminApp._addFinanceExpense()">➕ Registar Despesa</button>
+          <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem" data-action="addFinanceExpense">➕ Registar Despesa</button>
 
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
             <span style="font-size:.75rem;font-weight:700;color:#0f172a;">Histórico</span>
-            <button type="button" onclick="adminApp._exportFinanceCsv('expenses')" style="font-size:11px;padding:4px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;cursor:pointer">📥 CSV</button>
+            <button type="button" data-action="exportFinanceCsv" data-kind="expenses" style="font-size:11px;padding:4px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;cursor:pointer">📥 CSV</button>
           </div>
           <div id="financeExpensesList" style="margin-top:6px;max-height:220px;overflow-y:auto;font-size:.8rem">
             <div style="color:#94a3b8;text-align:center;padding:12px 0">A carregar…</div>
@@ -1183,11 +1183,11 @@
             <label>Data</label>
             <input type="date" id="wdDate"/>
           </div>
-          <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem" onclick="adminApp._addFinanceWithdrawal()">💸 Registar Levantamento</button>
+          <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem" data-action="addFinanceWithdrawal">💸 Registar Levantamento</button>
 
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
             <span style="font-size:.75rem;font-weight:700;color:#0f172a;">Histórico</span>
-            <button type="button" onclick="adminApp._exportFinanceCsv('withdrawals')" style="font-size:11px;padding:4px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;cursor:pointer">📥 CSV</button>
+            <button type="button" data-action="exportFinanceCsv" data-kind="withdrawals" style="font-size:11px;padding:4px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;cursor:pointer">📥 CSV</button>
           </div>
           <div id="financeWithdrawalsList" style="margin-top:6px;max-height:220px;overflow-y:auto;font-size:.8rem">
             <div style="color:#94a3b8;text-align:center;padding:12px 0">A carregar…</div>
@@ -1226,7 +1226,7 @@
               <label>Início do exercício fiscal</label>
               <input type="date" id="fis_year_start"/>
             </div>
-            <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem" onclick="adminApp._saveFiscalConfig()">💾 Guardar Dados Fiscais</button>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem" data-action="saveFiscalConfig">💾 Guardar Dados Fiscais</button>
           </form>
         </div>
 
@@ -1239,9 +1239,9 @@
           Escolha um intervalo (mês, trimestre, ano ou personalizado) para gerar um resumo pronto a entregar ao contabilista ou a apresentar numa inspecção: receita confirmada, despesas por categoria e resultado líquido do período.
         </p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <button type="button" onclick="adminApp._setReportPreset('month')" style="font-size:12px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;cursor:pointer">Este Mês</button>
-          <button type="button" onclick="adminApp._setReportPreset('quarter')" style="font-size:12px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;cursor:pointer">Este Trimestre</button>
-          <button type="button" onclick="adminApp._setReportPreset('year')" style="font-size:12px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;cursor:pointer">Este Ano</button>
+          <button type="button" data-action="setReportPreset" data-preset="month" style="font-size:12px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;cursor:pointer">Este Mês</button>
+          <button type="button" data-action="setReportPreset" data-preset="quarter" style="font-size:12px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;cursor:pointer">Este Trimestre</button>
+          <button type="button" data-action="setReportPreset" data-preset="year" style="font-size:12px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;cursor:pointer">Este Ano</button>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
           <div class="form-row" style="margin:0;">
@@ -1252,7 +1252,7 @@
             <label>Até</label>
             <input type="date" id="reportEndDate"/>
           </div>
-          <button type="button" class="btn-primary" style="padding:10px 18px" onclick="adminApp._generatePeriodReport()">📊 Gerar Relatório</button>
+          <button type="button" class="btn-primary" style="padding:10px 18px" data-action="generatePeriodReport">📊 Gerar Relatório</button>
         </div>
         <div id="periodReportOutput" style="margin-top:16px;"></div>
       </div>
@@ -1281,8 +1281,8 @@
               <option value="failed">Falhadas</option>
             </select>
           </div>
-          <button type="button" onclick="adminApp._loadTransactionLedger()" style="padding:9px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔍 Filtrar</button>
-          <button type="button" onclick="adminApp._exportFinanceCsv('transactions')" style="padding:9px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">📥 Exportar CSV</button>
+          <button type="button" data-action="loadTransactionLedger" style="padding:9px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔍 Filtrar</button>
+          <button type="button" data-action="exportFinanceCsv" data-kind="transactions" style="padding:9px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">📥 Exportar CSV</button>
         </div>
         <div class="table-wrap">
           <table class="admin-table">
@@ -1312,8 +1312,8 @@
             <label>Até</label>
             <input type="date" id="payoutsEndDate"/>
           </div>
-          <button type="button" onclick="adminApp._loadAffiliatePayouts()" style="padding:9px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔍 Filtrar</button>
-          <button type="button" onclick="adminApp._exportFinanceCsv('affiliate-payouts')" style="padding:9px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">📥 Exportar CSV</button>
+          <button type="button" data-action="loadAffiliatePayouts" style="padding:9px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">🔍 Filtrar</button>
+          <button type="button" data-action="exportFinanceCsv" data-kind="affiliate-payouts" style="padding:9px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">📥 Exportar CSV</button>
         </div>
         <div class="table-wrap">
           <table class="admin-table">
@@ -1365,7 +1365,7 @@
               <input type="text" id="cfg_whatsapp_support" placeholder="+258858695506"/>
             </div>
             <button type="button" class="btn-primary" style="width:100%;margin-top:.75rem"
-              onclick="adminApp.saveSystemSettings()">💾 Guardar Configurações</button>
+              data-action="saveSystemSettings">💾 Guardar Configurações</button>
           </form>
         </div>
 
@@ -1433,14 +1433,14 @@
             <div style="color:#94a3b8;">A carregar…</div>
           </div>
           <button class="btn-ghost" style="margin-top:10px;font-size:.8rem;width:100%;"
-            onclick="adminApp.loadAuditLog()">🔄 Actualizar</button>
+            data-action="loadAuditLog">🔄 Actualizar</button>
         </div>
 
         <div class="settings-card danger-card">
           <h3>⚠️ Diagnóstico</h3>
           <p style="font-size:.85rem;color:#64748b;margin-bottom:1rem">Utilizadores sem telemóvel gravado na BD</p>
-          <button class="btn-danger-outline" onclick="adminApp.diagnoseMissingPhones()">🔍 Ver perfis sem phone</button>
-          <button class="btn-danger-outline" style="margin-top:.5rem" onclick="adminApp.fixMissingPhones()">🔧 Reparar automaticamente</button>
+          <button class="btn-danger-outline" data-action="diagnoseMissingPhones">🔍 Ver perfis sem phone</button>
+          <button class="btn-danger-outline" style="margin-top:.5rem" data-action="fixMissingPhones">🔧 Reparar automaticamente</button>
         </div>
 
       </div>
@@ -1450,9 +1450,9 @@
 </div>
 
 <!-- ── MODAL GENÉRICO ─────────────────────────────────────────────── -->
-<div id="globalModal" class="modal-overlay" style="display:none" onclick="adminApp.closeModal(event)">
+<div id="globalModal" class="modal-overlay" style="display:none" data-action="closeModalOverlay">
   <div class="modal-box" id="modalBox">
-    <button class="modal-close" onclick="adminApp.closeModal()">✕</button>
+    <button class="modal-close" data-action="closeModal">✕</button>
     <div id="modalContent"></div>
   </div>
 </div>
