@@ -34,6 +34,21 @@
 //     "no endpoints found"...) e desactiva temporariamente (10min→30min→2h)
 //     um modelo com falhas repetidas transitórias — sem gastar mais pedidos
 //     num modelo que se sabe estar avariado.
+//
+// v2.4 (P0 — CONTROLO DE CUSTO DA CORRIDA PARALELA):
+//  9. raceAllProviders() deixou de correr TODOS os providers com chave
+//     configurada (9 chamadas por documento no pior caso). Agora corre por
+//     omissão apenas os tiers "generoso" + "médio" (2-3 chamadas), que já
+//     cobrem >95% dos casos. Os providers "reserva_ativa" só entram como
+//     FALLBACK, e apenas se o grupo primário falhar por completo (todos os
+//     providers generoso/médio configurados rejeitaram ou excederam quota).
+//     Isto corrige o esgotamento de quota 3-4,5x mais cedo no tier grátis e
+//     o custo real por documento (~2 MZN → 6-9 MZN) que estava a corroer a
+//     margem. Providers "reserva_inativa" (sem adaptador — ver UNWIRED_RESERVE
+//     em aiProviderRegistry.js) nunca fizeram parte da corrida.
+// 10. Cada provider agora tem um TIMEOUT individual (9s) — um provider lento
+//     ou pendurado já não atrasa a resposta ao utilizador nem bloqueia o
+//     Promise.any(); é simplesmente descartado e os restantes continuam.
 
 const { getUserFromToken, rpc } = require('./_lib/supabaseAdmin');
 const { PROVIDERS }               = require('./_lib/aiProviderRegistry');
@@ -292,38 +307,88 @@ module.exports = async function handler(req, res) {
     }
 }
 
-// ─── CORRIDA PARALELA com provider preferido ──────────────────────────────
+// ─── CORRIDA PARALELA por tiers, com controlo de custo e timeout ─────────
+// Grupo primário (por omissão): apenas tiers "generoso" + "médio" — cobre a
+// esmagadora maioria dos pedidos com 2-3 chamadas em vez de 9. O tier
+// "reserva_ativa" só entra se o grupo primário falhar por completo.
+const PRIMARY_TIERS       = ['generoso', 'medio'];
+const PROVIDER_TIMEOUT_MS = 9000; // 9s por provider — evita que um lento bloqueie a resposta
+
 async function raceAllProviders(prompt, apiKeys, preferProvider, maxTokens) {
-    const winner = new AbortController();
-
-    const makeRacer = async (providerCfg, apiKey) => {
-        try {
-            const t0     = Date.now();
-            const result = await tryProviderChain(providerCfg, apiKey, prompt, winner.signal, maxTokens);
-            winner.abort();
-            logProviderUsageAsync(providerCfg.id, true, result, null);
-            return { ...result, ms: Date.now() - t0 };
-        } catch (err) {
-            if (err.name === 'AbortError') throw new Error('cancelled');
-            logProviderUsageAsync(providerCfg.id, false, null, err);
-            throw err;
-        }
-    };
-
-    // avail: apenas os providers do registo central que têm chave configurada
+    // avail: todos os providers do registo central que têm chave configurada
+    // (independentemente do tier — usado para o fallback de reserva depois)
     const avail = {};
     for (const providerCfg of PROVIDERS) {
         if (apiKeys[providerCfg.id]) avail[providerCfg.id] = providerCfg;
     }
-
     if (Object.keys(avail).length === 0) throw new Error('Nenhum provider disponível');
 
-    // Provider preferido vai primeiro, os outros em paralelo atrás
-    const orderedIds = preferProvider && avail[preferProvider]
-        ? [preferProvider, ...Object.keys(avail).filter(k => k !== preferProvider)]
-        : Object.keys(avail);
+    // Grupo primário: só generoso + médio
+    let primaryIds = Object.keys(avail).filter(id => PRIMARY_TIERS.includes(avail[id].tier));
 
-    const racers = orderedIds.map(id => makeRacer(avail[id], apiKeys[id]));
+    // Provider preferido (consistência entre secções de um documento em
+    // cadeia — ver LongDocumentEngine.js) entra sempre à frente no grupo
+    // primário, mesmo que seja de reserva — já foi "escolhido" numa secção
+    // anterior porque os primários falharam, não faz sentido voltar a
+    // tentá-los do zero a meio do mesmo documento.
+    if (preferProvider && avail[preferProvider]) {
+        primaryIds = [preferProvider, ...primaryIds.filter(id => id !== preferProvider)];
+    }
+
+    // Nenhum provider generoso/médio configurado (ex.: só NVIDIA/Mistral
+    // ligados) → corre directamente com o que existir, sem tier a mais.
+    if (primaryIds.length === 0) primaryIds = Object.keys(avail);
+
+    try {
+        return await raceGroup(primaryIds, avail, apiKeys, prompt, maxTokens);
+    } catch (primaryErr) {
+        // Fallback: só os providers "reserva_ativa" que ainda não foram tentados
+        const reserveIds = Object.keys(avail)
+            .filter(id => avail[id].tier === 'reserva_ativa' && !primaryIds.includes(id));
+
+        if (reserveIds.length === 0) throw primaryErr;
+
+        console.warn('[raceAllProviders] Grupo primário (generoso+médio) falhou por completo — fallback para reserva_ativa:', reserveIds);
+        return await raceGroup(reserveIds, avail, apiKeys, prompt, maxTokens);
+    }
+}
+
+// Corre um grupo de providers em paralelo com Promise.any, timeout
+// individual por provider e cancelamento dos restantes assim que um vencer.
+async function raceGroup(ids, avail, apiKeys, prompt, maxTokens) {
+    const winner = new AbortController();
+
+    const makeRacer = async (providerCfg, apiKey) => {
+        const timeoutCtrl = new AbortController();
+        const timeoutId   = setTimeout(() => timeoutCtrl.abort(), PROVIDER_TIMEOUT_MS);
+        const signal       = AbortSignal.any([winner.signal, timeoutCtrl.signal]);
+
+        try {
+            const t0     = Date.now();
+            const result = await tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens);
+            winner.abort();
+            logProviderUsageAsync(providerCfg.id, true, result, null);
+            return { ...result, ms: Date.now() - t0 };
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                // Outro provider já venceu — não é uma falha real, não conta
+                // para o disjuntor nem para o log de erros.
+                if (winner.signal.aborted) throw new Error('cancelled');
+                // Excedeu o tecto de tempo individual — conta como falha
+                // deste provider para que o Promise.any continue para o
+                // próximo, sem esperar por ele indefinidamente.
+                const timeoutErr = new Error(`${providerCfg.name}: timeout (${PROVIDER_TIMEOUT_MS}ms)`);
+                logProviderUsageAsync(providerCfg.id, false, null, timeoutErr);
+                throw timeoutErr;
+            }
+            logProviderUsageAsync(providerCfg.id, false, null, err);
+            throw err;
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    };
+
+    const racers = ids.map(id => makeRacer(avail[id], apiKeys[id]));
     return Promise.any(racers);
 }
 
