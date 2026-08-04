@@ -23,10 +23,11 @@ móvel (M-Pesa, e-Mola, mKesh).
 > conteúdo do site para treinar modelos de IA — relevante porque esta plataforma processa dados
 > pessoais sensíveis (BI, NUIT, moradas, procurações, contratos).
 
-> ⚠️ **`ROADMAP-ESCALA.md` continua por criar.** Não existe no repositório. Existe apenas
-> `MzDocs-Pro-Roadmap-Marketing-Gratuito-Mocambique.md`, que é um documento diferente (marketing
-> orgânico, não escala técnica). Recomenda-se criar o ficheiro ou remover todas as referências a
-> ele.
+> ✅ **`ROADMAP-ESCALA.md` existe** (544 linhas, versão de Agosto/2026, secção 12) — fusão dos três
+> documentos de roadmap anteriores (técnico + rentabilidade + plano de execução de 14 dias) contra
+> o código-fonte, preços actuais dos fornecedores e a legislação fiscal moçambicana de 2026. Existe
+> também, à parte, `MzDocs-Pro-Roadmap-Marketing-Gratuito-Mocambique.md` (marketing orgânico — um
+> documento diferente, não substitui o de escala técnica).
 
 ---
 
@@ -53,7 +54,7 @@ móvel (M-Pesa, e-Mola, mKesh).
 
 | Funcionalidade | Descrição | Estado verificado |
 |---|---|---|
-| **Geração com IA — 13 providers registados** | Corrida paralela com fallback automático; ver secção 3 | ✅ Código confirmado — muito além dos "5 providers" descritos em versões antigas deste README |
+| **Geração com IA — 9 providers com adaptador funcional** (+ 4 catalogados sem adaptador, apenas referência) | Corrida por tiers com fallback automático e controlo de custo; ver secção 3 | ✅ Código confirmado — muito além dos "5 providers" descritos em versões antigas deste README |
 | **Descoberta de modelos ao vivo** | Antes de confiar numa lista fixa de modelos, o sistema consulta `GET /models` do próprio provider e usa o catálogo real | ✅ `api/_lib/modelDiscovery.js` |
 | **Disjuntor (circuit breaker) por modelo** | Desliga automaticamente um modelo específico que esteja a falhar — 7 dias se for descontinuação permanente, com backoff crescente (10min→30min→2h) se for falha transitória | ✅ `api/_lib/modelHealth.js` |
 | **Amostra Grátis + Custo Progressivo** | `_previewMode: true` gera um extracto curto sem debitar créditos; documentos longos (6+ páginas) têm custo progressivo via `LongDocumentEngine` | ✅ |
@@ -111,7 +112,10 @@ Este é o subsistema mais sofisticado do projecto e o que mais mudou desde as de
 anteriores deste README ("5 providers em corrida paralela"). O estado real, confirmado em
 `api/_lib/aiProviderRegistry.js`, é:
 
-### 3.1. 13 providers registados (fonte única de verdade)
+### 3.1. 9 providers com adaptador (competem de facto) + 4 catalogados sem adaptador
+
+`aiProviderRegistry.js` é a fonte única de verdade, mas divide-se em dois grupos bem distintos —
+**13 no total, mas só 9 alguma vez chamam um modelo**:
 
 | Provider | Tier | Activação |
 |---|---|---|
@@ -119,21 +123,33 @@ anteriores deste README ("5 providers em corrida paralela"). O estado real, conf
 | Cerebras | Generoso (grátis) | `CEREBRAS_API_KEY` |
 | Google Gemini | Médio | `GEMINI_API_KEY` |
 | OpenRouter | Médio | `OPENROUTER_API_KEY` |
-| NVIDIA NIM | Reserva activa | `NVIDIA_API_KEY` |
-| Mistral | Reserva activa | (env var própria) |
-| SambaNova Cloud | Reserva activa | (env var própria) |
-| Together AI | Reserva activa | (env var própria) |
-| Fireworks AI | Reserva activa | (env var própria) |
-| Cloudflare Workers AI | — | (env var própria) |
-| GitHub Models | — | (env var própria) |
-| Hugging Face Inference | — | (env var própria) |
-| Cohere | — | (env var própria) |
+| NVIDIA NIM | Reserva activa (fallback) | `NVIDIA_API_KEY` |
+| Mistral | Reserva activa (fallback) | `MISTRAL_API_KEY` |
+| SambaNova Cloud | Reserva activa (fallback) | `SAMBANOVA_API_KEY` |
+| Together AI | Reserva activa (fallback) | `TOGETHER_API_KEY` |
+| Fireworks AI | Reserva activa (fallback) | `FIREWORKS_API_KEY` |
 
-**Princípio de desenho:** assim que a variável de ambiente correspondente a um provider existir
-na Vercel, esse provider **entra automaticamente** na corrida paralela — não é preciso editar
-`generate-document.js` para "ligar" uma chave nova. Isto substitui o desenho antigo em que
-`generate-document.js` e `aiProvidersCatalog.js` tinham, cada um, a sua própria lista
-dessincronizada de providers e modelos.
+Os 4 seguintes estão só em `UNWIRED_RESERVE`, catalogados para planeamento e para o painel admin,
+**mas sem adaptador de chamada** (a API deles não fala o formato OpenAI `chat/completions` que
+`tryOpenAIModel()` sabe chamar) — definir a env var sugerida **não** os liga à corrida:
+
+| Provider | Estado |
+|---|---|
+| Cloudflare Workers AI | Sem adaptador — precisa de mapeamento dedicado antes de poder competir |
+| GitHub Models | Sem adaptador |
+| Hugging Face Inference | Sem adaptador |
+| Cohere | Sem adaptador |
+
+**Princípio de desenho (dos 9 com adaptador):** assim que a variável de ambiente correspondente
+existir na Vercel, esse provider entra automaticamente no registo — não é preciso editar
+`generate-document.js` para "ligar" uma chave nova. Mas **desde a v2.4 (correcção de custo,
+Agosto/2026) nem todos correm sempre**: por omissão, `raceAllProviders()` só corre em paralelo o
+grupo **generoso + médio** (Groq, Cerebras, Gemini, OpenRouter — até 4 chamadas, tipicamente 2-3
+com chave configurada). O grupo **reserva activa** (NVIDIA, Mistral, SambaNova, Together,
+Fireworks) só entra como **fallback**, e só se o grupo primário falhar por completo. Cada provider
+tem também um tecto de 9s — se não responder a tempo, é descartado e a corrida continua com os
+restantes. Antes da v2.4, o motor corria os 9 em paralelo em todo o pedido, o que esgotava a
+quota grátis 3-4,5× mais depressa e inflacionava o custo por documento; isto já não acontece.
 
 ### 3.2. Descoberta de modelos ao vivo (`modelDiscovery.js`)
 
@@ -230,7 +246,7 @@ MzDocs-Pro/
 ├── api/                                # 12 Serverless Functions (Vercel Hobby — limite físico atingido)
 │   ├── _lib/                           # Helpers partilhados (prefixo "_" — não contam para o limite)
 │   │   ├── supabaseAdmin.js            # Cliente Supabase via fetch puro (REST + Auth API)
-│   │   ├── aiProviderRegistry.js       # Fonte única de verdade: 13 providers de IA
+│   │   ├── aiProviderRegistry.js       # Fonte única de verdade: 9 providers com adaptador + 4 catalogados sem adaptador
 │   │   ├── aiProvidersCatalog.js       # Alimenta o painel "IA Providers" do admin (mesma fonte)
 │   │   ├── modelDiscovery.js           # Descoberta ao vivo de modelos disponíveis por provider
 │   │   ├── modelHealth.js              # Disjuntor por modelo (falhas permanentes/transitórias)
@@ -243,7 +259,7 @@ MzDocs-Pro/
 │   │   └── webpush.js                  # Notificações push via VAPID
 │   ├── admin/index.js                  # Dashboard, analytics, feedback, blog, templates, afiliados, finanças
 │   ├── auth/index.js                   # Login, registo, reset password
-│   ├── generate-document.js            # 13 providers IA + amostra grátis + custo progressivo + reembolso
+│   ├── generate-document.js            # Corrida por tiers (generoso+médio, reserva como fallback) + amostra grátis + custo progressivo + reembolso
 │   ├── extract-template.js             # Extracção de template via imagem (IA visão)
 │   ├── verify-credits.js               # Verificar saldo de créditos
 │   ├── deduct-credit.js                # Debitar/reembolsar crédito
@@ -599,7 +615,6 @@ exposição financeira e legal do produto — não têm nenhum teste automatizad
 
 - **Plano Vercel Hobby** a processar pagamentos comerciais — não permitido pelos Termos da
   Vercel; sem margem de functions para crescer. Ver aviso no topo.
-- **`ROADMAP-ESCALA.md`** referenciado (nesta e em versões anteriores) mas nunca criado.
 - **`schema.sql` central desactualizado** — a única fonte fiável do schema real é a cadeia
   completa de migrações; recomenda-se gerar `schema_CURRENT.sql` a partir do Supabase Dashboard.
 - **Ficheiros de migração avulsos** (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `migration_fix_*`,
@@ -667,6 +682,7 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | v32–v33 (mencionadas no cabeçalho da versão anterior deste documento, mas nunca documentadas em detalhe) | CSP hardening (remoção de handlers inline); correcção de 3 bugs de produção — não foi possível reconstruir o detalhe exacto a partir do ficheiro cortado; recomenda-se ao autor original completar esta linha manualmente se o detalhe ainda for relevante |
 | v34–v47 (via migrações) | Marketing Analytics completo; Finanças com Identidade Fiscal; recibos de afiliados; avaliações públicas; anti-abuso; parceiros advogados |
 | v48–v51 | Conformidade LPD (consentimento, direito ao esquecimento); protecção reforçada de dados sensíveis; recibos seguros; créditos bónus/promoções |
+| v52 (código) | Corrida de IA por tiers com controlo de custo (generoso+médio por omissão, reserva activa só como fallback) e timeout de 9s por provider — corrige o esgotamento de quota e o custo por documento |
 
 | Componente | Versão |
 |---|---|
@@ -675,7 +691,7 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | Migrações Supabase | até `migration_v51_bonus_credits.sql`, mais ficheiros avulsos não numerados |
 | Serviços | 18 (16 com IA + 2 via WhatsApp) |
 | Templates visuais integrados | 70 (14 serviços × 5) |
-| Providers de IA registados | 13 |
+| Providers de IA — com adaptador (competem) / catalogados sem adaptador | 9 / 4 (13 no total) |
 
 ---
 
