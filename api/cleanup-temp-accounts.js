@@ -1,11 +1,18 @@
-// api/cleanup-temp-accounts.js — v9.0 (AUDITORIA Junho/2026)
-// ALTERAÇÕES v9.0:
-//  1. Removido @supabase/supabase-js + require('ws') — usa api/_lib/supabaseAdmin.js.
-//  2. Lógica de negócio 100% preservada da v8.0.
-
+// api/cleanup-temp-accounts.js — v10.0 (P2 — expiração real de créditos por lote)
+// ALTERAÇÕES v10.0:
+//  1. NOVO: a antiga "Regra 3" zerava profiles.credits POR COMPLETO quando
+//     uma única data (credits_expires_at, escrita só no registo) passava —
+//     o que também apagava créditos comprados depois dessa data, sem
+//     relação com a data real de compra. Substituída pela chamada à nova
+//     função expire_credit_batches() (migration_v52_credit_ledger.sql), que
+//     expira cada LOTE de créditos 30 dias após a SUA própria data de
+//     aquisição (grátis, compra, referência, reembolso — ver migração para
+//     o detalhe completo), sem tocar em créditos de lotes ainda válidos.
+//  2. Preservada 100% a lógica das Regras 1 e 2 (contas Avulso).
 const {
   restRequest,
   adminDeleteUser,
+  rpc,
 } = require('./_lib/supabaseAdmin');
 
 const origin = process.env.SITE_URL || 'https://mzdocs.co.mz';
@@ -31,7 +38,7 @@ module.exports = async function handler(req, res) {
   const results = {
     deleted_zero_credits:  0,
     deleted_expired_7days: 0,
-    normal_expired_reset:  0,
+    accounts_credits_expired: 0,
     errors:                [],
   };
 
@@ -75,20 +82,14 @@ module.exports = async function handler(req, res) {
       results.errors.push({ rule: 'expired_7days', error: err.message });
     }
 
-    // ── Regra 3: Contas normais com créditos expirados — zerar ───────────
-    const now = new Date().toISOString();
+    // ── Regra 3 (P2 — v52): expirar créditos por LOTE via credit_ledger ───
+    // Substitui o antigo reset total de profiles.credits numa única data;
+    // ver nota v10.0 no cabeçalho e migration_v52_credit_ledger.sql.
     try {
-      const normalExpired = await restRequest(
-        `profiles?account_type=eq.normal&credits=gt.0&credits_expires_at=not.is.null&credits_expires_at=lt.${encodeURIComponent(now)}&select=id`,
-        {
-          method: 'PATCH',
-          body: { credits: 0, credits_expires_at: null, updated_at: now },
-          prefer: 'return=representation',
-        }
-      );
-      results.normal_expired_reset = Array.isArray(normalExpired) ? normalExpired.length : 0;
+      const accountsAffected = await rpc('expire_credit_batches', {});
+      results.accounts_credits_expired = typeof accountsAffected === 'number' ? accountsAffected : 0;
     } catch (err) {
-      results.errors.push({ rule: 'normal_expired_reset', error: err.message });
+      results.errors.push({ rule: 'expire_credit_batches', error: err.message });
     }
 
     console.log('[cleanup-temp-accounts] Executado:', JSON.stringify(results));
