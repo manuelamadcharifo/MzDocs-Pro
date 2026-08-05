@@ -14,6 +14,7 @@ const crypto  = require('crypto');
 const QRCode  = require('qrcode');
 const { analyzeImage, parseJSON: parseVisionJSON } = require('./_lib/visionAI');
 const { buscarArtigosRelevantes } = require('./_lib/legalSearch');
+const { notifyPaymentNeedsReview } = require('./_lib/notifyTelegram'); // NOVO — alerta Telegram para revisão manual
 
 const {
   restRequest,
@@ -565,6 +566,11 @@ async function _markReviewNeeded(transactionId, receiptHash, confidence, reason)
       message: `Confiança ${(confidence || 0) < 0.4 ? 'baixa' : 'moderada'} na verificação automática (${reason || 'motivo não especificado'}). Transacção ${transactionId}.`,
       link:    '#transactions',
     }).catch(e => console.warn('[verify-receipt] admin_notifications insert falhou:', e.message));
+
+    // NOVO — alerta imediato por Telegram, ao lado da notificação in-app
+    // acima (não a substitui). Fire-and-forget, best-effort: nunca deve
+    // impedir o fluxo de verificação em si.
+    notifyPaymentNeedsReview({ transactionId, reason, confidence });
   } catch (e) {
     console.error('[verify-receipt] _markReviewNeeded falhou:', e.message);
   }
