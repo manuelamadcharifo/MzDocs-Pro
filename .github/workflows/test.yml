@@ -1,0 +1,36 @@
+name: Testes
+
+# Corre em cada push e em cada pull request — bloqueia o merge se algo
+# partir em generate-document.js, deduct-credit.js, process-payment.js,
+# cleanup-temp-accounts.js ou legalSearch.js (ver tests/).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Correr testes
+        run: npm test
+        env:
+          # Nenhuma destas precisa de ser real — os testes mockam
+          # supabaseAdmin/misc/fetch por completo (ver tests/*.test.js),
+          # mas alguns módulos verificam a PRESENÇA da variável antes de
+          # decidirem "não configurado" vs "tentar ligar" — por isso
+          # damos valores fictícios só para não cair em ramos diferentes
+          # dos que os testes esperam.
+          SUPABASE_URL: https://ci-placeholder.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-key
