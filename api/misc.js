@@ -1186,9 +1186,22 @@ async function tplSubmit(req, res) {
   const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   const body = parseBody(req);
-  const { service_type, template_name, description, template_css, thumbnail_url, template_file } = body;
+  const { service_type, template_name, description, template_css, thumbnail_url, template_file, template_html } = body;
   if (!service_type || !template_name || !template_css)
     return res.status(400).json({ error: 'service_type, template_name e template_css são obrigatórios' });
+
+  // CORRIGIDO: esta função nunca lia body.template_type nem body.tags —
+  // o formulário em templates.html envia ambos (rádio "Comunidade"/
+  // "Privado" + campo de tags), mas eram descartados em silêncio. Ficava
+  // sempre gravado o valor por omissão da coluna (template_type =
+  // 'community'), pelo que um template submetido como "Privado" nunca
+  // recebia is_public/aprovação imediata nem share_token — ficava preso
+  // como 'pending', igual a um template público comum, contrariando o que
+  // o próprio formulário promete ("Templates privados são aprovados
+  // imediatamente"). As tags eram sempre perdidas.
+  const rawType = String(body.template_type || 'community').trim();
+  const template_type = rawType === 'private' ? 'private' : 'community';
+  const tags = Array.isArray(body.tags) ? body.tags.map(t => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 10) : [];
 
   // NOVO (v39): o cliente pode propor as suas próprias regras de venda —
   // o preço em CRÉDITOS (a mesma moeda usada em toda a plataforma; nunca
@@ -1200,12 +1213,22 @@ async function tplSubmit(req, res) {
   // CHECK constraint, como segunda camada de protecção. O admin continua
   // a poder rever/ajustar o preço em créditos antes de aprovar (ver
   // handleTemplates), tal como já acontecia com templates "premium".
+  // Templates privados nunca são vendidos (credit_cost forçado a 0).
   const rawCost = parseInt(body.credit_cost, 10);
-  const credit_cost = Number.isFinite(rawCost) ? Math.min(50, Math.max(0, rawCost)) : 0;
+  const credit_cost = template_type === 'private'
+    ? 0
+    : (Number.isFinite(rawCost) ? Math.min(50, Math.max(0, rawCost)) : 0);
   const rawShare = parseFloat(body.author_share_percent);
   const author_share_percent = Number.isFinite(rawShare)
     ? Math.min(70, Math.max(60, rawShare))
     : 65; // omisso → 65%, o valor intermédio da banda permitida
+
+  // Templates privados: aprovação imediata (só o autor os vê, ou quem tiver
+  // o link secreto) — mesma regra já implementada na função Postgres
+  // submit_template (migration_v12), replicada aqui porque esta rota usa
+  // insert() directo em vez dessa RPC.
+  const isPrivate   = template_type === 'private';
+  const share_token = isPrivate ? crypto.randomBytes(16).toString('hex') : null;
 
   let data;
   try {
@@ -1214,11 +1237,15 @@ async function tplSubmit(req, res) {
       service_type:  service_type.trim().slice(0, 50),
       template_name: template_name.trim().slice(0, 100),
       description:   (description || '').trim().slice(0, 300),
+      template_html: (template_html || '').slice(0, 20000),
       template_css:  template_css.slice(0, 20000),
       thumbnail_url: thumbnail_url || null,
       template_file: template_file || null,
-      status:        'pending',
-      is_public:     false,
+      tags,
+      template_type,
+      share_token,
+      status:        isPrivate ? 'approved' : 'pending',
+      is_public:     false, // mesmo aprovado, um template privado nunca entra na galeria pública
       credit_cost,
       author_share_percent,
     });
@@ -1226,10 +1253,12 @@ async function tplSubmit(req, res) {
     return res.status(500).json({ error: error.message });
   }
   return res.status(201).json({
-    success: true, id: data.id,
-    message: credit_cost > 0
-      ? `Template submetido com preço de ${credit_cost} créditos (${author_share_percent}% para si). Aguarda aprovação.`
-      : 'Template submetido! Aguarda aprovação.',
+    success: true, id: data.id, share_token,
+    message: isPrivate
+      ? 'Template privado guardado! Já pode partilhar o link.'
+      : credit_cost > 0
+        ? `Template submetido com preço de ${credit_cost} créditos (${author_share_percent}% para si). Aguarda aprovação.`
+        : 'Template submetido! Aguarda aprovação.',
   });
 }
 
@@ -1356,8 +1385,12 @@ async function tplMine(req, res) {
     // eles, o preview real do documento não conseguia ser mostrado na
     // aba "Os Meus" (mesmo bug da galeria pública, ver
     // migration_v23_fix_gallery_view_html_css.sql).
+    // CORRIGIDO: faltavam também is_public, credit_cost, author_share_percent
+    // e template_type — o criador não conseguia ver se o seu template já
+    // (ou ainda não) estava mesmo visível na galeria pública, nem quanto
+    // preço/percentagem ficou definido para ele (ver migration_v54).
     const templates = await restRequest(
-      `templates_custom?user_id=eq.${user.id}&order=created_at.desc&select=id,service_type,template_name,description,thumbnail_url,status,rejection_note,use_count,downloads,is_featured,template_html,template_css,created_at,share_token`
+      `templates_custom?user_id=eq.${user.id}&order=created_at.desc&select=id,service_type,template_name,description,thumbnail_url,status,is_public,template_type,rejection_note,use_count,downloads,is_featured,credit_cost,author_share_percent,template_html,template_css,created_at,share_token`
     );
     return res.status(200).json({ success: true, templates: Array.isArray(templates) ? templates : [] });
   } catch (err) {
