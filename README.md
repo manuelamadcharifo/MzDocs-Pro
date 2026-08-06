@@ -5,13 +5,12 @@ PWA instalável (Android/iOS), construída para o Vercel Hobby (limite: 12 Serve
 **já esgotado, sem margem**), Supabase (PostgreSQL + pgvector) e pagamento manual por carteira
 móvel (M-Pesa, e-Mola, mKesh).
 
-> 📌 **Nota sobre este README:** este documento foi reconstruído do zero em Agosto/2026 a partir
-> de uma leitura directa e integral do código-fonte (não apenas das notas de versão anteriores),
-> precisamente porque a versão anterior deste ficheiro tinha ficado **cortada a meio de uma
-> frase**, sem as secções mais recentes do changelog e com a lista de migrações de instalação
-> desactualizada em 10 ficheiros (parava em `v41`, quando o repositório já tinha migrações reais
-> até `v51`). Este documento reflecte o estado do código tal como está no export mais recente
-> disponível — não o histórico ronda-a-ronda, que passa a viver apenas na secção "Histórico de
+> 📌 **Nota sobre este README:** actualizado em Agosto/2026 a partir de uma leitura directa do
+> código-fonte no export mais recente (migrações até `v56`, correcções ao Marketplace de
+> Templates e ao motor de pagamentos). A versão anterior deste ficheiro tinha ficado desactualizada
+> em relação às migrações `v52`–`v56` e a várias correcções entretanto feitas ao Marketplace de
+> Templates, ao CI e às notificações de pagamento. Este documento reflecte o estado do código tal
+> como está — não o histórico ronda-a-ronda, que passa a viver apenas na secção "Histórico de
 > Versões" no fim.
 
 > ⚠️ **Acção urgente e não resolvida — plano Vercel:** este projecto processa pagamentos
@@ -71,8 +70,10 @@ móvel (M-Pesa, e-Mola, mKesh).
 | **Histórico Offline** | IndexedDB, sincronizado quando online | ✅ |
 | **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola, mKesh — upload de comprovativo com verificação automática por IA de visão (aprovação se confiança ≥ 0.85) e fallback WhatsApp | ✅ |
 | **Reembolso Automático de Créditos** | Se a geração falhar após o débito, o crédito é devolvido via RPC `refund_credit` | ✅ |
+| **Alertas Telegram para revisão manual (NOVO)** | Quando um comprovativo de pagamento não é aprovado automaticamente (`review_needed`), o admin recebe um alerta Telegram além da notificação já existente no painel — `notifyTelegram.js`, fire-and-forget, nunca bloqueia o fluxo de pagamento se falhar | ✅ `api/_lib/notifyTelegram.js`, ligado em `api/misc.js` |
 | **Preços Dinâmicos** | Pacotes lidos de `system_settings` em tempo real (`api/_lib/packages.js`) | ✅ |
-| **Marketplace de Templates** | Galeria comunitária, preview A4 realista, submissão/avaliação/partilha, repartição de receita 60–70% para o criador | ✅ |
+| **Marketplace de Templates** | Galeria comunitária, preview A4 realista com dados fictícios preenchidos automaticamente (mesmo para variáveis livres definidas pelo criador), submissão/avaliação/partilha, repartição de receita 60–70% para o criador, preço máximo 10 créditos (alinhado com o tecto de qualquer operação cobrada na plataforma) | ✅ |
+| **Venda de templates restrita a afiliados/parceiros (NOVO — v55)** | Um utilizador comum pode submeter e partilhar templates gratuitamente, mas só afiliados aprovados ou parceiros activos podem definir preço (`credit_cost > 0`) — garantido por trigger na base de dados, não só validação no código | ✅ `migration_v55` |
 | **Sistema de Afiliados Pro** | Segmentação, níveis, bónus por tier, detecção de fraude — ver secção 9 | ✅ |
 | **Rede de Parceiros (incl. advogados)** | Papelarias, cyber cafés e advogados parceiros, com código de acesso próprio | ✅ |
 | **Avaliações Públicas** | ⭐ 1–5, com moderação de conteúdo automática (`contentModeration.js`) | ✅ |
@@ -100,9 +101,10 @@ móvel (M-Pesa, e-Mola, mKesh).
 - **Rate limiting:** Upstash Redis, com fallback para `Map` local em memória se as variáveis
   `UPSTASH_REDIS_REST_URL`/`_TOKEN` não estiverem definidas.
 - **Migrações:** mais de 50 ficheiros SQL versionados em `supabase/`, de `schema.sql` +
-  `migration_v8_*` até `migration_v51_bonus_credits.sql`, mais um conjunto de ficheiros avulsos
-  sem numeração sequencial (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `migration_fix_*`,
+  `migration_v8_*` até `migration_v56_max_credit_cost_10.sql`, mais um conjunto de ficheiros
+  avulsos sem numeração sequencial (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `migration_fix_*`,
   `migration_add_*`) aplicados directamente em produção ao longo do tempo — ver secção 12.
+- **CI:** `.github/workflows/test.yml` corre `npm test` em cada push/PR ao branch principal.
 
 ---
 
@@ -452,8 +454,22 @@ migration_v48_lpd_compliance.sql                      -- consent_logs, direito a
 migration_v49_secure_affiliate_receipts.sql           -- bucket privado + signed URL 5min
 migration_v50_protect_sensitive_profile_columns.sql   -- RLS reforçada em BI/NUIT/morada
 
--- Créditos bónus (v51 — mais recente)
+-- Créditos bónus, expiração real, Marketplace, limite de preço (v51–v56 — mais recentes)
 migration_v51_bonus_credits.sql                       -- ver nota honesta na secção 12
+migration_v52_credit_ledger.sql                       -- expiração real por LOTE (30 dias da
+                                                       --   aquisição), substitui a data única
+                                                       --   por conta que a v51 deixou por aplicar
+migration_v53_fix_official_template_previews.sql      -- preenche template_html das 4 variantes
+                                                       --   de estilo por categoria que a v22 só
+                                                       --   tinha deixado com CSS (preview caía no
+                                                       --   texto genérico em vez do documento real)
+migration_v54_fix_template_gallery_visibility.sql     -- corrige templates aprovados com
+                                                       --   is_public=false que nunca apareciam na
+                                                       --   Galeria pública apesar do "✅ Aprovado"
+migration_v55_affiliate_partner_only_selling.sql      -- só afiliados/parceiros aprovados podem
+                                                       --   definir credit_cost > 0 — trigger na BD
+migration_v56_max_credit_cost_10.sql                  -- tecto de 10 créditos em credit_cost,
+                                                       --   alinhado com VALID_COSTS do débito
 ```
 
 > ⚠️ Existem ainda vários ficheiros avulsos em `supabase/` (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`,
@@ -524,10 +540,29 @@ qualquer chamada a uma API de cobrança no código como na documentação.
 3. `visionAI.js` (Gemini → OpenRouter fallback) extrai valor, referência, estado e confiança.
 4. **Aprovação automática** se confiança ≥ 0.85 *e* valor correcto (±1 MZN) *e* data ≤ 60 min
    *e* hash do comprovativo nunca reutilizado. Créditos creditados na hora via RPC `add_credits`.
-5. Caso contrário → `review_needed` para confirmação manual no admin.
+5. Caso contrário → `review_needed` para confirmação manual no admin, com alerta Telegram
+   enviado ao admin em paralelo (`notifyTelegram.js` — falha a enviar nunca bloqueia o pagamento).
 6. Anti-abuso: máximo 3 uploads por IP por minuto.
 
 **2. Fallback manual via WhatsApp** — link pré-formatado, confirmação manual pelo admin.
+
+> ℹ️ **Confirmação por SMS real da Vodacom (preparado, ainda não ligado):** existe
+> `api/_lib/parseMpesaSms.js`, que interpreta o SMS de confirmação M-Pesa real ("Confirmado
+> \<REF\>. Recebeste \<VALOR\>MT de..."), pensado para ser alimentado por uma app grátis de
+> encaminhamento de SMS por webhook (ex.: httpSMS) instalada no telemóvel que já recebe os
+> pagamentos — uma camada anti-burla mais forte que o OCR de comprovativo, sem custo adicional.
+> O ficheiro e o seu teste (`tests/parseMpesaSms.test.js`) existem e passam, mas **não está ligado
+> a nenhuma rota `api/`** — nem `process-payment.js` nem `misc.js` o chamam hoje. Falta o
+> despacho `?webhook=sms-mpesa` dentro de `api/process-payment.js` (reaproveitando a mesma
+> function, sem consumir um dos 12 slots) para a funcionalidade ficar activa.
+
+### Expiração de créditos (NOVO — v52, ledger por lote)
+
+Corrige a limitação que a v51 deixava documentada mas não resolvida (ver secção 12 da versão
+anterior deste README): créditos normais (grátis, comprados, referência/afiliado, reembolsados)
+passam a expirar **30 dias a contar da data de aquisição de CADA lote**, não de uma única data por
+conta gravada só no registo. Créditos "bónus"/promocionais continuam a usar o prazo configurável
+no admin (`bonus_credits_expiry_days`, 30 dias de fallback). Testado em `tests/credit-expiry.test.js`.
 
 ### Reembolso automático
 
@@ -577,6 +612,12 @@ confirmado (v43).
   cópia por afiliado fica gravada na base de dados.
 - **Rede de Parceiros:** papelarias, cyber cafés **e advogados** (v47), com código de acesso
   próprio (v46) e protecção anti-abuso nas avaliações (v45).
+- **Venda de templates restrita (NOVO — v55):** só afiliados aprovados (`profiles.is_affiliate`)
+  ou parceiros activos ligados à sua conta (`partners.linked_user_id`) podem definir preço num
+  template submetido por eles; um utilizador comum continua a poder submeter templates (privados
+  ou públicos gratuitos), mas nunca lhes pode atribuir `credit_cost > 0` — regra imposta por
+  trigger na base de dados, não apenas validação no código, para que nenhum caminho de código
+  futuro consiga contornar a repartição de receita a quem não está associado ao projecto.
 
 ---
 
@@ -603,11 +644,21 @@ em `api/` sem confirmar este limite primeiro.
 | `tests/auth.test.js` | 120 | AuthManager / AuthUI (jsdom) |
 | `tests/ocrSchemaAlignment.test.js` | 100 | Alinhamento schema OCR ↔ campos do formulário |
 | `tests/rateLimit.test.js` | 61 | `api/_lib/rateLimit.js` |
-| **Total** | **281** | — |
+| `tests/generate-document.test.js` (NOVO) | 190 | Formato da resposta; corrida por tiers (generoso/médio) vs fallback de reserva activa |
+| `tests/deduct-credit.test.js` (NOVO) | 150 | Dedução, créditos insuficientes, optimistic locking, reembolso automático |
+| `tests/process-payment.test.js` (NOVO) | 167 | Validação de telefone/pacote, detecção de carteira, duplicados, verificação automática de comprovativo |
+| `tests/credit-expiry.test.js` (NOVO) | 104 | Cron de expiração por lote (v52), degradação segura |
+| `tests/rag.test.js` (NOVO) | 107 | Motor Jurídico RAG (`legalSearch.js`): citação de fonte, limiar de similaridade, aviso de qualidade |
+| `tests/notifyTelegram.test.js` (NOVO) | 60 | Alerta Telegram de pagamento em revisão (`notifyTelegram.js`) |
+| **Total** | **≈ 1.059** | — |
 
-**Honestamente:** 281 linhas de teste para ~11.650 linhas de código só em `api/` é uma cobertura
-fina. Geração de documentos, pagamentos, afiliados e o Motor Jurídico RAG — as áreas de maior
-exposição financeira e legal do produto — não têm nenhum teste automatizado dedicado hoje.
+CI automático via `.github/workflows/test.yml`, a correr em cada push/PR ao branch principal.
+
+**Honestamente:** ~1.059 linhas de teste para ~11.650 linhas de código só em `api/` continua a ser
+uma cobertura fina, mas cresceu de forma dirigida — as áreas de maior exposição financeira e
+legal (geração de documentos, dedução/expiração de créditos, pagamentos, RAG jurídico) já têm
+teste dedicado. Afiliados e o fluxo completo do Marketplace de Templates continuam sem teste
+automatizado.
 
 ---
 
@@ -625,13 +676,24 @@ exposição financeira e legal do produto — não têm nenhum teste automatizad
 - **`migration_v31_marketing_purchase_attribution.sql`** foi assinalada em auditorias anteriores
   como possivelmente corrompida/vazia no export usado nessa altura — confirmar directamente no
   Supabase Dashboard se já foi aplicada antes de a tentar correr de novo.
-- **Cobertura de testes fina** face ao volume de código (ver secção 11).
-- **`bonus_credits_expiry_days` (v51) é guardado mas nunca aplicado** — nenhum crédito (grátis,
-  bónus ou comprado) expira automaticamente hoje; a coluna existe apenas para mostrar uma data ao
-  utilizador. Construir a expiração real exigiria um livro-razão de créditos por concessão (cada
-  lote com a sua própria validade) em vez do único número acumulado que `profiles.credits` é
-  hoje — mudança maior, fora do âmbito da v51. Este ponto está documentado de forma honesta no
-  próprio comentário SQL da migração, e é reproduzido aqui para não se perder.
+- **Cobertura de testes mais robusta, mas ainda parcial** face ao volume de código (ver secção 11).
+- ~~`bonus_credits_expiry_days` (v51) é guardado mas nunca aplicado~~ — **resolvido pela v52**
+  (`credit_ledger`): créditos normais agora expiram por lote, 30 dias da aquisição de cada um.
+- ~~`.github/workflows/test.yml` com erro de sintaxe~~ — **corrigido**: a linha "Instalar
+  dependências" tinha "run:" duplicado (`run: run: npm install...`), o que fazia o passo falhar
+  antes de correr qualquer teste; agora é `run: npm install --no-audit --no-fund`.
+- ~~Ficheiros de teste duplicados dentro de `.github/workflows/`~~ — **corrigido**: removidas as
+  8 cópias de `tests/*.test.js` que tinham ficado acidentalmente dentro da pasta de workflows;
+  ficou lá só `test.yml`, que é o único ficheiro com função nesse local.
+- **`api/_lib/parseMpesaSms.js` existe mas não está ligado a nenhuma rota** — ver nota na
+  secção 8 (Confirmação por SMS real da Vodacom). Falta o despacho `?webhook=sms-mpesa` dentro de
+  `api/process-payment.js`.
+- **Gateway de pagamento automático (PaySuite/ClicPay) ainda não integrado no repositório** — foi
+  desenhado e testado à parte (`paymentGateway.js`, adaptadores PaySuite/ClicPay, webhook PaySuite
+  reaproveitando a lógica de `verifyReceiptInternal`), mas por decisão do autor ainda não foi
+  merged; o fluxo de pagamento em produção continua 100% manual (comprovativo + verificação por
+  IA de visão, secção 8). Quando for integrado, o webhook do PaySuite vai precisar de outro slot
+  de function (Vercel Pro, ou o mesmo truque de despacho por query usado no SMS M-Pesa).
 - **Templates visuais continuam em 70** (14 serviços × 5) apesar do número total de serviços já
   ter crescido para 18 — `transcricao` e `conversao` ainda não têm galeria de templates própria.
 
@@ -683,15 +745,19 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | v34–v47 (via migrações) | Marketing Analytics completo; Finanças com Identidade Fiscal; recibos de afiliados; avaliações públicas; anti-abuso; parceiros advogados |
 | v48–v51 | Conformidade LPD (consentimento, direito ao esquecimento); protecção reforçada de dados sensíveis; recibos seguros; créditos bónus/promoções |
 | v52 (código) | Corrida de IA por tiers com controlo de custo (generoso+médio por omissão, reserva activa só como fallback) e timeout de 9s por provider — corrige o esgotamento de quota e o custo por documento |
+| v52–v56 (Ago/2026) | Expiração real de créditos por lote (`credit_ledger`); preview de templates "Oficiais" corrigido na origem (4 variantes de estilo sem `template_html`); templates aprovados que não apareciam na Galeria pública (`is_public` dessincronizado de `status`); venda de templates restrita a afiliados/parceiros aprovados (trigger na BD); tecto de 10 créditos em `credit_cost`, alinhado com o limite de qualquer operação cobrada |
+| Correcções de código (Ago/2026, mesma ronda) | Preview de templates da comunidade com variáveis em minúsculas (`{{nome_completo}}`, `{{destinatario}}`...) deixava de preencher com dados fictícios e mostrava as chaves `{{...}}` literais — bug na regex de `fillTemplate()` (`SampleData.js`), que só reconhecia MAIÚSCULAS; corrigido, e reaproveitado no preview do admin (antes escrevia o HTML cru, sem preencher nada); formulário "Submeter Template" passou a mostrar o equivalente em MZN ao lado dos créditos (criador/plataforma), como o admin já mostrava; `TemplateLibrary.js` pedia a coluna `price_mzn` — removida da tabela pela v39 — o que fazia as duas queries de carregamento de templates do marketplace falharem sempre em silêncio (nenhum template do marketplace aparecia no selector "Escolher Modelo"); `notifyTelegram.js` ligado a `misc.js` para alertar o admin de pagamentos em revisão manual |
 
 | Componente | Versão |
 |---|---|
 | `package.json` | `11.0.0` |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy (`v<sha-git-7-chars>-<YYYYMMDD>`) |
-| Migrações Supabase | até `migration_v51_bonus_credits.sql`, mais ficheiros avulsos não numerados |
+| Migrações Supabase | até `migration_v56_max_credit_cost_10.sql`, mais ficheiros avulsos não numerados |
 | Serviços | 18 (16 com IA + 2 via WhatsApp) |
 | Templates visuais integrados | 70 (14 serviços × 5) |
 | Providers de IA — com adaptador (competem) / catalogados sem adaptador | 9 / 4 (13 no total) |
+| Preço máximo de um template no Marketplace | 10 créditos (`migration_v56`) |
+| Testes | 9 suites, ≈ 1.059 linhas |
 
 ---
 
