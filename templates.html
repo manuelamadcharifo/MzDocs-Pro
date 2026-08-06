@@ -463,6 +463,29 @@
         <textarea id="sfHtml" style="min-height:80px;font-family:monospace;font-size:12px" placeholder="<!-- Estrutura HTML base do template (opcional) -->"></textarea>
       </div>
 
+      <!-- NOVO: o criador do template passa a poder ver e definir quanto vai
+           ganhar — antes só o admin via/alterava o preço em créditos na
+           aprovação, e o criador nunca sabia sequer que existia repartição
+           de receita. Grátis por omissão (0 créditos); só aparece a secção
+           de ganhos quando o criador define um preço > 0. A percentagem
+           para o criador é sempre entre 60% e 70% (o resto fica para a
+           plataforma) — o mesmo intervalo já validado no servidor. -->
+      <div id="sfPricingField">
+        <div class="tpl-field">
+          <label>💰 Preço do seu template (opcional)</label>
+          <p style="font-size:12px;color:var(--dim);margin:0 0 10px">Se definir um preço, quem usar o seu template paga em créditos — e uma parte fica para si. Deixe em 0 para partilhar gratuitamente.</p>
+          <input type="number" id="sfCreditCost" min="0" max="50" step="1" value="0" placeholder="0 = gratuito"/>
+        </div>
+        <div class="tpl-field" id="sfShareField" style="display:none">
+          <label>A sua percentagem sobre cada venda</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="number" id="sfSharePercent" min="60" max="70" step="1" value="65" style="max-width:90px"/>
+            <span style="font-size:12px;color:var(--dim)">% (60–70%; o resto fica para a plataforma)</span>
+          </div>
+          <p id="sfEarningsEstimate" style="font-size:12.5px;font-weight:700;color:#16a34a;margin-top:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px"></p>
+        </div>
+      </div>
+
       <button class="btn-tpl-submit-form" id="btnSubmitForm">🚀 Submeter Template</button>
       <button class="btn-tpl-cancel" id="btnCancelSubmit" data-action="closeSubmit">Cancelar</button>
     </div>
@@ -1081,8 +1104,27 @@ async function loadMine() {
           t.status === 'pending'  ? '⏳ A aguardar aprovação' :
           t.status === 'approved' ? '✅ Aprovado' : '❌ Rejeitado'
         }</span>
+        ${
+          // NOVO: um template pode estar "Aprovado" mas ainda não visível
+          // na galeria pública (is_public=false) — antes isto não era
+          // mostrado em lado nenhum, dando a entender que já estava tudo
+          // publicado. Templates privados nunca aparecem na galeria por
+          // natureza (têm link próprio), por isso não mostram este aviso.
+          t.status === 'approved' && t.template_type !== 'private' && !t.is_public
+            ? `<div style="font-size:11px;color:#B45309;background:#FFFBEB;border:1px solid #FCD34D;border-radius:6px;padding:5px 8px;margin-top:4px">⚠️ Aprovado mas ainda não visível na Galeria pública — contacte o suporte se isto persistir.</div>`
+            : ''
+        }
         ${t.status === 'rejected' && t.rejection_note ? `<div style="font-size:11px;color:#EF4444;margin-top:4px">Motivo: ${escapeHtml(t.rejection_note)}</div>` : ''}
         ${t.use_count ? `<div style="font-size:11px;color:var(--dim);margin-top:3px">📄 ${t.use_count} usos</div>` : ''}
+        ${
+          // NOVO: o criador passa a ver aqui quanto o seu template rende —
+          // antes esta informação só existia no painel do admin.
+          t.template_type !== 'private' && t.credit_cost > 0
+            ? `<div style="font-size:11px;color:#16a34a;font-weight:700;margin-top:3px">💰 ${t.credit_cost} créditos por uso · ${t.author_share_percent || 65}% para si</div>`
+            : t.template_type !== 'private'
+              ? `<div style="font-size:11px;color:var(--dim);margin-top:3px">🆓 Gratuito (sem créditos por uso)</div>`
+              : ''
+        }
         ${t.template_type === 'private' && t.share_token ? `
           <div style="margin-top:6px">
             <div style="font-size:11px;color:var(--dim);margin-bottom:3px">🔗 Link privado:</div>
@@ -1222,7 +1264,26 @@ window.selectType = function(val, el) {
   document.querySelectorAll('.tpl-type-radio').forEach(r => r.classList.remove('selected'));
   el.classList.add('selected');
   document.getElementById('privateInfo').style.display = val === 'private' ? 'block' : 'none';
+  // Preço só faz sentido para templates de Comunidade — um template
+  // privado é só para o próprio (ou quem tiver o link), não é "vendido".
+  document.getElementById('sfPricingField').style.display = val === 'community' ? 'block' : 'none';
+  _updateEarningsEstimate();
 };
+
+// NOVO: mostra ao criador, em tempo real, quanto vai receber por cada uso
+// pago do seu template — antes esta informação só era visível ao admin.
+function _updateEarningsEstimate() {
+  const cost    = parseInt(document.getElementById('sfCreditCost').value, 10) || 0;
+  const shareEl = document.getElementById('sfShareField');
+  const estEl   = document.getElementById('sfEarningsEstimate');
+  if (cost <= 0) { shareEl.style.display = 'none'; return; }
+  shareEl.style.display = 'block';
+  const pct = parseInt(document.getElementById('sfSharePercent').value, 10) || 65;
+  const earned = Math.round(cost * (pct / 100) * 10) / 10;
+  estEl.textContent = `💡 Cada vez que alguém usar este modelo (${cost} créditos), recebe aprox. ${earned} créditos (${pct}%). A plataforma fica com ${cost - earned} créditos (${100 - pct}%).`;
+}
+document.getElementById('sfCreditCost')?.addEventListener('input', _updateEarningsEstimate);
+document.getElementById('sfSharePercent')?.addEventListener('input', _updateEarningsEstimate);
 
 async function submitTemplate() {
   const btn   = document.getElementById('btnSubmitForm');
@@ -1233,6 +1294,14 @@ async function submitTemplate() {
 
   btn.disabled = true; btn.textContent = '⏳ A enviar…';
   const tags = document.getElementById('sfTags').value.split(',').map(t => t.trim()).filter(Boolean);
+  // NOVO: o criador propõe o seu próprio preço em créditos e vê a sua
+  // percentagem — o admin continua a poder ajustar antes/depois de
+  // aprovar, mas já não parte de "0 créditos, sem hipótese de ganhar nada"
+  // por a opção nem existir no formulário.
+  const creditCost = submitType === 'community'
+    ? Math.min(50, Math.max(0, parseInt(document.getElementById('sfCreditCost').value, 10) || 0))
+    : 0; // templates privados não são vendidos
+  const sharePercent = Math.min(70, Math.max(60, parseInt(document.getElementById('sfSharePercent').value, 10) || 65));
   const body = {
     template_type:  submitType,
     service_type:   svc,
@@ -1242,6 +1311,8 @@ async function submitTemplate() {
     template_html:  document.getElementById('sfHtml').value.trim(),
     thumbnail_url:  document.getElementById('sfThumb').value.trim() || null,
     tags,
+    credit_cost:            creditCost,
+    author_share_percent:   sharePercent,
   };
   try {
     const r = await fetch(`${API}/submit`, {
@@ -1262,6 +1333,9 @@ async function submitTemplate() {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     document.getElementById('sfService').value = '';
+    document.getElementById('sfCreditCost').value = '0';
+    document.getElementById('sfSharePercent').value = '65';
+    _updateEarningsEstimate();
     _setPhotoStatus('', null);
     loadGallery(); loadMine();
   } catch (e) {
