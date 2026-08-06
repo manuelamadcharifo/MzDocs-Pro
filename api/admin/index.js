@@ -1981,7 +1981,10 @@ async function handleTemplates(req, res) {
         for (const f of ALLOWED_FIELDS) if (u[f] !== undefined) patch[f] = u[f];
         if (patch.credit_cost !== undefined) {
           const c = parseInt(patch.credit_cost);
-          if (!Number.isFinite(c) || c < 0 || c > 50) { results.push({ id: u.id, ok: false, error: 'credit_cost inválido (0-50)' }); continue; }
+          // Limite do projecto: nenhuma operação cobra mais de 10 créditos
+          // (ver VALID_COSTS em api/deduct-credit.js) — antes permitia até
+          // 50, acima do que o próprio endpoint de dedução aceita.
+          if (!Number.isFinite(c) || c < 0 || c > 10) { results.push({ id: u.id, ok: false, error: 'credit_cost inválido (0-10)' }); continue; }
           patch.credit_cost = c;
         }
         if (patch.author_share_percent !== undefined) {
