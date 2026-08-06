@@ -165,11 +165,74 @@ Este é um texto de demonstração que ilustra como o conteúdo aparece quando f
 Cada modelo aplica a sua própria tipografia, espaçamento e cores a este tipo de conteúdo — o objectivo desta pré-visualização é dar uma ideia fiel do resultado final.`,
 };
 
+// ── Adivinhador de valores para placeholders desconhecidos ─────────────────
+// CORRIGIDO: templates submetidos pela comunidade (via "Submeter Template")
+// usam nomes de campo livres, escolhidos pelo próprio autor — nunca vão
+// bater certo com as chaves fixas de SAMPLE_DATA (pensadas só para os 14
+// serviços oficiais). Antes, qualquer {{PLACEHOLDER}} sem correspondência
+// em SAMPLE_DATA era simplesmente apagado (regex de limpeza no fim de
+// fillTemplate), deixando o preview com espaços em branco — não "dados
+// fictícios", mas ausência de dados. Esta função tenta adivinhar, a partir
+// do NOME do placeholder (ex.: {{NOME_CLIENTE}}, {{VALOR_TOTAL}},
+// {{DATA_ASSINATURA}}), um valor moçambicano plausível — para que TODOS os
+// modelos, oficiais ou da comunidade, mostrem sempre um documento com
+// dados fictícios preenchidos, nunca campos vazios ou texto genérico.
+const _PLACEHOLDER_GUESS_RULES = [
+  [/DATA|VALIDADE|PRAZO_DATA/, 'DATA'],
+  [/^(?!.*ENTIDADE)(?!.*EMPRESA).*NOME.*|REQUERENTE|DECLARANTE|CLIENTE$|REMETENTE$|DESTINATARIO$|CANDIDATO|OUTORGANTE|PROCURADOR|LOCADOR|LOCATARIO|INQUILINO|SENHORIO|PRESTADOR|CONTRATANTE|CONTRATADO/, 'NOME'],
+  [/E[-]?MAIL/, 'EMAIL'],
+  [/CONTACTO|TELEFONE|CELULAR|WHATSAPP/, 'CONTACTO'],
+  [/\bBI\b|BILHETE|IDENTIDADE|N\.?º?_?BI/, 'BI'],
+  [/NUIT/, 'NUIT'],
+  [/VALOR|PRECO|PREÇO|MONTANTE|TOTAL|CUSTO|RENDA|SALARIO|SALÁRIO/, 'VALOR'],
+  [/ENDERECO|ENDEREÇO|MORADA|LOCALIZACAO|LOCALIZAÇÃO|RESIDENCIA|RESIDÊNCIA/, 'ENDERECO'],
+  [/\bLOCAL\b|CIDADE|PROVINCIA|PROVÍNCIA/, 'LOCAL'],
+  [/CARGO|FUNCAO|FUNÇÃO|PROFISSAO|PROFISSÃO|POSICAO|POSIÇÃO/, 'CARGO'],
+  [/EMPRESA|ENTIDADE|INSTITUICAO|INSTITUIÇÃO|ORGANIZACAO|ORGANIZAÇÃO/, 'EMPRESA'],
+  [/ASSUNTO|MOTIVO|TITULO|TÍTULO|TEMA/, 'ASSUNTO'],
+  [/CURSO|FORMACAO|FORMAÇÃO/, 'CURSO'],
+  [/REF|NUM|NUMERO|NÚMERO|CODIGO|CÓDIGO/, 'REF'],
+  [/OBJECTIVO|OBJETIVO|SUMARIO|SUMÁRIO|INTRODUCAO|INTRODUÇÃO|DESCRICAO|DESCRIÇÃO|CORPO|TEXTO|CONTEUDO|CONTEÚDO|FUNDAMENTO|CLAUSULA|CLÁUSULA|PAUTA|DELIBERACAO|DELIBERAÇÃO/, 'PARAGRAFO'],
+];
+
+const _PLACEHOLDER_GUESS_VALUES = {
+  DATA:      '28 de Junho de 2026',
+  NOME:      'Maria José Cossa',
+  EMAIL:     'mariacossa@exemplo.co.mz',
+  CONTACTO:  '+258 84 123 4567',
+  BI:        '110987654321A',
+  NUIT:      '400123456',
+  VALOR:     '15.000,00 MZN',
+  ENDERECO:  'Rua das Acácias, n.º 12, Bairro Polana Caniço, Maputo',
+  LOCAL:     'Maputo',
+  CARGO:     'Técnica Administrativa',
+  EMPRESA:   'Empresa Exemplo, Lda',
+  ASSUNTO:   'Assunto de exemplo para pré-visualização',
+  CURSO:     'Licenciatura em Gestão de Empresas',
+  REF:       '045/2026',
+  PARAGRAFO: 'Texto de exemplo com dados fictícios moçambicanos, ilustrando de forma realista como este modelo fica preenchido com o conteúdo de um documento real.',
+};
+
+function _guessPlaceholderValue(key) {
+  for (const [rx, group] of _PLACEHOLDER_GUESS_RULES) {
+    if (rx.test(key)) return _PLACEHOLDER_GUESS_VALUES[group];
+  }
+  // Sem correspondência a nenhuma regra — ainda assim devolve texto
+  // plausível em vez de deixar o campo vazio.
+  return 'Exemplo';
+}
+
 /**
  * Preenche um template HTML com os placeholders {{CHAVE}} substituídos
  * pelos dados fornecidos. Idêntico a TemplatePicker._fillTemplate — mantido
  * como função pura e independente aqui para poder ser reutilizada na
  * galeria sem instanciar o TemplatePicker completo.
+ *
+ * CORRIGIDO: qualquer {{PLACEHOLDER}} que sobre depois de aplicar `data`
+ * (frequente em templates da comunidade, com nomes de campo livres) deixava
+ * de ser apagado silenciosamente — passa a ser preenchido com um valor
+ * fictício plausível via _guessPlaceholderValue, para que a pré-visualização
+ * nunca mostre espaços em branco.
  */
 export function fillTemplate(htmlTemplate, data) {
   if (!htmlTemplate) return '';
@@ -178,7 +241,7 @@ export function fillTemplate(htmlTemplate, data) {
     const rx = new RegExp('\\{\\{' + key + '\\}\\}', 'g');
     result = result.replace(rx, value != null ? String(value) : '');
   }
-  result = result.replace(/\{\{[A-Z0-9_]+\}\}/g, '');
+  result = result.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_, key) => _guessPlaceholderValue(key));
   return result;
 }
 
