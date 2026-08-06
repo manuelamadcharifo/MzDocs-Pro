@@ -1134,6 +1134,12 @@ async function handleTemplates(action, req, res) {
     // cria templates pagos — mesmo padrão já usado pelos afiliados.
     case 'earnings':    return tplEarnings(req, res);
     case 'withdraw':    return tplWithdraw(req, res);
+    // NOVO: só afiliados ou parceiros aprovados podem VENDER templates na
+    // Galeria (a plataforma não tem como pagar royalties a quem não está
+    // associado ao projecto). Esta acção diz ao frontend se o utilizador
+    // actual pode definir preço, para mostrar (ou esconder) essa parte do
+    // formulário de submissão.
+    case 'seller-status': return tplSellerStatus(req, res);
     default:            return res.status(404).json({ error: 'Acção de template não encontrada' });
   }
 }
@@ -1181,6 +1187,43 @@ async function tplList(req, res) {
   }
 }
 
+// ── Elegibilidade para VENDER templates (créditos > 0) ─────────────────────
+// REGRA DE NEGÓCIO: a plataforma só pode pagar royalties a quem já está
+// associado ao projecto — afiliados aprovados (profiles.is_affiliate) ou
+// parceiros aprovados e activos (tabela partners, ligados à conta via
+// partners.linked_user_id — ver migration_v55). Um utilizador comum pode
+// sempre criar e submeter os seus próprios templates (privados, ou
+// públicos gratuitos), mas NUNCA lhes definir um preço em créditos.
+// Esta função é a verificação "amigável" ao nível da aplicação — a
+// garantia definitiva (que não depende de nenhum código de API estar
+// correcto) é o trigger enforce_template_credit_eligibility na base de
+// dados, que força credit_cost=0 em qualquer INSERT/UPDATE que viole esta
+// regra, seja qual for o caminho usado para lá chegar.
+async function isEligibleTemplateSeller(userId) {
+  if (!userId) return false;
+  try {
+    const profile = await selectOne('profiles', 'id', userId, 'is_affiliate');
+    if (profile?.is_affiliate) return true;
+  } catch (_) { /* ignora — trata como não elegível */ }
+  try {
+    const rows = await restRequest(
+      `partners?linked_user_id=eq.${userId}&status=eq.approved&active=eq.true&select=id&limit=1`
+    );
+    if (Array.isArray(rows) && rows.length) return true;
+  } catch (_) { /* coluna pode não existir ainda — ver migration_v55 */ }
+  return false;
+}
+
+// GET /api/templates/seller-status — usado pelo formulário "Submeter
+// Template" para decidir se mostra a secção de preço/créditos ou uma
+// mensagem a explicar como se tornar elegível para vender.
+async function tplSellerStatus(req, res) {
+  const user = await getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Sessão inválida' });
+  const eligible = await isEligibleTemplateSeller(user.id);
+  return res.status(200).json({ success: true, eligible });
+}
+
 async function tplSubmit(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   const user = await getAuthUser(req);
@@ -1214,10 +1257,17 @@ async function tplSubmit(req, res) {
   // a poder rever/ajustar o preço em créditos antes de aprovar (ver
   // handleTemplates), tal como já acontecia com templates "premium".
   // Templates privados nunca são vendidos (credit_cost forçado a 0).
+  // NOVO: só afiliados/parceiros aprovados podem vender templates — um
+  // utilizador comum pode sempre submeter (privado, ou público gratuito),
+  // mas nunca com preço em créditos. Isto é reforçado outra vez ao nível
+  // da base de dados (trigger), mas verifica-se aqui também para devolver
+  // uma mensagem clara em vez de o preço ser simplesmente ignorado.
+  const canSell = template_type === 'private' ? false : await isEligibleTemplateSeller(user.id);
+
   const rawCost = parseInt(body.credit_cost, 10);
-  const credit_cost = template_type === 'private'
-    ? 0
-    : (Number.isFinite(rawCost) ? Math.min(50, Math.max(0, rawCost)) : 0);
+  const requestedCost = Number.isFinite(rawCost) ? Math.min(50, Math.max(0, rawCost)) : 0;
+  const credit_cost = canSell ? requestedCost : 0;
+  const blockedSale  = !canSell && requestedCost > 0; // pediu preço mas não é elegível
   const rawShare = parseFloat(body.author_share_percent);
   const author_share_percent = Number.isFinite(rawShare)
     ? Math.min(70, Math.max(60, rawShare))
@@ -1256,9 +1306,11 @@ async function tplSubmit(req, res) {
     success: true, id: data.id, share_token,
     message: isPrivate
       ? 'Template privado guardado! Já pode partilhar o link.'
-      : credit_cost > 0
-        ? `Template submetido com preço de ${credit_cost} créditos (${author_share_percent}% para si). Aguarda aprovação.`
-        : 'Template submetido! Aguarda aprovação.',
+      : blockedSale
+        ? 'Template submetido gratuitamente. Só afiliados ou parceiros aprovados podem vender templates na plataforma — torne-se afiliado para poder definir um preço da próxima vez.'
+        : credit_cost > 0
+          ? `Template submetido com preço de ${credit_cost} créditos (${author_share_percent}% para si). Aguarda aprovação.`
+          : 'Template submetido! Aguarda aprovação.',
   });
 }
 
