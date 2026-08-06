@@ -404,7 +404,8 @@ export class TemplatePicker {
     // v38: marcar grátis/pago. Templates pré-definidos da biblioteca (sem
     // _fromMarketplace) são sempre gratuitos; templates do marketplace já
     // vêm com _isFree calculado em TemplateLibrary.js a partir do
-    // credit_cost/price_mzn definidos pelo criador.
+    // credit_cost definido pelo criador (preço sempre em créditos desde a
+    // migration_v39 — nunca um valor MZN gravado à parte).
     allTemplates.forEach(t => { if (t._isFree === undefined) t._isFree = true; });
 
     // Actualizar contagens no mini filtro
@@ -454,7 +455,7 @@ export class TemplatePicker {
             <div class="tpl-tl" style="background:${t.preview?.accent||'#3B82F6'};opacity:.2;width:80%"></div>
             <div class="tpl-tl" style="background:${t.preview?.accent||'#3B82F6'};opacity:.15;width:90%"></div>
           </div>
-          ${!t._isFree ? `<div class="tpl-price-badge paid">💰 ${t.price_mzn > 0 ? t.price_mzn + ' MZN' : (t.credit_cost || 0) + ' créd.'}</div>` : ''}
+          ${!t._isFree ? `<div class="tpl-price-badge paid">💰 ${t.credit_cost || 0} créd.</div>` : ''}
           ${t._fromMarketplace ? '<div style="position:absolute;top:3px;right:3px;background:#f59e0b;color:#fff;font-size:7px;font-weight:800;padding:1px 5px;border-radius:4px">🌐</div>' : ''}
           ${t._isCustom ? '<div style="position:absolute;top:3px;right:3px;background:#10b981;color:#fff;font-size:7px;font-weight:800;padding:1px 5px;border-radius:4px">MEU</div>' : ''}
         </div>
@@ -492,7 +493,7 @@ export class TemplatePicker {
     const bar = document.getElementById('tplSelBar');
     if (bar) {
       const priceTag = !tpl._isFree
-        ? ` · 💰 ${tpl.price_mzn > 0 ? tpl.price_mzn + ' MZN' : (tpl.credit_cost || 0) + ' créditos'}`
+        ? ` · 💰 ${tpl.credit_cost || 0} créditos`
         : '';
       bar.textContent = `${tpl.name} — ${tpl.description || ''}${priceTag}`;
     }

@@ -233,15 +233,28 @@ function _guessPlaceholderValue(key) {
  * de ser apagado silenciosamente — passa a ser preenchido com um valor
  * fictício plausível via _guessPlaceholderValue, para que a pré-visualização
  * nunca mostre espaços em branco.
+ *
+ * CORRIGIDO (Ago/2026): a regex de limpeza final só reconhecia chaves em
+ * MAIÚSCULAS (`[A-Z0-9_]+`), porque _PLACEHOLDER_GUESS_RULES foi escrito a
+ * pensar em nomes como {{NOME_CLIENTE}}. Templates da comunidade submetidos
+ * com variáveis em minúsculas ou mistas — ex.: {{nome_completo}},
+ * {{destinatario}}, {{instituicao}}, {{local_emissao}} — nunca batiam
+ * certo com essa regex, pelo que ficavam por preencher e apareciam tal e
+ * qual ("{{nome_completo}}") no preview da galeria E no preview do admin
+ * (👁️), em vez dos dados fictícios prometidos. Agora a extracção aceita
+ * qualquer capitalização (flag "i") e a chave é normalizada para
+ * maiúsculas antes de se tentar adivinhar o valor, para que as regras já
+ * existentes em _PLACEHOLDER_GUESS_RULES continuem a funcionar sem
+ * alterações.
  */
 export function fillTemplate(htmlTemplate, data) {
   if (!htmlTemplate) return '';
   let result = htmlTemplate;
   for (const [key, value] of Object.entries(data || {})) {
-    const rx = new RegExp('\\{\\{' + key + '\\}\\}', 'g');
+    const rx = new RegExp('\\{\\{' + key + '\\}\\}', 'gi');
     result = result.replace(rx, value != null ? String(value) : '');
   }
-  result = result.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_, key) => _guessPlaceholderValue(key));
+  result = result.replace(/\{\{([A-Za-z0-9_]+)\}\}/g, (_, key) => _guessPlaceholderValue(key.toUpperCase()));
   return result;
 }
 

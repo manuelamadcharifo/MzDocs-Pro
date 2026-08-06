@@ -131,9 +131,19 @@ export async function loadPublicTemplatesFromSupabase(serviceKey) {
     let userOwnData = [];
 
     // 1. Templates públicos aprovados
+    // CORRIGIDO (Ago/2026): esta query pedia a coluna price_mzn, removida
+    // da tabela templates_custom pela migration_v39 (o preço passou a ser
+    // SEMPRE em créditos — credit_cost — com o equivalente em MZN
+    // calculado dinamicamente, nunca gravado). Pedir uma coluna
+    // inexistente faz o PostgREST devolver erro 400 em AMBAS as queries
+    // (esta e a dos templates do próprio utilizador, abaixo) — pubErr/
+    // ownErr ficavam sempre preenchidos, e a função devolvia sempre uma
+    // lista vazia. Resultado: nenhum template do marketplace (comunidade
+    // ou próprio) alguma vez aparecia no selector "Escolher Modelo",
+    // silenciosamente, sem qualquer erro visível ao utilizador.
     const { data: pub, error: pubErr } = await supabase
       .from('templates_custom')
-      .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id, credit_cost, price_mzn')
+      .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id, credit_cost')
       .eq('service_type', serviceKey)
       .eq('status', 'approved')
       .eq('is_public', true)
@@ -146,7 +156,7 @@ export async function loadPublicTemplatesFromSupabase(serviceKey) {
     if (userId) {
       const { data: own, error: ownErr } = await supabase
         .from('templates_custom')
-        .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id, credit_cost, price_mzn')
+        .select('id, template_name, description, template_html, template_css, service_type, downloads, rating_sum, rating_count, status, user_id, credit_cost')
         .eq('service_type', serviceKey)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -191,10 +201,12 @@ export async function loadPublicTemplatesFromSupabase(serviceKey) {
         _downloads:   row.downloads || 0,
         // NOVO (v38 — filtro grátis/pago no selector de modelos): um
         // template do marketplace é pago se o criador definiu preço em
-        // créditos (credit_cost) ou em MZN (price_mzn) ao submetê-lo.
+        // créditos (credit_cost) ao submetê-lo.
+        // CORRIGIDO (Ago/2026): removida a referência a price_mzn — essa
+        // coluna já não existe (migration_v39); o preço é sempre em
+        // créditos, nunca um valor MZN gravado directamente.
         credit_cost:  row.credit_cost || 0,
-        price_mzn:    row.price_mzn || 0,
-        _isFree:      !((row.credit_cost || 0) > 0 || (row.price_mzn || 0) > 0),
+        _isFree:      !((row.credit_cost || 0) > 0),
       };
 
       addSessionTemplate(serviceKey, tpl);
