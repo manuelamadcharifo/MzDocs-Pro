@@ -159,6 +159,10 @@
       "destination": "/api/misc?_ns=templates&_a=mine"
     },
     {
+      "source": "/api/templates/seller-status",
+      "destination": "/api/misc?_ns=templates&_a=seller-status"
+    },
+    {
       "source": "/api/templates/saved",
       "destination": "/api/misc?_ns=templates&_a=saved"
     },
