@@ -470,7 +470,7 @@
            de ganhos quando o criador define um preço > 0. A percentagem
            para o criador é sempre entre 60% e 70% (o resto fica para a
            plataforma) — o mesmo intervalo já validado no servidor. -->
-      <div id="sfPricingField">
+      <div id="sfPricingField" style="display:none">
         <div class="tpl-field">
           <label>💰 Preço do seu template (opcional)</label>
           <p style="font-size:12px;color:var(--dim);margin:0 0 10px">Se definir um preço, quem usar o seu template paga em créditos — e uma parte fica para si. Deixe em 0 para partilhar gratuitamente.</p>
@@ -483,6 +483,16 @@
             <span style="font-size:12px;color:var(--dim)">% (60–70%; o resto fica para a plataforma)</span>
           </div>
           <p id="sfEarningsEstimate" style="font-size:12.5px;font-weight:700;color:#16a34a;margin-top:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px"></p>
+        </div>
+      </div>
+
+      <!-- NOVO: mostrado em vez do campo de preço quando o utilizador NÃO é
+           afiliado nem parceiro aprovado — pode submeter na mesma
+           (gratuitamente), mas não pode vender. -->
+      <div class="tpl-field" id="sfSellerGate" style="display:none">
+        <div style="font-size:12.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;line-height:1.5">
+          🔒 <strong>Este template será partilhado gratuitamente.</strong> Só afiliados ou parceiros aprovados podem definir um preço em créditos e receber uma parte de cada venda —
+          <a href="/afiliado.html" target="_blank" style="color:#2563eb;font-weight:700">torne-se afiliado</a> para poder vender os seus próprios templates no futuro.
         </div>
       </div>
 
@@ -1176,11 +1186,34 @@ function openSubmit() {
   if (!currentUser) { notify('Faça login para submeter templates','warning'); return; }
   document.getElementById('submitOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  _loadSellerStatus();
 }
 function closeSubmit() {
   document.getElementById('submitOverlay').classList.remove('open');
   document.body.style.overflow = '';
   _setPhotoStatus('', null);
+}
+
+// NOVO: só afiliados ou parceiros aprovados podem vender templates — a
+// plataforma não tem como pagar royalties a quem não está associado ao
+// projecto. Um utilizador comum continua a poder submeter os seus
+// templates (privados, ou públicos gratuitos), mas o formulário deixa de
+// mostrar a opção de preço e explica como se tornar elegível.
+let _canSellTemplates = false;
+async function _loadSellerStatus() {
+  const field = document.getElementById('sfPricingField');
+  const gate  = document.getElementById('sfSellerGate');
+  field.style.display = 'none';
+  gate.style.display  = 'none';
+  try {
+    const r = await fetch(`${API}/seller-status`, { headers: authHeaders() });
+    const d = await r.json();
+    _canSellTemplates = !!d.eligible;
+  } catch { _canSellTemplates = false; }
+  if (submitType === 'community') {
+    if (_canSellTemplates) field.style.display = 'block';
+    else gate.style.display = 'block';
+  }
 }
 
 // ── Extrair template a partir de foto/imagem (igual a "Escolher Modelo") ──
@@ -1266,7 +1299,11 @@ window.selectType = function(val, el) {
   document.getElementById('privateInfo').style.display = val === 'private' ? 'block' : 'none';
   // Preço só faz sentido para templates de Comunidade — um template
   // privado é só para o próprio (ou quem tiver o link), não é "vendido".
-  document.getElementById('sfPricingField').style.display = val === 'community' ? 'block' : 'none';
+  // E, mesmo em Comunidade, só aparece para quem já é elegível para vender
+  // (afiliado ou parceiro aprovado) — ver _loadSellerStatus().
+  const showPricing = val === 'community' && _canSellTemplates;
+  document.getElementById('sfPricingField').style.display = showPricing ? 'block' : 'none';
+  document.getElementById('sfSellerGate').style.display = (val === 'community' && !_canSellTemplates) ? 'block' : 'none';
   _updateEarningsEstimate();
 };
 
@@ -1298,9 +1335,9 @@ async function submitTemplate() {
   // percentagem — o admin continua a poder ajustar antes/depois de
   // aprovar, mas já não parte de "0 créditos, sem hipótese de ganhar nada"
   // por a opção nem existir no formulário.
-  const creditCost = submitType === 'community'
+  const creditCost = (submitType === 'community' && _canSellTemplates)
     ? Math.min(50, Math.max(0, parseInt(document.getElementById('sfCreditCost').value, 10) || 0))
-    : 0; // templates privados não são vendidos
+    : 0; // privados nunca são vendidos; utilizadores não elegíveis partilham sempre grátis
   const sharePercent = Math.min(70, Math.max(60, parseInt(document.getElementById('sfSharePercent').value, 10) || 65));
   const body = {
     template_type:  submitType,
