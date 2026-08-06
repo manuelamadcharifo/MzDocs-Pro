@@ -469,12 +469,17 @@
            de receita. Grátis por omissão (0 créditos); só aparece a secção
            de ganhos quando o criador define um preço > 0. A percentagem
            para o criador é sempre entre 60% e 70% (o resto fica para a
-           plataforma) — o mesmo intervalo já validado no servidor. -->
+           plataforma) — o mesmo intervalo já validado no servidor.
+           CORRIGIDO (Ago/2026): o máximo permitido aqui era 50 créditos,
+           mas o limite real do projecto (VALID_COSTS em
+           api/deduct-credit.js — o mesmo endpoint que debita o crédito
+           quando alguém usa o template) é 10. Um template aprovado acima
+           de 10 créditos nunca conseguiria ser cobrado. -->
       <div id="sfPricingField" style="display:none">
         <div class="tpl-field">
           <label>💰 Preço do seu template (opcional)</label>
-          <p style="font-size:12px;color:var(--dim);margin:0 0 10px">Se definir um preço, quem usar o seu template paga em créditos — e uma parte fica para si. Deixe em 0 para partilhar gratuitamente.</p>
-          <input type="number" id="sfCreditCost" min="0" max="50" step="1" value="0" placeholder="0 = gratuito"/>
+          <p style="font-size:12px;color:var(--dim);margin:0 0 10px">Se definir um preço, quem usar o seu template paga em créditos — e uma parte fica para si. Deixe em 0 para partilhar gratuitamente. Máximo: 10 créditos.</p>
+          <input type="number" id="sfCreditCost" min="0" max="10" step="1" value="0" placeholder="0 = gratuito"/>
         </div>
         <div class="tpl-field" id="sfShareField" style="display:none">
           <label>A sua percentagem sobre cada venda</label>
@@ -482,6 +487,12 @@
             <input type="number" id="sfSharePercent" min="60" max="70" step="1" value="65" style="max-width:90px"/>
             <span style="font-size:12px;color:var(--dim)">% (60–70%; o resto fica para a plataforma)</span>
           </div>
+          <!-- NOVO: equivalente em MZN ao lado dos créditos, tal como o
+               admin já vê ("≈ X MZN") — calculado ao vivo a partir da
+               mesma taxa dinâmica (mzn_per_credit) devolvida por
+               /api/templates/seller-status, para o criador perceber
+               desde já quanto vai realmente ganhar/quanto fica para a
+               plataforma, não só em créditos abstractos. -->
           <p id="sfEarningsEstimate" style="font-size:12.5px;font-weight:700;color:#16a34a;margin-top:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px"></p>
         </div>
       </div>
@@ -1200,6 +1211,10 @@ function closeSubmit() {
 // templates (privados, ou públicos gratuitos), mas o formulário deixa de
 // mostrar a opção de preço e explica como se tornar elegível.
 let _canSellTemplates = false;
+// NOVO: taxa dinâmica MZN/crédito devolvida por /api/templates/seller-status
+// (mesma fonte de verdade que o admin usa em AdminApp.js/_mznPerCredit) —
+// usada só para mostrar "≈ X MZN" ao criador, nunca gravada.
+let _mznPerCreditPublic = 0;
 async function _loadSellerStatus() {
   const field = document.getElementById('sfPricingField');
   const gate  = document.getElementById('sfSellerGate');
@@ -1209,6 +1224,7 @@ async function _loadSellerStatus() {
     const r = await fetch(`${API}/seller-status`, { headers: authHeaders() });
     const d = await r.json();
     _canSellTemplates = !!d.eligible;
+    _mznPerCreditPublic = d.mzn_per_credit || 0;
   } catch { _canSellTemplates = false; }
   if (submitType === 'community') {
     if (_canSellTemplates) field.style.display = 'block';
@@ -1309,6 +1325,10 @@ window.selectType = function(val, el) {
 
 // NOVO: mostra ao criador, em tempo real, quanto vai receber por cada uso
 // pago do seu template — antes esta informação só era visível ao admin.
+// CORRIGIDO (Ago/2026): passou a mostrar também o equivalente em MZN
+// (≈ X MZN), tal como o admin já vê em AdminApp.js — antes só mostrava
+// créditos, e o criador não tinha ideia de quanto isso valia em dinheiro
+// real (o mesmo valor que pode depois levantar via M-Pesa/e-Mola/mKesh).
 function _updateEarningsEstimate() {
   const cost    = parseInt(document.getElementById('sfCreditCost').value, 10) || 0;
   const shareEl = document.getElementById('sfShareField');
@@ -1317,7 +1337,11 @@ function _updateEarningsEstimate() {
   shareEl.style.display = 'block';
   const pct = parseInt(document.getElementById('sfSharePercent').value, 10) || 65;
   const earned = Math.round(cost * (pct / 100) * 10) / 10;
-  estEl.textContent = `💡 Cada vez que alguém usar este modelo (${cost} créditos), recebe aprox. ${earned} créditos (${pct}%). A plataforma fica com ${cost - earned} créditos (${100 - pct}%).`;
+  const platformCredits = Math.round((cost - earned) * 10) / 10;
+  const totalMzn    = Math.round(cost * _mznPerCreditPublic * 100) / 100;
+  const earnedMzn   = Math.round(earned * _mznPerCreditPublic * 100) / 100;
+  const platformMzn = Math.round((totalMzn - earnedMzn) * 100) / 100;
+  estEl.textContent = `💡 Cada vez que alguém usar este modelo (${cost} créditos ≈ ${totalMzn} MZN), recebe aprox. ${earned} créditos ≈ ${earnedMzn} MZN (${pct}%). A plataforma fica com ${platformCredits} créditos ≈ ${platformMzn} MZN (${100 - pct}%).`;
 }
 document.getElementById('sfCreditCost')?.addEventListener('input', _updateEarningsEstimate);
 document.getElementById('sfSharePercent')?.addEventListener('input', _updateEarningsEstimate);
@@ -1335,8 +1359,10 @@ async function submitTemplate() {
   // percentagem — o admin continua a poder ajustar antes/depois de
   // aprovar, mas já não parte de "0 créditos, sem hipótese de ganhar nada"
   // por a opção nem existir no formulário.
+  // CORRIGIDO: limite alinhado com o resto do projecto — nenhuma operação
+  // cobra mais de 10 créditos (ver VALID_COSTS em api/deduct-credit.js).
   const creditCost = (submitType === 'community' && _canSellTemplates)
-    ? Math.min(50, Math.max(0, parseInt(document.getElementById('sfCreditCost').value, 10) || 0))
+    ? Math.min(10, Math.max(0, parseInt(document.getElementById('sfCreditCost').value, 10) || 0))
     : 0; // privados nunca são vendidos; utilizadores não elegíveis partilham sempre grátis
   const sharePercent = Math.min(70, Math.max(60, parseInt(document.getElementById('sfSharePercent').value, 10) || 65));
   const body = {
