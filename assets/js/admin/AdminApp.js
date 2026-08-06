@@ -3,6 +3,13 @@
 
 import { authManager } from '../auth/AuthManager.js';
 import { sanitizeHtml, escapeHtml } from '../utils/Sanitizer.js';
+// CORRIGIDO (Ago/2026): o preview de templates no admin (miniatura na
+// grelha e janela 👁️ "ver completo") escrevia tpl.template_html tal e
+// qual, sem substituir os placeholders {{...}} — mostrava a "string" do
+// template ({{nome_completo}}, {{destinatario}}, etc.) em vez de um
+// documento com dados fictícios, ao contrário da galeria pública
+// (templates.html), que já usa este mesmo motor. Reutiliza-se aqui.
+import { fillTemplate, getSampleData } from '../marketplace/SampleData.js';
 
 class AdminApp {
     constructor() {
@@ -3402,7 +3409,11 @@ USING (EXISTS (
                 const safeDesc    = escapeHtml(tpl.description || '—');
                 const safeService = escapeHtml(tpl.service_type || '');
                 const previewCSS = tpl.template_css || 'body{font-family:sans-serif;font-size:10pt;padding:10mm;}';
-                const previewHTML = (tpl.template_html || '').slice(0, 2000);
+                // CORRIGIDO: antes mostrava tpl.template_html cru (com
+                // {{placeholders}} visíveis); agora preenche com os mesmos
+                // dados fictícios de exemplo usados na galeria pública.
+                const sampleData  = getSampleData(tpl.service_type, tpl.template_name, tpl.description);
+                const previewHTML = fillTemplate(tpl.template_html || '', sampleData).slice(0, 4000);
                 const date = new Date(tpl.created_at).toLocaleDateString('pt');
 
                 return `<div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.07)">
@@ -3427,7 +3438,7 @@ USING (EXISTS (
                          plataforma). -->
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;flex-wrap:wrap">
                       <label style="font-size:11px;font-weight:700;color:#475569;white-space:nowrap">⭐ Créditos:</label>
-                      <input type="number" id="tplCost-${tpl.id}" value="${tpl.credit_cost || 0}" min="0" max="50" step="1"
+                      <input type="number" id="tplCost-${tpl.id}" value="${tpl.credit_cost || 0}" min="0" max="10" step="1"
                         data-input-action="updateTplMznEstimate" data-id="${escapeHtml(tpl.id)}"
                         style="width:54px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:700;text-align:center"/>
                       <span id="tplMznEst-${tpl.id}" style="font-size:10.5px;color:#94a3b8;white-space:nowrap">≈ ${tpl.mzn_equivalent || 0} MZN</span>
@@ -3516,8 +3527,10 @@ USING (EXISTS (
         const shareInput = document.getElementById(`tplShare-${id}`);
         if (!costInput) return;
         const cost = parseInt(costInput.value, 10);
-        if (!Number.isFinite(cost) || cost < 0 || cost > 50) {
-            this._notify('Créditos deve ser um número entre 0 e 50.', 'error');
+        // Limite do projecto: nenhuma operação (documento ou template) cobra
+        // mais de 10 créditos — ver VALID_COSTS em api/deduct-credit.js.
+        if (!Number.isFinite(cost) || cost < 0 || cost > 10) {
+            this._notify('Créditos deve ser um número entre 0 e 10.', 'error');
             return;
         }
         const share = parseFloat(shareInput?.value ?? 65);
@@ -3568,13 +3581,19 @@ USING (EXISTS (
         // sanitizar aqui antes de escrever, para impedir que um template
         // malicioso execute JavaScript na sessão real do admin.
         this.supabase.from('templates_custom')
-            .select('template_name, template_html, template_css')
+            .select('template_name, template_html, template_css, service_type, description')
             .eq('id', id)
             .single()
             .then(({ data, error }) => {
                 if (error || !data) return;
                 const safeName = escapeHtml(data.template_name || '');
-                const safeHtml = sanitizeHtml(data.template_html || '<p>Sem conteúdo HTML</p>');
+                // CORRIGIDO: preenche com dados fictícios (mesmo motor da
+                // galeria) antes de sanitizar/escrever — sem isto, o preview
+                // completo mostrava os {{placeholders}} literais do template
+                // em vez de um documento de exemplo.
+                const sampleData = getSampleData(data.service_type, data.template_name, data.description);
+                const filledHtml = fillTemplate(data.template_html || '', sampleData);
+                const safeHtml = sanitizeHtml(filledHtml || '<p>Sem conteúdo HTML</p>');
                 const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${safeName}</title>
 <style>*{box-sizing:border-box;}${data.template_css || ''}</style></head>
 <body>${safeHtml}</body></html>`;
