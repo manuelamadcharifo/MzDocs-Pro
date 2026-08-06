@@ -1221,7 +1221,19 @@ async function tplSellerStatus(req, res) {
   const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Sessão inválida' });
   const eligible = await isEligibleTemplateSeller(user.id);
-  return res.status(200).json({ success: true, eligible });
+  // NOVO: devolve também a taxa MZN/crédito em vigor, para o formulário
+  // "Submeter Template" mostrar "≈ X MZN" ao vivo enquanto o criador define
+  // o preço — o mesmo cálculo que o admin já vê em /api/admin/templates
+  // (mzn_per_credit), calculado a partir dos pacotes de créditos activos.
+  let mznPerCredit = 0;
+  try {
+    const packages = await loadPackagesFromSettings();
+    mznPerCredit = estimateMznPerCredit(packages);
+  } catch (_) { /* falha a obter a taxa não deve bloquear o resto do formulário */ }
+  return res.status(200).json({
+    success: true, eligible,
+    mzn_per_credit: Math.round(mznPerCredit * 100) / 100,
+  });
 }
 
 async function tplSubmit(req, res) {
@@ -1265,7 +1277,10 @@ async function tplSubmit(req, res) {
   const canSell = template_type === 'private' ? false : await isEligibleTemplateSeller(user.id);
 
   const rawCost = parseInt(body.credit_cost, 10);
-  const requestedCost = Number.isFinite(rawCost) ? Math.min(50, Math.max(0, rawCost)) : 0;
+  // Limite do projecto: nenhuma operação cobra mais de 10 créditos (ver
+  // VALID_COSTS em api/deduct-credit.js) — antes permitia até 50, um
+  // template aprovado com esse preço nunca poderia sequer ser debitado.
+  const requestedCost = Number.isFinite(rawCost) ? Math.min(10, Math.max(0, rawCost)) : 0;
   const credit_cost = canSell ? requestedCost : 0;
   const blockedSale  = !canSell && requestedCost > 0; // pediu preço mas não é elegível
   const rawShare = parseFloat(body.author_share_percent);

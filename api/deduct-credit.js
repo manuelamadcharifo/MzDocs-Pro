@@ -31,11 +31,10 @@ const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 // dessa lista caía silenciosamente no fallback de 1 crédito (ver linha
 // "VALID_COSTS.includes(rawCost) ? rawCost : 1" abaixo), cobrando menos
 // do que o admin definiu. Passa a aceitar-se 1-10, faixa suficiente para
-// a variação de preço de templates (a validação em api/admin/index.js
-// → handleTemplates limita credit_cost a 0-50 na definição do preço, mas
-// o consumo normal de documentos/templates nunca deve exceder 10 créditos
-// numa única operação — isto continua a proteger contra valores anómalos
-// vindos de um cliente comprometido).
+// a variação de preço de templates (a validação em api/admin/index.js e
+// api/misc.js → tplSubmit/handleTemplates agora também limita credit_cost
+// a 0-10, alinhada com este mesmo limite — ver migration_v56, que reforça
+// o mesmo tecto ao nível da base de dados).
 const VALID_COSTS    = Array.from({ length: 10 }, (_, i) => i + 1); // 1 a 10 créditos por operação
 
 module.exports = async function handler(req, res) {
