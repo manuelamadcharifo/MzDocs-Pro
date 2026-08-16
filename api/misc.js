@@ -2195,25 +2195,35 @@ async function handleOcrAnalyze(req, res) {
   const hasImage = images.length > 0 && !!mimeType?.startsWith('image/');
   const isMultiPage = images.length > 1;
 
+  // CORRIGIDO (bug crítico de "não consegue ler manuscritos"): a transcrição
+  // completa ("transcript") só era pedida quando havia MAIS DE 1 página
+  // (isMultiPage). No serviço "transcricao" (Digitalizar Documento), o
+  // utilizador pode perfeitamente digitalizar UMA única página de cada vez
+  // — nesse caso, antes desta correcção, a IA nunca era instruída a
+  // transcrever o conteúdo manuscrito, só a preencher o campo opcional
+  // "titulo". Agora, sempre que o serviço for "transcricao", pedimos a
+  // transcrição completa independentemente do nº de páginas enviadas.
+  const wantsTranscript = isMultiPage || serviceType === 'transcricao';
+
   const schemaDesc = schema.map(f => `- ${f.id}: "${f.label}" (${f.type})`).join('\n');
 
-  // NOVO: com várias páginas, além de extrair os campos do formulário,
-  // pedimos também a TRANSCRIÇÃO integral do texto manuscrito (em ordem de
-  // leitura, todas as páginas), para servir de base ao documento final —
-  // sem isto, um rascunho de várias páginas só contribuía com os metadados
-  // da capa (tema/nível/disciplina), perdendo o conteúdo que o aluno
-  // efectivamente escreveu.
-  const transcriptInstructions = isMultiPage
-    ? `\n- Além dos campos, transcreve TAMBÉM o texto manuscrito de TODAS as páginas, pela ordem em que foram fornecidas, para o campo "transcript" (junta as páginas num só texto corrido, mantendo parágrafos)\n`
+  // NOVO: com várias páginas (ou no serviço de digitalização/transcrição),
+  // além de extrair os campos do formulário, pedimos também a TRANSCRIÇÃO
+  // integral do texto manuscrito (em ordem de leitura, todas as páginas),
+  // para servir de base ao documento final — sem isto, um rascunho só
+  // contribuía com os metadados da capa (tema/nível/disciplina), perdendo
+  // o conteúdo que o utilizador efectivamente escreveu.
+  const transcriptInstructions = wantsTranscript
+    ? `\n- Além dos campos, transcreve TAMBÉM o texto manuscrito de TODAS as páginas, pela ordem em que foram fornecidas, para o campo "transcript" (junta as páginas num só texto corrido, mantendo parágrafos). Faz isto mesmo que a letra seja difícil de ler — faz o teu melhor esforço, e usa [ILEGÍVEL] apenas nas palavras realmente impossíveis de decifrar.\n`
     : '';
-  const transcriptFormat = isMultiPage ? `,"transcript":"texto completo transcrito de todas as páginas"` : '';
+  const transcriptFormat = wantsTranscript ? `,"transcript":"texto completo transcrito de todas as páginas"` : '';
 
-  const userPrompt = `És um especialista em extracção de dados de documentos moçambicanos.\n${ocrText ? `TEXTO EXTRAÍDO DO DOCUMENTO:\n${ocrText.slice(0, 2000)}\n` : ''}\nTIPO DE DOCUMENTO: ${serviceType}\n\nCAMPOS A EXTRAIR:\n${schemaDesc}\n\nINSTRUÇÕES:\n- Analisa ${hasImage ? (isMultiPage ? `as ${images.length} imagens (páginas do mesmo rascunho) e o texto` : 'a imagem e o texto') : 'o texto'} cuidadosamente\n- Para cada campo, extrai o valor exacto que aparece no documento\n- Se o campo não existir, inclui-o em "missing"${transcriptInstructions}- Responde APENAS com JSON válido, sem markdown, sem explicações\n\nFORMATO OBRIGATÓRIO:\n{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":["campo_ausente"]${transcriptFormat}}`;
+  const userPrompt = `És um especialista em extracção de dados de documentos moçambicanos.\n${ocrText ? `TEXTO EXTRAÍDO DO DOCUMENTO:\n${ocrText.slice(0, 2000)}\n` : ''}\nTIPO DE DOCUMENTO: ${serviceType}\n\nCAMPOS A EXTRAIR:\n${schemaDesc}\n\nINSTRUÇÕES:\n- Analisa ${hasImage ? (isMultiPage ? `as ${images.length} imagens (páginas do mesmo rascunho) e o texto` : 'a imagem e o texto') : 'o texto'} cuidadosamente\n- Para cada campo, extrai o valor exacto que aparece no documento\n- Se o campo não existir, inclui-o em "missing" (isto é normal e não é um erro — nem todos os documentos têm todos os campos)${transcriptInstructions}- Responde APENAS com JSON válido, sem markdown, sem explicações\n\nFORMATO OBRIGATÓRIO:\n{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":["campo_ausente"]${transcriptFormat}}`;
 
-  // Transcrever várias páginas manuscritas produz uma resposta bem maior do
-  // que só os campos do formulário — sem aumentar o limite, o JSON saía
-  // cortado a meio e falhava o parse.
-  const maxTokens = isMultiPage ? 4000 : 1500;
+  // Transcrever páginas manuscritas produz uma resposta bem maior do que só
+  // os campos do formulário — sem aumentar o limite, o JSON saía cortado a
+  // meio e falhava o parse.
+  const maxTokens = wantsTranscript ? 4000 : 1500;
 
   if (process.env.GROQ_API_KEY) {
     const visionModels = hasImage
@@ -2233,7 +2243,7 @@ async function handleOcrAnalyze(req, res) {
           const d = await r.json();
           if (d.error) { console.warn('[ocr-analyze] Groq model error:', model, d.error?.message); continue; }
           const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
-          if (parsed?.fields && Object.keys(parsed.fields).length > 0) return res.status(200).json(parsed);
+          if (_hasUsefulOcrResult(parsed)) return res.status(200).json(parsed);
         }
       } catch (e) { console.warn('[ocr-analyze] Groq exception:', model, e.message); }
     }
@@ -2250,7 +2260,7 @@ async function handleOcrAnalyze(req, res) {
         if (r.ok) {
           const d = await r.json();
           const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
-          if (parsed?.fields && Object.keys(parsed.fields).length > 0) return res.status(200).json(parsed);
+          if (_hasUsefulOcrResult(parsed)) return res.status(200).json(parsed);
         }
       } catch (e) { console.warn('[ocr-analyze] Gemini exception:', e.message); }
     }
@@ -2269,7 +2279,7 @@ async function handleOcrAnalyze(req, res) {
       if (r.ok) {
         const d = await r.json();
         const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
-        if (parsed?.fields && Object.keys(parsed.fields).length > 0) return res.status(200).json(parsed);
+        if (_hasUsefulOcrResult(parsed)) return res.status(200).json(parsed);
       }
     } catch (e) { console.warn('[ocr-analyze] OpenRouter:', e.message); }
   }
@@ -2280,6 +2290,27 @@ async function handleOcrAnalyze(req, res) {
 
 function _safeJSON(raw) {
   try { return JSON.parse(raw.replace(/```json|```/g, '').trim()); } catch (_) { return null; }
+}
+
+// CORRIGIDO (bug crítico): antes, uma resposta só era aceite como válida se
+// `fields` tivesse pelo menos 1 campo preenchido — `if (parsed?.fields &&
+// Object.keys(parsed.fields).length > 0)`. Isto DESCARTAVA respostas
+// perfeitamente válidas sempre que a IA não encontrava nenhum dos campos do
+// formulário (ex.: notas manuscritas sem um "título" claro, para o serviço
+// "transcricao"/Digitalizar Documento), MESMO QUE a IA tivesse conseguido
+// transcrever todo o texto manuscrito no campo "transcript". O resultado:
+// o texto transcrito era deitado fora, o pipeline caía no fallback final
+// ({fields:{}, missing:[...]}, sem "transcript"), e o utilizador via
+// "Não foi possível extrair dados. Preencha manualmente" mesmo quando a
+// leitura do manuscrito tinha, na realidade, funcionado.
+//
+// Agora uma resposta é considerada válida (e devolvida) se tiver PELO MENOS
+// UM dos dois: campos preenchidos OU uma transcrição não-vazia.
+function _hasUsefulOcrResult(parsed) {
+  if (!parsed || typeof parsed !== 'object') return false;
+  const hasFields     = !!parsed.fields && Object.keys(parsed.fields).length > 0;
+  const hasTranscript = typeof parsed.transcript === 'string' && parsed.transcript.trim().length > 0;
+  return hasFields || hasTranscript;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
