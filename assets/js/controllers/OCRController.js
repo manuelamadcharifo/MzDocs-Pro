@@ -156,9 +156,18 @@ export class OCRController {
 
       if (ocrResultBox) ocrResultBox.style.display = 'block';
 
-      // Notificação correcta: basear no sucesso real da IA, não no Tesseract
+      // Notificação correcta: basear no sucesso real da IA, não no Tesseract.
+      // CORRIGIDO: serviços como "transcricao" (Digitalizar Documento) têm
+      // poucos ou nenhum campo de formulário para preencher (fieldCount pode
+      // legitimamente ser 0 mesmo quando a transcrição funcionou muito bem —
+      // o objectivo desse serviço é o texto transcrito em si, não campos).
+      // Antes, esse caso caía sempre em "baixa confiança" ou "não foi
+      // possível extrair", mesmo quando `text` continha uma transcrição
+      // completa e correcta vinda da IA (ver SmartOCRService → `transcript`).
       if (fieldCount > 0) {
         NotificationView.success(`✅ ${fieldCount} campo(s) preenchido(s) pela IA!`);
+      } else if (text && displayConf >= 60) {
+        NotificationView.success('✅ Documento lido com sucesso! Reveja o texto abaixo.');
       } else if (!text || conf < 30) {
         NotificationView.warn('⚠️ Não foi possível extrair dados. Preencha manualmente.');
       } else {
