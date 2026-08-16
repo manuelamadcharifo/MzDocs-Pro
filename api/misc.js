@@ -2188,9 +2188,17 @@ async function handleOcrAnalyze(req, res) {
   // NOVO: várias páginas do mesmo rascunho manuscrito (Trabalho Escolar) —
   // imagesBase64 é um array; mantém-se compatibilidade total com o fluxo de
   // 1 foto (imageBase64, string única) usado por todos os outros serviços.
-  // Limite de 8 imagens: alinhado com o limite no frontend (OCRController).
+  // CORRIGIDO: o limite estava fixo em 8 imagens para TODOS os serviços,
+  // mas o frontend (OCRController → MAX_PAGES_BY_SERVICE) já permite até 25
+  // páginas para "transcricao" (Digitalizar Documento) — o utilizador podia
+  // enviar 9+ fotos e o backend descartava silenciosamente tudo a partir da
+  // 9ª, sem avisar ninguém. Agora o limite acompanha o do frontend por
+  // serviço (continua conservador nos outros serviços, que normalmente só
+  // têm um rascunho pequeno).
+  const MAX_IMAGES_BY_SERVICE = { transcricao: 20, trabalho: 8 };
+  const maxImages = MAX_IMAGES_BY_SERVICE[serviceType] || 8;
   const images = Array.isArray(imagesBase64) && imagesBase64.length
-    ? imagesBase64.slice(0, 8)
+    ? imagesBase64.slice(0, maxImages)
     : (imageBase64 ? [imageBase64] : []);
   const hasImage = images.length > 0 && !!mimeType?.startsWith('image/');
   const isMultiPage = images.length > 1;
@@ -2213,19 +2221,38 @@ async function handleOcrAnalyze(req, res) {
   // para servir de base ao documento final — sem isto, um rascunho só
   // contribuía com os metadados da capa (tema/nível/disciplina), perdendo
   // o conteúdo que o utilizador efectivamente escreveu.
+  // CORRIGIDO (bug crítico de "inventa informação falsa" / "páginas
+  // desaparecem"): a instrução anterior não dizia explicitamente ao modelo
+  // para NÃO inventar conteúdo, nem pedia uma transcrição literal página a
+  // página — com várias imagens densas de letra manuscrita, isso levava o
+  // modelo, sob pressão do limite de tokens, a "desistir" de transcrever
+  // literalmente e a preencher com texto genérico plausível mas inventado
+  // (ex.: uma lista de frases soltas sobre a Bíblia que nunca esteve nas
+  // fotos). Agora a instrução é explícita: transcrição literal, com
+  // marcador por página, proibição clara de gerar conteúdo genérico/não
+  // verificável, e uso de [ILEGÍVEL]/[PÁGINA N NÃO LEGÍVEL] em vez de
+  // inventar quando a letra não dá para ler.
   const transcriptInstructions = wantsTranscript
-    ? `\n- Além dos campos, transcreve TAMBÉM o texto manuscrito de TODAS as páginas, pela ordem em que foram fornecidas, para o campo "transcript" (junta as páginas num só texto corrido, mantendo parágrafos). Faz isto mesmo que a letra seja difícil de ler — faz o teu melhor esforço, e usa [ILEGÍVEL] apenas nas palavras realmente impossíveis de decifrar.\n`
+    ? `\n- Além dos campos, transcreve TAMBÉM o texto manuscrito de TODAS as ${images.length > 1 ? `${images.length} páginas` : 'páginas'}, pela ordem em que foram fornecidas, para o campo "transcript".\n- REGRA ABSOLUTA: transcreve APENAS o que está literalmente escrito nas imagens. NUNCA acrescentes frases, ideias, listas ou conteúdo que não estejam fisicamente escritos na página — mesmo que o tema pareça religioso, académico ou familiar a um padrão comum, NÃO completes com frases genéricas do teu conhecimento geral. Isto é transcrição, não geração de texto.\n${images.length > 1 ? `- Usa um marcador "--- Página N ---" antes do texto de cada página, para as ${images.length} páginas fornecidas, na ordem em que foram enviadas.\n` : ''}- Se uma palavra, linha ou página inteira estiver ilegível, escreve exactamente [ILEGÍVEL] (ou [PÁGINA NÃO LEGÍVEL] se a página toda estiver impossível de ler) nesse ponto — nunca adivinhes nem substituas por conteúdo plausível.\n- Não resumas nem cortes conteúdo por a resposta estar a ficar longa — a transcrição TEM de cobrir todas as páginas fornecidas.\n`
     : '';
-  const transcriptFormat = wantsTranscript ? `,"transcript":"texto completo transcrito de todas as páginas"` : '';
+  const transcriptFormat = wantsTranscript ? `,"transcript":"texto completo transcrito de todas as páginas, com marcadores --- Página N --- se houver mais de uma"` : '';
 
-  const userPrompt = `És um especialista em extracção de dados de documentos moçambicanos.\n${ocrText ? `TEXTO EXTRAÍDO DO DOCUMENTO:\n${ocrText.slice(0, 2000)}\n` : ''}\nTIPO DE DOCUMENTO: ${serviceType}\n\nCAMPOS A EXTRAIR:\n${schemaDesc}\n\nINSTRUÇÕES:\n- Analisa ${hasImage ? (isMultiPage ? `as ${images.length} imagens (páginas do mesmo rascunho) e o texto` : 'a imagem e o texto') : 'o texto'} cuidadosamente\n- Para cada campo, extrai o valor exacto que aparece no documento\n- Se o campo não existir, inclui-o em "missing" (isto é normal e não é um erro — nem todos os documentos têm todos os campos)${transcriptInstructions}- Responde APENAS com JSON válido, sem markdown, sem explicações\n\nFORMATO OBRIGATÓRIO:\n{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":["campo_ausente"]${transcriptFormat}}`;
+  const userPrompt = `És um digitador/transcritor extremamente rigoroso de documentos moçambicanos, incluindo manuscritos. A tua única tarefa de transcrição é reproduzir fielmente o que está escrito — nunca gerar, resumir ou completar conteúdo por conta própria.\n${ocrText ? `TEXTO EXTRAÍDO DO DOCUMENTO:\n${ocrText.slice(0, 2000)}\n` : ''}\nTIPO DE DOCUMENTO: ${serviceType}\n\nCAMPOS A EXTRAIR:\n${schemaDesc}\n\nINSTRUÇÕES:\n- Analisa ${hasImage ? (isMultiPage ? `as ${images.length} imagens (páginas do mesmo rascunho, nesta ordem) e o texto` : 'a imagem e o texto') : 'o texto'} cuidadosamente, página a página\n- Para cada campo, extrai o valor exacto que aparece no documento\n- Se o campo não existir, inclui-o em "missing" (isto é normal e não é um erro — nem todos os documentos têm todos os campos)${transcriptInstructions}- Responde APENAS com JSON válido, sem markdown, sem explicações\n\nFORMATO OBRIGATÓRIO:\n{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":["campo_ausente"]${transcriptFormat}}`;
 
-  // Transcrever páginas manuscritas produz uma resposta bem maior do que só
-  // os campos do formulário — sem aumentar o limite, o JSON saía cortado a
-  // meio e falhava o parse.
-  const maxTokens = wantsTranscript ? 4000 : 1500;
+  // CORRIGIDO: o limite de tokens estava fixo em 4000 independentemente do
+  // número de páginas. Para 8-9 páginas de letra manuscrita densa, 4000
+  // tokens de saída não chegam nem para metade do conteúdo — o modelo corta
+  // a transcrição a meio (ou, sob essa pressão, começa a resumir/inventar
+  // em vez de continuar a transcrever literalmente, o que explica tanto as
+  // "páginas que desaparecem" como o conteúdo genérico/inventado a partir
+  // de certo ponto). Agora escala com o nº de páginas.
+  const maxTokens = wantsTranscript
+    ? Math.min(8000, 1500 + images.length * 700)
+    : 1500;
 
-  if (process.env.GROQ_API_KEY) {
+  // ── Tentativas por provider (cada uma devolve o JSON parseado ou null) ──
+  async function tryGroq() {
+    if (!process.env.GROQ_API_KEY) return null;
     const visionModels = hasImage
       ? ['meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.2-90b-vision-preview', 'meta-llama/llama-4-maverick-17b-128e-instruct']
       : ['llama-3.3-70b-versatile'];
@@ -2243,27 +2270,48 @@ async function handleOcrAnalyze(req, res) {
           const d = await r.json();
           if (d.error) { console.warn('[ocr-analyze] Groq model error:', model, d.error?.message); continue; }
           const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
-          if (_hasUsefulOcrResult(parsed)) return res.status(200).json(parsed);
+          if (_hasUsefulOcrResult(parsed)) return parsed;
         }
       } catch (e) { console.warn('[ocr-analyze] Groq exception:', model, e.message); }
     }
+    return null;
   }
 
-  if (process.env.GEMINI_API_KEY) {
+  async function tryGemini() {
+    if (!process.env.GEMINI_API_KEY) return null;
     for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
       try {
         const parts = [];
         if (hasImage) images.forEach(img => parts.push({ inline_data: { mime_type: mimeType, data: img } }));
         parts.push({ text: userPrompt });
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: maxTokens } }) });
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1 } }) });
         if (r.ok) {
           const d = await r.json();
           const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
-          if (_hasUsefulOcrResult(parsed)) return res.status(200).json(parsed);
+          if (_hasUsefulOcrResult(parsed)) return parsed;
         }
       } catch (e) { console.warn('[ocr-analyze] Gemini exception:', e.message); }
     }
+    return null;
+  }
+
+  // CORRIGIDO (causa principal do conteúdo inventado/páginas em falta):
+  // a ordem anterior tentava sempre Groq primeiro, mesmo para leitura de
+  // manuscritos com várias páginas — os modelos de visão gratuitos do Groq
+  // (llama-4-scout, llama-3.2-vision) são bons para documentos impressos
+  // simples, mas muito menos fiáveis do que o Gemini a interpretar várias
+  // imagens de letra manuscrita em simultâneo, tendendo a "compensar" com
+  // texto genérico quando não consegue ler bem. Para pedidos com imagem(ns)
+  // que precisem de transcrição (manuscritos/"transcricao"), tenta-se agora
+  // o Gemini primeiro; para os restantes casos (extracção simples de campos
+  // de 1 documento impresso), mantém-se a ordem original (Groq primeiro,
+  // que é mais rápido/barato e já funcionava bem para esses casos).
+  const preferGeminiFirst = hasImage && wantsTranscript;
+  const providers = preferGeminiFirst ? [tryGemini, tryGroq] : [tryGroq, tryGemini];
+  for (const tryProvider of providers) {
+    const parsed = await tryProvider();
+    if (parsed) return res.status(200).json(parsed);
   }
 
   if (process.env.OPENROUTER_API_KEY) {
@@ -2289,7 +2337,31 @@ async function handleOcrAnalyze(req, res) {
 }
 
 function _safeJSON(raw) {
-  try { return JSON.parse(raw.replace(/```json|```/g, '').trim()); } catch (_) { return null; }
+  const cleaned = (raw || '').replace(/```json|```/g, '').trim();
+  try { return JSON.parse(cleaned); } catch (_) {}
+  // CORRIGIDO: com transcrições longas (várias páginas), a resposta do
+  // modelo por vezes é cortada mesmo com maxTokens generoso (ex.: o modelo
+  // ainda estava a meio da última página quando atingiu o limite), o que
+  // deixa o JSON tecnicamente inválido (aspas/chavetas por fechar) — antes
+  // isto fazia o parse falhar por completo e perdia-se TUDO, incluindo as
+  // páginas anteriores já bem transcritas. Este salvamento tenta recuperar
+  // pelo menos o conteúdo de "transcript" já gerado antes do corte, em vez
+  // de descartar a resposta inteira.
+  const tMatch = cleaned.match(/"transcript"\s*:\s*"/);
+  if (tMatch) {
+    const start = tMatch.index + tMatch[0].length;
+    let text = '', i = start, closed = false;
+    while (i < cleaned.length) {
+      const ch = cleaned[i];
+      if (ch === '\\' && i + 1 < cleaned.length) { text += cleaned[i + 1]; i += 2; continue; }
+      if (ch === '"') { closed = true; break; }
+      text += ch; i++;
+    }
+    if (text.trim()) {
+      return { fields: {}, missing: [], transcript: text + (closed ? '' : ' [TEXTO CORTADO — tente com menos páginas de cada vez]') };
+    }
+  }
+  return null;
 }
 
 // CORRIGIDO (bug crítico): antes, uma resposta só era aceite como válida se
