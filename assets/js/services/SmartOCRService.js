@@ -67,7 +67,18 @@ export class SmartOCRService {
         : 'image/jpeg';
       const result = await this._analyzeWithAI(base64, mimeType, text, schema, serviceType);
       if (onProgress) onProgress(100, 'Concluído!');
-      return { rawText: text, confidence, ...result };
+      // CORRIGIDO: quando o backend devolve "transcript" (agora também
+      // acontece com 1 única foto no serviço "transcricao" — ver
+      // api/misc.js → handleOcrAnalyze), essa transcrição da IA é o texto
+      // correcto a usar, não o texto (normalmente fraco/vazio) do
+      // Tesseract, que não foi desenhado para reconhecer letra manuscrita.
+      // Antes, "rawText: text" ficava sempre com o resultado do Tesseract,
+      // porque `...result` não tinha uma chave "rawText" para o sobrepor —
+      // o "transcript" da IA era recebido mas nunca chegava a ser usado.
+      const { transcript, ...rest } = result || {};
+      const finalText = (transcript && transcript.trim()) ? transcript.trim() : text;
+      const finalConfidence = (transcript && transcript.trim()) ? Math.max(confidence, 75) : confidence;
+      return { rawText: finalText, confidence: finalConfidence, ...rest };
     } catch (err) {
       console.warn('[SmartOCR] IA falhou:', err.message);
       return { rawText: text, confidence, fields: {}, missing: schema.map(f => f.id) };
