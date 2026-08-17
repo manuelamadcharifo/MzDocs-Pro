@@ -2250,6 +2250,96 @@ async function handleOcrAnalyze(req, res) {
     ? Math.min(8000, 1500 + images.length * 700)
     : 1500;
 
+  // CORRIGIDO (causa da mensagem repetida "A imagem foi demasiado escura
+  // para ler."): enviar várias páginas manuscritas TODAS JUNTAS numa única
+  // chamada ao modelo de visão (como o código fazia até aqui) sobrecarrega
+  // a atenção do modelo — com 7-9 imagens no mesmo pedido, modelos de visão
+  // gratuitos (Gemini Flash, Groq llama-4-scout) tendem a "desistir" da
+  // maioria das páginas e devolver uma desculpa genérica repetida, mesmo
+  // quando o conteúdo é perfeitamente legível a olho nu numa imagem sozinha
+  // (confirmado manualmente: as mesmas fotos, analisadas uma a uma, dão
+  // ~90% de leitura). A correcção: para múltiplas páginas, faz-se AGORA UMA
+  // CHAMADA DE IA POR PÁGINA (em vez de uma chamada só com todas as
+  // imagens), cada uma com a atenção total do modelo dedicada a essa única
+  // imagem, e no fim juntam-se as transcrições com marcadores "--- Página N
+  // ---". Isto está também alinhado com o modelo de custo da app, que já
+  // cobra por página digitalizada (dynamicCostPerPage) — ou seja, o custo
+  // de fazer 1 chamada por página já era o esperado, só a implementação
+  // técnica é que ainda ia tudo numa única chamada.
+  async function transcribeSinglePage(img, pageNum, totalPages) {
+    const pagePrompt = `És um digitador/transcritor extremamente rigoroso de documentos moçambicanos, incluindo manuscritos. A tua única tarefa é reproduzir fielmente o que está escrito nesta imagem — nunca gerar, resumir ou completar conteúdo por conta própria.\n\nEsta é a página ${pageNum} de ${totalPages} de um mesmo rascunho/caderno manuscrito.\n\nTIPO DE DOCUMENTO: ${serviceType}\n${schema.length ? `\nSe algum destes campos aparecer NESTA página, extrai também:\n${schemaDesc}\n` : ''}\nINSTRUÇÕES:\n- Transcreve TODO o texto manuscrito visível nesta imagem, exactamente como está escrito, mantendo a ordem das linhas e parágrafos.\n- REGRA ABSOLUTA: transcreve APENAS o que está literalmente escrito. NUNCA acrescentes frases, ideias ou conteúdo que não estejam fisicamente na página, mesmo que o tema pareça familiar (religioso, académico, etc.).\n- Roda mentalmente a imagem se o texto estiver de lado ou invertido — o teu trabalho é ler o conteúdo, independentemente da orientação da fotografia.\n- Se uma palavra ou linha estiver ilegível, escreve [ILEGÍVEL] apenas nesse ponto e continua a transcrever o resto normalmente — não desistas da página inteira por causa de uma palavra difícil.\n- Só usa "[PÁGINA NÃO LEGÍVEL]" como transcrição se a imagem estiver GENUINAMENTE em branco, completamente fora de foco, ou sem nenhum texto visível — não uses isto apenas porque a letra é cursiva ou difícil; faz sempre o teu melhor esforço antes de desistir.\n- Responde APENAS com JSON válido, sem markdown, sem explicações.\n\nFORMATO OBRIGATÓRIO:\n{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":[],"transcript":"texto completo desta página"}`;
+
+    if (process.env.GEMINI_API_KEY) {
+      for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash']) {
+        try {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: img } }, { text: pagePrompt }] }], generationConfig: { maxOutputTokens: 2200, temperature: 0.1 } }) });
+          if (r.ok) {
+            const d = await r.json();
+            const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+            if (_hasUsefulOcrResult(parsed)) return parsed;
+          }
+        } catch (e) { console.warn(`[ocr-analyze] Gemini página ${pageNum} exception:`, e.message); }
+      }
+    }
+    if (process.env.GROQ_API_KEY) {
+      for (const model of ['meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.2-90b-vision-preview']) {
+        try {
+          const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+            body: JSON.stringify({ model, max_tokens: 2200, temperature: 0.1, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${img}` } }, { type: 'text', text: pagePrompt }] }] }),
+          });
+          if (r.ok) {
+            const d = await r.json();
+            if (d.error) { console.warn(`[ocr-analyze] Groq página ${pageNum} erro:`, model, d.error?.message); continue; }
+            const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
+            if (_hasUsefulOcrResult(parsed)) return parsed;
+          }
+        } catch (e) { console.warn(`[ocr-analyze] Groq página ${pageNum} exception:`, model, e.message); }
+      }
+    }
+    return null;
+  }
+
+  async function transcribeAllPagesSeparately() {
+    const CONCURRENCY = 3; // várias em paralelo para não demorar minutos, mas sem disparar rate-limits
+    const results = new Array(images.length).fill(null);
+    let next = 0;
+    async function worker() {
+      while (next < images.length) {
+        const i = next++;
+        results[i] = await transcribeSinglePage(images[i], i + 1, images.length);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, images.length) }, worker));
+
+    const mergedFields = {};
+    const missingSet = new Set(schema.map(f => f.id));
+    const transcriptParts = [];
+    let anyRealContent = false;
+    results.forEach((r, i) => {
+      if (r?.fields) {
+        for (const [k, v] of Object.entries(r.fields)) {
+          if (v?.value && !mergedFields[k]) { mergedFields[k] = v; missingSet.delete(k); }
+        }
+      }
+      const pageText = (r?.transcript && r.transcript.trim()) ? r.transcript.trim() : '[PÁGINA NÃO LEGÍVEL]';
+      if (pageText !== '[PÁGINA NÃO LEGÍVEL]') anyRealContent = true;
+      transcriptParts.push(`--- Página ${i + 1} ---\n${pageText}`);
+    });
+    if (!anyRealContent) return null;
+    return { fields: mergedFields, missing: Array.from(missingSet), transcript: transcriptParts.join('\n\n') };
+  }
+
+  // Para várias páginas com pedido de transcrição, tenta primeiro o
+  // caminho página-a-página (mais fiável); só recorre ao pedido único com
+  // todas as imagens juntas (código original abaixo) como último recurso.
+  if (isMultiPage && wantsTranscript && (process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY)) {
+    const merged = await transcribeAllPagesSeparately();
+    if (merged) return res.status(200).json(merged);
+  }
+
   // ── Tentativas por provider (cada uma devolve o JSON parseado ou null) ──
   async function tryGroq() {
     if (!process.env.GROQ_API_KEY) return null;
