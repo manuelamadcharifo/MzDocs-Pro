@@ -2300,30 +2300,50 @@ async function handleOcrAnalyze(req, res) {
   // pausa progressiva (backoff), antes de passar ao fornecedor seguinte —
   // dá tempo à janela de limite de pedidos-por-minuto da API se libertar
   // sem desistir logo da página.
+  // NOVO — causa concreta da diferença de qualidade entre a leitura manual
+  // (ex.: pedir a um assistente de IA de fronteira para ler as mesmas 9
+  // fotos) e o resultado desta função: esta chamada estava presa em
+  // `gemini-2.0-flash`, enquanto o resto do projecto (ver
+  // `api/_lib/aiProviderRegistry.js`, linha `models: ['gemini-2.5-flash',
+  // 'gemini-2.0-flash', 'gemini-1.5-flash']`) já usa `gemini-2.5-flash`
+  // como preferido para geração de texto — só esta função de OCR
+  // página-a-página, que é justamente a parte mais exigente (letra
+  // cursiva/manuscrita), tinha ficado esquecida na versão mais antiga e
+  // mais fraca. `gemini-2.5-flash` lê consideravelmente melhor letra
+  // manuscrita do que `gemini-2.0-flash`, continua disponível na
+  // quota gratuita da API Gemini, e usa a MESMA chave já configurada
+  // (`GEMINI_API_KEY`) — não é preciso nenhuma conta nova nem custo
+  // adicional. Isto não elimina a diferença de qualidade face a um modelo
+  // de fronteira (ver nota mais detalhada no README, secção 12), mas é o
+  // maior ganho disponível sem mudar de fornecedor.
+  const _GEMINI_OCR_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+
   async function _callGeminiPage(img, pagePrompt, pageNum) {
     if (!process.env.GEMINI_API_KEY) { _logOcrAttempt(`Gemini p${pageNum}`, 'sem GEMINI_API_KEY configurada'); return null; }
-    for (let attempt = 0; attempt < 2 && _timeLeft() > 4000; attempt++) {
-      try {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: img } }, { text: pagePrompt }] }], generationConfig: { maxOutputTokens: 2600, temperature: 0.1 } }) });
-        if (r.ok) {
-          const d = await r.json();
-          const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
-          if (_hasUsefulOcrResult(parsed)) { _logOcrAttempt(`Gemini p${pageNum}`, 'ok'); return parsed; }
-          _logOcrAttempt(`Gemini p${pageNum}`, 'HTTP 200 mas sem conteúdo útil (resposta vazia/genérica)');
-          break; // resposta válida mas sem conteúdo útil — não vale repetir
-        }
-        let bodyTxt = '';
-        try { bodyTxt = (await r.text()).slice(0, 200); } catch (_) {}
-        if (r.status === 429 || r.status === 503) {
-          _logOcrAttempt(`Gemini p${pageNum}`, `HTTP ${r.status} (limite/indisponível) tentativa ${attempt + 1} — ${bodyTxt}`);
-          if (attempt === 0 && _timeLeft() > 5000) { await _sleep(1500 + Math.random() * 800); continue; }
-        } else {
-          _logOcrAttempt(`Gemini p${pageNum}`, `HTTP ${r.status} — ${bodyTxt}`);
-          console.warn(`[ocr-analyze] Gemini página ${pageNum} status:`, r.status);
-        }
-        break;
-      } catch (e) { _logOcrAttempt(`Gemini p${pageNum}`, `excepção: ${e.message}`); console.warn(`[ocr-analyze] Gemini página ${pageNum} exception:`, e.message); break; }
+    for (const model of _GEMINI_OCR_MODELS) {
+      for (let attempt = 0; attempt < 2 && _timeLeft() > 4000; attempt++) {
+        try {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: img } }, { text: pagePrompt }] }], generationConfig: { maxOutputTokens: 2600, temperature: 0.1 } }) });
+          if (r.ok) {
+            const d = await r.json();
+            const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+            if (_hasUsefulOcrResult(parsed)) { _logOcrAttempt(`Gemini p${pageNum} (${model})`, 'ok'); return parsed; }
+            _logOcrAttempt(`Gemini p${pageNum} (${model})`, 'HTTP 200 mas sem conteúdo útil (resposta vazia/genérica)');
+            break; // resposta válida mas sem conteúdo útil neste modelo — passa ao próximo modelo, não repete o mesmo
+          }
+          let bodyTxt = '';
+          try { bodyTxt = (await r.text()).slice(0, 200); } catch (_) {}
+          if (r.status === 429 || r.status === 503) {
+            _logOcrAttempt(`Gemini p${pageNum} (${model})`, `HTTP ${r.status} (limite/indisponível) tentativa ${attempt + 1} — ${bodyTxt}`);
+            if (attempt === 0 && _timeLeft() > 5000) { await _sleep(1500 + Math.random() * 800); continue; }
+          } else {
+            _logOcrAttempt(`Gemini p${pageNum} (${model})`, `HTTP ${r.status} — ${bodyTxt}`);
+            console.warn(`[ocr-analyze] Gemini página ${pageNum} (${model}) status:`, r.status);
+          }
+          break; // este modelo falhou de forma não recuperável — tenta o próximo modelo da lista
+        } catch (e) { _logOcrAttempt(`Gemini p${pageNum} (${model})`, `excepção: ${e.message}`); console.warn(`[ocr-analyze] Gemini página ${pageNum} (${model}) exception:`, e.message); break; }
+      }
     }
     return null;
   }
@@ -2475,7 +2495,7 @@ async function handleOcrAnalyze(req, res) {
 
   async function tryGemini() {
     if (!process.env.GEMINI_API_KEY) { _logOcrAttempt('Gemini (combinado)', 'sem GEMINI_API_KEY configurada'); return null; }
-    for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
+    for (const model of ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
       try {
         const parts = [];
         if (hasImage) images.forEach(img => parts.push({ inline_data: { mime_type: mimeType, data: img } }));
