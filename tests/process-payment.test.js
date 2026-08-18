@@ -29,8 +29,27 @@ const FAKE_PACKAGES = {
   starter: { credits: 10, price: 120, name: 'Starter' },
 };
 
+// CORRIGIDO: o rate limiter de api/process-payment.js guarda os contadores
+// num Map ao nível do módulo (`_paymentRateMap`), que persiste na memória
+// durante TODA a execução deste ficheiro de testes (o `require('../api/
+// process-payment')` só corre uma vez, no topo do ficheiro — o módulo não é
+// recarregado entre testes). Como todos os testes usavam o mesmo IP fixo
+// ('10.0.0.1'), a partir do 4º pedido o rate limiter (correctamente, é o
+// comportamento esperado em produção) começava a devolver 429, fazendo
+// falhar todos os testes seguintes por um motivo que nada tem a ver com o
+// que cada um está realmente a verificar.
+//
+// A correcção NÃO enfraquece nem contorna o rate limiter em si (isso seria
+// esconder um teste, não corrigi-lo) — simplesmente dá a cada chamada de
+// mockReqRes() um IP simulado diferente por omissão, tal como aconteceria
+// com pedidos reais de utilizadores diferentes. Um teste que precise
+// especificamente de simular o MESMO IP em pedidos sucessivos (nenhum
+// precisa disso aqui) pode sempre passar 'x-forwarded-for' explicitamente,
+// que continua a ter prioridade sobre este valor por omissão.
+let _testIpCounter = 0;
 function mockReqRes(body, headers = {}) {
-  const req = { method: 'POST', headers: { 'x-forwarded-for': '10.0.0.1', ...headers }, body };
+  _testIpCounter++;
+  const req = { method: 'POST', headers: { 'x-forwarded-for': `10.0.${_testIpCounter}.1`, ...headers }, body };
   const res = {
     _status: 200,
     _json: null,
