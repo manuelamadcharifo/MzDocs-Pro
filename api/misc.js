@@ -2277,6 +2277,19 @@ async function handleOcrAnalyze(req, res) {
   const _ocrDeadline = Date.now() + 45000;
   const _timeLeft = () => _ocrDeadline - Date.now();
 
+  // NOVO (diagnóstico): antes, quando TODOS os fornecedores falhavam, a
+  // única pista no cliente era "Não foi possível extrair dados" — sem
+  // dizer se foi 429 (limite de pedidos), chave em falta, quota diária
+  // esgotada, ou outro erro. Isto tornava impossível distinguir "bug no
+  // código" de "quota gratuita esgotada por testes repetidos no mesmo
+  // dia" (o cenário mais provável ao fim de várias rondas de teste
+  // seguidas). Regista-se aqui um resumo por página/fornecedor, devolvido
+  // ao cliente como "_debug" só quando o resultado final falha ou é
+  // parcial — nunca visível na UI normal, mas aparece na consola do
+  // browser (ver SmartOCRService.js) para diagnóstico rápido.
+  const _ocrDebugLog = [];
+  function _logOcrAttempt(label, info) { _ocrDebugLog.push(`${label}: ${info}`); }
+
   // CORRIGIDO (causa raiz das páginas "[ILEGÍVEL]" em cascata, sobretudo a
   // partir da página 3-4): a versão anterior desistia de cada página ao
   // primeiro 429/503 (limite de pedidos-por-minuto dos planos gratuitos do
@@ -2288,7 +2301,7 @@ async function handleOcrAnalyze(req, res) {
   // dá tempo à janela de limite de pedidos-por-minuto da API se libertar
   // sem desistir logo da página.
   async function _callGeminiPage(img, pagePrompt, pageNum) {
-    if (!process.env.GEMINI_API_KEY) return null;
+    if (!process.env.GEMINI_API_KEY) { _logOcrAttempt(`Gemini p${pageNum}`, 'sem GEMINI_API_KEY configurada'); return null; }
     for (let attempt = 0; attempt < 2 && _timeLeft() > 4000; attempt++) {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -2296,22 +2309,27 @@ async function handleOcrAnalyze(req, res) {
         if (r.ok) {
           const d = await r.json();
           const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
-          if (_hasUsefulOcrResult(parsed)) return parsed;
+          if (_hasUsefulOcrResult(parsed)) { _logOcrAttempt(`Gemini p${pageNum}`, 'ok'); return parsed; }
+          _logOcrAttempt(`Gemini p${pageNum}`, 'HTTP 200 mas sem conteúdo útil (resposta vazia/genérica)');
           break; // resposta válida mas sem conteúdo útil — não vale repetir
         }
+        let bodyTxt = '';
+        try { bodyTxt = (await r.text()).slice(0, 200); } catch (_) {}
         if (r.status === 429 || r.status === 503) {
+          _logOcrAttempt(`Gemini p${pageNum}`, `HTTP ${r.status} (limite/indisponível) tentativa ${attempt + 1} — ${bodyTxt}`);
           if (attempt === 0 && _timeLeft() > 5000) { await _sleep(1500 + Math.random() * 800); continue; }
         } else {
+          _logOcrAttempt(`Gemini p${pageNum}`, `HTTP ${r.status} — ${bodyTxt}`);
           console.warn(`[ocr-analyze] Gemini página ${pageNum} status:`, r.status);
         }
         break;
-      } catch (e) { console.warn(`[ocr-analyze] Gemini página ${pageNum} exception:`, e.message); break; }
+      } catch (e) { _logOcrAttempt(`Gemini p${pageNum}`, `excepção: ${e.message}`); console.warn(`[ocr-analyze] Gemini página ${pageNum} exception:`, e.message); break; }
     }
     return null;
   }
 
   async function _callGroqPage(img, pagePrompt, pageNum) {
-    if (!process.env.GROQ_API_KEY) return null;
+    if (!process.env.GROQ_API_KEY) { _logOcrAttempt(`Groq p${pageNum}`, 'sem GROQ_API_KEY configurada'); return null; }
     for (let attempt = 0; attempt < 2 && _timeLeft() > 4000; attempt++) {
       try {
         const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -2323,15 +2341,22 @@ async function handleOcrAnalyze(req, res) {
           const d = await r.json();
           if (!d.error) {
             const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
-            if (_hasUsefulOcrResult(parsed)) return parsed;
+            if (_hasUsefulOcrResult(parsed)) { _logOcrAttempt(`Groq p${pageNum}`, 'ok'); return parsed; }
+            _logOcrAttempt(`Groq p${pageNum}`, 'HTTP 200 mas sem conteúdo útil');
+          } else {
+            _logOcrAttempt(`Groq p${pageNum}`, `erro na resposta: ${d.error?.message || JSON.stringify(d.error).slice(0, 150)}`);
           }
           break;
         }
+        let bodyTxt = '';
+        try { bodyTxt = (await r.text()).slice(0, 200); } catch (_) {}
         if ((r.status === 429 || r.status === 503) && attempt === 0 && _timeLeft() > 5000) {
+          _logOcrAttempt(`Groq p${pageNum}`, `HTTP ${r.status} (limite/indisponível) tentativa ${attempt + 1} — ${bodyTxt}`);
           await _sleep(1200 + Math.random() * 600); continue;
         }
+        _logOcrAttempt(`Groq p${pageNum}`, `HTTP ${r.status} — ${bodyTxt}`);
         break;
-      } catch (e) { console.warn(`[ocr-analyze] Groq página ${pageNum} exception:`, e.message); break; }
+      } catch (e) { _logOcrAttempt(`Groq p${pageNum}`, `excepção: ${e.message}`); console.warn(`[ocr-analyze] Groq página ${pageNum} exception:`, e.message); break; }
     }
     return null;
   }
@@ -2401,12 +2426,14 @@ async function handleOcrAnalyze(req, res) {
   // todas as imagens juntas (código original abaixo) como último recurso.
   if (isMultiPage && wantsTranscript && (process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY)) {
     const merged = await transcribeAllPagesSeparately();
-    if (merged) return res.status(200).json(merged);
+    if (merged) return res.status(200).json({ ...merged, _debug: _ocrDebugLog });
+  } else if (isMultiPage && wantsTranscript) {
+    _logOcrAttempt('multi-página', 'nem GEMINI_API_KEY nem GROQ_API_KEY configuradas — a saltar directamente para o fallback combinado');
   }
 
   // ── Tentativas por provider (cada uma devolve o JSON parseado ou null) ──
   async function tryGroq() {
-    if (!process.env.GROQ_API_KEY) return null;
+    if (!process.env.GROQ_API_KEY) { _logOcrAttempt('Groq (combinado)', 'sem GROQ_API_KEY configurada'); return null; }
     const visionModels = hasImage
       ? ['meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.2-90b-vision-preview', 'meta-llama/llama-4-maverick-17b-128e-instruct']
       : ['llama-3.3-70b-versatile'];
@@ -2422,17 +2449,20 @@ async function handleOcrAnalyze(req, res) {
         });
         if (r.ok) {
           const d = await r.json();
-          if (d.error) { console.warn('[ocr-analyze] Groq model error:', model, d.error?.message); continue; }
+          if (d.error) { _logOcrAttempt(`Groq (combinado, ${model})`, `erro: ${d.error?.message}`); console.warn('[ocr-analyze] Groq model error:', model, d.error?.message); continue; }
           const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
-          if (_hasUsefulOcrResult(parsed)) return parsed;
+          if (_hasUsefulOcrResult(parsed)) { _logOcrAttempt(`Groq (combinado, ${model})`, 'ok'); return parsed; }
+          _logOcrAttempt(`Groq (combinado, ${model})`, 'HTTP 200 mas sem conteúdo útil');
+        } else {
+          _logOcrAttempt(`Groq (combinado, ${model})`, `HTTP ${r.status}`);
         }
-      } catch (e) { console.warn('[ocr-analyze] Groq exception:', model, e.message); }
+      } catch (e) { _logOcrAttempt(`Groq (combinado, ${model})`, `excepção: ${e.message}`); console.warn('[ocr-analyze] Groq exception:', model, e.message); }
     }
     return null;
   }
 
   async function tryGemini() {
-    if (!process.env.GEMINI_API_KEY) return null;
+    if (!process.env.GEMINI_API_KEY) { _logOcrAttempt('Gemini (combinado)', 'sem GEMINI_API_KEY configurada'); return null; }
     for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
       try {
         const parts = [];
@@ -2443,9 +2473,12 @@ async function handleOcrAnalyze(req, res) {
         if (r.ok) {
           const d = await r.json();
           const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
-          if (_hasUsefulOcrResult(parsed)) return parsed;
+          if (_hasUsefulOcrResult(parsed)) { _logOcrAttempt(`Gemini (combinado, ${model})`, 'ok'); return parsed; }
+          _logOcrAttempt(`Gemini (combinado, ${model})`, 'HTTP 200 mas sem conteúdo útil');
+        } else {
+          _logOcrAttempt(`Gemini (combinado, ${model})`, `HTTP ${r.status}`);
         }
-      } catch (e) { console.warn('[ocr-analyze] Gemini exception:', e.message); }
+      } catch (e) { _logOcrAttempt(`Gemini (combinado, ${model})`, `excepção: ${e.message}`); console.warn('[ocr-analyze] Gemini exception:', e.message); }
     }
     return null;
   }
@@ -2481,13 +2514,18 @@ async function handleOcrAnalyze(req, res) {
       if (r.ok) {
         const d = await r.json();
         const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
-        if (_hasUsefulOcrResult(parsed)) return res.status(200).json(parsed);
+        if (_hasUsefulOcrResult(parsed)) { _logOcrAttempt('OpenRouter (combinado)', 'ok'); return res.status(200).json(parsed); }
+        _logOcrAttempt('OpenRouter (combinado)', 'HTTP 200 mas sem conteúdo útil');
+      } else {
+        _logOcrAttempt('OpenRouter (combinado)', `HTTP ${r.status}`);
       }
-    } catch (e) { console.warn('[ocr-analyze] OpenRouter:', e.message); }
+    } catch (e) { _logOcrAttempt('OpenRouter (combinado)', `excepção: ${e.message}`); console.warn('[ocr-analyze] OpenRouter:', e.message); }
+  } else {
+    _logOcrAttempt('OpenRouter (combinado)', 'sem OPENROUTER_API_KEY configurada');
   }
 
-  console.error('[ocr-analyze] Todos os providers falharam.');
-  return res.status(200).json({ fields: {}, missing: schema.map(f => f.id) });
+  console.error('[ocr-analyze] Todos os providers falharam.', _ocrDebugLog.join(' | '));
+  return res.status(200).json({ fields: {}, missing: schema.map(f => f.id), _debug: _ocrDebugLog });
 }
 
 function _safeJSON(raw) {
