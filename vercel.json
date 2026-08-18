@@ -40,7 +40,7 @@
       "maxDuration": 30
     },
     "api/misc.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/partners.js": {
       "maxDuration": 15
