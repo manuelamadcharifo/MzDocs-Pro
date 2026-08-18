@@ -2392,12 +2392,24 @@ async function handleOcrAnalyze(req, res) {
     // ilegíveis, e uma pausa mais longa dá tempo à janela do limite se
     // libertar. Cada ronda respeita o orçamento de tempo global (_timeLeft)
     // para nunca arriscar ultrapassar o limite da função serverless.
+    // NOVO: antes, uma página só era repetida nas rondas de recuperação se
+    // `transcribeSinglePage` tivesse FALHADO (lançado erro/devolvido null).
+    // Se a chamada tivesse sucesso técnico mas devolvesse um transcript
+    // vazio/ilegível (ex.: foto desfocada, modelo desistiu à primeira), o
+    // resultado ficava marcado como "concluído" e NUNCA tinha uma 2ª
+    // chance — mesmo havendo tempo/orçamento de sobra e a causa mais
+    // provável ser variação do modelo gratuito, não a imagem em si.
+    // Agora tratamos como "ainda por resolver" tanto os `null` como os
+    // resultados sem transcript real, para lhes dar a mesma 2ª e 3ª
+    // oportunidade que já existia para os erros de rede/limite de taxa.
+    const _isPageDone = (r) => !!(r && r.transcript && r.transcript.trim());
+
     for (const pauseMs of [1200, 2200]) {
-      if (results.every(r => r)) break;
+      if (results.every(_isPageDone)) break;
       if (_timeLeft() < 6000) break;
       await _sleep(pauseMs);
       for (let i = 0; i < results.length; i++) {
-        if (!results[i] && _timeLeft() > 4000) {
+        if (!_isPageDone(results[i]) && _timeLeft() > 4000) {
           results[i] = await transcribeSinglePage(images[i], i + 1, images.length);
         }
       }
