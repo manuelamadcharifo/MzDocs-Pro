@@ -272,6 +272,19 @@
         <button id="btnCam">📸 Tirar Foto</button>
         <button id="btnFile">📁 Escolher Ficheiro</button>
       </div>
+      <!-- NOVO: lista de páginas acumuladas — cada toque em "Tirar
+           Foto"/"Escolher Ficheiro" ADICIONA à lista em vez de substituir,
+           em vez de depender do selector nativo do telemóvel devolver bem
+           uma selecção de várias fotos de uma vez (nalguns Android isso
+           falha silenciosamente e só a 1ª foto chega à app). Visível
+           apenas nos serviços de várias páginas — ver OCRController.js. -->
+      <div id="ocrStagedWrap" style="display:none">
+        <div id="ocrStagedList" class="ocr-staged-list"></div>
+        <div class="ocr-staged-actions">
+          <button id="btnOcrClearStaged" type="button" class="ocr-staged-clear">🗑️ Limpar</button>
+          <button id="btnOcrRunTranscribe" type="button" class="ocr-staged-run">✓ Transcrever <span id="ocrStagedCount">0</span> página(s)</button>
+        </div>
+      </div>
       <input type="file" id="ocrInput" accept="image/*,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/msword,.doc" style="display:none"/>
       <button id="btnUseTemplate" class="btn-template-ocr" type="button" title="Use o seu próprio modelo de documento como base">
         📄 Usar modelo próprio
