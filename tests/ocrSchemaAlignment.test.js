@@ -75,8 +75,24 @@ describe('Alinhamento entre formulário real e schema de extracção OCR', () =>
   // estruturada for implementada, remova a entrada correspondente aqui E
   // adicione 'itens' ao schema de SmartOCRService.js — não faça só uma das
   // duas coisas, ou este teste deixa de proteger contra o bug original.
+  //
+  // 'transcricao' (Digitalizar Documento): 'tipo' e 'organizacao' NÃO são
+  // dados que existam no material fotografado — são preferências do
+  // PRÓPRIO UTILIZADOR sobre o que fazer com o documento depois de o ler
+  // (que tipo de formatação aplicar; como organizar as secções), não
+  // conteúdo a extrair da imagem. Pedir à IA de OCR para "adivinhar" a
+  // organização que a pessoa quer, a partir de fotos do rascunho, não faz
+  // sentido — é o inverso do que o campo serve. Isto está alinhado com o
+  // comentário já existente em SmartOCRService.js junto a este schema:
+  // "este serviço não tenta extrair muitos campos... só tenta detectar um
+  // título". Se um dia a IA passar a sugerir também o 'tipo' (classificando
+  // o documento fotografado dentro das opções do formulário), pode
+  // remover-se 'tipo' daqui — mas 'organizacao' deve manter-se sempre como
+  // excepção, por ser uma instrução do utilizador e não conteúdo do
+  // documento.
   const KNOWN_OCR_GAPS = {
     recibo: ['itens'],
+    transcricao: ['tipo', 'organizacao'],
   };
 
   test('todos os serviços com schema OCR existem em ServiceDefinitions.js', () => {
