@@ -173,6 +173,19 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .ocr-btns{display:flex;gap:8px;padding:0 18px 10px}
 .ocr-btns button{flex:1;padding:10px;border-radius:var(--rs);border:1.5px solid var(--border);font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:700;cursor:pointer;background:var(--white);color:var(--ink);transition:var(--t)}
 .ocr-btns button:hover{border-color:var(--blue);color:var(--blue)}
+/* NOVO: lista de páginas acumuladas (ver OCRController.js — stagedFiles) */
+#ocrStagedWrap{margin:0 18px 10px;background:var(--surface);border:1.5px dashed var(--border);border-radius:var(--rs);padding:10px}
+.ocr-staged-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto}
+.ocr-staged-item{display:flex;align-items:center;gap:8px;background:var(--white);border:1px solid var(--border);border-radius:8px;padding:6px 8px}
+.ocr-staged-num{flex-shrink:0;width:20px;height:20px;border-radius:50%;background:var(--blue-s);color:var(--blue-d);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.ocr-staged-name{flex:1;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ocr-staged-remove{flex-shrink:0;width:22px;height:22px;border-radius:50%;border:1px solid var(--border);background:var(--white);color:var(--muted);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:var(--t)}
+.ocr-staged-remove:hover{background:#fee2e2;border-color:#fca5a5;color:#dc2626}
+.ocr-staged-actions{display:flex;gap:8px;margin-top:8px}
+.ocr-staged-clear{padding:9px 12px;border-radius:var(--rx);background:var(--white);color:var(--muted);border:1.5px solid var(--border);font-family:'Bricolage Grotesque',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer}
+.ocr-staged-clear:hover{border-color:#fca5a5;color:#dc2626}
+.ocr-staged-run{flex:1;padding:9px 12px;border-radius:var(--rx);background:var(--blue);color:#fff;border:none;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:var(--t)}
+.ocr-staged-run:hover{background:var(--blue-d)}
 .bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin:0 18px 6px}
 .bar-fill{height:100%;width:0%;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--green-l));transition:width .3s}
 #ocrStatusTxt{font-size:12px;color:var(--muted);font-weight:600;padding:0 18px;display:block;margin-bottom:8px}
