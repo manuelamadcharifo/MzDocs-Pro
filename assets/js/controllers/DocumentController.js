@@ -336,14 +336,21 @@ export class DocumentController {
    else ocrInput.removeAttribute('multiple');
  }
  if (ocrCard) {
+   // CORRIGIDO: o texto anterior ("seleccione várias fotos de uma vez")
+   // presumia que o selector nativo do telemóvel devolve sempre TODOS os
+   // ficheiros escolhidos numa selecção múltipla — isso falha em silêncio
+   // em muitos Android (só a 1ª foto chega à app). O texto agora explica
+   // o fluxo real: adicionar página a página (ou várias de cada vez, se o
+   // telemóvel permitir) e confirmar no botão "Transcrever" — ver a nova
+   // lista acumulada (#ocrStagedWrap) em OCRController.js.
    ocrCard.textContent = key === 'transcricao'
-     ? 'Fotografe todas as páginas do documento (manuscrito ou em vários ficheiros) e receba-o já digitado, formatado e pronto a imprimir'
+     ? 'Fotografe as páginas do documento — pode adicionar uma de cada vez ou várias juntas — e depois carregue em "Transcrever" para receber o documento já digitado'
      : isMultiPageDraft
-       ? 'Fotografe todas as páginas (pode seleccionar várias fotos de uma vez) e o sistema transforma em documento digital'
+       ? 'Fotografe as páginas (adicione uma de cada vez ou várias juntas) e depois carregue em "Transcrever"'
        : 'Fotografe e o sistema transforma em documento digital';
  }
- if (btnCamEl) btnCamEl.textContent = isMultiPageDraft ? '📸 Tirar Fotos' : '📸 Tirar Foto';
- if (btnFileEl) btnFileEl.textContent = isMultiPageDraft ? '📁 Escolher Ficheiros' : '📁 Escolher Ficheiro';
+ if (btnCamEl) btnCamEl.textContent = isMultiPageDraft ? '📸 Adicionar Foto' : '📸 Tirar Foto';
+ if (btnFileEl) btnFileEl.textContent = isMultiPageDraft ? '📁 Adicionar Ficheiro' : '📁 Escolher Ficheiro';
 
  DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
  DocumentView.removePreviewPanel();
