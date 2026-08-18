@@ -108,6 +108,27 @@ export class DocumentController {
  document.getElementById('btnDl')?.addEventListener('click', () => this.downloadDoc());
  document.getElementById('btnWaResult')?.addEventListener('click', () => this.sendWA());
 
+ // CORRIGIDO (bug crítico "Gerar com IA não responde ao clique" — reportado
+ // só em Chrome, mas era um problema de fundo em qualquer browser): os
+ // botões #btnGen / #btnWaDirect / #btnPreview são recriados via
+ // formFootEl.innerHTML em DocumentView.renderForm() — que é chamado não só
+ // ao abrir o formulário, mas também, por exemplo, ao descartar um rascunho
+ // (ver _showDraftBanner → 'Descartar'). Antes, o clique era ligado com
+ // `elemento.onclick = ...` num setTimeout(50ms) UMA ÚNICA VEZ dentro de
+ // open() — cada vez que o formFoot era re-renderizado depois disso, os
+ // elementos antigos eram substituídos por elementos NOVOS sem o onclick
+ // (o listener ficava "preso" ao nó DOM antigo, já removido), e o botão
+ // ficava visualmente igual mas sem qualquer acção associada — parecia que
+ // "o clique não fazia nada", sem erro nenhum na consola. A correcção usa
+ // delegação de eventos num único listener, ligado permanentemente ao
+ // contentor #formFoot (que nunca é substituído, só o seu conteúdo), por
+ // isso continua a funcionar por muitas vezes que o botão seja recriado.
+ document.getElementById('formFoot')?.addEventListener('click', e => {
+  if (e.target.closest('#btnGen'))      { e.preventDefault(); this.generate(); }
+  else if (e.target.closest('#btnWaDirect')) { e.preventDefault(); this.sendDirect(); }
+  else if (e.target.closest('#btnPreview'))  { e.preventDefault(); this.previewDocument(); }
+ });
+
    document.getElementById('btnTemplate')?.addEventListener('click', () => {
      const key     = this.docModel?.service || documentState.serviceType || '';
      const content = documentState.currentContent || this.docModel?.content || '';
@@ -341,14 +362,10 @@ export class DocumentController {
 
  this._bindDraftAutoSave(key, svc.fields);
 
- setTimeout(() => {
-  const btnGen = document.getElementById('btnGen');
-  const btnWa = document.getElementById('btnWaDirect');
-  const btnPreview = document.getElementById('btnPreview');
-  if (btnGen) btnGen.onclick = () => this.generate();
-  if (btnWa) btnWa.onclick = () => this.sendDirect();
-  if (btnPreview) btnPreview.onclick = () => this.previewDocument();
- }, 50);
+ // NOVO: já não é preciso religar #btnGen/#btnWaDirect/#btnPreview aqui —
+ // o clique é tratado por delegação de eventos em #formFoot (ver
+ // _bindEvents()), que continua a funcionar mesmo depois de renderForm()
+ // recriar estes botões (ex.: ao descartar um rascunho restaurado).
 
  ModalView.open('formOverlay');
 
