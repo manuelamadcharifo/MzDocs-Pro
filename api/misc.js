@@ -2268,38 +2268,56 @@ async function handleOcrAnalyze(req, res) {
   // técnica é que ainda ia tudo numa única chamada.
   const _sleep = (ms) => new Promise((r2) => setTimeout(r2, ms));
 
-  // CORRIGIDO (causa dos "[ILEGÍVEL]" em cascata a partir da página 2): ao
-  // disparar várias chamadas de IA por página em simultâneo, é muito comum
-  // bater no limite de pedidos-por-minuto dos planos gratuitos do Gemini/
-  // Groq — a 1ª chamada de cada "onda" costuma passar, e as restantes
-  // recebiam HTTP 429 (Too Many Requests) sem retry, ficando marcadas como
-  // página não legível mesmo tendo conteúdo perfeitamente legível
-  // (confirmado: consegui ler essas mesmas páginas directamente das
-  // fotos). Mantém-se aqui só 1 tentativa por fornecedor (para não
-  // arriscar ultrapassar o tempo máximo da função serverless) — a
-  // resiliência a picos de taxa vem da 2ª ronda em `transcribeAllPagesSeparately`.
-  async function transcribeSinglePage(img, pageNum, totalPages) {
-    const pagePrompt = `És um digitador/transcritor extremamente rigoroso de documentos moçambicanos, incluindo manuscritos. A tua única tarefa é reproduzir fielmente o que está escrito nesta imagem — nunca gerar, resumir ou completar conteúdo por conta própria.\n\nEsta é a página ${pageNum} de ${totalPages} de um mesmo rascunho/caderno manuscrito.\n\nTIPO DE DOCUMENTO: ${serviceType}\n${schema.length ? `\nSe algum destes campos aparecer NESTA página, extrai também:\n${schemaDesc}\n` : ''}\nINSTRUÇÕES:\n- Transcreve TODO o texto manuscrito visível nesta imagem, exactamente como está escrito, mantendo a ordem das linhas e parágrafos.\n- REGRA ABSOLUTA: transcreve APENAS o que está literalmente escrito. NUNCA acrescentes frases, ideias ou conteúdo que não estejam fisicamente na página, mesmo que o tema pareça familiar (religioso, académico, etc.).\n- Roda mentalmente a imagem se o texto estiver de lado ou invertido — o teu trabalho é ler o conteúdo, independentemente da orientação da fotografia.\n- Se uma palavra ou linha estiver ilegível, escreve [ILEGÍVEL] apenas nesse ponto e continua a transcrever o resto normalmente — não desistas da página inteira por causa de uma palavra difícil.\n- Só usa "[PÁGINA NÃO LEGÍVEL]" como transcrição se a imagem estiver GENUINAMENTE em branco, completamente fora de foco, ou sem nenhum texto visível — não uses isto apenas porque a letra é cursiva ou difícil; faz sempre o teu melhor esforço antes de desistir.\n- Responde APENAS com JSON válido, sem markdown, sem explicações.\n\nFORMATO OBRIGATÓRIO:\n{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":[],"transcript":"texto completo desta página"}`;
+  // NOVO: orçamento de tempo global para todo o pipeline de transcrição
+  // multi-página. api/misc.js tem maxDuration:60s (ver vercel.json) — este
+  // orçamento fica com margem de segurança (45s) para sobrar sempre tempo
+  // de escrever a resposta antes da função serverless ser abatida a meio,
+  // o que produziria um erro de rede genérico no browser em vez de uma
+  // resposta (parcial que seja) com o que já foi conseguido transcrever.
+  const _ocrDeadline = Date.now() + 45000;
+  const _timeLeft = () => _ocrDeadline - Date.now();
 
-    if (process.env.GEMINI_API_KEY) {
+  // CORRIGIDO (causa raiz das páginas "[ILEGÍVEL]" em cascata, sobretudo a
+  // partir da página 3-4): a versão anterior desistia de cada página ao
+  // primeiro 429/503 (limite de pedidos-por-minuto dos planos gratuitos do
+  // Gemini/Groq), confiando só numa "ronda de recuperação" única e global
+  // no fim — nessa altura, com 6-9 páginas a repetir o mesmo erro em maré,
+  // muitas ainda caíam no mesmo limite de taxa e ficavam definitivamente
+  // por ler. Agora cada página tenta o MESMO fornecedor até 2 vezes, com
+  // pausa progressiva (backoff), antes de passar ao fornecedor seguinte —
+  // dá tempo à janela de limite de pedidos-por-minuto da API se libertar
+  // sem desistir logo da página.
+  async function _callGeminiPage(img, pagePrompt, pageNum) {
+    if (!process.env.GEMINI_API_KEY) return null;
+    for (let attempt = 0; attempt < 2 && _timeLeft() > 4000; attempt++) {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: img } }, { text: pagePrompt }] }], generationConfig: { maxOutputTokens: 2200, temperature: 0.1 } }) });
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: img } }, { text: pagePrompt }] }], generationConfig: { maxOutputTokens: 2600, temperature: 0.1 } }) });
         if (r.ok) {
           const d = await r.json();
           const parsed = _safeJSON(d.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
           if (_hasUsefulOcrResult(parsed)) return parsed;
-        } else if (r.status !== 429 && r.status !== 503) {
+          break; // resposta válida mas sem conteúdo útil — não vale repetir
+        }
+        if (r.status === 429 || r.status === 503) {
+          if (attempt === 0 && _timeLeft() > 5000) { await _sleep(1500 + Math.random() * 800); continue; }
+        } else {
           console.warn(`[ocr-analyze] Gemini página ${pageNum} status:`, r.status);
         }
-      } catch (e) { console.warn(`[ocr-analyze] Gemini página ${pageNum} exception:`, e.message); }
+        break;
+      } catch (e) { console.warn(`[ocr-analyze] Gemini página ${pageNum} exception:`, e.message); break; }
     }
-    if (process.env.GROQ_API_KEY) {
+    return null;
+  }
+
+  async function _callGroqPage(img, pagePrompt, pageNum) {
+    if (!process.env.GROQ_API_KEY) return null;
+    for (let attempt = 0; attempt < 2 && _timeLeft() > 4000; attempt++) {
       try {
         const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-          body: JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', max_tokens: 2200, temperature: 0.1, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${img}` } }, { type: 'text', text: pagePrompt }] }] }),
+          body: JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', max_tokens: 2600, temperature: 0.1, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${img}` } }, { type: 'text', text: pagePrompt }] }] }),
         });
         if (r.ok) {
           const d = await r.json();
@@ -2307,38 +2325,56 @@ async function handleOcrAnalyze(req, res) {
             const parsed = _safeJSON(d.choices?.[0]?.message?.content || '{}');
             if (_hasUsefulOcrResult(parsed)) return parsed;
           }
+          break;
         }
-      } catch (e) { console.warn(`[ocr-analyze] Groq página ${pageNum} exception:`, e.message); }
+        if ((r.status === 429 || r.status === 503) && attempt === 0 && _timeLeft() > 5000) {
+          await _sleep(1200 + Math.random() * 600); continue;
+        }
+        break;
+      } catch (e) { console.warn(`[ocr-analyze] Groq página ${pageNum} exception:`, e.message); break; }
     }
     return null;
   }
 
+  async function transcribeSinglePage(img, pageNum, totalPages) {
+    const pagePrompt = `És um digitador/transcritor extremamente rigoroso de documentos moçambicanos, incluindo manuscritos. A tua única tarefa é reproduzir fielmente o que está escrito nesta imagem — nunca gerar, resumir ou completar conteúdo por conta própria.\n\nEsta é a página ${pageNum} de ${totalPages} de um mesmo rascunho/caderno manuscrito.\n\nTIPO DE DOCUMENTO: ${serviceType}\n${schema.length ? `\nSe algum destes campos aparecer NESTA página, extrai também:\n${schemaDesc}\n` : ''}\nINSTRUÇÕES:\n- Transcreve TODO o texto manuscrito visível nesta imagem, exactamente como está escrito, mantendo a ordem das linhas e parágrafos.\n- REGRA ABSOLUTA: transcreve APENAS o que está literalmente escrito. NUNCA acrescentes frases, ideias ou conteúdo que não estejam fisicamente na página, mesmo que o tema pareça familiar (religioso, académico, etc.).\n- Roda mentalmente a imagem se o texto estiver de lado ou invertido — o teu trabalho é ler o conteúdo, independentemente da orientação da fotografia.\n- Se uma palavra ou linha estiver ilegível, escreve [ILEGÍVEL] apenas nesse ponto e continua a transcrever o resto normalmente — não desistas da página inteira por causa de uma palavra difícil.\n- Só usa "[PÁGINA NÃO LEGÍVEL]" como transcrição se a imagem estiver GENUINAMENTE em branco, completamente fora de foco, ou sem nenhum texto visível — não uses isto apenas porque a letra é cursiva ou difícil; faz sempre o teu melhor esforço antes de desistir.\n- Responde APENAS com JSON válido, sem markdown, sem explicações.\n\nFORMATO OBRIGATÓRIO:\n{"fields":{"id_campo":{"value":"valor encontrado","confidence":0.95,"source":"ocr"}},"missing":[],"transcript":"texto completo desta página"}`;
+
+    const gemini = await _callGeminiPage(img, pagePrompt, pageNum);
+    if (gemini) return gemini;
+    return await _callGroqPage(img, pagePrompt, pageNum);
+  }
+
   async function transcribeAllPagesSeparately() {
-    // CORRIGIDO: concorrência mais baixa e com um pequeno desfasamento no
-    // arranque de cada "trabalhador" — disparar todas as páginas ao mesmo
-    // tempo era precisamente o que fazia bater no limite de taxa da API
-    // logo a seguir à 1ª página.
-    const CONCURRENCY = 3;
+    // CORRIGIDO: concorrência reduzida de 3 para 2 e desfasamento maior no
+    // arranque de cada "trabalhador" (300ms → 700ms) — reduz ainda mais o
+    // pico de pedidos/segundo contra os limites gratuitos do Gemini/Groq,
+    // já que agora cada página também pode repetir até 2x sozinha.
+    const CONCURRENCY = 2;
     const results = new Array(images.length).fill(null);
     let next = 0;
     async function worker(workerIndex) {
-      await _sleep(workerIndex * 300); // desfasamento para suavizar o arranque
-      while (next < images.length) {
+      await _sleep(workerIndex * 700); // desfasamento para suavizar o arranque
+      while (next < images.length && _timeLeft() > 4000) {
         const i = next++;
         results[i] = await transcribeSinglePage(images[i], i + 1, images.length);
       }
     }
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, images.length) }, (_, w) => worker(w)));
 
-    // Ronda extra (uma só vez, em série, com pequena pausa): recupera
-    // páginas que só falharam por causa do pico de pedidos da 1ª ronda —
-    // não por serem realmente ilegíveis. Mantém-se leve (uma tentativa,
-    // sem paralelismo) para não arriscar ultrapassar o tempo máximo da
-    // função serverless.
-    for (let i = 0; i < results.length; i++) {
-      if (!results[i]) {
-        await _sleep(500);
-        results[i] = await transcribeSinglePage(images[i], i + 1, images.length);
+    // CORRIGIDO: em vez de UMA ronda de recuperação, agora são até DUAS,
+    // cada uma com uma pausa maior que a anterior — a maioria das falhas
+    // observadas eram picos de limite de taxa (429), não páginas realmente
+    // ilegíveis, e uma pausa mais longa dá tempo à janela do limite se
+    // libertar. Cada ronda respeita o orçamento de tempo global (_timeLeft)
+    // para nunca arriscar ultrapassar o limite da função serverless.
+    for (const pauseMs of [1200, 2200]) {
+      if (results.every(r => r)) break;
+      if (_timeLeft() < 6000) break;
+      await _sleep(pauseMs);
+      for (let i = 0; i < results.length; i++) {
+        if (!results[i] && _timeLeft() > 4000) {
+          results[i] = await transcribeSinglePage(images[i], i + 1, images.length);
+        }
       }
     }
 
