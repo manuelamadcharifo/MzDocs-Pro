@@ -36,6 +36,9 @@
   },
   "jest": {
     "testEnvironment": "jsdom",
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ],
     "coverageDirectory": "coverage",
     "collectCoverageFrom": [
       "assets/js/**/*.js",
