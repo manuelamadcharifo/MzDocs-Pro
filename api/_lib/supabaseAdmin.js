@@ -16,11 +16,21 @@
 // `createClient` directamente.
 // ──────────────────────────────────────────────────────────────────────────
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// CORRIGIDO: SUPABASE_URL e SERVICE_KEY eram `const` avaliadas UMA ÚNICA VEZ,
+// no momento em que este módulo é importado pela primeira vez (`require`).
+// Isto tornava o módulo "cego" a qualquer alteração posterior de
+// process.env.SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY — por exemplo, em
+// testes automatizados que definem essas variáveis dentro de um `test(...)`
+// específico (depois de o módulo já ter sido importado no topo do
+// ficheiro), a alteração simplesmente não tinha efeito, e todas as chamadas
+// continuavam a falhar com "Supabase não está configurado", mesmo com as
+// variáveis correctamente definidas. Ler o valor a cada chamada (em vez de
+// o guardar em cache no arranque) resolve isto e é, em geral, mais robusto.
+function _supaUrl() { return process.env.SUPABASE_URL; }
+function _supaKey() { return process.env.SUPABASE_SERVICE_ROLE_KEY; }
 
 function assertConfigured() {
-  if (!SUPABASE_URL || !SERVICE_KEY) {
+  if (!_supaUrl() || !_supaKey()) {
     const err = new Error('Supabase não está configurado no servidor (faltam SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY).');
     err.code = 'SUPABASE_NOT_CONFIGURED';
     throw err;
@@ -36,9 +46,9 @@ async function getUserFromToken(token) {
   if (!token) return { user: null, error: new Error('Token ausente') };
 
   try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    const res = await fetch(`${_supaUrl()}/auth/v1/user`, {
       headers: {
-        apikey: SERVICE_KEY,
+        apikey: _supaKey(),
         Authorization: `Bearer ${token}`,
       },
     });
@@ -64,14 +74,14 @@ async function restRequest(path, { method = 'GET', body, headers = {}, prefer } 
   assertConfigured();
 
   const finalHeaders = {
-    apikey: SERVICE_KEY,
-    Authorization: `Bearer ${SERVICE_KEY}`,
+    apikey: _supaKey(),
+    Authorization: `Bearer ${_supaKey()}`,
     'Content-Type': 'application/json',
     ...headers,
   };
   if (prefer) finalHeaders['Prefer'] = prefer;
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  const res = await fetch(`${_supaUrl()}/rest/v1/${path}`, {
     method,
     headers: finalHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -159,11 +169,11 @@ async function upsert(table, row, onConflict = 'id') {
  */
 async function countRows(table, filters = '') {
   assertConfigured();
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${filters}`, {
+  const res = await fetch(`${_supaUrl()}/rest/v1/${table}${filters}`, {
     method: 'HEAD',
     headers: {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: _supaKey(),
+      Authorization: `Bearer ${_supaKey()}`,
       Prefer: 'count=exact',
     },
   });
@@ -181,8 +191,8 @@ async function countRows(table, filters = '') {
 /** Obtém um utilizador via Auth Admin API pelo seu id. */
 async function adminGetUserById(userId) {
   assertConfigured();
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+  const res = await fetch(`${_supaUrl()}/auth/v1/admin/users/${userId}`, {
+    headers: { apikey: _supaKey(), Authorization: `Bearer ${_supaKey()}` },
   });
   const text = await res.text();
   let data = null;
@@ -198,9 +208,9 @@ async function adminGetUserById(userId) {
 /** Actualiza campos de um utilizador (ex: app_metadata) via Auth Admin API. */
 async function adminUpdateUserById(userId, patch) {
   assertConfigured();
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+  const res = await fetch(`${_supaUrl()}/auth/v1/admin/users/${userId}`, {
     method: 'PUT',
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    headers: { apikey: _supaKey(), Authorization: `Bearer ${_supaKey()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   });
   const text = await res.text();
@@ -217,11 +227,11 @@ async function adminUpdateUserById(userId, patch) {
 /** Envia um ficheiro (Buffer) para o Supabase Storage. upsert=true substitui se já existir. */
 async function storageUpload(bucket, path, buffer, contentType, upsert = true) {
   assertConfigured();
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+  const res = await fetch(`${_supaUrl()}/storage/v1/object/${bucket}/${path}`, {
     method: 'POST',
     headers: {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: _supaKey(),
+      Authorization: `Bearer ${_supaKey()}`,
       'Content-Type': contentType || 'application/octet-stream',
       'x-upsert': upsert ? 'true' : 'false',
     },
@@ -240,7 +250,7 @@ async function storageUpload(bucket, path, buffer, contentType, upsert = true) {
 
 /** Devolve o URL público de um ficheiro num bucket público. */
 function storageGetPublicUrl(bucket, path) {
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+  return `${_supaUrl()}/storage/v1/object/public/${bucket}/${path}`;
 }
 
 /**
@@ -259,11 +269,11 @@ async function storageCreateSignedUrl(bucket, path, expiresInSeconds = 300) {
   assertConfigured();
   if (!path) return null;
   try {
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${path}`, {
+    const res = await fetch(`${_supaUrl()}/storage/v1/object/sign/${bucket}/${path}`, {
       method: 'POST',
       headers: {
-        apikey: SERVICE_KEY,
-        Authorization: `Bearer ${SERVICE_KEY}`,
+        apikey: _supaKey(),
+        Authorization: `Bearer ${_supaKey()}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ expiresIn: expiresInSeconds }),
@@ -271,7 +281,7 @@ async function storageCreateSignedUrl(bucket, path, expiresInSeconds = 300) {
     if (!res.ok) return null;
     const data = await res.json();
     if (!data || !data.signedURL) return null;
-    return `${SUPABASE_URL}/storage/v1${data.signedURL}`;
+    return `${_supaUrl()}/storage/v1${data.signedURL}`;
   } catch (err) {
     console.error('[storageCreateSignedUrl] erro:', err.message);
     return null;
@@ -293,11 +303,11 @@ async function storageCreateSignedUrls(items, expiresInSeconds = 300) {
 /** Remove permanentemente um utilizador via Auth Admin API (contas avulso). */
 async function adminDeleteUser(userId) {
   assertConfigured();
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+  const res = await fetch(`${_supaUrl()}/auth/v1/admin/users/${userId}`, {
     method: 'DELETE',
     headers: {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: _supaKey(),
+      Authorization: `Bearer ${_supaKey()}`,
     },
   });
   return res.ok;
@@ -318,11 +328,11 @@ async function adminDeleteUser(userId) {
  */
 async function adminCreateUser({ email, password, userMetadata = {}, emailConfirm = true }) {
   assertConfigured();
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+  const res = await fetch(`${_supaUrl()}/auth/v1/admin/users`, {
     method: 'POST',
     headers: {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: _supaKey(),
+      Authorization: `Bearer ${_supaKey()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -349,8 +359,13 @@ async function adminCreateUser({ email, password, userMetadata = {}, emailConfir
 }
 
 module.exports = {
-  SUPABASE_URL,
-  SERVICE_KEY,
+  // NOTA: SUPABASE_URL/SERVICE_KEY deixaram de ser exportados como
+  // valores estáticos (eram capturados uma única vez no arranque do
+  // módulo — ver comentário "CORRIGIDO" acima). Nada no projecto os
+  // importava directamente (confirmado por pesquisa em todo o código),
+  // por isso são removidos em vez de exportados desactualizados; quem
+  // precisar do URL/chave deve usar assertConfigured() + as funções
+  // deste módulo, nunca ler estes valores directamente.
   assertConfigured,
   getUserFromToken,
   restRequest,
@@ -377,8 +392,8 @@ module.exports = {
  */
 async function anonAuthRequest(path, body) {
   const ANON_KEY = process.env.SUPABASE_ANON_KEY;
-  if (!SUPABASE_URL || !ANON_KEY) throw new Error('Supabase não configurado (falta URL ou ANON_KEY)');
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+  if (!_supaUrl() || !ANON_KEY) throw new Error('Supabase não configurado (falta URL ou ANON_KEY)');
+  const res = await fetch(`${_supaUrl()}/auth/v1/${path}`, {
     method: 'POST',
     headers: {
       apikey: ANON_KEY,
@@ -396,11 +411,11 @@ async function anonAuthRequest(path, body) {
  */
 async function adminSendRecovery(email, redirectTo) {
   assertConfigured();
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+  const res = await fetch(`${_supaUrl()}/auth/v1/recover`, {
     method: 'POST',
     headers: {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: _supaKey(),
+      Authorization: `Bearer ${_supaKey()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ email, redirect_to: redirectTo }),
