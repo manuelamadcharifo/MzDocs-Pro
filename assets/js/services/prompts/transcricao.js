@@ -63,6 +63,7 @@ REGRAS ABSOLUTAS (violar qualquer uma torna o resultado inaceitável):
 5. Se uma palavra ou trecho for absolutamente ilegível no material fornecido, marque no texto como [ILEGÍVEL] em vez de adivinhar ou inventar conteúdo — nunca finja ter lido algo que não estava claro.
 6. Mantenha números, datas, nomes próprios e valores EXACTAMENTE como aparecem no original — nunca "corrija" um valor ou uma data por parecer estranho, mesmo que pareça um erro do autor.
 7. Se o material tiver várias páginas, uma-as num documento contínuo e coerente, respeitando a ordem (salvo instrução de organização em contrário acima).
+8. NOVO — se alguma parte do material vier marcada exactamente como "[PÁGINA NÃO LEGÍVEL]" (a câmara não conseguiu ler essa página de todo, geralmente por desfoque, inclinação ou pouca luz): NÃO a omita silenciosamente do documento final e NÃO invente conteúdo para preencher esse espaço. Em vez disso, escreva no lugar exacto dessa página, em destaque: "> ⚠️ **Não foi possível ler esta página.** Tire a foto novamente com boa luz, bem enquadrada e sem inclinação, e gere de novo." Isto avisa claramente o utilizador de qual página específica precisa de ser refotografada, em vez de o documento parecer incompleto sem explicação.
 
 ${ocrBlock}
 
