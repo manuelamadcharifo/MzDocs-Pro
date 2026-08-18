@@ -67,6 +67,9 @@ export class SmartOCRService {
         : 'image/jpeg';
       const result = await this._analyzeWithAI(base64, mimeType, text, schema, serviceType);
       if (onProgress) onProgress(100, 'Concluído!');
+      if (result?._debug?.length) {
+        console.warn('[SmartOCR] Diagnóstico da última leitura:\n' + result._debug.join('\n'));
+      }
       // CORRIGIDO: quando o backend devolve "transcript" (agora também
       // acontece com 1 única foto no serviço "transcricao" — ver
       // api/misc.js → handleOcrAnalyze), essa transcrição da IA é o texto
@@ -121,6 +124,15 @@ export class SmartOCRService {
     try {
       const result = await this._analyzeWithAI(images, 'image/jpeg', '', schema, serviceType);
       if (onProgress) onProgress(100, 'Concluído!');
+      // NOVO (diagnóstico): quando o backend falha a ler páginas, devolve
+      // agora um resumo "_debug" (motivo por página/fornecedor: chave em
+      // falta, HTTP 429, excepção, etc.) — nunca mostrado na interface,
+      // só na consola do browser, para se conseguir distinguir rapidamente
+      // "quota grátis esgotada hoje" de um problema real no código sem ter
+      // de adivinhar a partir de um resultado vazio.
+      if (result?._debug?.length) {
+        console.warn('[SmartOCR] Diagnóstico da última leitura:\n' + result._debug.join('\n'));
+      }
       const { transcript, ...rest } = result || {};
       return { rawText: transcript || '', confidence: transcript ? 70 : 0, ...rest };
     } catch (err) {
