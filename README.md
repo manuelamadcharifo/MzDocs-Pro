@@ -7,11 +7,12 @@ móvel (M-Pesa, e-Mola, mKesh).
 
 > 📌 **Nota sobre este README:** actualizado em Agosto/2026 a partir de uma leitura directa do
 > código-fonte no export mais recente (migrações até `v56`, correcções ao Marketplace de
-> Templates e ao motor de pagamentos). A versão anterior deste ficheiro tinha ficado desactualizada
-> em relação às migrações `v52`–`v56` e a várias correcções entretanto feitas ao Marketplace de
-> Templates, ao CI e às notificações de pagamento. Este documento reflecte o estado do código tal
-> como está — não o histórico ronda-a-ronda, que passa a viver apenas na secção "Histórico de
-> Versões" no fim.
+> Templates, ao motor de pagamentos, e à fiabilidade do OCR multi-página do serviço "Digitalizar
+> Documento" — ronda v57, secção 12 e 14). A versão anterior deste ficheiro tinha ficado
+> desactualizada em relação às migrações `v52`–`v56` e a várias correcções entretanto feitas ao
+> Marketplace de Templates, ao CI e às notificações de pagamento. Este documento reflecte o estado
+> do código tal como está — não o histórico ronda-a-ronda, que passa a viver apenas na secção
+> "Histórico de Versões" no fim.
 
 > ⚠️ **Acção urgente e não resolvida — plano Vercel:** este projecto processa pagamentos
 > (`api/process-payment.js`, tabela `transactions`). Os Termos de Serviço da Vercel definem
@@ -65,7 +66,7 @@ móvel (M-Pesa, e-Mola, mKesh).
 | **Módulo Académico APA 7** | Citações, bibliografia, TOC automático, upload PDF/URL | ✅ |
 | **Extracção de Template por Imagem** | IA de visão extrai estrutura de qualquer imagem de documento | ✅ |
 | **OCR (SmartOCRService v4)** | IA visual primeiro (Groq/Gemini), Tesseract como complemento; suporta imagem, PDF (`pdf.js`) e Word (`mammoth.js`) | ✅ |
-| **Digitalizar Documento (`transcricao`)** | Serviço dedicado a fotografar um trabalho manuscrito/vários ficheiros e devolver texto digitado e formatado | ✅ Novo serviço, não documentado em versões anteriores deste README |
+| **Digitalizar Documento (`transcricao`) — acumulador de páginas (NOVO — Ago/2026)** | Fotografar/carregar um documento de várias páginas (manuscrito ou não) e receber o texto digitado e formatado. Cada toque em "Adicionar Foto/Ficheiro" **acumula** a página numa lista visível (`#ocrStagedWrap`, `OCRController.stagedFiles`) em vez de disparar o OCR de imediato — só a transcrição efectiva do lote completo é feita ao carregar em "Transcrever N página(s)". Páginas que falhem a leitura na 1ª tentativa têm agora 2 rondas extra de recuperação (antes só páginas com erro de rede eram repetidas); se mesmo assim ficarem ilegíveis, o documento final mostra um aviso visível nessa página exacta ("⚠️ Não foi possível ler esta página...") em vez de a omitir silenciosamente | ✅ Corrige um bug de produção confirmado (selecção múltipla de fotos no `<input type="file">` perdia silenciosamente todas as páginas menos a 1ª em vários Android) — ver secção 12 |
 | **Motor Jurídico RAG** | Busca vectorial (pgvector) sobre artigos de lei moçambicanos reais para os serviços jurídicos, em vez de citações estáticas | ✅ |
 | **Histórico Offline** | IndexedDB, sincronizado quando online | ✅ |
 | **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola, mKesh — upload de comprovativo com verificação automática por IA de visão (aprovação se confiança ≥ 0.85) e fallback WhatsApp | ✅ |
@@ -696,6 +697,39 @@ automatizado.
   de function (Vercel Pro, ou o mesmo truque de despacho por query usado no SMS M-Pesa).
 - **Templates visuais continuam em 70** (14 serviços × 5) apesar do número total de serviços já
   ter crescido para 18 — `transcricao` e `conversao` ainda não têm galeria de templates própria.
+- ~~Seleccionar várias fotos de uma vez no OCR (`transcricao`/`trabalho`) perdia silenciosamente
+  todas menos a 1ª em vários telemóveis Android~~ — **resolvido (Ago/2026):** o `<input
+  type="file" id="ocrInput">` já tinha o atributo `multiple` ligado dinamicamente, mas o selector
+  nativo de muitos Android não devolve de forma fiável mais do que 1 ficheiro em `e.target.files`
+  mesmo assim, sem qualquer erro. Solução aplicada em `OCRController.js`: cada toque em "Adicionar
+  Foto/Ficheiro" passou a **acumular** os ficheiros numa lista visível (`stagedFiles`,
+  `#ocrStagedWrap` em `index.html`) em vez de processar de imediato — o utilizador pode repetir o
+  toque quantas vezes precisar (uma página de cada vez, se for o que o telemóvel permitir de
+  forma fiável) até ter todas as páginas, e só depois carrega em "Transcrever N página(s)". Corrigido
+  também, na mesma função: um único ficheiro grande demais no lote fazia `return` e descartava
+  **todo** o lote em silêncio — agora só esse ficheiro é ignorado, com aviso claro, os restantes
+  continuam.
+- ~~Deploys de correcções de UI/JS não chegavam aos telemóveis mesmo depois de feitos~~ — **causa
+  identificada e documentada (Ago/2026):** `sw.js` faz precache explícito de `index.html`,
+  `OCRController.js`, `DocumentController.js` e `styles.css` com `revision: CACHE_VERSION`; o
+  projecto já tinha `scripts/inject-version.js` (chamado pelo `"build"` do `package.json`) para
+  gerar esse valor automaticamente a partir de `VERCEL_GIT_COMMIT_SHA` em cada deploy — mecanismo
+  correcto e já existente, não foi preciso criar nada de novo. O sintoma reportado foi, muito
+  provavelmente, o ciclo de vida normal do Service Worker (uma aba já aberta continua controlada
+  pela versão antiga até ser fechada/recarregada — o botão `mzUpdateNow` em `app.js` já trata
+  disto) e não uma falha do `inject-version.js`. Fica documentado aqui para o caso de o sintoma se
+  repetir: confirmar primeiro se `CACHE_VERSION` no `sw.js` publicado corresponde ao commit mais
+  recente antes de suspeitar do build.
+- **Páginas que continuam ilegíveis mesmo após as rondas de recuperação são uma limitação física
+  da fotografia (desfoque, inclinação, pouca luz), não um bug de código** — `api/misc.js` agora dá
+  a essas páginas o mesmo número de tentativas que a páginas com erro de rede (antes só tinham 1),
+  e `prompts/transcricao.js` (regra 8) já não as omite silenciosamente do documento final, mas não
+  há (ainda) nenhum pré-processamento de imagem (correcção de rotação/contraste antes do envio à
+  IA de visão) que aumente a taxa de sucesso da própria leitura.
+- **Sem teste automatizado para o fluxo de acumulação de páginas do OCR** — `OCRController.js`
+  (staged pages, validação por ficheiro, `runStaged()`) não tem nenhuma suite dedicada; a suite
+  mais próxima, `tests/ocrSchemaAlignment.test.js`, cobre apenas o alinhamento schema↔formulário,
+  não a lógica de acumulação/retry introduzida nesta ronda.
 
 ---
 
@@ -747,6 +781,7 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | v52 (código) | Corrida de IA por tiers com controlo de custo (generoso+médio por omissão, reserva activa só como fallback) e timeout de 9s por provider — corrige o esgotamento de quota e o custo por documento |
 | v52–v56 (Ago/2026) | Expiração real de créditos por lote (`credit_ledger`); preview de templates "Oficiais" corrigido na origem (4 variantes de estilo sem `template_html`); templates aprovados que não apareciam na Galeria pública (`is_public` dessincronizado de `status`); venda de templates restrita a afiliados/parceiros aprovados (trigger na BD); tecto de 10 créditos em `credit_cost`, alinhado com o limite de qualquer operação cobrada |
 | Correcções de código (Ago/2026, mesma ronda) | Preview de templates da comunidade com variáveis em minúsculas (`{{nome_completo}}`, `{{destinatario}}`...) deixava de preencher com dados fictícios e mostrava as chaves `{{...}}` literais — bug na regex de `fillTemplate()` (`SampleData.js`), que só reconhecia MAIÚSCULAS; corrigido, e reaproveitado no preview do admin (antes escrevia o HTML cru, sem preencher nada); formulário "Submeter Template" passou a mostrar o equivalente em MZN ao lado dos créditos (criador/plataforma), como o admin já mostrava; `TemplateLibrary.js` pedia a coluna `price_mzn` — removida da tabela pela v39 — o que fazia as duas queries de carregamento de templates do marketplace falharem sempre em silêncio (nenhum template do marketplace aparecia no selector "Escolher Modelo"); `notifyTelegram.js` ligado a `misc.js` para alertar o admin de pagamentos em revisão manual |
+| v57 (Ago/2026) — fiabilidade do OCR multi-página (`transcricao`) | Reportado em produção: fotografar 9 páginas de um documento manuscrito resultava num documento final com o conteúdo de apenas 1 página. Três correcções em cadeia, cada uma isolando a causa seguinte: **(1)** `OCRController.js` — o `<input type="file">` perdia silenciosamente todas as fotos menos a 1ª em vários Android; solução: acumulador de páginas (`stagedFiles`) com lista visível e botão "Transcrever N página(s)", em vez de processar de imediato ao escolher ficheiros; corrigido também um bug em que 1 ficheiro grande demais no lote descartava o lote inteiro. **(2)** Confirmado que `scripts/inject-version.js` (build da Vercel) já gera `CACHE_VERSION` automaticamente a partir do commit — não foi preciso criar mecanismo novo, apenas documentar para diagnóstico futuro. **(3)** `api/misc.js` — páginas que "liam" mas devolviam transcript vazio nunca tinham 2ª tentativa (só páginas com erro de rede eram repetidas); `prompts/transcricao.js` (nova regra 8) — páginas que continuam ilegíveis após as tentativas deixam de desaparecer silenciosamente do documento final, passando a mostrar um aviso visível a pedir nova fotografia dessa página específica |
 
 | Componente | Versão |
 |---|---|
