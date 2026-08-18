@@ -3,7 +3,7 @@
 // 🔑 CACHE_VERSION: mudar este valor a cada deploy para invalidar o cache
 //    em todos os clientes e forçar download dos ficheiros novos.
 //    Formato sugerido: 'v<versao>-<YYYYMMDD>' ex: 'v7-20260515'
-const CACHE_VERSION = 'v30-20260725'; // CORRIGIDO: 'activate' apagava a cache REAL do precache (CSS/JS/imagens) a cada deploy, porque comparava com uma string literal errada em vez do nome real (workbox.core.cacheNames.precache). Por isso a app abria offline mas sem nenhum estilo.
+const CACHE_VERSION = 'v31-20260818'; // NOVO: subido de v30-20260725 — o precache abaixo lista index.html, OCRController.js, DocumentController.js e styles.css com `revision: CACHE_VERSION`; para o Workbox, mesma URL + mesma revisão = "ficheiro igual ao anterior", por isso NUNCA ia buscar as versões novas desses ficheiros ao servidor, mesmo depois de um deploy — o site continuava a servir a app antiga do cache local em todos os telemóveis já com a PWA instalada/visitada antes. Subir este valor invalida esse cache e força o download das versões actuais (fluxo do acumulador de páginas do OCR — ver OCRController.js). CORRIGIDO (anterior): 'activate' apagava a cache REAL do precache (CSS/JS/imagens) a cada deploy, porque comparava com uma string literal errada em vez do nome real (workbox.core.cacheNames.precache). Por isso a app abria offline mas sem nenhum estilo.
 
 // CORRIGIDO (bug crítico — causa raiz de "a app não abre sem dados/internet"):
 // Antes, o Service Worker carregava o Workbox e o idb via importScripts a partir
