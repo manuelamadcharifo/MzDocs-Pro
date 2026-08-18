@@ -101,8 +101,14 @@ export class SmartOCRService {
     // inteira de texto manuscrito. Para este fluxo (várias páginas de um
     // rascunho/caderno), usa-se uma resolução maior (1600px) à custa de um
     // payload um pouco maior, mas com ganho real de precisão na leitura.
+    // CORRIGIDO: 1600px no lado maior ficava demasiado apertado para letra
+    // cursiva pequena em páginas inteiras de caderno — a IA confundia
+    // letras semelhantes ou desistia da página. 1800px melhora a
+    // legibilidade sem aumentar muito o payload por imagem (o custo real
+    // continua controlado, porque cada página é enviada numa chamada
+    // separada — ver transcribeSinglePage em api/misc.js).
     for (let i = 0; i < files.length; i++) {
-      const base64 = await this._compressImage(files[i], 1600, 0.85).catch(() => null);
+      const base64 = await this._compressImage(files[i], 1800, 0.87).catch(() => null);
       if (base64) images.push(base64);
       if (onProgress) onProgress(10 + Math.round(((i + 1) / files.length) * 40), `A preparar página ${i + 1}/${files.length}…`);
     }
