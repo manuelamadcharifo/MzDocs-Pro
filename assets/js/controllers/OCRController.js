@@ -1,22 +1,51 @@
 // assets/js/controllers/OCRController.js
 // Versão melhorada: usa SmartOCRService para auto-preenchimento inteligente
+//
+// CORRIGIDO (bug crítico: "só lê a 1ª foto, o resto é ignorado"): antes,
+// seleccionar 9 fotos de uma vez dependia inteiramente do atributo
+// `multiple` do <input type="file"> e do selector nativo do telemóvel
+// devolver TODOS os ficheiros escolhidos em `e.target.files`. Em muitos
+// Android isso falha silenciosamente — o utilizador escolhe 9 fotos, mas
+// só a 1ª chega à aplicação, sem qualquer aviso, e o resto é
+// simplesmente descartado. O backend (api/misc.js) já sabia transcrever
+// várias páginas correctamente, uma a uma — o problema nunca esteve ali.
+//
+// SOLUÇÃO: para os serviços de várias páginas ("trabalho" e "transcricao"),
+// deixámos de processar imediatamente ao escolher ficheiros. Em vez disso,
+// cada toque em "Adicionar Foto"/"Adicionar Ficheiro" ACUMULA os ficheiros
+// escolhidos numa lista visível (this.stagedFiles) — o utilizador pode
+// repetir o toque quantas vezes precisar (uma foto de cada vez, se for o
+// que o telemóvel permitir de forma fiável, ou várias juntas quando o
+// selector múltiplo funcionar), vendo sempre quantas páginas já tem
+// prontas. Só quando carrega em "Transcrever N página(s)" é que a IA é
+// chamada, com TODOS os ficheiros acumulados de uma vez — exactamente
+// como já acontecia antes, só que agora a lista de ficheiros está
+// garantidamente completa antes de seguir para o backend.
 import { NotificationView, DocumentView } from '../views/Views.js';
 import { SmartOCRService } from '../services/SmartOCRService.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 
+const MAX_PAGES_BY_SERVICE = { trabalho: 8, transcricao: 25 };
+const MULTI_PAGE_SERVICES = new Set(['trabalho', 'transcricao']);
+
 export class OCRController {
   constructor(docModel) {
-    this.docModel   = docModel;
-    this.smartOCR   = new SmartOCRService();
+    this.docModel     = docModel;
+    this.smartOCR     = new SmartOCRService();
+    // NOVO: acumulador de páginas para os serviços multi-página.
+    this.stagedFiles  = [];
     this._bindEvents();
   }
 
   _bindEvents() {
     document.getElementById('btnCam')?.addEventListener('click',    () => this.trigger('cam'));
     document.getElementById('btnFile')?.addEventListener('click',   () => this.trigger('file'));
-    document.getElementById('ocrInput')?.addEventListener('change', e => this.processFile(e));
+    document.getElementById('ocrInput')?.addEventListener('change', e => this.onFilesPicked(e));
     document.getElementById('btnUseOcr')?.addEventListener('click',     () => this.use());
     document.getElementById('btnDiscardOcr')?.addEventListener('click', () => this.discard());
+    // NOVO: acções da lista de páginas acumuladas.
+    document.getElementById('btnOcrClearStaged')?.addEventListener('click', () => this.clearStaged());
+    document.getElementById('btnOcrRunTranscribe')?.addEventListener('click', () => this.runStaged());
   }
 
   trigger(mode) {
@@ -27,34 +56,129 @@ export class OCRController {
     input.click();
   }
 
-  async processFile(e) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  _isMultiPageService() {
+    return MULTI_PAGE_SERVICES.has(this.docModel?.service || '');
+  }
 
-    const serviceTypeEarly = this.docModel?.service || '';
+  _maxPages() {
+    return MAX_PAGES_BY_SERVICE[this.docModel?.service || ''] || 8;
+  }
 
+  // NOVO: validação isolada da execução do OCR. CORRIGIDO: antes, se UM
+  // único ficheiro do lote excedesse o tamanho máximo, a função inteira
+  // fazia `return` e descartava TODOS os ficheiros em silêncio (incluindo
+  // os válidos) — agora só o ficheiro problemático é ignorado, com aviso
+  // claro, e os restantes continuam normalmente.
+  _validateFiles(files) {
     const maxSize = 10 * 1024 * 1024; // 10 MB para PDF/Word; 5 MB para imagens
-    // NOVO: limite de páginas por serviço.
-    // "trabalho" (Trabalho Escolar): 8 fotos cobre confortavelmente um
-    // rascunho/apontamento típico de aluno (poucas páginas manuscritas).
-    // "transcricao" (Digitalizar Documento — pensado para digitadores que
-    // já têm um trabalho INTEIRO escrito à mão ou espalhado por vários
-    // ficheiros): precisa de um limite bem maior, por isso 25 páginas.
-    // Acima disso o pedido às APIs de IA visual fica demasiado grande para
-    // uma única chamada.
-    const MAX_PAGES_BY_SERVICE = { trabalho: 8, transcricao: 25 };
-    const maxPages = MAX_PAGES_BY_SERVICE[serviceTypeEarly] || 8;
-    if (files.length > maxPages) {
-      NotificationView.warn(`⚠️ Máximo de ${maxPages} fotos de cada vez. Foram consideradas só as primeiras ${maxPages}.`);
-      files.length = maxPages;
-    }
+    const valid = [];
     for (const file of files) {
       const isImage = file.type.startsWith('image/');
-      if (file.size > maxSize || (isImage && file.size > 5 * 1024 * 1024)) {
-        NotificationView.error(`Ficheiro "${file.name}" muito grande (máx. ${isImage ? '5' : '10'}MB)`);
+      const limit = isImage ? 5 * 1024 * 1024 : maxSize;
+      if (file.size > limit) {
+        NotificationView.error(`Ficheiro "${file.name}" muito grande (máx. ${isImage ? '5' : '10'}MB) — ignorado.`);
+        continue;
+      }
+      valid.push(file);
+    }
+    return valid;
+  }
+
+  // NOVO: chamado sempre que o <input type="file"> muda.
+  // - Serviços multi-página (trabalho/transcricao): os ficheiros são
+  //   ACUMULADOS na lista visível — nada é processado ainda.
+  // - Restantes serviços (1 única foto): mantém-se o comportamento de
+  //   sempre, processa imediatamente.
+  onFilesPicked(e) {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = ''; // permite escolher o mesmo ficheiro outra vez, se preciso
+    const files = this._validateFiles(picked);
+    if (!files.length) return;
+
+    if (this._isMultiPageService()) {
+      const maxPages = this._maxPages();
+      const room = maxPages - this.stagedFiles.length;
+      if (room <= 0) {
+        NotificationView.warn(`⚠️ Já tem o máximo de ${maxPages} páginas prontas. Carregue em "Transcrever" ou "Limpar" antes de adicionar mais.`);
         return;
       }
+      const toAdd = files.slice(0, room);
+      if (files.length > toAdd.length) {
+        NotificationView.warn(`⚠️ Só foi possível adicionar ${toAdd.length} página(s) — limite de ${maxPages} atingido.`);
+      }
+      this.stagedFiles.push(...toAdd);
+      this._renderStagedList();
+      NotificationView.info(
+        this.stagedFiles.length === 1
+          ? '📄 1 página pronta — adicione mais ou carregue em "Transcrever" para continuar.'
+          : `📄 ${this.stagedFiles.length} páginas prontas — adicione mais ou carregue em "Transcrever" para continuar.`
+      );
+    } else {
+      // fluxo de sempre: 1 ficheiro, processa já
+      this.processFiles(files);
     }
+  }
+
+  // NOVO: desenha a lista de páginas já acumuladas, com opção de remover
+  // cada uma individualmente antes de transcrever.
+  _renderStagedList() {
+    const wrap  = document.getElementById('ocrStagedWrap');
+    const list  = document.getElementById('ocrStagedList');
+    const count = document.getElementById('ocrStagedCount');
+    if (!wrap || !list) return;
+
+    if (!this.stagedFiles.length) {
+      wrap.style.display = 'none';
+      list.innerHTML = '';
+      return;
+    }
+
+    wrap.style.display = 'block';
+    if (count) count.textContent = String(this.stagedFiles.length);
+
+    list.innerHTML = this.stagedFiles.map((f, i) => {
+      const label = (f.name || `Página ${i + 1}`)
+        .replace(/[<>&]/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch]));
+      return `
+        <div class="ocr-staged-item">
+          <span class="ocr-staged-num">${i + 1}</span>
+          <span class="ocr-staged-name">${label}</span>
+          <button type="button" class="ocr-staged-remove" data-idx="${i}" title="Remover esta página">✕</button>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.ocr-staged-remove').forEach(btn => {
+      btn.addEventListener('click', () => this._removeStaged(Number(btn.dataset.idx)));
+    });
+  }
+
+  _removeStaged(idx) {
+    this.stagedFiles.splice(idx, 1);
+    this._renderStagedList();
+  }
+
+  clearStaged() {
+    this.stagedFiles = [];
+    this._renderStagedList();
+  }
+
+  // NOVO: chamado pelo botão "Transcrever N página(s)" — processa TODAS as
+  // páginas acumuladas até agora, de uma só vez (o backend já as trata
+  // página a página internamente — ver api/misc.js → transcribeAllPagesSeparately).
+  async runStaged() {
+    if (!this.stagedFiles.length) {
+      NotificationView.warn('⚠️ Adicione pelo menos uma página antes de transcrever.');
+      return;
+    }
+    await this.processFiles(this.stagedFiles.slice());
+  }
+
+  // Antes chamava-se processFile(e) e recebia o evento do <input>
+  // directamente. Agora recebe sempre um array de File já validado —
+  // tanto o fluxo de 1 foto (onFilesPicked) como o fluxo acumulado
+  // (runStaged) chamam esta função da mesma forma.
+  async processFiles(files) {
+    if (!files || !files.length) return;
 
     const ocrBar       = document.getElementById('ocrBar');
     const ocrResultBox = document.getElementById('ocrResultBox');
@@ -75,11 +199,9 @@ export class OCRController {
       };
 
       // Uma só foto → caminho de sempre (extractFields). Várias páginas →
-      // extractFieldsMulti, que junta todas as imagens numa ÚNICA chamada à
-      // IA visual (não N chamadas separadas — mantém o custo controlado:
-      // 5 páginas custam sensivelmente o mesmo que 1 chamada de OCR normal,
-      // só que com mais tokens de imagem de entrada, e nenhum tokens extra
-      // de saída, já que a resposta continua limitada a max_tokens:1500).
+      // extractFieldsMulti, que envia todas as imagens ao backend, que por
+      // sua vez transcreve página a página (não é 1 chamada gigante — ver
+      // api/misc.js → transcribeAllPagesSeparately).
       const result = files.length > 1
         ? await this.smartOCR.extractFieldsMulti(files, serviceType, progress)
         : await this.smartOCR.extractFields(files[0], serviceType, progress);
@@ -106,15 +228,15 @@ export class OCRController {
 
       if (this.docModel) {
         this.docModel.ocrText = text;
-        // NOVO: guarda quantas páginas entraram neste OCR — usado por
+        // guarda quantas páginas entraram neste OCR — usado por
         // DocumentController.generate() para calcular o custo em créditos
         // do serviço "transcricao" (Digitalizar Documento), que cobra por
         // página em vez de custo fixo (ver ServiceDefinitions.js).
         this.docModel.ocrPageCount = files.length;
 
-        // NOVO: se este serviço tiver custo dinâmico, mostra já o custo
-        // real no botão "Gerar com IA" — antes disto o utilizador só via
-        // "1 crédito" (o valor por omissão) até carregar em gerar.
+        // se este serviço tiver custo dinâmico, mostra já o custo real no
+        // botão "Gerar com IA" — antes disto o utilizador só via "1
+        // crédito" (o valor por omissão) até carregar em gerar.
         const svcDef = SERVICES[serviceType];
         if (svcDef?.dynamicCostPerPage) {
           const realCost = Math.min(10, Math.max(1, Math.ceil(files.length / svcDef.dynamicCostPerPage)));
@@ -157,13 +279,10 @@ export class OCRController {
       if (ocrResultBox) ocrResultBox.style.display = 'block';
 
       // Notificação correcta: basear no sucesso real da IA, não no Tesseract.
-      // CORRIGIDO: serviços como "transcricao" (Digitalizar Documento) têm
-      // poucos ou nenhum campo de formulário para preencher (fieldCount pode
+      // Serviços como "transcricao" (Digitalizar Documento) têm poucos ou
+      // nenhum campo de formulário para preencher (fieldCount pode
       // legitimamente ser 0 mesmo quando a transcrição funcionou muito bem —
       // o objectivo desse serviço é o texto transcrito em si, não campos).
-      // Antes, esse caso caía sempre em "baixa confiança" ou "não foi
-      // possível extrair", mesmo quando `text` continha uma transcrição
-      // completa e correcta vinda da IA (ver SmartOCRService → `transcript`).
       if (fieldCount > 0) {
         NotificationView.success(`✅ ${fieldCount} campo(s) preenchido(s) pela IA!`);
       } else if (text && displayConf >= 60) {
@@ -178,7 +297,6 @@ export class OCRController {
       if (ocrBar) ocrBar.style.display = 'none';
       NotificationView.error('❌ Erro no OCR: ' + err.message);
     }
-    e.target.value = '';
   }
 
   _showSmartFillBanner(applied, missing) {
@@ -246,5 +364,8 @@ export class OCRController {
     if (txt) txt.value = '';
     const fill = document.getElementById('ocrFill');
     if (fill) fill.style.width = '0%';
+    // NOVO: limpa também a lista de páginas acumuladas ao trocar de
+    // serviço / descartar — evita misturar páginas de documentos diferentes.
+    this.clearStaged();
   }
 }
