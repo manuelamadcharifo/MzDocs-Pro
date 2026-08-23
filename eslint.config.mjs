@@ -63,6 +63,29 @@ export default [
       'no-compare-neg-zero': 'error',
       'valid-typeof':      'error',
 
+      // CORRIGIDO (após 1ª execução real em CI, Ago/2026): estas 4 regras
+      // vêm activadas por defeito no preset "recommended" do ESLint, mas
+      // disparam quase 200 vezes neste projecto contra padrões usados DE
+      // PROPÓSITO no código, não bugs:
+      //  - no-empty: o projecto usa `catch (_) {}` centenas de vezes como
+      //    padrão deliberado de "erro best-effort, nunca deve quebrar o
+      //    fluxo principal" (ver comentários "best-effort" espalhados por
+      //    api/misc.js). allowEmptyCatch mantém a regra activa para outros
+      //    blocos vazios (if/for/while), que continuam a ser suspeitos.
+      //  - no-useless-catch: há vários `try { await x() } catch (e) { throw e }`
+      //    que são pontos de extensão deliberados (log/telemetria viria
+      //    depois) — aviso, não erro.
+      //  - no-useless-escape: muitos regex têm escapes tecnicamente
+      //    desnecessários (\\., \\-, \\") mas usados por clareza/hábito
+      //    entre motores de regex — não é um bug.
+      //  - no-control-regex: há regex propositadamente a apanhar
+      //    caracteres de controlo (\\x00, \\x09, \\x0a, \\x0d) para limpar
+      //    texto antes de exportar PDF/DOCX — é exactamente a intenção.
+      'no-empty':          ['error', { allowEmptyCatch: true }],
+      'no-useless-catch':  'warn',
+      'no-useless-escape': 'warn',
+      'no-control-regex':  'off',
+
       // Estilo / disciplina — aviso, não bloqueia
       'no-unused-vars': ['warn', {
         // O projecto usa muito `catch (_)` / `catch (e) {}` de propósito
@@ -86,7 +109,14 @@ export default [
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',
-      globals: { ...globals.browser },
+      globals: {
+        ...globals.browser,
+        // Carregadas via <script src="..."> a partir de CDN (não são
+        // dependências npm, por isso o ESLint não as conhece por si só):
+        // Chart.js no painel /admin, Tesseract.js como fallback de OCR.
+        Chart:     'readonly',
+        Tesseract: 'readonly',
+      },
     },
     rules: {
       'no-undef':        'error',
@@ -94,6 +124,14 @@ export default [
       'no-unreachable':  'error',
       'no-const-assign': 'error',
       'no-fallthrough':  'error',
+
+      // Ver explicação detalhada no bloco do backend acima — mesmos
+      // padrões intencionais (catch(_){} best-effort, regex com escapes
+      // por clareza) também aparecem no frontend.
+      'no-empty':          ['error', { allowEmptyCatch: true }],
+      'no-useless-catch':  'warn',
+      'no-useless-escape': 'warn',
+      'no-control-regex':  'off',
 
       'no-unused-vars': ['warn', {
         args: 'none',
@@ -127,7 +165,14 @@ export default [
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'commonjs',
-      globals: { ...globals.node, ...globals.jest },
+      globals: {
+        ...globals.node,
+        ...globals.jest,
+        // O jest.config testEnvironment é 'jsdom' por defeito, e alguns
+        // ficheiros (ex.: auth.test.js) usam @jest-environment jsdom
+        // explicitamente — precisam de document/localStorage/etc.
+        ...globals.browser,
+      },
     },
     rules: {
       'no-undef':       'error',
@@ -136,6 +181,10 @@ export default [
         caughtErrors: 'none',
         varsIgnorePattern: '^_',
       }],
+      // ocrSchemaAlignment.test.js usa regex com espaços múltiplos de
+      // propósito para verificar alinhamento/whitespace real de texto de
+      // OCR — não é um erro de contagem acidental.
+      'no-regex-spaces': 'warn',
     },
   },
 ];
