@@ -2,19 +2,19 @@
 
 Plataforma moçambicana de geração, edição e exportação de documentos profissionais com IA.
 PWA instalável (Android/iOS), construída para o Vercel Hobby (limite: 12 Serverless Functions —
-**já esgotado, sem margem**), Supabase (PostgreSQL + pgvector) e pagamento manual por carteira
-móvel (M-Pesa, e-Mola, mKesh).
+**9 em uso, 3 de margem** desde a consolidação de Ago/2026, ver secção 10), Supabase (PostgreSQL +
+pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 
 > 📌 **Nota sobre este README:** actualizado em Agosto/2026 a partir de uma leitura directa do
-> código-fonte no export mais recente (migrações até `v60`, confirmação de pagamento atómica,
-> operações de crédito idempotentes, observabilidade estruturada, correcções ao Marketplace de
-> Templates, ao motor de pagamentos, e à fiabilidade do OCR multi-página do serviço "Digitalizar
-> Documento" — secções 12 e 15). A versão anterior deste ficheiro tinha ficado desactualizada em
-> relação às migrações `v57`–`v60`, aos scripts de manutenção em `scripts/`, ao CI/lint
-> (`.github/workflows/test.yml`, `eslint.config.mjs`) e à observabilidade estruturada
-> (`api/_lib/observability.js`, `docs/observability.md`). Este documento reflecte o estado do
-> código tal como está — não o histórico ronda-a-ronda, que passa a viver apenas na secção
-> "Histórico de Versões" no fim.
+> código-fonte no export mais recente (consolidação de Serverless Functions — 12→9, ver secção 10
+> — migrações até `v60`, confirmação de pagamento atómica, operações de crédito idempotentes,
+> observabilidade estruturada, correcções ao Marketplace de Templates, ao motor de pagamentos, e à
+> fiabilidade do OCR multi-página do serviço "Digitalizar Documento" — secções 5, 12 e 15). A
+> versão anterior deste ficheiro tinha ficado desactualizada em relação às migrações `v57`–`v60`,
+> aos scripts de manutenção em `scripts/`, ao CI/lint (`.github/workflows/test.yml`,
+> `eslint.config.mjs`) e à observabilidade estruturada (`api/_lib/observability.js`,
+> `docs/observability.md`). Este documento reflecte o estado do código tal como está — não o
+> histórico ronda-a-ronda, que passa a viver apenas na secção "Histórico de Versões" no fim.
 >
 > ⚠️ **Nota de nomenclatura que confunde ao ler o histórico:** existem duas coisas diferentes
 > chamadas "v57" no projecto — a migração `migration_v57_atomic_payment_confirmation.sql` (base de
@@ -99,9 +99,11 @@ móvel (M-Pesa, e-Mola, mKesh).
 - **Frontend:** HTML/CSS/JS puro (sem framework pesado), organizado em `assets/js/` por
   domínio (`controllers/`, `services/`, `components/`, `marketplace/`, `academic/`, `auth/`,
   `admin/`, `partners/`, `utils/`, `views/`).
-- **Backend:** 12 Serverless Functions na Vercel — o número exacto e físico permitido pelo plano
-  Hobby, confirmado em `vercel.json` (`functions: {...}` tem exactamente 12 entradas). Ficheiros
-  dentro de `api/_lib/` são helpers partilhados e **não contam** para este limite.
+- **Backend:** 9 Serverless Functions na Vercel (plano Hobby permite até 12) — **3 de margem**,
+  confirmado em `vercel.json` (`functions: {...}` tem exactamente 9 entradas). Já foram 12/12, sem
+  margem nenhuma; consolidados em Ago/2026 (ver secção 10). Ficheiros dentro de `api/_lib/` e
+  `api/_services/` são helpers/lógica partilhada e **não contam** para este limite (convenção
+  Vercel: qualquer ficheiro/pasta com prefixo `_` dentro de `api/` nunca vira function).
 - **Base de dados:** Supabase (PostgreSQL) com extensão `pgvector` para o Motor Jurídico RAG.
 - **Cliente Supabase:** 100% via `fetch` nativo (`api/_lib/supabaseAdmin.js`) — **confirmado**
   que não existe nenhum `require()`/`import` activo de `@supabase/supabase-js` nem de `ws` em
@@ -109,12 +111,16 @@ móvel (M-Pesa, e-Mola, mKesh).
   (Referências a essas bibliotecas que ainda aparecem em `api/admin/index.js` e `api/misc.js`
   são **comentários históricos**, não código a correr.)
 - **Rate limiting:** Upstash Redis, com fallback para `Map` local em memória se as variáveis
-  `UPSTASH_REDIS_REST_URL`/`_TOKEN` não estiverem definidas.
+  `UPSTASH_REDIS_REST_URL`/`_TOKEN` não estiverem definidas — e tecto degradado mais apertado nos
+  namespaces sensíveis (pagamento, login, OCR, geração) quando o Redis está indisponível, para
+  reduzir o efeito de um atacante distribuído por várias instâncias serverless; ver secção 7.
 - **Migrações:** mais de 50 ficheiros SQL versionados em `supabase/`, de `schema.sql` +
-  `migration_v8_*` até `migration_v56_max_credit_cost_10.sql`, mais um conjunto de ficheiros
-  avulsos sem numeração sequencial (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `migration_fix_*`,
-  `migration_add_*`) aplicados directamente em produção ao longo do tempo — ver secção 13.
-- **CI:** `.github/workflows/test.yml` corre `npm test` em cada push/PR ao branch principal.
+  `migration_v8_*` até `migration_v60_idempotent_credit_operations.sql`, mais um conjunto de
+  ficheiros avulsos sem numeração sequencial (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`,
+  `migration_fix_*`, `migration_add_*`) aplicados directamente em produção ao longo do tempo —
+  ver secção 13.
+- **CI:** `.github/workflows/test.yml` corre `npm run lint` (ESLint) e `npm test` (Jest), ambos
+  bloqueantes, em cada push/PR ao branch principal — ver secção 12.2.
 
 ---
 
@@ -255,7 +261,7 @@ export const TEMPLATES = [
 
 ```
 MzDocs-Pro/
-├── api/                                # 12 Serverless Functions (Vercel Hobby — limite físico atingido)
+├── api/                                # 9 Serverless Functions (Vercel Hobby, limite 12 — 3 de margem)
 │   ├── _lib/                           # Helpers partilhados (prefixo "_" — não contam para o limite)
 │   │   ├── supabaseAdmin.js            # Cliente Supabase via fetch puro (REST + Auth API)
 │   │   ├── aiProviderRegistry.js       # Fonte única de verdade: 9 providers com adaptador + 4 catalogados sem adaptador
@@ -267,22 +273,29 @@ MzDocs-Pro/
 │   │   ├── packages.js                 # Única fonte de verdade dos pacotes de créditos
 │   │   ├── piiRedaction.js             # Mascaragem de PII no texto (servidor)
 │   │   ├── contentModeration.js        # Filtro de conteúdo abusivo em avaliações públicas
-│   │   ├── rateLimit.js                # Rate-limit via Upstash Redis (fallback Map local)
+│   │   ├── rateLimit.js                # Rate-limit via Upstash Redis (fallback Map local degradado — secção 7)
+│   │   ├── notifyTelegram.js           # Alertas Telegram (pagamento em revisão, rate limit degradado)
+│   │   ├── observability.js            # logEvent() estruturado — pagamento/OCR/geração/ledger (secção 12.3)
 │   │   └── webpush.js                  # Notificações push via VAPID
+│   ├── _services/                      # Lógica de negócio por domínio (prefixo "_" — não conta para o limite)
+│   │   ├── account.js                  # NOVO (Ago/2026): verify-credits, deduct-credit, delete-temp-account, cleanup-temp-accounts
+│   │   ├── payments.js                 # verify-receipt + verifyReceiptInternal (chamado por process-payment.js)
+│   │   ├── ocr.js                      # ocr-analyze (Digitalizar Documento)
+│   │   ├── legal.js                    # legal-search (Motor Jurídico RAG)
+│   │   ├── blog.js                     # sitemap.xml, blog-list, blog-cron, github-diagnostic
+│   │   ├── site.js                     # page-view, marketing, config, public-reviews, push, document-usage
+│   │   ├── templates.js                # namespace _ns=templates (Marketplace)
+│   │   └── affiliates.js               # namespace _ns=affiliate
 │   ├── admin/index.js                  # Dashboard, analytics, feedback, blog, templates, afiliados, finanças
 │   ├── auth/index.js                   # Login, registo, reset password
 │   ├── generate-document.js            # Corrida por tiers (generoso+médio, reserva como fallback) + amostra grátis + custo progressivo + reembolso
 │   ├── extract-template.js             # Extracção de template via imagem (IA visão)
-│   ├── verify-credits.js               # Verificar saldo de créditos
-│   ├── deduct-credit.js                # Debitar/reembolsar crédito
+│   ├── account.js                      # NOVO (Ago/2026): router fino → api/_services/account.js (ver nota abaixo)
 │   ├── process-payment.js              # Pagamento manual multi-carteira + registo de transacção
 │   ├── partners.js                     # API da Rede de Parceiros
 │   ├── convert.js                      # Conversão de ficheiros (OCR / extracção de texto)
-│   ├── delete-temp-account.js          # Direito ao esquecimento / limpeza de conta
-│   ├── cleanup-temp-accounts.js        # Cron diário: limpeza automática de contas expiradas
-│   └── misc.js                         # Router auxiliar: config, ocr-analyze, verify-receipt,
-│                                        #   legal-search, page-view, sitemap.xml, /api/affiliate/*,
-│                                        #   /api/templates/*
+│   └── misc.js                         # Router fino → api/_services/{payments,ocr,legal,blog,site,templates,affiliates}.js
+│                                        #   (era um monólito de ~3.234 linhas; virou router de ~90 — ver secção 13)
 │
 ├── assets/
 │   ├── js/
@@ -359,6 +372,17 @@ MzDocs-Pro/
 > adesão) e de `admin-parceiros.html` (gestão da rede pelo admin). `robots.txt` bloqueia a
 > indexação de `admin.html` e `admin-parceiros.html` e permite explicitamente `/pages/`
 > (conteúdo SEO) — coerente com a meta tag `noindex,nofollow` já presente em `parceiro-portal.html`.
+
+> 📎 **`api/account.js` (NOVO, Ago/2026):** consolidação de 4 Serverless Functions antigas
+> (`api/verify-credits.js`, `api/deduct-credit.js`, `api/delete-temp-account.js`,
+> `api/cleanup-temp-accounts.js` — todas apagadas) num único router fino, mesmo padrão já usado em
+> `api/misc.js` e `api/admin/index.js`: dispatch por `?_op=` para `api/_services/account.js`, que
+> tem a lógica de negócio movida sem nenhuma alteração de comportamento. As rotas públicas
+> (`/api/verify-credits`, `/api/deduct-credit`, `/api/delete-temp-account`,
+> `/api/cleanup-temp-accounts`) continuam a existir e a funcionar de forma idêntica, via rewrite em
+> `vercel.json` — nenhum código do frontend precisou de mudar. Motivo: abrir margem real no tecto
+> de 12 functions do plano Hobby (estava em 12/12) para features futuras já desenhadas mas ainda
+> não integradas (webhook PaySuite/ClicPay — ver secção 13). Resultado: 12 → 9 functions.
 
 ---
 
@@ -703,15 +727,27 @@ confirmado (v43).
 
 | Recurso | Limite | Usado |
 |---|---|---|
-| Serverless Functions | 12 | **12 — sem margem** (`api/_lib/` não conta) |
+| Serverless Functions | 12 | **9 — 3 de margem** (consolidação Ago/2026, ver secção 5; `api/_lib/` e `api/_services/` não contam) |
 | `generate-document.js` / `extract-template.js` / `convert.js` | 60 s | — |
-| `process-payment.js` | 30 s | — |
-| Restantes | 10–30 s | — |
+| `process-payment.js` / `admin/index.js` / `auth/index.js` / `account.js` | 30 s | — |
+| `partners.js` | 15 s | — |
 | Bandwidth | 100 GB/mês | — |
 
-**Regra prática:** toda nova lógica de API deve ir em `api/misc.js` ou numa function já
-existente. Helpers partilhados vão em `api/_lib/`. Não criar novos ficheiros `.js` directamente
-em `api/` sem confirmar este limite primeiro.
+**Como a margem foi aberta (Ago/2026):** `api/verify-credits.js`, `api/deduct-credit.js`,
+`api/delete-temp-account.js` e `api/cleanup-temp-accounts.js` — 4 functions pequenas do mesmo
+domínio (conta/crédito) — foram absorvidas por um único `api/account.js` (router, dispatch por
+`?_op=`) + `api/_services/account.js` (lógica). Rotas públicas inalteradas, via rewrite em
+`vercel.json`. Antes disso, `api/misc.js` já tinha sido reduzido de ~3.234 linhas para um router
+fino de ~90 linhas (`api/_services/{payments,ocr,legal,blog,site,templates,affiliates}.js`), o que
+resolveu a manutenibilidade mas **não** a contagem de functions — o número de ficheiros em `api/`
+é que determina isso, não como o código está organizado internamente.
+
+**Regra prática:** toda nova lógica de API deve ir num router existente (`api/misc.js`,
+`api/account.js`, `api/admin/index.js`) ou usar o mesmo padrão router+`_services/` para uma nova
+function, só quando o domínio for genuinamente distinto. Helpers partilhados vão em `api/_lib/`,
+lógica de negócio por domínio em `api/_services/` — nenhum dos dois conta para o limite. Com 3
+slots livres, há margem para integrar o webhook do PaySuite/ClicPay (ver secção 13) sem precisar
+do plano Pro — mas confirmar sempre a contagem real em `vercel.json` antes de assumir margem.
 
 ---
 
@@ -723,13 +759,13 @@ em `api/` sem confirmar este limite primeiro.
 | `tests/ocrSchemaAlignment.test.js` | 100 | Alinhamento schema OCR ↔ campos do formulário |
 | `tests/rateLimit.test.js` | 61 | `api/_lib/rateLimit.js` |
 | `tests/generate-document.test.js` (NOVO) | 190 | Formato da resposta; corrida por tiers (generoso/médio) vs fallback de reserva activa |
-| `tests/deduct-credit.test.js` (NOVO) | 150 | Dedução, créditos insuficientes, optimistic locking, reembolso automático |
+| `tests/deduct-credit.test.js` (NOVO) | 154 | Dedução, créditos insuficientes, optimistic locking, reembolso automático |
 | `tests/process-payment.test.js` (NOVO) | 167 | Validação de telefone/pacote, detecção de carteira, duplicados, verificação automática de comprovativo |
-| `tests/credit-expiry.test.js` (NOVO) | 104 | Cron de expiração por lote (v52), degradação segura |
+| `tests/credit-expiry.test.js` (NOVO) | 109 | Cron de expiração por lote (v52), degradação segura |
 | `tests/rag.test.js` (NOVO) | 107 | Motor Jurídico RAG (`legalSearch.js`): citação de fonte, limiar de similaridade, aviso de qualidade |
 | `tests/notifyTelegram.test.js` (NOVO) | 60 | Alerta Telegram de pagamento em revisão (`notifyTelegram.js`) |
 | `tests/creditLedgerConcurrency.test.js` (NOVO) | 160 | Contrato da aplicação (`payments.js`) quando duas chamadas concorrentes chegam com o mesmo `transactionId` e a RPC atómica (v57) devolve `already_confirmed: true` na 2ª — **não** prova o lock `FOR UPDATE` em si (impossível com mock; ver `scripts/test-credit-concurrency.js` abaixo) |
-| **Total** | **≈ 1.449** | — |
+| **Total** | **≈ 1.458** | — |
 
 CI automático via `.github/workflows/test.yml`, a correr em cada push/PR ao branch principal —
 dois passos, ambos bloqueantes: `npm run lint` (ESLint, `eslint.config.mjs`) e depois `npm test`
@@ -738,7 +774,7 @@ módulos que verificam a *presença* da variável antes de decidir "não configu
 ligar" — todos os testes mockam `supabaseAdmin`/`fetch` por completo, nenhum bate numa base de
 dados real.
 
-**Honestamente:** ~1.449 linhas de teste para ~11.650 linhas de código só em `api/` continua a ser
+**Honestamente:** ~1.458 linhas de teste para ~11.650 linhas de código só em `api/` continua a ser
 uma cobertura fina, mas cresceu de forma dirigida — as áreas de maior exposição financeira e
 legal (geração de documentos, dedução/expiração/idempotência de créditos, pagamentos, RAG
 jurídico) já têm teste dedicado. Afiliados e o fluxo completo do Marketplace de Templates
@@ -772,8 +808,8 @@ Nenhum destes corre como Serverless Function — não contam para o limite de 12
 
 Corre em cada `push`/`pull request` ao branch principal, Node 24.x: `npm install` →
 `npm run lint` (ESLint, falha o CI em erro) → `npm test` (Jest `--coverage`). Bloqueia o merge se
-algo partir em `generate-document.js`, `deduct-credit.js`, `process-payment.js`,
-`cleanup-temp-accounts.js` ou `legalSearch.js`.
+algo partir em `generate-document.js`, `process-payment.js`, `legalSearch.js` ou
+`api/_services/account.js` (dedução/reembolso de crédito e cleanup diário de contas — ver secção 10).
 
 `eslint.config.mjs` (flat config, ESLint 9+, sem plugins externos além de `globals`) trata bugs
 reais (variáveis não definidas, chaves duplicadas, código inalcançável, promises esquecidas) como
@@ -817,8 +853,12 @@ reaproveitando `notifyTelegram.js`.
 
 ## 13. Dívida técnica e problemas conhecidos (honesto, sem filtro)
 
-- **Plano Vercel Hobby** a processar pagamentos comerciais — não permitido pelos Termos da
-  Vercel; sem margem de functions para crescer. Ver aviso no topo.
+- ~~**Plano Vercel Hobby sem margem de functions para crescer**~~ — **parcialmente resolvido
+  (Ago/2026):** 12/12 → 9/12 (3 de margem) via consolidação de 4 functions pequenas em
+  `api/account.js` — ver secção 10. **Continua por resolver** o outro risco desta mesma nota: este
+  projecto processa pagamentos, e os Termos de Serviço da Vercel definem qualquer fluxo de
+  cobrança a visitantes do site como uso comercial, não permitido no plano Hobby — isso exige o
+  plano Pro independentemente de quantas functions sobrem. Ver aviso no topo.
 - **`schema.sql` central desactualizado** — a única fonte fiável do schema real é a cadeia
   completa de migrações; recomenda-se gerar `schema_CURRENT.sql` a partir do Supabase Dashboard.
 - **Ficheiros de migração avulsos** (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `migration_fix_*`,
@@ -845,8 +885,9 @@ reaproveitando `notifyTelegram.js`.
   desenhado e testado à parte (`paymentGateway.js`, adaptadores PaySuite/ClicPay, webhook PaySuite
   reaproveitando a lógica de `verifyReceiptInternal`), mas por decisão do autor ainda não foi
   merged; o fluxo de pagamento em produção continua 100% manual (comprovativo + verificação por
-  IA de visão, secção 8). Quando for integrado, o webhook do PaySuite vai precisar de outro slot
-  de function (Vercel Pro, ou o mesmo truque de despacho por query usado no SMS M-Pesa).
+  IA de visão, secção 8). Desde a consolidação de Ago/2026 (secção 10) já **há margem** (3
+  functions livres) para integrar o webhook do PaySuite sem precisar do plano Pro — antes disto
+  não havia nenhum slot livre.
 - **Templates visuais continuam em 70** (14 serviços × 5) apesar do número total de serviços já
   ter crescido para 18 — `transcricao` e `conversao` ainda não têm galeria de templates própria.
 - ~~Seleccionar várias fotos de uma vez no OCR (`transcricao`/`trabalho`) perdia silenciosamente
@@ -939,6 +980,7 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | v59 (Ago/2026) — `migration_v59_observability.sql` (P2-04) | Observabilidade estruturada: tabela `metrics_events` + três views de dashboard (`v_payment_funnel_daily`, `v_ocr_health_daily`, `v_document_generation_daily`) + `api/_lib/observability.js` (`logEvent()`) chamado a partir dos fluxos de pagamento/OCR/geração/ledger. Ver secção 12.3 |
 | v60 (Ago/2026) — `migration_v60_idempotent_credit_operations.sql` (P1-08) | `deduct_credits_idempotent()`/`refund_credit_idempotent()`: `operation_id` gerado pelo cliente por tentativa de geração evita débito/reembolso duplicado em retries de rede; 100% aditivo, funções antigas continuam como fallback. `tests/creditLedgerConcurrency.test.js` cobre o contrato do lado da aplicação; `scripts/test-credit-concurrency.js` cobre o lock real contra staging. Ver secções 8, 11 e 12.1 |
 | Ago/2026 (mesma ronda) — CI, lint e scripts de manutenção | `eslint.config.mjs` liga lint real ao CI pela primeira vez (antes: `"lint": "echo 'Linting not configured yet'"`, não apanhava nada); `jest.setup.js` corrige falhas de `AbortSignal.timeout`/`.any` no ambiente jsdom dos testes (bug do ambiente de simulação, não do código); `scripts/ocr-golden-eval.js` e `tests/fixtures/orc/` criam o primeiro golden dataset (ainda pequeno — 2 exemplos) para medir regressões de OCR em vez de avaliar só "a olho" |
+| Ago/2026 (ronda actual) — consolidação de Serverless Functions (P1-07, parte 2) | `api/misc.js` já tinha sido reduzido a router fino (ronda anterior); esta ronda resolveu a contagem real de functions, que é independente disso: `api/verify-credits.js`, `api/deduct-credit.js`, `api/delete-temp-account.js` e `api/cleanup-temp-accounts.js` (4 functions pequenas do mesmo domínio) foram absorvidas por `api/account.js` (router, dispatch `?_op=`) + `api/_services/account.js` (lógica movida sem alteração de comportamento); `vercel.json` actualizado (`functions`, `rewrites` para as 3 rotas chamadas pelo frontend, `crons` para o cron diário); `tests/deduct-credit.test.js` e `tests/credit-expiry.test.js` actualizados para importar do novo local. Resultado: **12 → 9 Serverless Functions**, 3 de margem — ver secção 10 |
 
 | Componente | Versão |
 |---|---|
@@ -949,9 +991,10 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | Templates visuais integrados | 70 (14 serviços × 5) |
 | Providers de IA — com adaptador (competem) / catalogados sem adaptador | 9 / 4 (13 no total) |
 | Preço máximo de um template no Marketplace | 10 créditos (`migration_v56`) |
-| Testes (Jest, CI) | 10 suites, ≈ 1.449 linhas |
+| Testes (Jest, CI) | 10 suites, ≈ 1.458 linhas |
 | Scripts de manutenção (fora do CI) | 4 (`inject-version`, `legal-ingest`, `ocr-golden-eval`, `test-credit-concurrency`) |
 | Observabilidade | `metrics_events` + 3 views SQL (`migration_v59`), retenção de 90 dias |
+| Serverless Functions (Vercel Hobby) | 9 de 12 — 3 de margem (era 12/12 até Ago/2026) |
 
 ---
 
