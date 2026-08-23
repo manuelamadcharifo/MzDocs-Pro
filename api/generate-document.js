@@ -87,6 +87,26 @@ const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
 // Se UPSTASH_REDIS_REST_URL não estiver configurado, cai no Map local (sem persistência)
 // Setup: vercel.com/integrations/upstash → cria DB grátis → cola as env vars no Vercel
 
+// CORRIGIDO (auditoria — P1-06, Ago/2026): geração de documentos por IA é
+// um dos namespaces sensíveis (custo directo por chamada de IA). Quando o
+// Redis está indisponível, cada instância serverless só protege a si
+// própria — um pedido distribuído por várias instâncias pode multiplicar
+// o limite efectivo. Em vez de bloquear tudo, aplicamos aqui um tecto
+// muito mais apertado enquanto o degrade durar, e avisamos o admin por
+// Telegram uma vez por arranque de instância (não a cada pedido).
+let _rateLimitDegradeAlerted = false;
+function _alertRateLimitDegraded() {
+    if (_rateLimitDegradeAlerted) return;
+    _rateLimitDegradeAlerted = true;
+    try {
+        const { notifyTelegram } = require('./_lib/notifyTelegram');
+        notifyTelegram(
+            '🟠 *Rate limit em modo degradado*\nRedis (Upstash) indisponível — generate-document.js a usar limites locais muito mais apertados. Verifica UPSTASH_REDIS_REST_URL/TOKEN na Vercel.',
+            { silent: true }
+        ).catch(() => {});
+    } catch (_) { /* best-effort — nunca deve quebrar o rate limit em si */ }
+}
+
 async function checkRateLimit(req, isChainCall, isPreview) {
     const auth = req.headers['authorization'];
     const ip   = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
@@ -95,6 +115,9 @@ async function checkRateLimit(req, isChainCall, isPreview) {
 
     const limit     = isPreview ? 4 : (isChainCall ? (auth ? 60 : 20) : (auth ? 20 : 8));
     const windowSec = isPreview ? 60 : (isChainCall ? 10 : 60);
+    // Tecto degradado: bem mais apertado que o normal, mas ainda deixa um
+    // utilizador legítimo continuar a trabalhar durante uma falha do Redis.
+    const degradedLimit = isPreview ? 1 : (isChainCall ? 4 : 2);
 
     const redisUrl   = process.env.UPSTASH_REDIS_REST_URL;
     const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -118,12 +141,13 @@ async function checkRateLimit(req, isChainCall, isPreview) {
         }
     }
 
+    _alertRateLimitDegraded();
     const now   = Date.now();
     const entry = _localRateMap.get(key) || { count: 0, reset: now + windowSec * 1000 };
     if (now > entry.reset) { entry.count = 0; entry.reset = now + windowSec * 1000; }
     entry.count++;
     _localRateMap.set(key, entry);
-    return entry.count <= limit;
+    return entry.count <= degradedLimit;
 }
 
 const _localRateMap = new Map();
