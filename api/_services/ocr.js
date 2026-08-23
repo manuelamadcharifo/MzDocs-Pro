@@ -12,7 +12,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 const { checkRateLimit } = require('../_lib/rateLimit');
-const { ORIGIN, parseBody } = require('../_lib/httpHelpers');
+const { ORIGIN, SITE_URL, parseBody } = require('../_lib/httpHelpers');
 const { logEvent } = require('../_lib/observability');
 
 async function handleOcrAnalyze(req, res) {
