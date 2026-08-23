@@ -59,3 +59,38 @@ describe('checkRateLimit (fallback local, sem Redis configurado)', () => {
     expect(allowed).toBe(true);
   });
 });
+
+// CORRIGIDO (auditoria — P1-06, Ago/2026): sem Redis configurado, os
+// namespaces sensíveis (pagamento, login, OCR) devem usar um tecto muito
+// mais apertado do que o limite pedido pelo chamador — nunca o limite
+// normal — precisamente porque o Map local, sem Redis, não protege contra
+// um atacante distribuído por várias instâncias serverless.
+describe('checkRateLimit — degradação para namespaces sensíveis sem Redis', () => {
+  beforeEach(() => {
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+  });
+
+  test('namespace "receipt" (pagamento) usa tecto degradado de 1, mesmo pedindo limite maior', async () => {
+    const ip = `9.9.9.${Date.now() % 250}`; // identidade única por execução, evita poluição entre testes
+    const first  = await checkRateLimit('receipt', ip, { limit: 3, windowSec: 60 });
+    const second = await checkRateLimit('receipt', ip, { limit: 3, windowSec: 60 });
+    expect(first).toBe(true);
+    expect(second).toBe(false); // o limite pedido (3) seria suficiente, mas o tecto degradado (1) já bloqueia
+  });
+
+  test('namespace "auth-signin" (login) usa tecto degradado de 2', async () => {
+    const ip = `9.9.8.${Date.now() % 250}`;
+    expect(await checkRateLimit('auth-signin', ip, { limit: 8, windowSec: 300 })).toBe(true);
+    expect(await checkRateLimit('auth-signin', ip, { limit: 8, windowSec: 300 })).toBe(true);
+    expect(await checkRateLimit('auth-signin', ip, { limit: 8, windowSec: 300 })).toBe(false);
+  });
+
+  test('namespace normal (não sensível) continua a usar o limite pedido, sem degradação', async () => {
+    const ns = `legal-search-${Date.now()}`; // não é o literal 'receipt'/'auth-signin'/etc — não degrada
+    const ip = '9.9.7.7';
+    expect(await checkRateLimit(ns, ip, { limit: 2, windowSec: 60 })).toBe(true);
+    expect(await checkRateLimit(ns, ip, { limit: 2, windowSec: 60 })).toBe(true);
+    expect(await checkRateLimit(ns, ip, { limit: 2, windowSec: 60 })).toBe(false);
+  });
+});
