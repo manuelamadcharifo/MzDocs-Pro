@@ -3,7 +3,7 @@
   "outputDirectory": ".",
   "crons": [
     {
-      "path": "/api/cleanup-temp-accounts",
+      "path": "/api/account?_op=cleanup-temp-accounts",
       "schedule": "0 0 * * *"
     },
     {
@@ -18,19 +18,10 @@
     "api/extract-template.js": {
       "maxDuration": 60
     },
-    "api/verify-credits.js": {
-      "maxDuration": 10
-    },
-    "api/deduct-credit.js": {
-      "maxDuration": 10
-    },
-    "api/process-payment.js": {
+    "api/account.js": {
       "maxDuration": 30
     },
-    "api/delete-temp-account.js": {
-      "maxDuration": 10
-    },
-    "api/cleanup-temp-accounts.js": {
+    "api/process-payment.js": {
       "maxDuration": 30
     },
     "api/auth/index.js": {
@@ -50,6 +41,18 @@
     }
   },
   "rewrites": [
+    {
+      "source": "/api/verify-credits",
+      "destination": "/api/account?_op=verify-credits"
+    },
+    {
+      "source": "/api/deduct-credit",
+      "destination": "/api/account?_op=deduct-credit"
+    },
+    {
+      "source": "/api/delete-temp-account",
+      "destination": "/api/account?_op=delete-temp-account"
+    },
     {
       "source": "/api/config",
       "destination": "/api/misc"
