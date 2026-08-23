@@ -81,11 +81,24 @@ module.exports = async function handler(req, res) {
     ? body.documentType.slice(0, 50).replace(/[^a-z0-9_-]/gi, '')
     : null;
 
+  // NOVO (P1-08, auditoria Ago/2026): operationId gerado pelo CLIENTE, uma
+  // única vez por tentativa de geração e reenviado sem alterações em
+  // qualquer retry dessa MESMA tentativa (ver Services.js/_callBackend).
+  // Permite ao servidor reconhecer um pedido repetido (rede instável,
+  // duplo-clique, resposta perdida) e devolver o resultado já processado
+  // em vez de debitar/reembolsar duas vezes. Formato inválido é ignorado
+  // silenciosamente — cai para o comportamento antigo (sem idempotência),
+  // nunca bloqueia o pedido por causa disto.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const operationId = typeof body?.operationId === 'string' && UUID_RE.test(body.operationId)
+    ? body.operationId
+    : null;
+
   // ── MODO REEMBOLSO ───────────────────────────────────────────────────────
   // Usado quando /api/generate-document falhou DEPOIS de o crédito já ter
   // sido debitado (todos os provedores de IA indisponíveis, etc.).
   if (body?.refund === true) {
-    return await _refundCredit(userId, cost, documentType, res);
+    return await _refundCredit(userId, cost, documentType, res, operationId);
   }
 
   // ── Verificar se conta está bloqueada / créditos expirados ────────────────
@@ -148,24 +161,54 @@ module.exports = async function handler(req, res) {
   try {
     let remaining = null;
     let rpcOk     = false;
+    let replayed  = false;
 
-    // Tentar função deduct_credits (suporta N créditos)
-    try {
-      const dataN = await rpc('deduct_credits', { p_user_id: userId, p_amount: cost });
-      if (dataN !== undefined && dataN !== null) {
-        remaining = dataN;
-        rpcOk     = true;
+    // NOVO (P1-08): com operationId, usa a RPC idempotente — ela própria já
+    // grava a linha em credit_logs (com operation_id/balance_after) dentro
+    // da MESMA transacção da dedução, por isso não repetimos o insert()
+    // manual mais abaixo para este caminho (ver bloco "if (operationId)").
+    if (operationId) {
+      try {
+        const rows = await rpc('deduct_credits_idempotent', {
+          p_user_id:       userId,
+          p_amount:        cost,
+          p_operation_id:  operationId,
+          p_document_type: documentType,
+          p_credit_source: creditSource,
+        });
+        const row = Array.isArray(rows) ? rows[0] : rows;
+        if (row && typeof row.remaining_credits === 'number') {
+          remaining = row.remaining_credits;
+          replayed  = !!row.replayed;
+          rpcOk     = true;
+        }
+      } catch (errIdem) {
+        // Migration v60 ainda não aplicada nesta base de dados, ou outro
+        // erro na RPC nova — cai para o caminho sem idempotência abaixo
+        // (comportamento idêntico ao que existia antes desta alteração).
+        console.warn('[deduct-credit] deduct_credits_idempotent indisponível, a usar caminho sem idempotência:', errIdem.message);
       }
-    } catch (errN) {
-      if (cost === 1) {
-        // Fallback para função antiga (1 crédito)
-        try {
-          const data1 = await rpc('deduct_credit', { user_id: userId });
-          if (data1 !== undefined && data1 !== null) {
-            remaining = data1;
-            rpcOk     = true;
-          }
-        } catch (err1) { /* segue para fallback manual */ }
+    }
+
+    if (!rpcOk) {
+      // Tentar função deduct_credits (suporta N créditos)
+      try {
+        const dataN = await rpc('deduct_credits', { p_user_id: userId, p_amount: cost });
+        if (dataN !== undefined && dataN !== null) {
+          remaining = dataN;
+          rpcOk     = true;
+        }
+      } catch (errN) {
+        if (cost === 1) {
+          // Fallback para função antiga (1 crédito)
+          try {
+            const data1 = await rpc('deduct_credit', { user_id: userId });
+            if (data1 !== undefined && data1 !== null) {
+              remaining = data1;
+              rpcOk     = true;
+            }
+          } catch (err1) { /* segue para fallback manual */ }
+        }
       }
     }
 
@@ -187,16 +230,22 @@ module.exports = async function handler(req, res) {
     // trigger compute_document_usage_limits (migration_v40) vai decidir os
     // limites de downloads/edições do documento que está prestes a ser
     // criado com este crédito.
-    try {
-      await insert('credit_logs', {
-        user_id:       userId,
-        action:        'consume',
-        credits:       -cost,
-        document_type: documentType,
-        credit_source: creditSource,
-        note:          `Dedução de ${cost} crédito(s) via RPC`,
-      });
-    } catch (e) { console.warn('[deduct-credit] credit_logs falhou:', e.message); }
+    // Quando operationId existe e a RPC idempotente correu com sucesso, o
+    // registo em credit_logs já foi feito DENTRO da RPC (replay incluído,
+    // caso contrário duplicaria a linha) — só regista aqui no caminho
+    // antigo (sem operationId ou com fallback para deduct_credits/deduct_credit).
+    if (!operationId) {
+      try {
+        await insert('credit_logs', {
+          user_id:       userId,
+          action:        'consume',
+          credits:       -cost,
+          document_type: documentType,
+          credit_source: creditSource,
+          note:          `Dedução de ${cost} crédito(s) via RPC`,
+        });
+      } catch (e) { console.warn('[deduct-credit] credit_logs falhou:', e.message); }
+    }
 
     if (remaining === 0) {
       _tryDeleteAvulsoAccount(userId);
@@ -207,6 +256,7 @@ module.exports = async function handler(req, res) {
       credits:       remaining,
       source:        'supabase_rpc',
       credit_source: creditSource,
+      replayed,
     });
 
   } catch (e) {
@@ -280,19 +330,45 @@ async function _fallbackDeductWithLock(userId, cost, documentType, creditSource,
 // Chamado quando /api/generate-document falha por completo após o crédito
 // já ter sido debitado. Devolve `cost` créditos ao utilizador e regista o
 // motivo em credit_logs.
-async function _refundCredit(userId, cost, documentType, res) {
+async function _refundCredit(userId, cost, documentType, res, operationId = null) {
   try {
     let newCredits = null;
     let usedRpc    = false;
+    let replayed   = false;
 
-    try {
-      const data = await rpc('refund_credit', { p_user_id: userId, p_amount: cost });
-      if (data !== undefined && data !== null) {
-        newCredits = data;
-        usedRpc    = true;
+    // NOVO (P1-08): com operationId, tenta primeiro a RPC idempotente — um
+    // segundo pedido de reembolso com o MESMO operationId (retry de rede,
+    // duplo-clique) devolve o saldo já reembolsado da primeira vez, sem
+    // voltar a somar créditos.
+    if (operationId) {
+      try {
+        const rows = await rpc('refund_credit_idempotent', {
+          p_user_id:       userId,
+          p_amount:        cost,
+          p_operation_id:  operationId,
+          p_document_type: documentType,
+        });
+        const row = Array.isArray(rows) ? rows[0] : rows;
+        if (row && typeof row.remaining_credits === 'number') {
+          newCredits = row.remaining_credits;
+          replayed   = !!row.replayed;
+          usedRpc    = true;
+        }
+      } catch (e) {
+        console.warn('[deduct-credit] RPC refund_credit_idempotent indisponível, a usar caminho antigo:', e.message);
       }
-    } catch (e) {
-      console.warn('[deduct-credit] RPC refund_credit indisponível, a usar fallback:', e.message);
+    }
+
+    if (!usedRpc) {
+      try {
+        const data = await rpc('refund_credit', { p_user_id: userId, p_amount: cost });
+        if (data !== undefined && data !== null) {
+          newCredits = data;
+          usedRpc    = true;
+        }
+      } catch (e) {
+        console.warn('[deduct-credit] RPC refund_credit indisponível, a usar fallback:', e.message);
+      }
     }
 
     if (!usedRpc) {
@@ -319,6 +395,7 @@ async function _refundCredit(userId, cost, documentType, res) {
       success:  true,
       refunded: true,
       credits:  newCredits,
+      replayed,
     });
   } catch (e) {
     console.error('[deduct-credit] Excepção no reembolso:', e.message);
