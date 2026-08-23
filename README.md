@@ -6,13 +6,21 @@ PWA instalável (Android/iOS), construída para o Vercel Hobby (limite: 12 Serve
 móvel (M-Pesa, e-Mola, mKesh).
 
 > 📌 **Nota sobre este README:** actualizado em Agosto/2026 a partir de uma leitura directa do
-> código-fonte no export mais recente (migrações até `v56`, correcções ao Marketplace de
+> código-fonte no export mais recente (migrações até `v60`, confirmação de pagamento atómica,
+> operações de crédito idempotentes, observabilidade estruturada, correcções ao Marketplace de
 > Templates, ao motor de pagamentos, e à fiabilidade do OCR multi-página do serviço "Digitalizar
-> Documento" — ronda v57, secção 12 e 14). A versão anterior deste ficheiro tinha ficado
-> desactualizada em relação às migrações `v52`–`v56` e a várias correcções entretanto feitas ao
-> Marketplace de Templates, ao CI e às notificações de pagamento. Este documento reflecte o estado
-> do código tal como está — não o histórico ronda-a-ronda, que passa a viver apenas na secção
+> Documento" — secções 12 e 15). A versão anterior deste ficheiro tinha ficado desactualizada em
+> relação às migrações `v57`–`v60`, aos scripts de manutenção em `scripts/`, ao CI/lint
+> (`.github/workflows/test.yml`, `eslint.config.mjs`) e à observabilidade estruturada
+> (`api/_lib/observability.js`, `docs/observability.md`). Este documento reflecte o estado do
+> código tal como está — não o histórico ronda-a-ronda, que passa a viver apenas na secção
 > "Histórico de Versões" no fim.
+>
+> ⚠️ **Nota de nomenclatura que confunde ao ler o histórico:** existem duas coisas diferentes
+> chamadas "v57" no projecto — a migração `migration_v57_atomic_payment_confirmation.sql` (base de
+> dados) e a "ronda v57" da secção 14 (correcções de OCR multi-página, código de front-end). Não é
+> o mesmo v57 e não têm relação directa; é uma coincidência de numeração entre o histórico de
+> migrações SQL e o histórico de rondas de correcção descrito em prosa.
 
 > ⚠️ **Acção urgente e não resolvida — plano Vercel:** este projecto processa pagamentos
 > (`api/process-payment.js`, tabela `transactions`). Os Termos de Serviço da Vercel definem
@@ -44,9 +52,10 @@ móvel (M-Pesa, e-Mola, mKesh).
 9. [Sistema de afiliados e rede de parceiros](#9-sistema-de-afiliados-e-rede-de-parceiros)
 10. [Limites do Vercel Hobby](#10-limites-do-vercel-hobby)
 11. [Testes](#11-testes)
-12. [Dívida técnica e problemas conhecidos (honesto, sem filtro)](#12-dívida-técnica-e-problemas-conhecidos-honesto-sem-filtro)
-13. [Conformidade legal (Moçambique)](#13-conformidade-legal-moçambique)
-14. [Histórico de versões](#14-histórico-de-versões)
+12. [Scripts de manutenção, CI/CD e Observabilidade](#12-scripts-de-manutenção-cicd-e-observabilidade)
+13. [Dívida técnica e problemas conhecidos (honesto, sem filtro)](#13-dívida-técnica-e-problemas-conhecidos-honesto-sem-filtro)
+14. [Conformidade legal (Moçambique)](#14-conformidade-legal-moçambique)
+15. [Histórico de versões](#15-histórico-de-versões)
 
 ---
 
@@ -62,11 +71,11 @@ móvel (M-Pesa, e-Mola, mKesh).
 | **70+ Templates Visuais** | 5 templates por serviço nos 14 serviços "clássicos", com CSS próprio | ✅ |
 | **Editor WYSIWYG** | Edição inline com preservação fiel do template (iframe + `designMode`) | ✅ |
 | **Export PDF / Word (.docx real) / Excel (.xls)** | `HTMLToDocxExporter` e `WordExporter` geram OOXML real via biblioteca `docx`, não HTML disfarçado | ✅ |
-| **Assinatura Digital (canvas)** | Inserida directamente no documento — **sem validade jurídica plena** sem certificação nos termos da Lei n.º 3/2017 (ver secção 13) | ✅ |
+| **Assinatura Digital (canvas)** | Inserida directamente no documento — **sem validade jurídica plena** sem certificação nos termos da Lei n.º 3/2017 (ver secção 14) | ✅ |
 | **Módulo Académico APA 7** | Citações, bibliografia, TOC automático, upload PDF/URL | ✅ |
 | **Extracção de Template por Imagem** | IA de visão extrai estrutura de qualquer imagem de documento | ✅ |
 | **OCR (SmartOCRService v4)** | IA visual primeiro (Groq/Gemini), Tesseract como complemento; suporta imagem, PDF (`pdf.js`) e Word (`mammoth.js`) | ✅ |
-| **Digitalizar Documento (`transcricao`) — acumulador de páginas (NOVO — Ago/2026)** | Fotografar/carregar um documento de várias páginas (manuscrito ou não) e receber o texto digitado e formatado. Cada toque em "Adicionar Foto/Ficheiro" **acumula** a página numa lista visível (`#ocrStagedWrap`, `OCRController.stagedFiles`) em vez de disparar o OCR de imediato — só a transcrição efectiva do lote completo é feita ao carregar em "Transcrever N página(s)". Páginas que falhem a leitura na 1ª tentativa têm agora 2 rondas extra de recuperação (antes só páginas com erro de rede eram repetidas); se mesmo assim ficarem ilegíveis, o documento final mostra um aviso visível nessa página exacta ("⚠️ Não foi possível ler esta página...") em vez de a omitir silenciosamente | ✅ Corrige um bug de produção confirmado (selecção múltipla de fotos no `<input type="file">` perdia silenciosamente todas as páginas menos a 1ª em vários Android) — ver secção 12 |
+| **Digitalizar Documento (`transcricao`) — acumulador de páginas (NOVO — Ago/2026)** | Fotografar/carregar um documento de várias páginas (manuscrito ou não) e receber o texto digitado e formatado. Cada toque em "Adicionar Foto/Ficheiro" **acumula** a página numa lista visível (`#ocrStagedWrap`, `OCRController.stagedFiles`) em vez de disparar o OCR de imediato — só a transcrição efectiva do lote completo é feita ao carregar em "Transcrever N página(s)". Páginas que falhem a leitura na 1ª tentativa têm agora 2 rondas extra de recuperação (antes só páginas com erro de rede eram repetidas); se mesmo assim ficarem ilegíveis, o documento final mostra um aviso visível nessa página exacta ("⚠️ Não foi possível ler esta página...") em vez de a omitir silenciosamente | ✅ Corrige um bug de produção confirmado (selecção múltipla de fotos no `<input type="file">` perdia silenciosamente todas as páginas menos a 1ª em vários Android) — ver secção 13 |
 | **Motor Jurídico RAG** | Busca vectorial (pgvector) sobre artigos de lei moçambicanos reais para os serviços jurídicos, em vez de citações estáticas | ✅ |
 | **Histórico Offline** | IndexedDB, sincronizado quando online | ✅ |
 | **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola, mKesh — upload de comprovativo com verificação automática por IA de visão (aprovação se confiança ≥ 0.85) e fallback WhatsApp | ✅ |
@@ -78,7 +87,7 @@ móvel (M-Pesa, e-Mola, mKesh).
 | **Sistema de Afiliados Pro** | Segmentação, níveis, bónus por tier, detecção de fraude — ver secção 9 | ✅ |
 | **Rede de Parceiros (incl. advogados)** | Papelarias, cyber cafés e advogados parceiros, com código de acesso próprio | ✅ |
 | **Avaliações Públicas** | ⭐ 1–5, com moderação de conteúdo automática (`contentModeration.js`) | ✅ |
-| **Créditos Bónus / Promoções (NOVO)** | Admin pode conceder um bónus de créditos (ex.: "+5 este mês") somado aos créditos grátis normais no registo | ✅ Mas ver nota honesta na secção 12 — o prazo de validade do bónus é guardado e nunca aplicado |
+| **Créditos Bónus / Promoções (NOVO)** | Admin pode conceder um bónus de créditos (ex.: "+5 este mês") somado aos créditos grátis normais no registo | ✅ Mas ver nota honesta na secção 13 — o prazo de validade do bónus é guardado e nunca aplicado |
 | **Painel Admin** | Analytics, feedback, utilizadores, pagamentos, parceiros, preços dinâmicos, Finanças com Identidade Fiscal, Kit de Marketing, recibos de afiliados | ✅ |
 | **Blog / SEO** | CMS com geração assistida por IA; publicação automática de HTML estático directamente no GitHub via Contents API | ✅ |
 | **PWA** | Instalável, funciona offline, `CACHE_VERSION` auto-gerado a cada deploy | ✅ |
@@ -104,7 +113,7 @@ móvel (M-Pesa, e-Mola, mKesh).
 - **Migrações:** mais de 50 ficheiros SQL versionados em `supabase/`, de `schema.sql` +
   `migration_v8_*` até `migration_v56_max_credit_cost_10.sql`, mais um conjunto de ficheiros
   avulsos sem numeração sequencial (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `migration_fix_*`,
-  `migration_add_*`) aplicados directamente em produção ao longo do tempo — ver secção 12.
+  `migration_add_*`) aplicados directamente em produção ao longo do tempo — ver secção 13.
 - **CI:** `.github/workflows/test.yml` corre `npm test` em cada push/PR ao branch principal.
 
 ---
@@ -304,25 +313,52 @@ MzDocs-Pro/
 │
 ├── supabase/
 │   ├── schema.sql                              # ⚠️ Desactualizado — usar migrations por ordem
-│   ├── migration_v8_* … migration_v51_bonus_credits.sql   # Cadeia principal, ver secção 6
+│   ├── migration_v8_* … migration_v60_idempotent_credit_operations.sql   # Cadeia principal, ver secção 6
 │   └── EMERGENCIA_*, EXECUTAR_AGORA_*, migration_fix_*, migration_add_*, polices.sql, transactions.sql
 │                                               # ⚠️ Ficheiros avulsos aplicados directamente em
-│                                               #   produção, sem numeração sequencial — ver secção 12
+│                                               #   produção, sem numeração sequencial — ver secção 13
 │
-├── tests/
-│   ├── auth.test.js                # 120 linhas
-│   ├── ocrSchemaAlignment.test.js  # 100 linhas
-│   └── rateLimit.test.js           # 61 linhas
-│                                   # Total: 281 linhas de teste para ~11.650 linhas de código em api/
+├── tests/                          # 10 suites Jest, ≈ 1.449 linhas — ver secção 11
+│   ├── auth.test.js                     # 120 linhas
+│   ├── credit-expiry.test.js            # 104 linhas
+│   ├── creditLedgerConcurrency.test.js  # 160 linhas — contrato de idempotência (v57/v60), lock não é testável aqui
+│   ├── deduct-credit.test.js            # 150 linhas
+│   ├── generate-document.test.js        # 190 linhas
+│   ├── notifyTelegram.test.js           #  60 linhas
+│   ├── ocrSchemaAlignment.test.js       # 116 linhas
+│   ├── process-payment.test.js          # 186 linhas
+│   ├── rag.test.js                      # 107 linhas
+│   ├── rateLimit.test.js                #  96 linhas
+│   └── fixtures/orc/                    # Golden dataset de OCR (não corre em CI — ver secção 12)
 │
-├── docs/legal/                     # VERIFICACAO-LEGAL.md + textos-fonte das leis usadas no RAG
-├── pages/                          # Páginas SEO estáticas (geradas pelo admin via GitHub API)
-├── afiliado.html · admin.html · admin-parceiros.html · parceiros.html · templates.html
-├── perfil.html · index.html · offline.html · legal.html · blog.html
+├── scripts/                        # Ferramentas de manutenção — não contam para o limite de functions
+│   ├── inject-version.js           # Executado no build da Vercel: gera CACHE_VERSION do sw.js
+│   ├── legal-ingest.js             # Ingestão manual dos textos de lei para o Motor Jurídico RAG
+│   ├── ocr-golden-eval.js          # Corre tests/fixtures/orc/ contra a IA real; não é CI (custa $ e chaves)
+│   └── test-credit-concurrency.js  # Testa o lock FOR UPDATE contra staging real (não mocável em Jest)
+│
+├── docs/
+│   ├── observability.md            # Taxonomia de eventos + dashboards SQL — ver secção 12
+│   └── legal/                      # VERIFICACAO-LEGAL.md + textos-fonte/ (leis usadas no RAG)
+│
+├── .github/workflows/test.yml      # CI: npm run lint (eslint) + npm test (jest --coverage), em cada push/PR
+├── eslint.config.mjs               # Flat config ESLint 9+; falha o CI em bugs reais, avisa em estilo
+├── jest.setup.js                   # Polyfill AbortSignal.timeout/.any para jsdom (ambiente de teste)
+│
+├── pages/                          # 35 páginas SEO estáticas (geradas pelo admin via GitHub Contents API)
+├── afiliado.html · admin.html · admin-parceiros.html · parceiro-portal.html · parceiros.html
+├── templates.html · perfil.html · index.html · offline.html · legal.html · blog.html
 ├── sw.js                           # CACHE_VERSION reescrita automaticamente a cada deploy
-├── manifest.json · vercel.json · package.json (v11.0.0) · package-lock.json
+├── manifest.json · robots.txt · vercel.json · package.json (v11.0.0) · package-lock.json
 └── scripts/inject-version.js
 ```
+
+> 📎 `parceiro-portal.html` é a área de acesso do parceiro (papelaria/cyber café/advogado) já
+> aprovado — entra com telefone + código de acesso recebido por WhatsApp (`access_code`, ver
+> `migration_v46_partner_access_code.sql`); é diferente de `parceiros.html` (página pública de
+> adesão) e de `admin-parceiros.html` (gestão da rede pelo admin). `robots.txt` bloqueia a
+> indexação de `admin.html` e `admin-parceiros.html` e permite explicitamente `/pages/`
+> (conteúdo SEO) — coerente com a meta tag `noindex,nofollow` já presente em `parceiro-portal.html`.
 
 ---
 
@@ -380,7 +416,7 @@ GITHUB_TOKEN=...                    # PAT com escrita no repositório — tratar
 > nenhum ficheiro de código. O estado de administrador é controlado pela coluna
 > `profiles.is_admin` — ver `supabase/EXECUTAR_promote_admin.sql`.
 
-### 6.3. Migrações Supabase — lista completa e actualizada (v8 → v51)
+### 6.3. Migrações Supabase — lista completa e actualizada (v8 → v60)
 
 Execute por ordem no SQL Editor do Supabase:
 
@@ -456,7 +492,7 @@ migration_v49_secure_affiliate_receipts.sql           -- bucket privado + signed
 migration_v50_protect_sensitive_profile_columns.sql   -- RLS reforçada em BI/NUIT/morada
 
 -- Créditos bónus, expiração real, Marketplace, limite de preço (v51–v56 — mais recentes)
-migration_v51_bonus_credits.sql                       -- ver nota honesta na secção 12
+migration_v51_bonus_credits.sql                       -- ver nota honesta na secção 13
 migration_v52_credit_ledger.sql                       -- expiração real por LOTE (30 dias da
                                                        --   aquisição), substitui a data única
                                                        --   por conta que a v51 deixou por aplicar
@@ -471,6 +507,30 @@ migration_v55_affiliate_partner_only_selling.sql      -- só afiliados/parceiros
                                                        --   definir credit_cost > 0 — trigger na BD
 migration_v56_max_credit_cost_10.sql                  -- tecto de 10 créditos em credit_cost,
                                                        --   alinhado com VALID_COSTS do débito
+
+-- Pagamento atómico, observabilidade, idempotência (v57–v60 — mais recentes)
+migration_v57_atomic_payment_confirmation.sql         -- confirm_payment_and_credit(): confirmar
+                                                       --   transacção + creditar utilizador numa
+                                                       --   ÚNICA transacção PL/pgSQL, em vez de dois
+                                                       --   pedidos REST separados; elimina a janela em
+                                                       --   que uma transacção ficava 'completed' sem
+                                                       --   crédito atribuído se o processo caísse a
+                                                       --   meio. Conta com conta ainda por criar
+                                                       --   (userId NULL) continua fora da transacção
+                                                       --   SQL — ver nota no próprio ficheiro
+                                                       --   ⚠️ NÃO confundir com a "ronda v57" da
+                                                       --   secção 15 (OCR multi-página) — mesma
+                                                       --   numeração, mudanças independentes
+                                                       --   (gap v58: não existe ficheiro numerado v58)
+migration_v59_observability.sql                       -- tabela metrics_events + views
+                                                       --   v_payment_funnel_daily / v_ocr_health_daily
+                                                       --   / v_document_generation_daily — ver secção 12
+migration_v60_idempotent_credit_operations.sql        -- deduct_credits_idempotent() /
+                                                       --   refund_credit_idempotent(): operation_id
+                                                       --   gerado pelo cliente evita débito/reembolso
+                                                       --   duplicado em retries de rede; 100% aditivo,
+                                                       --   não altera as funções antigas (fallback
+                                                       --   automático quando operation_id é NULL)
 ```
 
 > ⚠️ Existem ainda vários ficheiros avulsos em `supabase/` (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`,
@@ -546,6 +606,23 @@ qualquer chamada a uma API de cobrança no código como na documentação.
 6. Anti-abuso: máximo 3 uploads por IP por minuto.
 
 **2. Fallback manual via WhatsApp** — link pré-formatado, confirmação manual pelo admin.
+
+> ✅ **Confirmação atómica (v57) e operações de crédito idempotentes (v60):** o passo 4 acima —
+> marcar a transacção como `completed` **e** creditar o utilizador — corre agora dentro de uma
+> única função PL/pgSQL (`confirm_payment_and_credit`, `migration_v57_atomic_payment_confirmation.sql`),
+> em vez de duas chamadas REST separadas ao PostgREST; elimina o cenário em que o processo Node
+> falhava exactamente entre marcar `completed` e creditar, deixando uma transacção paga sem
+> crédito atribuído. Limitação aceite e documentada: contas "avulsas" ainda por criar (`userId`
+> NULL) continuam a usar a API de Admin do Supabase Auth fora dessa transacção SQL, porque é uma
+> chamada HTTP externa. Em paralelo, `migration_v60_idempotent_credit_operations.sql` acrescenta
+> `deduct_credits_idempotent()`/`refund_credit_idempotent()`: o cliente gera um `operation_id`
+> (UUID) uma única vez por tentativa de geração e reenvia-o sem alterar em qualquer retry dessa
+> mesma tentativa (`assets/js/services/Services.js`); um segundo pedido com o mesmo `operation_id`
+> nunca volta a tocar em `profiles.credits`, devolvendo directamente o saldo já resultante da
+> primeira execução (`replayed: true`) — protege contra débito ou reembolso duplicado quando a
+> resposta de rede se perde depois do servidor já ter processado o pedido. É 100% aditivo: sem
+> `operation_id`, o comportamento é exactamente o de antes (`deduct_credits`/`refund_credit`
+> continuam a existir como fallback).
 
 > ℹ️ **Confirmação por SMS real da Vodacom (preparado, ainda não ligado):** existe
 > `api/_lib/parseMpesaSms.js`, que interpreta o SMS de confirmação M-Pesa real ("Confirmado
@@ -651,19 +728,94 @@ em `api/` sem confirmar este limite primeiro.
 | `tests/credit-expiry.test.js` (NOVO) | 104 | Cron de expiração por lote (v52), degradação segura |
 | `tests/rag.test.js` (NOVO) | 107 | Motor Jurídico RAG (`legalSearch.js`): citação de fonte, limiar de similaridade, aviso de qualidade |
 | `tests/notifyTelegram.test.js` (NOVO) | 60 | Alerta Telegram de pagamento em revisão (`notifyTelegram.js`) |
-| **Total** | **≈ 1.059** | — |
+| `tests/creditLedgerConcurrency.test.js` (NOVO) | 160 | Contrato da aplicação (`payments.js`) quando duas chamadas concorrentes chegam com o mesmo `transactionId` e a RPC atómica (v57) devolve `already_confirmed: true` na 2ª — **não** prova o lock `FOR UPDATE` em si (impossível com mock; ver `scripts/test-credit-concurrency.js` abaixo) |
+| **Total** | **≈ 1.449** | — |
 
-CI automático via `.github/workflows/test.yml`, a correr em cada push/PR ao branch principal.
+CI automático via `.github/workflows/test.yml`, a correr em cada push/PR ao branch principal —
+dois passos, ambos bloqueantes: `npm run lint` (ESLint, `eslint.config.mjs`) e depois `npm test`
+(Jest com `--coverage`). O job usa `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` fictícios só para os
+módulos que verificam a *presença* da variável antes de decidir "não configurado" vs "tentar
+ligar" — todos os testes mockam `supabaseAdmin`/`fetch` por completo, nenhum bate numa base de
+dados real.
 
-**Honestamente:** ~1.059 linhas de teste para ~11.650 linhas de código só em `api/` continua a ser
+**Honestamente:** ~1.449 linhas de teste para ~11.650 linhas de código só em `api/` continua a ser
 uma cobertura fina, mas cresceu de forma dirigida — as áreas de maior exposição financeira e
-legal (geração de documentos, dedução/expiração de créditos, pagamentos, RAG jurídico) já têm
-teste dedicado. Afiliados e o fluxo completo do Marketplace de Templates continuam sem teste
-automatizado.
+legal (geração de documentos, dedução/expiração/idempotência de créditos, pagamentos, RAG
+jurídico) já têm teste dedicado. Afiliados e o fluxo completo do Marketplace de Templates
+continuam sem teste automatizado. Duas verificações importantes ficam **fora do Jest de propósito**
+porque precisam de infra-estrutura real — ver secção 12: concorrência real do lock de Postgres
+(`scripts/test-credit-concurrency.js`) e qualidade do OCR contra um golden dataset
+(`scripts/ocr-golden-eval.js`).
 
 ---
 
-## 12. Dívida técnica e problemas conhecidos (honesto, sem filtro)
+## 12. Scripts de manutenção, CI/CD e Observabilidade
+
+### 12.1. Scripts (`scripts/`)
+
+Nenhum destes corre como Serverless Function — não contam para o limite de 12 do Vercel Hobby
+(secção 10). Correm manualmente ou como passo de build.
+
+| Script | Quando corre | Função |
+|---|---|---|
+| `inject-version.js` | Automaticamente, a cada build da Vercel (`buildCommand` em `vercel.json` / `scripts.build` em `package.json`) | Reescreve `CACHE_VERSION` em `sw.js` a partir do commit (`v<sha-git-7-chars>-<YYYYMMDD>`), para os clientes deixarem de servir uma versão em cache desactualizada. Nunca falha o build — qualquer erro é só `console.warn` |
+| `legal-ingest.js` | Manual, uma vez por diploma (ou todos) | Lê `docs/legal/textos-fonte/<slug>.txt`, segmenta por artigo, limpa ruído de OCR/Boletim, gera embedding via Gemini API por artigo, insere em `legal_chunks` (Supabase) para o Motor Jurídico RAG |
+| `ocr-golden-eval.js` | Manual, antes/depois de mexer no OCR | Corre cada fixture de `tests/fixtures/ocr/` através de `handleOcrAnalyze` real (mesma função de produção, sem HTTP) e compara com `expected.json`. Não corre em CI: custa chamadas de IA reais e precisa de chaves de API secretas — `GEMINI_API_KEY=... GROQ_API_KEY=... node scripts/ocr-golden-eval.js` |
+| `test-credit-concurrency.js` | Manual, contra **staging real** (nunca produção) | Verifica que dois pedidos simultâneos com saldo=1 nunca resultam em saldo=-1 nem em dois documentos gerados com 1 crédito só — só tem resposta real testando o lock `SELECT ... FOR UPDATE` do Postgres; um teste Jest mocado nunca exercitaria lock nenhum, teria sempre "sucesso" |
+
+> ⚠️ `tests/fixtures/orc/` contém apenas 2 exemplos (`_example_manuscrito`,
+> `_example_texto_impresso`) — úteis como modelo de formato (`meta.json` + `expected.json`), mas
+> não substituem um golden dataset real com documentos anonimizados de produção; ver
+> `tests/fixtures/orc/readme.md` para o formato exacto a seguir.
+
+### 12.2. CI (`.github/workflows/test.yml`)
+
+Corre em cada `push`/`pull request` ao branch principal, Node 24.x: `npm install` →
+`npm run lint` (ESLint, falha o CI em erro) → `npm test` (Jest `--coverage`). Bloqueia o merge se
+algo partir em `generate-document.js`, `deduct-credit.js`, `process-payment.js`,
+`cleanup-temp-accounts.js` ou `legalSearch.js`.
+
+`eslint.config.mjs` (flat config, ESLint 9+, sem plugins externos além de `globals`) trata bugs
+reais (variáveis não definidas, chaves duplicadas, código inalcançável, promises esquecidas) como
+**erro** — o que falha o lint e por isso o CI — e deixa preferências de estilo como aviso, para não
+travar o projecto com centenas de avisos irrelevantes. Ignora `node_modules/`, `coverage/`,
+`.vercel/`, `assets/vendor/`, `*.min.js`, `docs/`, `supabase/` (SQL) e trata `sw.js` à parte.
+
+`jest.setup.js` faz polyfill de `AbortSignal.timeout()`/`AbortSignal.any()` — o `testEnvironment:
+'jsdom'` usado pelo Jest não implementa esses métodos estáticos mais recentes do standard (ao
+contrário do Node 24.x real usado no deploy), o que fazia qualquer teste que exercitasse
+`signal: AbortSignal.timeout(...)` falhar por ambiente, não por bug de código. Só corre nos testes,
+nunca é servido à aplicação real.
+
+### 12.3. Observabilidade estruturada (`api/_lib/observability.js`, `docs/observability.md`)
+
+`logEvent(categoria, evento, payload)` centraliza eventos para responder a perguntas
+operacionais sem grep manual nos logs do Vercel (ex.: "quantos pagamentos foram auto-aprovados
+hoje?", "qual a taxa de fallback do OCR esta semana?"). Cada chamada:
+
+1. Emite sempre uma linha JSON em `stdout`, capturada pelos Logs do Vercel e por qualquer log
+   drain externo (Axiom, Datadog, Better Stack...) sem mudar código, só configuração;
+2. Tenta gravar, *best-effort* (nunca bloqueia, nunca lança excepção), na tabela `metrics_events`
+   (`migration_v59_observability.sql`), para dashboards SQL directos no Supabase.
+
+Categorias principais: `payment` (`pending`/`auto_approved`/`credited`/`credit_failed`/
+`review_needed`/`duplicate_receipt`), `ocr` (`started`/`success`/`failed`/`fallback_model`),
+`document` (`generation_success`/`generation_failed`/`refund_success`/`refund_failed`), `ai`
+(chamadas a providers, via `withTiming`), `ledger` (`consumed`/`expired`).
+
+Três views prontas para consulta directa (SQL Editor do Supabase ou qualquer BI ligado por
+Postgres): `v_payment_funnel_daily`, `v_ocr_health_daily`, `v_document_generation_daily`.
+`cleanup_old_metrics_events()` apaga registos com mais de 90 dias — recomenda-se ligar ao mesmo
+cron diário que já limpa contas temporárias.
+
+**Alertas recomendados, ainda não automatizados (P2 futuro):** pagamento auto-aprovado sem crédito
+(`SELECT * FROM v_payment_funnel_daily WHERE auto_approved > credited`) e refunds falhados
+(`category='document' AND event='refund_failed'`), ambos pensados para notificar por Telegram
+reaproveitando `notifyTelegram.js`.
+
+---
+
+## 13. Dívida técnica e problemas conhecidos (honesto, sem filtro)
 
 - **Plano Vercel Hobby** a processar pagamentos comerciais — não permitido pelos Termos da
   Vercel; sem margem de functions para crescer. Ver aviso no topo.
@@ -733,7 +885,7 @@ automatizado.
 
 ---
 
-## 13. Conformidade legal (Moçambique)
+## 14. Conformidade legal (Moçambique)
 
 Confirmado directamente em `legal.html`: a plataforma cita a **Lei n.º 3/2017, de 9 de Janeiro
 (Lei das Transacções Electrónicas)** e reconhece explicitamente que **Moçambique ainda não tem
@@ -758,7 +910,7 @@ cautela.
 
 ---
 
-## 14. Histórico de versões
+## 15. Histórico de versões
 
 O histórico detalhado ronda-a-ronda (v12 até v31) descrevia, ficheiro a ficheiro, cada correcção
 desde Junho/2026. Esse histórico longo foi **retirado deste README** porque a versão anterior do
@@ -782,17 +934,24 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | v52–v56 (Ago/2026) | Expiração real de créditos por lote (`credit_ledger`); preview de templates "Oficiais" corrigido na origem (4 variantes de estilo sem `template_html`); templates aprovados que não apareciam na Galeria pública (`is_public` dessincronizado de `status`); venda de templates restrita a afiliados/parceiros aprovados (trigger na BD); tecto de 10 créditos em `credit_cost`, alinhado com o limite de qualquer operação cobrada |
 | Correcções de código (Ago/2026, mesma ronda) | Preview de templates da comunidade com variáveis em minúsculas (`{{nome_completo}}`, `{{destinatario}}`...) deixava de preencher com dados fictícios e mostrava as chaves `{{...}}` literais — bug na regex de `fillTemplate()` (`SampleData.js`), que só reconhecia MAIÚSCULAS; corrigido, e reaproveitado no preview do admin (antes escrevia o HTML cru, sem preencher nada); formulário "Submeter Template" passou a mostrar o equivalente em MZN ao lado dos créditos (criador/plataforma), como o admin já mostrava; `TemplateLibrary.js` pedia a coluna `price_mzn` — removida da tabela pela v39 — o que fazia as duas queries de carregamento de templates do marketplace falharem sempre em silêncio (nenhum template do marketplace aparecia no selector "Escolher Modelo"); `notifyTelegram.js` ligado a `misc.js` para alertar o admin de pagamentos em revisão manual |
 | v57 (Ago/2026) — fiabilidade do OCR multi-página (`transcricao`) | Reportado em produção: fotografar 9 páginas de um documento manuscrito resultava num documento final com o conteúdo de apenas 1 página. Três correcções em cadeia, cada uma isolando a causa seguinte: **(1)** `OCRController.js` — o `<input type="file">` perdia silenciosamente todas as fotos menos a 1ª em vários Android; solução: acumulador de páginas (`stagedFiles`) com lista visível e botão "Transcrever N página(s)", em vez de processar de imediato ao escolher ficheiros; corrigido também um bug em que 1 ficheiro grande demais no lote descartava o lote inteiro. **(2)** Confirmado que `scripts/inject-version.js` (build da Vercel) já gera `CACHE_VERSION` automaticamente a partir do commit — não foi preciso criar mecanismo novo, apenas documentar para diagnóstico futuro. **(3)** `api/misc.js` — páginas que "liam" mas devolviam transcript vazio nunca tinham 2ª tentativa (só páginas com erro de rede eram repetidas); `prompts/transcricao.js` (nova regra 8) — páginas que continuam ilegíveis após as tentativas deixam de desaparecer silenciosamente do documento final, passando a mostrar um aviso visível a pedir nova fotografia dessa página específica |
+| v57 (Ago/2026) — migração `migration_v57_atomic_payment_confirmation.sql` (P0/P1-02, auditoria Ago/2026) | Confirmação de pagamento + crédito ao utilizador passam a correr dentro de uma única função `confirm_payment_and_credit()` (transacção PL/pgSQL atómica), em vez de dois pedidos REST separados ao PostgREST — elimina a janela entre marcar `completed` e creditar em que uma falha de rede/processo deixava a transacção paga sem crédito atribuído. Ver secção 8 — **numeração coincide, mas é independente da ronda de OCR acima** |
+| v58 | Não existe ficheiro de migração numerado `v58` no repositório — gap real, tal como o gap v18/v19 já documentado na secção 6.3 |
+| v59 (Ago/2026) — `migration_v59_observability.sql` (P2-04) | Observabilidade estruturada: tabela `metrics_events` + três views de dashboard (`v_payment_funnel_daily`, `v_ocr_health_daily`, `v_document_generation_daily`) + `api/_lib/observability.js` (`logEvent()`) chamado a partir dos fluxos de pagamento/OCR/geração/ledger. Ver secção 12.3 |
+| v60 (Ago/2026) — `migration_v60_idempotent_credit_operations.sql` (P1-08) | `deduct_credits_idempotent()`/`refund_credit_idempotent()`: `operation_id` gerado pelo cliente por tentativa de geração evita débito/reembolso duplicado em retries de rede; 100% aditivo, funções antigas continuam como fallback. `tests/creditLedgerConcurrency.test.js` cobre o contrato do lado da aplicação; `scripts/test-credit-concurrency.js` cobre o lock real contra staging. Ver secções 8, 11 e 12.1 |
+| Ago/2026 (mesma ronda) — CI, lint e scripts de manutenção | `eslint.config.mjs` liga lint real ao CI pela primeira vez (antes: `"lint": "echo 'Linting not configured yet'"`, não apanhava nada); `jest.setup.js` corrige falhas de `AbortSignal.timeout`/`.any` no ambiente jsdom dos testes (bug do ambiente de simulação, não do código); `scripts/ocr-golden-eval.js` e `tests/fixtures/orc/` criam o primeiro golden dataset (ainda pequeno — 2 exemplos) para medir regressões de OCR em vez de avaliar só "a olho" |
 
 | Componente | Versão |
 |---|---|
 | `package.json` | `11.0.0` |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy (`v<sha-git-7-chars>-<YYYYMMDD>`) |
-| Migrações Supabase | até `migration_v56_max_credit_cost_10.sql`, mais ficheiros avulsos não numerados |
+| Migrações Supabase | até `migration_v60_idempotent_credit_operations.sql` (gap real em `v58`), mais ficheiros avulsos não numerados |
 | Serviços | 18 (16 com IA + 2 via WhatsApp) |
 | Templates visuais integrados | 70 (14 serviços × 5) |
 | Providers de IA — com adaptador (competem) / catalogados sem adaptador | 9 / 4 (13 no total) |
 | Preço máximo de um template no Marketplace | 10 créditos (`migration_v56`) |
-| Testes | 9 suites, ≈ 1.059 linhas |
+| Testes (Jest, CI) | 10 suites, ≈ 1.449 linhas |
+| Scripts de manutenção (fora do CI) | 4 (`inject-version`, `legal-ingest`, `ocr-golden-eval`, `test-credit-concurrency`) |
+| Observabilidade | `metrics_events` + 3 views SQL (`migration_v59`), retenção de 90 dias |
 
 ---
 
