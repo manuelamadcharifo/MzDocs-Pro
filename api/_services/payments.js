@@ -41,7 +41,7 @@ async function checkReceiptRateLimit(ip) {
 // (ver esse ficheiro para o porquê — corrige duplicação em 5 locais e o
 // bug de a verificação automática de comprovativos nunca reflectir
 // alterações de preço feitas no painel de admin).
-const { loadPackagesFromSettings, estimateMznPerCredit } = require('../_lib/packages');
+const { loadPackagesFromSettings } = require('../_lib/packages');
 
 const RECEIPT_PROMPT = (wallet) =>
   `És um verificador de comprovativos de transferência bancária moçambicana (M-Pesa, e-Mola, mKesh). ` +
