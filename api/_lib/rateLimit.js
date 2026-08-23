@@ -27,6 +27,40 @@ function _getLocalMap(namespace) {
   return _localRateMaps.get(namespace);
 }
 
+// CORRIGIDO (auditoria — P1-06, Ago/2026): quando o Redis está
+// indisponível, o Map local por instância protege essa instância, mas não
+// o conjunto — num ambiente serverless, pedidos do mesmo atacante podem
+// cair em instâncias diferentes e cada uma aplica o limite normal
+// independentemente, multiplicando o limite efectivo. Optámos por NÃO
+// bloquear tudo (fail-closed total transformaria uma simples
+// indisponibilidade do Redis num apagão de login/pagamentos/OCR para
+// todos os utilizadores legítimos) — em vez disso, para os namespaces
+// sensíveis (pagamento, login, recuperação de password, OCR, geração de
+// documentos), o limite local cai para um valor muito mais apertado
+// enquanto o degrade durar, e o admin é avisado por Telegram (uma vez por
+// arranque de instância, não a cada pedido, para não inundar o chat).
+const SENSITIVE_DEGRADED_LIMIT = {
+  'receipt':              1,  // verificação de comprovativo de pagamento
+  'auth-signin':          2,  // login
+  'auth-signup':          1,  // registo
+  'auth-reset-password':  1,  // recuperação de password
+  'ocr-analyze':          2,  // digitalização/OCR
+};
+let _degradeAlerted = false;
+function _alertRateLimitDegraded(namespace) {
+  if (_degradeAlerted) return;
+  _degradeAlerted = true;
+  try {
+    // require() tardio para evitar dependência circular/custo no arranque
+    // frio quando o Redis está normalmente disponível (o caminho comum).
+    const { notifyTelegram } = require('./notifyTelegram');
+    notifyTelegram(
+      `🟠 *Rate limit em modo degradado*\nRedis (Upstash) indisponível — a usar limites locais muito mais apertados para endpoints sensíveis (namespace: \`${namespace}\`). Verifica UPSTASH_REDIS_REST_URL/TOKEN na Vercel.`,
+      { silent: true }
+    ).catch(() => {});
+  } catch (_) { /* notifyTelegram é best-effort — nunca deve quebrar o rate limit em si */ }
+}
+
 /**
  * @param {string} namespace - identifica o endpoint/uso (ex.: 'receipt', 'legal-search')
  * @param {string} identity  - identificador do chamador (ex.: IP, user id)
@@ -63,13 +97,16 @@ async function checkRateLimit(namespace, identity, opts = {}) {
   }
 
   // ── Fallback: Map local (sem persistência entre cold starts/instâncias) ──
+  const effectiveLimit = SENSITIVE_DEGRADED_LIMIT[namespace] ?? limit;
+  if (effectiveLimit < limit) _alertRateLimitDegraded(namespace);
+
   const map   = _getLocalMap(namespace);
   const now   = Date.now();
   const entry = map.get(key) || { count: 0, reset: now + windowSec * 1000 };
   if (now > entry.reset) { entry.count = 0; entry.reset = now + windowSec * 1000; }
   entry.count++;
   map.set(key, entry);
-  return entry.count <= limit;
+  return entry.count <= effectiveLimit;
 }
 
 module.exports = { checkRateLimit };
