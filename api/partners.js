@@ -116,7 +116,24 @@ function generateAccessCode() {
 // misc.js/convert.js). O segredo é o SUPABASE_SERVICE_ROLE_KEY, que já é
 // obrigatório no servidor e nunca chega ao cliente — evita ter de pedir
 // mais uma variável de ambiente só para isto.
-const PARTNER_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
+// CORRIGIDO (auditoria — P1-08, Ago/2026): 90 dias era demasiado tempo para
+// um token que funciona como sessão sem qualquer mecanismo de revogação
+// (ver nota abaixo). Reduzido para 30 dias, com renovação automática por
+// "sliding window": sempre que a parceira usa o portal com um token que já
+// passou de metade da sua validade (>15 dias de vida), o servidor emite um
+// token novo e devolve-o no cabeçalho X-Partner-Token-Refresh — o frontend
+// troca-o silenciosamente sem pedir novo login. Na prática, uma parceira
+// activa nunca chega a ver o token expirar; uma parceira inactiva por mais
+// de 30 dias tem de entrar de novo com telefone+código.
+//
+// LIMITAÇÃO CONHECIDA (documentada, não escondida): isto ainda não é
+// revogação explícita — se um token vazar, continua válido até expirar (no
+// máx. 30 dias, antes eram 90). Revogação verdadeira (jti + tabela de
+// sessões, "sair em todos os dispositivos") fica como P2 futuro — ver
+// docs/observability.md / auditoria para o desenho sugerido (tabela
+// partner_sessions com jti, issued_at, revoked_at).
+const PARTNER_TOKEN_TTL_MS         = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const PARTNER_TOKEN_REFRESH_AFTER_MS = PARTNER_TOKEN_TTL_MS / 2; // renova a meio da validade
 
 // CORRIGIDO (auditoria segurança — P1-05, Ago/2026): o fallback
 // `|| 'mzdocs-fallback'` foi removido. Um segredo HMAC hard-coded e
@@ -137,11 +154,17 @@ function _partnerTokenSecret() {
 
 function signPartnerToken(partnerId) {
   const secret  = _partnerTokenSecret();
-  const payload = Buffer.from(JSON.stringify({ pid: partnerId, exp: Date.now() + PARTNER_TOKEN_TTL_MS })).toString('base64url');
+  const now     = Date.now();
+  const payload = Buffer.from(JSON.stringify({ pid: partnerId, iat: now, exp: now + PARTNER_TOKEN_TTL_MS })).toString('base64url');
   const sig     = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
   return `${payload}.${sig}`;
 }
 
+// Devolve { pid, exp, iat } quando válido, ou null. Antes devolvia só o
+// pid — mudado para expor `exp`/`iat` também, necessário para
+// getPartnerFromRequest decidir se deve renovar o token (sliding window,
+// P1-08). Nenhum chamador antigo dependia do valor de retorno ser uma
+// string simples fora deste ficheiro (verifyPartnerToken não é exportado).
 function verifyPartnerToken(token) {
   try {
     const secret = _partnerTokenSecret();
@@ -154,18 +177,36 @@ function verifyPartnerToken(token) {
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
     if (!data.pid || !data.exp || Date.now() > data.exp) return null;
-    return data.pid;
+    return { pid: data.pid, exp: data.exp, iat: data.iat || null };
   } catch (_) {
     return null;
   }
 }
 
-async function getPartnerFromRequest(req) {
+// CORRIGIDO (auditoria — P1-08, Ago/2026): assinatura mudou para aceitar
+// `res` opcionalmente — quando fornecido e o token estiver a mais de meia
+// vida da sua validade, um token novo é assinado e devolvido no cabeçalho
+// `X-Partner-Token-Refresh`. O frontend (PartnerPortal.js) deve verificar
+// esse cabeçalho em toda resposta autenticada e, se presente, substituir o
+// token guardado localmente — puramente aditivo, nenhuma chamada existente
+// que não passe `res` deixa de funcionar (só não ganha renovação).
+async function getPartnerFromRequest(req, res = null) {
   const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
-  const pid = verifyPartnerToken(token);
-  if (!pid) return null;
-  const partner = await selectOne('partners', 'id', pid, 'id,status,active,name,owner_name,phone,whatsapp,city,address,lat,lng,type,services,hours,credential_number,bio,rating_sum,rating_count').catch(() => null);
+  const verified = verifyPartnerToken(token);
+  if (!verified) return null;
+  const partner = await selectOne('partners', 'id', verified.pid, 'id,status,active,name,owner_name,phone,whatsapp,city,address,lat,lng,type,services,hours,credential_number,bio,rating_sum,rating_count').catch(() => null);
   if (!partner || partner.status !== 'approved') return null;
+
+  if (res && typeof res.setHeader === 'function') {
+    const age = Date.now() - (verified.iat || 0);
+    if (!verified.iat || age >= PARTNER_TOKEN_REFRESH_AFTER_MS) {
+      try {
+        const freshToken = signPartnerToken(verified.pid);
+        res.setHeader('X-Partner-Token-Refresh', freshToken);
+      } catch (_) { /* renovação é best-effort — nunca deve bloquear o pedido actual */ }
+    }
+  }
+
   return partner;
 }
 
@@ -465,7 +506,7 @@ async function handleLogin(req, res) {
 
 // ── PORTAL: ME ───────────────────────────────────────────────────────────────
 async function handleMe(req, res) {
-  const partner = await getPartnerFromRequest(req);
+  const partner = await getPartnerFromRequest(req, res);
   if (!partner) return res.status(401).json({ error: 'Sessão inválida ou expirada' });
   return res.status(200).json({
     ok: true,
@@ -483,7 +524,7 @@ async function handleMe(req, res) {
 // 'owner_name' ficam de fora — mudar isso continua a passar pelo admin, para
 // evitar confusão sobre quem é "dona" de uma candidatura já aprovada.
 async function handleUpdateProfile(req, res) {
-  const partner = await getPartnerFromRequest(req);
+  const partner = await getPartnerFromRequest(req, res);
   if (!partner) return res.status(401).json({ error: 'Sessão inválida ou expirada' });
 
   const b = parseBody(req);

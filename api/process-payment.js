@@ -10,6 +10,7 @@
 
 const { insert, restRequest, getUserFromToken } = require('./_lib/supabaseAdmin');
 const { verifyReceiptInternal } = require('./misc');
+const { logEvent } = require('./_lib/observability');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
 const WA_NUMBER      = process.env.WA_SUPPORT_NUMBER || '258858695506';
@@ -200,6 +201,7 @@ module.exports = async function handler(req, res) {
 
     const transactionId = txData?.id;
     console.log('[process-payment] Transação criada:', referenceId, '| id:', transactionId, '| user_id:', userId || 'anónimo');
+    logEvent('payment', 'pending', { transactionId, referenceId, packageId, userId: userId || null, amount: pkg.price });
 
     // Registar em credit_logs — fire-and-forget, nunca bloqueia o fluxo principal
     if (transactionId) {
