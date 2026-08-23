@@ -170,9 +170,16 @@ module.exports = async function handler(req, res) {
         _planMode,    // planeamento (retorna JSON de secções)
         _sectionMode, // geração de uma secção individual
         _previewMode, // amostra grátis, sem dedução de crédito
+        _operationId, // P1-08: mesmo UUID usado em /api/deduct-credit — liga a dedução ao seu próprio reembolso
         creditsRemaining: preDeductedCredits,
         cost: deductedCost,
     } = body;
+
+    // Mesma validação de formato do endpoint /api/deduct-credit — um valor
+    // inválido é apenas ignorado (cai para o reembolso sem idempotência),
+    // nunca bloqueia a geração do documento.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const operationId = typeof _operationId === 'string' && UUID_RE.test(_operationId) ? _operationId : null;
 
     const isPreview   = !!_previewMode && !_planMode && !_sectionMode;
     const isChainCall = !isPreview && !!(_planMode || _sectionMode);
@@ -307,14 +314,40 @@ module.exports = async function handler(req, res) {
         let creditsAfterRefund = creditsAfterDeduction;
 
         if (!isChainCall && !isPreview && verifiedUserId && (deductedCost === 1 || deductedCost === 2)) {
-            try {
-                const newCredits = await rpc('refund_credit', { p_user_id: verifiedUserId, p_amount: deductedCost });
-                if (newCredits !== undefined && newCredits !== null) {
-                    refunded = true;
-                    creditsAfterRefund = newCredits;
+            // P1-08: com operationId, usa a RPC idempotente — protege contra
+            // reembolso duplicado se este handler for invocado duas vezes
+            // para a mesma tentativa (ex.: função serverless reexecutada
+            // pela plataforma após um timeout do lado do cliente, quando na
+            // realidade já tinha corrido — cenário citado na auditoria).
+            let usedIdempotent = false;
+            if (operationId) {
+                try {
+                    const rows = await rpc('refund_credit_idempotent', {
+                        p_user_id:       verifiedUserId,
+                        p_amount:        deductedCost,
+                        p_operation_id:  operationId,
+                        p_document_type: serviceType || null,
+                    });
+                    const row = Array.isArray(rows) ? rows[0] : rows;
+                    if (row && typeof row.remaining_credits === 'number') {
+                        refunded            = true;
+                        creditsAfterRefund  = row.remaining_credits;
+                        usedIdempotent      = true;
+                    }
+                } catch (refundErr) {
+                    console.warn('[generate-document] refund_credit_idempotent indisponível, a usar rpc antiga:', refundErr.message);
                 }
-            } catch (refundErr) {
-                console.error('[generate-document] Falha ao reembolsar crédito automaticamente:', refundErr.message);
+            }
+            if (!usedIdempotent) {
+                try {
+                    const newCredits = await rpc('refund_credit', { p_user_id: verifiedUserId, p_amount: deductedCost });
+                    if (newCredits !== undefined && newCredits !== null) {
+                        refunded = true;
+                        creditsAfterRefund = newCredits;
+                    }
+                } catch (refundErr) {
+                    console.error('[generate-document] Falha ao reembolsar crédito automaticamente:', refundErr.message);
+                }
             }
         }
 
