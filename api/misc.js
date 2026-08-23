@@ -2230,6 +2230,17 @@ async function handleOcrAnalyze(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'POST only' });
 
+  // CORRIGIDO (auditoria — P1-06, Ago/2026): handleOcrAnalyze processa até
+  // 20 imagens por pedido através da IA de visão (custo real por chamada)
+  // e nunca teve nenhum rate limit, ao contrário de verify-receipt e
+  // legal-search — qualquer pessoa podia esgotar a quota diária dos
+  // provedores de IA (Gemini/Groq) só com este endpoint, sem precisar de
+  // pagar nada. Mesmo limite/janela do resto do fluxo de digitalização.
+  const ocrIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  if (!await checkRateLimit('ocr-analyze', ocrIp, { limit: 6, windowSec: 60 })) {
+    return res.status(429).json({ error: 'Demasiados pedidos de digitalização. Aguarde um minuto e tente de novo.', code: 'RATE_LIMITED' });
+  }
+
   const body = parseBody(req);
   const { ocrText = '', schema = [], serviceType = '', imageBase64, imagesBase64, mimeType } = body;
   if (!schema.length) return res.status(400).json({ error: 'schema required' });
