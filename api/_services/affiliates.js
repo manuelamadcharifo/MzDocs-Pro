@@ -18,8 +18,7 @@ const {
   adminGetUserById,
   storageCreateSignedUrl,
 } = require('../_lib/supabaseAdmin');
-const { ORIGIN, parseBody, getAuthUser } = require('../_lib/httpHelpers');
-const { logEvent } = require('../_lib/observability');
+const { ORIGIN, SITE_URL, parseBody, getAuthUser } = require('../_lib/httpHelpers');
 
 async function handleAffiliate(action, req, res) {
   res.setHeader('Access-Control-Allow-Origin', ORIGIN);
