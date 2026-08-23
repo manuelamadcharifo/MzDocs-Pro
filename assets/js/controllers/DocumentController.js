@@ -1632,6 +1632,10 @@ export class DocumentController {
        return;
      }
 
+     // P1-08 (auditoria Ago/2026): operationId por tentativa de reedição —
+     // protege contra dedução duplicada em duplo-clique/retry de rede.
+     const operationId = crypto.randomUUID();
+
      const deductRes = await fetch('/api/deduct-credit', {
        method:  'POST',
        headers: {
@@ -1641,6 +1645,7 @@ export class DocumentController {
        body: JSON.stringify({
          cost:         1,
          documentType: serviceType || this.docModel.service || 'reedit',
+         operationId,
        }),
      });
 
