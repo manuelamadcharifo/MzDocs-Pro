@@ -118,8 +118,25 @@ function generateAccessCode() {
 // mais uma variável de ambiente só para isto.
 const PARTNER_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 
+// CORRIGIDO (auditoria segurança — P1-05, Ago/2026): o fallback
+// `|| 'mzdocs-fallback'` foi removido. Um segredo HMAC hard-coded e
+// conhecido publicamente (visível a qualquer pessoa com acesso ao
+// código-fonte, incluindo este repositório) nunca deve existir em
+// código de produção — mesmo que, na configuração normal do servidor,
+// SUPABASE_SERVICE_ROLE_KEY esteja sempre definida e o fallback seja
+// teoricamente inalcançável. Se a variável de ambiente não existir,
+// o sistema agora falha de forma explícita e fechada (fail closed) em
+// vez de assinar/aceitar tokens de parceiro com um segredo previsível.
+function _partnerTokenSecret() {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada — impossível assinar/verificar tokens de parceiro.');
+  }
+  return secret;
+}
+
 function signPartnerToken(partnerId) {
-  const secret  = process.env.SUPABASE_SERVICE_ROLE_KEY || 'mzdocs-fallback';
+  const secret  = _partnerTokenSecret();
   const payload = Buffer.from(JSON.stringify({ pid: partnerId, exp: Date.now() + PARTNER_TOKEN_TTL_MS })).toString('base64url');
   const sig     = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
   return `${payload}.${sig}`;
@@ -127,7 +144,7 @@ function signPartnerToken(partnerId) {
 
 function verifyPartnerToken(token) {
   try {
-    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'mzdocs-fallback';
+    const secret = _partnerTokenSecret();
     const [payload, sig] = String(token || '').split('.');
     if (!payload || !sig) return null;
     const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
