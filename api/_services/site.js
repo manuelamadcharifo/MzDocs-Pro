@@ -19,7 +19,6 @@ const {
 const { checkRateLimit } = require('../_lib/rateLimit');
 const { loadPackagesFromSettings } = require('../_lib/packages');
 const { ORIGIN, parseBody } = require('../_lib/httpHelpers');
-const { logEvent } = require('../_lib/observability');
 
 async function handlePageView(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
