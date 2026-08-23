@@ -11,6 +11,8 @@
     "test": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
     "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
     "test:auth": "jest tests/auth.test.js",
+    "test:concurrency": "node scripts/test-credit-concurrency.js",
+    "ocr:golden": "node scripts/ocr-golden-eval.js",
     "lint": "eslint ."
   },
   "keywords": [
