@@ -196,13 +196,23 @@ export class OpenRouterService {
       'Authorization': `Bearer ${authToken}`,
     };
 
+    // NOVO (P1-08, auditoria Ago/2026): UUID gerado uma única vez para
+    // ESTA tentativa de geração — enviado tanto para /api/deduct-credit
+    // como para /api/generate-document (que o reenvia no reembolso, se
+    // precisar). Se um destes pedidos for repetido com o mesmo body (ex.:
+    // o browser reenviar automaticamente um pedido cuja resposta se
+    // perdeu), o servidor reconhece o operationId e não debita/reembolsa
+    // duas vezes. crypto.randomUUID() está disponível em todos os
+    // browsers-alvo do projecto (contexto seguro/HTTPS, já exigido pela PWA).
+    const operationId = crypto.randomUUID();
+
     // ── PASSO 1: Deduzir créditos via /api/deduct-credit ────────────────
     // Feito ANTES da geração para garantir que os créditos são consumidos
     // mesmo que a geração falhe (o servidor de IA pode falhar, o crédito foi usado).
     const deductRes = await fetch('/api/deduct-credit', {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ cost }),
+      body: JSON.stringify({ cost, operationId }),
     });
 
     if (deductRes.status === 401) {
@@ -229,6 +239,7 @@ export class OpenRouterService {
         userId,
         creditsRemaining: creditsAfterDeduct, // enviado de volta para o cliente via resposta
         cost, // permite ao servidor reembolsar automaticamente este custo se a geração falhar
+        _operationId: operationId, // P1-08: liga um eventual reembolso à mesma dedução acima
       }),
     });
 
