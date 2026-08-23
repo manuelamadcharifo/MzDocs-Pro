@@ -10,7 +10,6 @@
 const { restRequest, insert } = require('../_lib/supabaseAdmin');
 const { publishBlogPageToGithub } = require('../_lib/blogTemplate');
 const { ORIGIN, SITE_URL, parseBody } = require('../_lib/httpHelpers');
-const { logEvent } = require('../_lib/observability');
 
 // Páginas SEO estáticas — ao adicionar novas páginas em /pages/, acrescentar
 // aqui também. Páginas geradas pelo admin (blog_pages) são lidas
