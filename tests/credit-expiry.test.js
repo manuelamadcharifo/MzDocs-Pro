@@ -16,7 +16,12 @@ jest.mock('../api/_lib/supabaseAdmin', () => ({
 }));
 
 const supabaseAdmin = require('../api/_lib/supabaseAdmin');
-const handler = require('../api/cleanup-temp-accounts');
+// CORRIGIDO (consolidação de Serverless Functions, Ago/2026): api/cleanup-
+// temp-accounts.js foi absorvido por api/_services/account.js (rota pública
+// /api/cleanup-temp-accounts continua igual, chamada agora via
+// /api/account?_op=cleanup-temp-accounts — ver vercel.json). O teste passa
+// a importar o handler nomeado do novo local; nenhuma asserção mudou.
+const { handleCleanupTempAccounts: handler } = require('../api/_services/account');
 
 function mockReqRes(headers = {}) {
   const req = { method: 'POST', headers: { 'x-cron-secret': 'test-secret', ...headers } };

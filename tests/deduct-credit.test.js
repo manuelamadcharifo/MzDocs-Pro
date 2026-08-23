@@ -16,7 +16,11 @@ jest.mock('../api/_lib/supabaseAdmin', () => ({
 }));
 
 const supabaseAdmin = require('../api/_lib/supabaseAdmin');
-const handler = require('../api/deduct-credit');
+// CORRIGIDO (consolidação de Serverless Functions, Ago/2026): api/deduct-credit.js
+// foi absorvido por api/_services/account.js (rota pública /api/deduct-credit
+// continua igual — ver rewrite em vercel.json). O teste passa a importar o
+// handler nomeado do novo local; nenhuma asserção abaixo mudou.
+const { handleDeductCredit: handler } = require('../api/_services/account');
 
 function mockReqRes(body, headers = {}) {
   const req = { method: 'POST', headers: { authorization: 'Bearer fake-jwt', ...headers }, body };
