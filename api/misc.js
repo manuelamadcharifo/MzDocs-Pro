@@ -405,9 +405,30 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
       // sem crédito nenhum atribuído a ninguém, porque userId era null e a
       // criação da conta só existia no botão manual "🎫 Criar Conta" do
       // admin, em handleConfirmAvulso).
+      // CORRIGIDO (auditoria — P0/P1-02, Ago/2026): idempotência do crédito.
+      // O PATCH acima já protege contra duas chamadas em paralelo (usa
+      // &status=eq.pending e aborta se 0 linhas mudarem). Mas se
+      // add_credits() ou a criação da conta avulso falharem DEPOIS da
+      // transacção já ter ficado "completed" (ex.: timeout de rede), uma
+      // nova tentativa (retry manual do admin, ou reprocessamento) passaria
+      // de novo por aqui e podia creditar 2x, porque o único guarda-costas
+      // era o status da transacção, já 'completed'. Agora verificamos
+      // primeiro se já existe um credit_logs para este transactionId —
+      // nesse caso não voltamos a chamar add_credits nem a criar conta.
+      let alreadyCredited = false;
+      try {
+        const existingLog = await restRequest(
+          `credit_logs?transaction_id=eq.${transactionId}&select=id&limit=1`
+        );
+        alreadyCredited = Array.isArray(existingLog) && existingLog.length > 0;
+      } catch (_) { /* coluna/tabela indisponível — seguir sem bloquear */ }
+
       let accountInfo   = null;
       let creditedUser  = null;
-      if (userId && credits > 0) {
+      if (alreadyCredited) {
+        console.warn('[verify-receipt] Créditos já atribuídos anteriormente para esta transacção — a ignorar novo crédito.', transactionId);
+        creditedUser = userId || null;
+      } else if (userId && credits > 0) {
         await rpc('add_credits', { user_id: userId, amount: credits });
         creditedUser = userId;
 
@@ -597,6 +618,7 @@ async function handleVerifyReceipt(req, res) {
   }
 
   // Verificar que a transacção existe e está pendente
+  let tx;
   try {
     const rows = await restRequest(
       `transactions?id=eq.${transactionId}&status=in.(pending,review_needed)&select=id,package_id,amount,user_id&limit=1`
@@ -604,17 +626,44 @@ async function handleVerifyReceipt(req, res) {
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(404).json({ error: 'Transacção não encontrada ou já processada.' });
     }
+    tx = rows[0];
   } catch (e) {
     return res.status(500).json({ error: 'Erro ao verificar transacção.' });
   }
 
+  // CORRIGIDO (auditoria segurança — P0-01, Ago/2026): package_id, user_id e
+  // amount deixam de vir do corpo do pedido (body) para decidir quantos
+  // créditos atribuir e a quem. Antes disto, o servidor confirmava apenas
+  // que o transactionId existia e estava pending, mas depois usava os
+  // valores de packageId/userId/amount tal como enviados pelo cliente —
+  // um atacante podia reaproveitar um transactionId válido (de uma compra
+  // já criada, ex.: pacote "avulso") e declarar no pedido um packageId mais
+  // caro (ex.: "empresa") ou um userId diferente do dono real da compra.
+  // Se o comprovativo fosse aprovado automaticamente pela IA, o sistema
+  // creditava a conta errada ou creditava mais do que o pago. Agora a
+  // linha `tx` lida da base de dados é a única fonte de verdade — os
+  // campos packageId/userId/amount do body só servem de log/depuração e
+  // nunca chegam a verifyReceiptInternal.
+  if (packageId && tx.package_id && String(packageId) !== String(tx.package_id)) {
+    console.warn('[verify-receipt] packageId do pedido não corresponde à transacção — ignorado, a usar o da BD.',
+      { transactionId, requested: packageId, actual: tx.package_id });
+  }
+  if (userId && tx.user_id && String(userId) !== String(tx.user_id)) {
+    console.warn('[verify-receipt] userId do pedido não corresponde à transacção — ignorado, a usar o da BD.',
+      { transactionId, requested: userId, actual: tx.user_id });
+  }
+
   try {
+    const trustedPackageId = tx.package_id;
+    const trustedUserId    = tx.user_id || null;
     const fallbackPackages = await loadPackagesFromSettings();
     const result = await verifyReceiptInternal({
       imageBase64, mimeType, reference, phone,
-      amount: Number(amount) || (fallbackPackages[packageId]?.price || 0),
+      amount: Number(tx.amount) || (fallbackPackages[trustedPackageId]?.price || 0),
       wallet: wallet || 'móvel',
-      userId, transactionId, packageId,
+      userId:        trustedUserId,
+      transactionId,
+      packageId:     trustedPackageId,
     });
     // Sempre 200 — success:false é resposta de negócio, não erro HTTP.
     // O frontend distingue pelos campos success/code/nextStep.
