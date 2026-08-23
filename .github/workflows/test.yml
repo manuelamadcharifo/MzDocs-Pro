@@ -23,6 +23,9 @@ jobs:
       - name: Instalar dependências
         run: npm install --no-audit --no-fund
 
+      - name: Lint
+        run: npm run lint
+
       - name: Correr testes
         run: npm test
         env:
