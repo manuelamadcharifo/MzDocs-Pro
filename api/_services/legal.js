@@ -8,7 +8,6 @@
 const { buscarArtigosRelevantes } = require('../_lib/legalSearch');
 const { checkRateLimit } = require('../_lib/rateLimit');
 const { ORIGIN, parseBody } = require('../_lib/httpHelpers');
-const { logEvent } = require('../_lib/observability');
 
 async function checkLegalSearchRateLimit(ip) {
   // max 20 buscas por IP por minuto — generoso para uso normal
