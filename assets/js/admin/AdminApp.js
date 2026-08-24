@@ -98,6 +98,13 @@ class AdminApp {
         openMaterialForm:       (d) => this._openMaterialForm(d.id),
         toggleMaterialActive:   (d) => this._toggleMaterialActive(d.id, d.active === 'true'),
         deleteMaterial:         (d) => this._deleteMaterial(d.id),
+        // NOVO (v61): pacotes de créditos dinâmicos — mesmo padrão dos
+        // materiais de marketing acima.
+        openPackageForm:        (d) => this._openPackageForm(d.id),
+        closePackageForm:       () => this._closePackageForm(),
+        savePackage:            () => this._savePackage(),
+        togglePackageActive:    (d) => this._togglePackageActive(d.id, d.active === 'true'),
+        deletePackage:          (d) => this._deletePackage(d.id),
         // Secção Campanhas/Metas (CSP Fase 1, parte 4)
         toggleCampaign:         (d) => this._toggleCampaign(d.id, d.active === 'true'),
         deleteCampaign:         (d) => this._deleteCampaign(d.id, d.name),
@@ -2590,16 +2597,10 @@ USING (EXISTS (
         await Promise.all([
             this._loadSystemSettings(),
             this.loadAuditLog(),
+            // NOVO (v61): pacotes de créditos dinâmicos (substituiu o
+            // antigo formulário fixo pkgStarter/pkgBasico/pkgPro/pkgEmpresa).
+            this._loadPackages(),
         ]);
-        // Existing pricing form submit (safe re-bind)
-        const pf = document.getElementById('pricingForm');
-        if (pf && !pf._bound) {
-            pf._bound = true;
-            pf.addEventListener('submit', async e => {
-                e.preventDefault();
-                await this._savePricingSettings();
-            });
-        }
     }
 
     async _loadSystemSettings() {
@@ -2634,6 +2635,22 @@ USING (EXISTS (
             set('cfg_bonus_credits_amount',       'bonus_credits_amount');
             set('cfg_bonus_credits_expiry_days',  'bonus_credits_expiry_days');
 
+            // NOVO (v61): agendamento da promoção — guardadas em ISO
+            // completo (map[key]), mas o <input type="datetime-local">
+            // só aceita "YYYY-MM-DDTHH:mm" (sem segundos/timezone).
+            const setDateTimeLocal = (id, key) => {
+                const el = document.getElementById(id);
+                if (el && map[key]) {
+                    const d = new Date(map[key]);
+                    if (!isNaN(d.getTime())) {
+                        const pad = n => String(n).padStart(2, '0');
+                        el.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                    }
+                }
+            };
+            setDateTimeLocal('cfg_bonus_promo_starts_at', 'bonus_promo_starts_at');
+            setDateTimeLocal('cfg_bonus_promo_ends_at',   'bonus_promo_ends_at');
+
             // NOVO: regras de afiliados — já reais e usadas pela função SQL
             // process_affiliate_commission_v2 (ver migration_v36); só faltava
             // poder editá-las sem SQL directo.
@@ -2648,24 +2665,9 @@ USING (EXISTS (
 
             // NOVO: royalties de templates
             set('cfg_tpl_min_withdraw',        'tpl_min_withdraw');
-
-            // Populate pricing fields too
-            set('pkgStarterCredits', 'pkg_starter_credits');
-            set('pkgStarterPrice',   'pkg_starter_price');
-            set('pkgBasicoCredits',  'pkg_basico_credits');
-            set('pkgBasicoPrice',    'pkg_basico_price');
-            set('pkgProCredits',     'pkg_pro_credits');
-            set('pkgProPrice',       'pkg_pro_price');
-            set('pkgEmpresaCredits', 'pkg_empresa_credits');
-            set('pkgEmpresaPrice',   'pkg_empresa_price');
-
-            // NOVO (monetização — bónus escada): créditos bónus por pacote,
-            // por cima dos créditos normais na mesma compra. Mesmo padrão
-            // de chave (pkg_<id>_bonus) usado em api/_lib/packages.js.
-            set('pkgStarterBonus',   'pkg_starter_bonus');
-            set('pkgBasicoBonus',    'pkg_basico_bonus');
-            set('pkgProBonus',       'pkg_pro_bonus');
-            set('pkgEmpresaBonus',   'pkg_empresa_bonus');
+            // NOVO (v61): preços/créditos/bónus por pacote deixaram de
+            // viver aqui (chaves fixas pkg_<id>_*) — ver _loadPackages(),
+            // que lê a lista dinâmica de /api/admin/packages.
 
             loader.style.display = 'none';
             form.style.display   = 'block';
@@ -2717,6 +2719,19 @@ USING (EXISTS (
             bonus_credits_amount:      get('cfg_bonus_credits_amount'),
             bonus_credits_expiry_days: get('cfg_bonus_credits_expiry_days'),
         };
+        // NOVO (v61): agendamento — <input type="datetime-local"> devolve
+        // "YYYY-MM-DDTHH:mm" (hora local do browser, sem timezone). new
+        // Date(...) interpreta isso como hora local e .toISOString()
+        // converte correctamente para UTC antes de gravar.
+        const toIso = id => {
+            const raw = get(id);
+            if (!raw) return '';
+            const d = new Date(raw);
+            return isNaN(d.getTime()) ? '' : d.toISOString();
+        };
+        updates.bonus_promo_starts_at = toIso('cfg_bonus_promo_starts_at');
+        updates.bonus_promo_ends_at   = toIso('cfg_bonus_promo_ends_at');
+
         Object.keys(updates).forEach(k => { if (updates[k] === '') delete updates[k]; });
         try {
             const token = await this._getAdminToken();
@@ -2775,42 +2790,6 @@ USING (EXISTS (
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Erro ao guardar');
             this._notify('✅ Regras de templates guardadas!', 'success');
-        } catch (err) {
-            this._notify('❌ ' + err.message, 'error');
-        }
-    }
-
-    async _savePricingSettings() {
-        const get = id => document.getElementById(id)?.value?.trim() || '';
-        const updates = {
-            pkg_starter_credits: get('pkgStarterCredits'),
-            pkg_starter_price:   get('pkgStarterPrice'),
-            pkg_basico_credits:  get('pkgBasicoCredits'),
-            pkg_basico_price:    get('pkgBasicoPrice'),
-            pkg_pro_credits:     get('pkgProCredits'),
-            pkg_pro_price:       get('pkgProPrice'),
-            pkg_empresa_credits: get('pkgEmpresaCredits'),
-            pkg_empresa_price:   get('pkgEmpresaPrice'),
-            // NOVO (monetização — bónus escada): créditos bónus por pacote.
-            // '0' é um valor válido (guarda normalmente) — só campos
-            // realmente vazios são removidos abaixo, para não sobrescrever
-            // sem querer um bónus já configurado com um valor em branco.
-            pkg_starter_bonus:   get('pkgStarterBonus'),
-            pkg_basico_bonus:    get('pkgBasicoBonus'),
-            pkg_pro_bonus:       get('pkgProBonus'),
-            pkg_empresa_bonus:   get('pkgEmpresaBonus'),
-        };
-        Object.keys(updates).forEach(k => { if (updates[k] === '') delete updates[k]; });
-        try {
-            const token = await this._getAdminToken();
-            const res   = await fetch('/api/admin/settings', {
-                method:  'PUT',
-                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                body:    JSON.stringify({ updates }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Erro');
-            this._notify('✅ Preços guardados!', 'success');
         } catch (err) {
             this._notify('❌ ' + err.message, 'error');
         }
@@ -4062,6 +4041,144 @@ USING (EXISTS (
             if (!res.ok) throw new Error(d.error || 'Erro ao apagar material');
             this._toast('🗑️ Material apagado.', 'success');
             this._loadMaterials();
+        } catch (err) {
+            this._toast('Erro: ' + err.message, 'error');
+        }
+    }
+
+    // ── PACOTES DE CRÉDITOS DINÂMICOS (v61) ───────────────────────────────
+    // Mesmo padrão dos materiais de marketing acima (_loadMaterials /
+    // _openMaterialForm / _toggleMaterialActive / _deleteMaterial).
+    async _loadPackages() {
+        const container = document.getElementById('packagesList');
+        if (!container) return;
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px">A carregar pacotes…</div>';
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch('/api/admin/packages', { headers: { Authorization: 'Bearer ' + token } });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao carregar pacotes');
+
+            this._packagesCache = d.packages || [];
+            if (!this._packagesCache.length) {
+                container.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px">Nenhum pacote encontrado. Clique em "➕ Novo Pacote".</div>';
+                return;
+            }
+
+            container.innerHTML = this._packagesCache.map(p => `
+                <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1.5px solid #e7e9ee;border-radius:12px;padding:10px 12px;${p.is_active ? '' : 'opacity:.6'}">
+                    <div style="flex:1;min-width:0">
+                        <div style="font-weight:800;font-size:13.5px;color:#0f172a">
+                            ${escapeHtml(p.name)}
+                            <span style="font-weight:600;color:#94a3b8;font-size:11.5px">(${escapeHtml(p.id)})</span>
+                            ${p.is_popular ? '<span style="margin-left:4px;font-size:10.5px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:6px;font-weight:700">★ Popular</span>' : ''}
+                            ${p.is_active ? '' : '<span style="margin-left:4px;font-size:10.5px;color:#dc2626;font-weight:700">inactivo</span>'}
+                        </div>
+                        <div style="font-size:12px;color:#64748b;margin-top:2px">
+                            MZN ${Number(p.price_mzn).toLocaleString('pt-PT')} — ${p.credits} créditos${Number(p.bonus) > 0 ? ` + ${p.bonus} bónus` : ''}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-shrink:0">
+                        <button data-action="openPackageForm" data-id="${escapeHtml(p.id)}" style="padding:7px 10px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:11.5px;cursor:pointer">✏️ Editar</button>
+                        <button data-action="togglePackageActive" data-id="${escapeHtml(p.id)}" data-active="${p.is_active}" style="padding:7px 10px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#334155;font-weight:700;font-size:11.5px;cursor:pointer">${p.is_active ? '🚫' : '✅'}</button>
+                        <button data-action="deletePackage" data-id="${escapeHtml(p.id)}" style="padding:7px 10px;border:1.5px solid #fca5a5;border-radius:8px;background:#fef2f2;color:#b91c1c;font-weight:700;font-size:11.5px;cursor:pointer">🗑️</button>
+                    </div>
+                </div>`).join('');
+        } catch (err) {
+            console.error('[Admin] pacotes:', err.message);
+            container.innerHTML = `<div style="text-align:center;padding:20px;color:#dc2626;font-size:13px">Erro ao carregar: ${err.message}</div>`;
+        }
+    }
+
+    _openPackageForm(id) {
+        const card = document.getElementById('packageFormCard');
+        card.style.display = 'block';
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        const pkg = id ? (this._packagesCache || []).find(p => p.id === id) : null;
+
+        document.getElementById('packageFormTitle').textContent = pkg ? '✏️ Editar Pacote' : '➕ Novo Pacote';
+        document.getElementById('pkgFormOriginalId').value = pkg?.id || '';
+        const idInput = document.getElementById('pkgFormId');
+        idInput.value = pkg?.id || '';
+        idInput.disabled = !!pkg; // id não pode mudar depois de criado
+        document.getElementById('pkgFormName').value = pkg?.name || '';
+        document.getElementById('pkgFormDescription').value = pkg?.description || '';
+        document.getElementById('pkgFormCredits').value = pkg?.credits ?? '';
+        document.getElementById('pkgFormPrice').value = pkg?.price_mzn ?? '';
+        document.getElementById('pkgFormBonus').value = pkg?.bonus ?? 0;
+        document.getElementById('pkgFormSortOrder').value = pkg?.sort_order ?? 10;
+        document.getElementById('pkgFormPopular').checked = !!pkg?.is_popular;
+        document.getElementById('pkgFormActive').checked = pkg ? !!pkg.is_active : true;
+    }
+
+    _closePackageForm() {
+        const card = document.getElementById('packageFormCard');
+        if (card) card.style.display = 'none';
+        document.getElementById('pkgFormId').disabled = false;
+    }
+
+    async _savePackage() {
+        const originalId = document.getElementById('pkgFormOriginalId').value.trim();
+        const isEdit = !!originalId;
+
+        const payload = {
+            id:          document.getElementById('pkgFormId').value.trim().toLowerCase(),
+            name:        document.getElementById('pkgFormName').value.trim(),
+            description: document.getElementById('pkgFormDescription').value.trim(),
+            credits:     Number(document.getElementById('pkgFormCredits').value),
+            price_mzn:   Number(document.getElementById('pkgFormPrice').value),
+            bonus:       Number(document.getElementById('pkgFormBonus').value || 0),
+            sort_order:  Number(document.getElementById('pkgFormSortOrder').value || 10),
+            is_popular:  document.getElementById('pkgFormPopular').checked,
+            is_active:   document.getElementById('pkgFormActive').checked,
+        };
+
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch('/api/admin/packages', {
+                method: isEdit ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify(isEdit ? { ...payload, id: originalId } : payload),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao guardar pacote');
+            this._toast(isEdit ? '✅ Pacote actualizado!' : '✅ Pacote criado!', 'success');
+            this._closePackageForm();
+            this._loadPackages();
+        } catch (err) {
+            this._toast('Erro: ' + err.message, 'error');
+        }
+    }
+
+    async _togglePackageActive(id, currentlyActive) {
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch('/api/admin/packages', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify({ id, is_active: !currentlyActive }),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao actualizar pacote');
+            this._loadPackages();
+        } catch (err) {
+            this._toast('Erro: ' + err.message, 'error');
+        }
+    }
+
+    async _deletePackage(id) {
+        if (!confirm('Apagar este pacote? Esta acção não pode ser desfeita.')) return;
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch(`/api/admin/packages?id=${encodeURIComponent(id)}`, {
+                method: 'DELETE',
+                headers: { Authorization: 'Bearer ' + token },
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao apagar pacote');
+            this._toast('🗑️ Pacote apagado.', 'success');
+            this._loadPackages();
         } catch (err) {
             this._toast('Erro: ' + err.message, 'error');
         }
