@@ -1394,10 +1394,25 @@
               <input type="number" id="cfg_bonus_credits_expiry_days" min="1"/>
             </div>
             <p style="font-size:.72rem;color:#94a3b8;margin:2px 0 10px;">
-              ⚠️ Nota honesta: a validade acima ainda não é aplicada automaticamente
-              (nenhum crédito — grátis, bónus ou comprado — expira sozinho no sistema
-              hoje). Este campo já fica guardado para quando essa parte for construída;
-              por agora serve só de registo da regra pretendida.
+              ✅ A validade acima é aplicada de facto: cada lote de créditos bónus
+              concedido fica registado no <code>credit_ledger</code> com a sua própria
+              data de expiração e é removido automaticamente pelo cron diário quando
+              essa data passa (não afecta créditos grátis/comprados, que têm as suas
+              próprias regras de validade).
+            </p>
+            <div class="form-row">
+              <label>Promoção começa em</label>
+              <input type="datetime-local" id="cfg_bonus_promo_starts_at"/>
+            </div>
+            <div class="form-row">
+              <label>Promoção termina em</label>
+              <input type="datetime-local" id="cfg_bonus_promo_ends_at"/>
+            </div>
+            <p style="font-size:.72rem;color:#94a3b8;margin:2px 0 10px;">
+              NOVO: defina início/fim para agendar a promoção com antecedência — só
+              é aplicada a novos registos dentro dessa janela, mesmo com "Sim" acima.
+              Deixe os dois campos vazios para voltar ao comportamento manual (activa/
+              desactiva apenas pelo interruptor "Sim/Não").
             </p>
             <button type="button" class="btn-primary" style="width:100%;margin-top:.5rem"
               data-action="saveBonusCreditsSettings">💾 Guardar Créditos Bónus</button>
@@ -1462,63 +1477,70 @@
         </div>
 
         <div class="settings-card">
-          <h3>📦 Preços dos Pacotes</h3>
-          <p style="font-size:.85rem;color:var(--text-muted,#888);margin-top:-.25rem;margin-bottom:.75rem">
-            NOVO: campo "Bónus" — créditos extra atribuídos por cima dos
-            créditos do pacote, na mesma compra, sem alterar o preço.
-            Deixe em 0 (ou vazio) para nenhum bónus.
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+            <h3 style="margin:0">📦 Pacotes de Créditos</h3>
+            <button type="button" data-action="openPackageForm" style="padding:8px 14px;border:none;border-radius:8px;background:#0f172a;color:#fff;font-weight:700;font-size:13px;cursor:pointer">➕ Novo Pacote</button>
+          </div>
+          <p style="font-size:.8rem;color:#64748b;margin:2px 0 12px;">
+            NOVO (v61): já não está limitado a Avulso/Starter/Básico/Pro/Empresa —
+            crie, edite, desactive ou remova qualquer pacote (ex.: uma promoção
+            "Black Friday" com um id próprio). "Bónus" são créditos extra atribuídos
+            por cima dos créditos do pacote, na mesma compra, sem alterar o preço.
+            Pacotes desactivados deixam de aparecer no checkout, mas não são apagados.
           </p>
-          <form id="pricingForm">
+
+          <!-- Formulário de criação/edição -->
+          <div id="packageFormCard" style="display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:14px">
+            <h4 id="packageFormTitle" style="margin:0 0 10px">➕ Novo Pacote</h4>
+            <input type="hidden" id="pkgFormOriginalId"/>
             <div class="form-row">
-              <label>Starter — Créditos</label>
-              <input type="number" id="pkgStarterCredits" value="10" min="1">
+              <label>ID (só usado internamente — não pode mudar depois de criado)</label>
+              <input type="text" id="pkgFormId" placeholder="ex: mega, black-friday" pattern="[a-z0-9_-]+"/>
             </div>
             <div class="form-row">
-              <label>Starter — Preço (MZN)</label>
-              <input type="number" id="pkgStarterPrice" value="120" min="1">
+              <label>Nome (mostrado ao cliente)</label>
+              <input type="text" id="pkgFormName" placeholder="ex: Mega Pacote"/>
             </div>
             <div class="form-row">
-              <label>Starter — Bónus (créditos extra)</label>
-              <input type="number" id="pkgStarterBonus" value="2" min="0">
+              <label>Descrição curta (opcional)</label>
+              <input type="text" id="pkgFormDescription" placeholder="ex: A melhor opção para escritórios"/>
             </div>
             <div class="form-row">
-              <label>Básico — Créditos</label>
-              <input type="number" id="pkgBasicoCredits" value="25" min="1">
+              <label>Créditos</label>
+              <input type="number" id="pkgFormCredits" min="1"/>
             </div>
             <div class="form-row">
-              <label>Básico — Preço (MZN)</label>
-              <input type="number" id="pkgBasicoPrice" value="280" min="1">
+              <label>Preço (MZN)</label>
+              <input type="number" id="pkgFormPrice" min="1"/>
             </div>
             <div class="form-row">
-              <label>Básico — Bónus (créditos extra)</label>
-              <input type="number" id="pkgBasicoBonus" value="5" min="0">
+              <label>Bónus (créditos extra)</label>
+              <input type="number" id="pkgFormBonus" min="0" value="0"/>
             </div>
             <div class="form-row">
-              <label>Pro — Créditos</label>
-              <input type="number" id="pkgProCredits" value="60" min="1">
+              <label>Ordem de exibição (menor aparece primeiro)</label>
+              <input type="number" id="pkgFormSortOrder" min="0" value="10"/>
             </div>
             <div class="form-row">
-              <label>Pro — Preço (MZN)</label>
-              <input type="number" id="pkgProPrice" value="600" min="1">
+              <label style="display:flex;align-items:center;gap:6px">
+                <input type="checkbox" id="pkgFormPopular"/> Marcar como "Popular" (destaque no checkout)
+              </label>
             </div>
             <div class="form-row">
-              <label>Pro — Bónus (créditos extra)</label>
-              <input type="number" id="pkgProBonus" value="15" min="0">
+              <label style="display:flex;align-items:center;gap:6px">
+                <input type="checkbox" id="pkgFormActive" checked/> Activo (visível no checkout)
+              </label>
             </div>
-            <div class="form-row">
-              <label>Empresa — Créditos</label>
-              <input type="number" id="pkgEmpresaCredits" value="150" min="1">
+            <div style="display:flex;gap:10px;margin-top:8px">
+              <button type="button" data-action="savePackage" class="btn-primary" style="flex:1">💾 Guardar Pacote</button>
+              <button type="button" data-action="closePackageForm" style="padding:10px 16px;border:1.5px solid #cbd5e1;border-radius:10px;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer">Cancelar</button>
             </div>
-            <div class="form-row">
-              <label>Empresa — Preço (MZN)</label>
-              <input type="number" id="pkgEmpresaPrice" value="1500" min="1">
-            </div>
-            <div class="form-row">
-              <label>Empresa — Bónus (créditos extra)</label>
-              <input type="number" id="pkgEmpresaBonus" value="40" min="0">
-            </div>
-            <button type="submit" class="btn-primary" style="width:100%;margin-top:.75rem">💾 Guardar Preços</button>
-          </form>
+          </div>
+
+          <!-- Lista de pacotes -->
+          <div id="packagesList" style="display:flex;flex-direction:column;gap:8px">
+            <div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px">A carregar pacotes…</div>
+          </div>
         </div>
 
         <div class="settings-card">
