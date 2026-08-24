@@ -2659,6 +2659,14 @@ USING (EXISTS (
             set('pkgEmpresaCredits', 'pkg_empresa_credits');
             set('pkgEmpresaPrice',   'pkg_empresa_price');
 
+            // NOVO (monetização — bónus escada): créditos bónus por pacote,
+            // por cima dos créditos normais na mesma compra. Mesmo padrão
+            // de chave (pkg_<id>_bonus) usado em api/_lib/packages.js.
+            set('pkgStarterBonus',   'pkg_starter_bonus');
+            set('pkgBasicoBonus',    'pkg_basico_bonus');
+            set('pkgProBonus',       'pkg_pro_bonus');
+            set('pkgEmpresaBonus',   'pkg_empresa_bonus');
+
             loader.style.display = 'none';
             form.style.display   = 'block';
         } catch (err) {
@@ -2783,7 +2791,16 @@ USING (EXISTS (
             pkg_pro_price:       get('pkgProPrice'),
             pkg_empresa_credits: get('pkgEmpresaCredits'),
             pkg_empresa_price:   get('pkgEmpresaPrice'),
+            // NOVO (monetização — bónus escada): créditos bónus por pacote.
+            // '0' é um valor válido (guarda normalmente) — só campos
+            // realmente vazios são removidos abaixo, para não sobrescrever
+            // sem querer um bónus já configurado com um valor em branco.
+            pkg_starter_bonus:   get('pkgStarterBonus'),
+            pkg_basico_bonus:    get('pkgBasicoBonus'),
+            pkg_pro_bonus:       get('pkgProBonus'),
+            pkg_empresa_bonus:   get('pkgEmpresaBonus'),
         };
+        Object.keys(updates).forEach(k => { if (updates[k] === '') delete updates[k]; });
         try {
             const token = await this._getAdminToken();
             const res   = await fetch('/api/admin/settings', {
