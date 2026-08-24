@@ -78,6 +78,11 @@ class AdminApp {
         // Secção Blog/Páginas SEO (CSP Fase 1, parte 4)
         saveBlogQueueDate:      (d) => this._saveBlogQueueDate(d.id),
         deleteBlogQueueItem:    (d) => this._deleteBlogQueueItem(d.id),
+        // NOVO: mostra a mensagem de erro real de um item da fila que
+        // falhou, num modal (não um alert()) — usa o mesmo componente
+        // showModal/closeModal já usado no resto do admin (ver
+        // _showBlogQueueErrorModal abaixo).
+        showBlogQueueError:     (d) => this._showBlogQueueErrorModal(d.error),
         doRescheduleAll:        ()  => this._doRescheduleAll(),
         doBulkSchedule:         ()  => this._doBulkSchedule(),
         saveBlogAutogenSettings: () => this._saveBlogAutogenSettings(),
@@ -852,6 +857,20 @@ class AdminApp {
             this._notify(`✅ Utilizador ${block ? 'bloqueado' : 'desbloqueado'} com sucesso!`);
             this._loadUsers();
         } catch (err) { this._notify('❌ ' + err.message, 'error'); }
+    }
+
+    // NOVO: erro real de um item da fila de blog que falhou (antes só
+    // dava para ver em hover — invisível no telemóvel). Mesmo componente
+    // showModal/closeModal do resto do admin, não um alert().
+    _showBlogQueueErrorModal(errorText) {
+        this.showModal(`
+            <p class="modal-title">❌ Falha na publicação</p>
+            <p class="modal-sub">Mensagem devolvida pelo sistema ao tentar publicar este artigo:</p>
+            <pre style="background:#FEF2F2;color:#991B1B;padding:1rem;border-radius:8px;font-size:.8rem;overflow-x:auto;margin:.75rem 0;white-space:pre-wrap;border:1px solid #FCA5A5">${escapeHtml(errorText || '(sem detalhe)')}</pre>
+            <div class="modal-actions">
+                <button style="background:#3b82f6;color:#fff" data-action="closeModal">Fechar</button>
+            </div>
+        `);
     }
 
     _showMigrationHint() {
@@ -1641,7 +1660,13 @@ USING (EXISTS (
                         failed:    '<span style="background:#FEE2E2;color:#991B1B;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">❌ Falhou</span>',
                     }[it.status] || it.status;
                     const origem = it.source === 'ai' ? '🤖 IA' : '✍️ Manual';
-                    const actions = it.error_note ? `<span style="font-size:11px;color:#991B1B;" title="${(it.error_note||'').replace(/"/g,'&quot;')}">ⓘ erro</span>` : '—';
+                    const actions = it.error_note
+                        // CORRIGIDO: "title" (tooltip nativo) só aparece em hover —
+                        // no telemóvel não há hover, por isso a mensagem real do
+                        // erro ficava invisível (só o ícone "ⓘ erro"). Passa a
+                        // abrir num alert ao toque, funciona em qualquer ecrã.
+                        ? `<button type="button" data-action="showBlogQueueError" data-error="${(it.error_note || '').replace(/"/g, '&quot;')}" style="font-size:11px;color:#991B1B;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:8px;padding:3px 8px;cursor:pointer;">ⓘ ver erro</button>`
+                        : '—';
                     return `<tr>
                         <td><strong>${it.title}</strong></td>
                         <td style="font-size:12px;">${origem}</td>
