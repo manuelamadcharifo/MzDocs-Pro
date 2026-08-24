@@ -23,18 +23,24 @@ const { restRequest } = require('./supabaseAdmin');
 
 // Usado apenas se a tabela estiver indisponível (rede em falha, RLS mal
 // configurada, etc.) — nunca deve ser a fonte normal de valores.
+//
+// NOVO (monetização — bónus escada): campo `bonus` — créditos extra
+// atribuídos por cima de `credits` na mesma compra, sem alterar o preço.
+// Pensado para aumentar o ticket médio nos pacotes maiores (quanto maior
+// o pacote, maior o bónus proporcional). `avulso` fica sem bónus de
+// propósito — é o pacote de entrada/experimentação, sem conta permanente.
 const FALLBACK_PACKAGES = {
-  avulso:  { credits: 3,   price: 50,   name: 'Avulso'  },
-  starter: { credits: 10,  price: 120,  name: 'Starter' },
-  basico:  { credits: 25,  price: 280,  name: 'Básico'  },
-  pro:     { credits: 60,  price: 600,  name: 'Pro'     },
-  empresa: { credits: 150, price: 1500, name: 'Empresa' },
+  avulso:  { credits: 3,   price: 50,   name: 'Avulso',  bonus: 0  },
+  starter: { credits: 10,  price: 120,  name: 'Starter', bonus: 2  },
+  basico:  { credits: 25,  price: 280,  name: 'Básico',  bonus: 5  },
+  pro:     { credits: 60,  price: 600,  name: 'Pro',     bonus: 15 },
+  empresa: { credits: 150, price: 1500, name: 'Empresa', bonus: 40 },
 };
 
 async function loadPackagesFromSettings() {
   try {
     const keys = Object.keys(FALLBACK_PACKAGES)
-      .flatMap(id => [`pkg_${id}_price`, `pkg_${id}_credits`]);
+      .flatMap(id => [`pkg_${id}_price`, `pkg_${id}_credits`, `pkg_${id}_bonus`]);
     const rows = await restRequest(
       `system_settings?key=in.(${keys.join(',')})&select=key,value`
     );
@@ -47,10 +53,17 @@ async function loadPackagesFromSettings() {
     for (const [id, fallback] of Object.entries(FALLBACK_PACKAGES)) {
       const price   = Number(map[`pkg_${id}_price`]);
       const credits = Number(map[`pkg_${id}_credits`]);
+      // NOVO: bónus lido do mesmo padrão (pkg_<id>_bonus), com fallback
+      // para o valor acima — 0 e valores negativos são tratados como
+      // "sem bónus" (Number.isFinite && >= 0), nunca reduzem os créditos
+      // base por engano de configuração no admin.
+      const bonusRaw = map[`pkg_${id}_bonus`];
+      const bonus    = Number(bonusRaw);
       packages[id] = {
         name:    fallback.name,
         price:   Number.isFinite(price)   && price   > 0 ? price   : fallback.price,
         credits: Number.isFinite(credits) && credits > 0 ? credits : fallback.credits,
+        bonus:   bonusRaw !== undefined && Number.isFinite(bonus) && bonus >= 0 ? bonus : fallback.bonus,
       };
     }
     return packages;
@@ -58,6 +71,18 @@ async function loadPackagesFromSettings() {
     console.warn('[packages] Falha ao carregar de system_settings, a usar fallback:', e.message);
     return clonePackages(FALLBACK_PACKAGES);
   }
+}
+
+// NOVO (monetização — bónus escada): total de créditos que um pacote
+// realmente atribui numa compra (base + bónus). Única função que deve
+// ser usada para creditar o utilizador — nunca ler `pkg.credits`
+// directamente num fluxo de atribuição de créditos, ou o bónus fica de
+// fora (mesmo que apareça correctamente no checkout/pending). Aceita
+// pacotes sem o campo `bonus` (compatibilidade com dados antigos/mocks
+// de teste) tratando-o como 0.
+function packageTotalCredits(pkg) {
+  if (!pkg) return 0;
+  return (Number(pkg.credits) || 0) + (Number(pkg.bonus) || 0);
 }
 
 function clonePackages(src) {
@@ -79,4 +104,4 @@ function estimateMznPerCredit(packages) {
   return totalPrice / totalCredits;
 }
 
-module.exports = { loadPackagesFromSettings, FALLBACK_PACKAGES, estimateMznPerCredit };
+module.exports = { loadPackagesFromSettings, FALLBACK_PACKAGES, estimateMznPerCredit, packageTotalCredits };
