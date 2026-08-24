@@ -17,6 +17,13 @@ jest.mock('../api/misc', () => ({
 
 jest.mock('../api/_lib/packages', () => ({
   loadPackagesFromSettings: jest.fn(),
+  // NOVO (monetização — bónus escada): process-payment.js agora importa
+  // packageTotalCredits() para incluir o bónus no total de créditos
+  // gravado na transacção pendente — o mock precisa de a expor. Os pacotes
+  // de teste (FAKE_PACKAGES) não têm `bonus`, por isso isto devolve
+  // exactamente pkg.credits, mantendo os testes existentes válidos e sem
+  // alteração de comportamento esperado.
+  packageTotalCredits:      jest.fn(pkg => (pkg?.credits || 0) + (pkg?.bonus || 0)),
 }));
 
 const supabaseAdmin = require('../api/_lib/supabaseAdmin');

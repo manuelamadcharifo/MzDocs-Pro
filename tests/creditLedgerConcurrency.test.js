@@ -47,6 +47,12 @@ jest.mock('../api/_lib/rateLimit', () => ({
 jest.mock('../api/_lib/packages', () => ({
   loadPackagesFromSettings: jest.fn(),
   estimateMznPerCredit:     jest.fn(),
+  // NOVO (monetização — bónus escada): payments.js agora importa e usa
+  // packageTotalCredits() em vez de ler pkg.credits directamente — o mock
+  // precisa de expor a mesma função (espelhando o comportamento real:
+  // base + bónus) para não rebentar o require() de payments.js nem os
+  // testes de idempotência abaixo, que não têm bónus a testar.
+  packageTotalCredits:      jest.fn(pkg => (pkg?.credits || 0) + (pkg?.bonus || 0)),
 }));
 jest.mock('../api/_lib/observability', () => ({
   logEvent:   jest.fn(),
