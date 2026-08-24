@@ -834,15 +834,25 @@ const SVC_COLOR = {
   acta:'#4B5563', conversao:'#EF4444',
 };
 
+// CORRIGIDO (monetização — diferenciação de créditos por documento):
+// antes este mapa tinha o custo de cada serviço reescrito à mão aqui
+// (ex: "planonegocio: '2 créditos'"), completamente desligado do campo
+// `cost` real em ServiceDefinitions.js — alterar o custo de um serviço
+// (ou adicionar um novo Premium/Expert) nunca se reflectia neste badge,
+// o cliente via sempre "1 crédito" mesmo quando o custo real era outro.
+// Agora o número de créditos vem sempre de SERVICES[id].cost (a mesma
+// fonte que DocumentController.js usa para debitar) — este mapa serve
+// apenas para os 2 casos que não são "N créditos" (serviços via
+// parceiro/WhatsApp, sem IA, sem custo em créditos).
 const SVC_CREDITS = {
-  planonegocio: '2 créditos',
   impressao: null, foto: null,
-  // conversao agora usa 1 crédito (igual aos outros serviços Pro)
 };
 
 function getCredits(id) {
   if (SVC_CREDITS[id] === null) return '<span class="cost wa-cost">📲 Via Parceiro</span>';
-  return `<span class="cost">${SVC_CREDITS[id] || '1 crédito'}</span>`;
+  const cost = (SERVICES[id] && SERVICES[id].cost) || 1;
+  const label = cost === 1 ? '1 crédito' : `${cost} créditos`;
+  return `<span class="cost">${label}</span>`;
 }
 
 // ── Contagem de cliques por categoria (localStorage) ────────────────────────

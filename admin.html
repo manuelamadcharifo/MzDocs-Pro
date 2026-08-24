@@ -1463,6 +1463,11 @@
 
         <div class="settings-card">
           <h3>📦 Preços dos Pacotes</h3>
+          <p style="font-size:.85rem;color:var(--text-muted,#888);margin-top:-.25rem;margin-bottom:.75rem">
+            NOVO: campo "Bónus" — créditos extra atribuídos por cima dos
+            créditos do pacote, na mesma compra, sem alterar o preço.
+            Deixe em 0 (ou vazio) para nenhum bónus.
+          </p>
           <form id="pricingForm">
             <div class="form-row">
               <label>Starter — Créditos</label>
@@ -1473,12 +1478,20 @@
               <input type="number" id="pkgStarterPrice" value="120" min="1">
             </div>
             <div class="form-row">
+              <label>Starter — Bónus (créditos extra)</label>
+              <input type="number" id="pkgStarterBonus" value="2" min="0">
+            </div>
+            <div class="form-row">
               <label>Básico — Créditos</label>
               <input type="number" id="pkgBasicoCredits" value="25" min="1">
             </div>
             <div class="form-row">
               <label>Básico — Preço (MZN)</label>
               <input type="number" id="pkgBasicoPrice" value="280" min="1">
+            </div>
+            <div class="form-row">
+              <label>Básico — Bónus (créditos extra)</label>
+              <input type="number" id="pkgBasicoBonus" value="5" min="0">
             </div>
             <div class="form-row">
               <label>Pro — Créditos</label>
@@ -1489,12 +1502,20 @@
               <input type="number" id="pkgProPrice" value="600" min="1">
             </div>
             <div class="form-row">
+              <label>Pro — Bónus (créditos extra)</label>
+              <input type="number" id="pkgProBonus" value="15" min="0">
+            </div>
+            <div class="form-row">
               <label>Empresa — Créditos</label>
               <input type="number" id="pkgEmpresaCredits" value="150" min="1">
             </div>
             <div class="form-row">
               <label>Empresa — Preço (MZN)</label>
               <input type="number" id="pkgEmpresaPrice" value="1500" min="1">
+            </div>
+            <div class="form-row">
+              <label>Empresa — Bónus (créditos extra)</label>
+              <input type="number" id="pkgEmpresaBonus" value="40" min="0">
             </div>
             <button type="submit" class="btn-primary" style="width:100%;margin-top:.75rem">💾 Guardar Preços</button>
           </form>
