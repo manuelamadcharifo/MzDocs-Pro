@@ -16,38 +16,48 @@ import { Storage } from '../utils/Storage.js';
 import { authManager } from '../auth/AuthManager.js';
 
 // ─── Definição dos pacotes v8.0 ───────────────────────────────────────────────
+// NOVO (monetização — bónus escada): `bonus` — créditos extra por cima de
+// `credits` na mesma compra, ao mesmo preço (fonte de verdade real em
+// api/_lib/packages.js). Valores locais são só fallback inicial —
+// syncPackagesV8FromConfig() substitui por dados reais de /api/config.
 const PACKAGES_V8 = {
   avulso: {
-    id: 'avulso', name: 'Avulso', credits: 3, price: 50, pricePerCredit: 16.67,
+    id: 'avulso', name: 'Avulso', credits: 3, bonus: 0, price: 50, pricePerCredit: 16.67,
     description: 'Experimente sem compromisso',
     features: ['3 documentos', 'Válido por 7 dias', 'Sem conta permanente'],
     popular: false, colorClass: 'pkg-gray',
   },
   starter: {
-    id: 'starter', name: 'Starter', credits: 10, price: 120, pricePerCredit: 12.00,
+    id: 'starter', name: 'Starter', credits: 10, bonus: 2, price: 120, pricePerCredit: 12.00,
     description: 'Ideal para estudantes',
     features: ['10 documentos', 'Economia 28%', 'Suporte WhatsApp'],
     popular: false, colorClass: 'pkg-blue',
   },
   basico: {
-    id: 'basico', name: 'Básico', credits: 25, price: 280, pricePerCredit: 11.20,
+    id: 'basico', name: 'Básico', credits: 25, bonus: 5, price: 280, pricePerCredit: 11.20,
     description: 'Para profissionais',
     features: ['25 documentos', 'Economia 33%', 'Prioridade na geração'],
     popular: true, colorClass: 'pkg-green',
   },
   pro: {
-    id: 'pro', name: 'Pro', credits: 60, price: 600, pricePerCredit: 10.00,
+    id: 'pro', name: 'Pro', credits: 60, bonus: 15, price: 600, pricePerCredit: 10.00,
     description: 'Pequenas empresas',
     features: ['60 documentos', 'Economia 40%', 'Suporte prioritário'],
     popular: false, colorClass: 'pkg-purple',
   },
   empresa: {
-    id: 'empresa', name: 'Empresa', credits: 150, price: 1500, pricePerCredit: 10.00,
+    id: 'empresa', name: 'Empresa', credits: 150, bonus: 40, price: 1500, pricePerCredit: 10.00,
     description: 'Escritórios e ONGs',
     features: ['150 documentos', 'Multi-utilizador', 'Painel de admin'],
     popular: false, colorClass: 'pkg-gold',
   },
 };
+
+// NOVO: total de créditos que o pacote realmente entrega (base + bónus).
+function _pkgTotalCredits(pkg) {
+  if (!pkg) return 0;
+  return (Number(pkg.credits) || 0) + (Number(pkg.bonus) || 0);
+}
 
 // CORRIGIDO (Junho/2026): PACKAGES_V8 tinha price/credits hard-coded,
 // verificados ANTES do fallback this.payment.getPackages() em 3 pontos
@@ -65,9 +75,14 @@ export function syncPackagesV8FromConfig(packagesFromApi) {
     if (Number.isFinite(data.price) && data.price > 0)     PACKAGES_V8[id].price   = data.price;
     if (Number.isFinite(data.credits) && data.credits > 0) PACKAGES_V8[id].credits = data.credits;
     if (data.name) PACKAGES_V8[id].name = data.name;
+    // NOVO: bonus pode legitimamente ser 0 (ex: 'avulso') — aceita >= 0.
+    if (Number.isFinite(data.bonus) && data.bonus >= 0) PACKAGES_V8[id].bonus = data.bonus;
     // Recalcular pricePerCredit para manter consistência visual nos cards
-    if (PACKAGES_V8[id].credits > 0) {
-      PACKAGES_V8[id].pricePerCredit = Math.round((PACKAGES_V8[id].price / PACKAGES_V8[id].credits) * 100) / 100;
+    // — agora usando o total (base + bónus), para o "preço por documento"
+    // reflectir o que o cliente realmente recebe pela compra.
+    const total = _pkgTotalCredits(PACKAGES_V8[id]);
+    if (total > 0) {
+      PACKAGES_V8[id].pricePerCredit = Math.round((PACKAGES_V8[id].price / total) * 100) / 100;
     }
   }
 }
@@ -88,12 +103,21 @@ export function renderPackageCards() {
     const priceEl = document.getElementById(`pkgPrice${cap}`);
     if (priceEl) priceEl.textContent = `MZN ${pkg.price}`;
 
+    // NOVO (monetização — bónus escada): quando o pacote tem bónus, o
+    // card mostra "25 + 5 bónus = 30 créditos" em vez de só "25 créditos"
+    // — é a mudança visível que faz o pacote parecer melhor negócio, sem
+    // mexer no preço.
     const crEl = document.getElementById(`pkgCr${cap}`);
-    if (crEl) crEl.textContent = `${pkg.credits} créditos`;
+    if (crEl) {
+      crEl.textContent = pkg.bonus > 0
+        ? `${pkg.credits} + ${pkg.bonus} bónus = ${_pkgTotalCredits(pkg)} créditos`
+        : `${pkg.credits} créditos`;
+    }
 
     const perEl = document.getElementById(`pkgPer${cap}`);
-    if (perEl && pkg.credits > 0) {
-      const per = pkg.price / pkg.credits;
+    const totalCr = _pkgTotalCredits(pkg);
+    if (perEl && totalCr > 0) {
+      const per = pkg.price / totalCr;
       perEl.textContent = `MZN ${Number.isInteger(per) ? per : per.toFixed(1)}/doc`;
     }
   }
@@ -235,11 +259,17 @@ export class PaymentController {
     const section = document.getElementById('mpesaSection');
     if (section) section.style.display = 'flex';
 
+    // NOVO (monetização — bónus escada): resumo do checkout mostra o
+    // bónus de forma explícita quando existir, para o cliente ver de
+    // imediato que está a levar mais créditos pelo mesmo preço.
     const summary = document.getElementById('paySummary');
     if (summary) {
+      const creditsLabel = pkg.bonus > 0
+        ? `${pkg.credits} + ${pkg.bonus} bónus = ${_pkgTotalCredits(pkg)} créditos`
+        : `${pkg.credits} créditos`;
       summary.innerHTML =
         `<span>Pacote <strong>${pkg.name}</strong></span>` +
-        `<strong>MZN ${pkg.price} → ${pkg.credits} créditos</strong>`;
+        `<strong>MZN ${pkg.price} → ${creditsLabel}</strong>`;
     }
 
     const mpNote     = document.getElementById('mpNote');
