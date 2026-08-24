@@ -37,6 +37,12 @@ export function updateWhatsAppFromConfig(whatsappSupport) {
 // fonte de verdade real). Estes valores locais são só fallback inicial,
 // tal como price/credits já eram — updatePackagesFromConfig() abaixo
 // substitui por dados reais assim que /api/config responder.
+// NOVO (v61 — pacotes dinâmicos): antes só era possível ACTUALIZAR os 5
+// ids fixos abaixo (`if (!PACKAGES[id]) continue` descartava qualquer id
+// novo criado no admin). Agora a lista inteira vem de /api/config —
+// PACKAGES é preenchido dinamicamente, com estes 5 a servirem só de
+// fallback inicial (para o checkout funcionar mesmo antes de /api/config
+// responder, ou se a chamada falhar).
 const PACKAGES = {
   avulso:  { credits: 3,   price: 50,   name: 'Avulso',  bonus: 0,  popular: false, desc: '3 documentos, sem conta permanente' },
   starter: { credits: 10,  price: 120,  name: 'Starter',  bonus: 2,  popular: false },
@@ -44,22 +50,52 @@ const PACKAGES = {
   pro:     { credits: 60,  price: 600,  name: 'Pro',      bonus: 15, popular: false },
   empresa: { credits: 150, price: 1500, name: 'Empresa',  bonus: 40, popular: false },
 };
+let _packagesHydrated = false; // true assim que /api/config já respondeu pelo menos uma vez
 
-// Actualiza PACKAGES in-place a partir de { avulso: {price, credits, name, bonus}, ... }
-// vindo de /api/config. Mantém popular/desc (não vêm do backend) e só
-// substitui price/credits/name/bonus quando presentes e válidos — nunca apaga
-// um pacote inteiro por uma resposta incompleta.
+// Actualiza PACKAGES a partir de { avulso: {price, credits, name, bonus,
+// description, popular}, ... } vindo de /api/config (fonte de verdade:
+// api/_lib/packages.js, que por sua vez lê a tabela credit_packages).
+// Ao contrário da versão anterior, agora:
+//   - cria entradas novas (pacotes criados no admin depois do deploy)
+//   - remove entradas que já não vêm da API (pacotes desactivados/apagados)
+//     — mas só depois da 1ª resposta válida, para nunca esvaziar o
+//     checkout por causa de uma resposta vazia/falhada de /api/config.
 export function updatePackagesFromConfig(packagesFromApi) {
   if (!packagesFromApi || typeof packagesFromApi !== 'object') return;
+  const incomingIds = Object.keys(packagesFromApi);
+  if (incomingIds.length === 0) return; // resposta vazia — mantém o fallback local, não apaga nada
+
   for (const [id, data] of Object.entries(packagesFromApi)) {
-    if (!PACKAGES[id] || !data) continue;
-    if (Number.isFinite(data.price) && data.price > 0)     PACKAGES[id].price   = data.price;
-    if (Number.isFinite(data.credits) && data.credits > 0) PACKAGES[id].credits = data.credits;
+    if (!data) continue;
+    if (!Number.isFinite(data.price) || data.price <= 0) continue;
+    if (!Number.isFinite(data.credits) || data.credits <= 0) continue;
+    if (!PACKAGES[id]) PACKAGES[id] = { credits: 0, price: 0, name: id, bonus: 0, popular: false };
+    PACKAGES[id].price   = data.price;
+    PACKAGES[id].credits = data.credits;
     if (data.name) PACKAGES[id].name = data.name;
-    // bonus pode legitimamente ser 0 (ex: pacote 'avulso') — por isso a
-    // condição aceita >= 0 em vez de > 0, ao contrário de price/credits.
+    if (data.description) PACKAGES[id].desc = data.description;
+    PACKAGES[id].popular = !!data.popular;
+    // bonus pode legitimamente ser 0 — por isso a condição aceita >= 0
+    // em vez de > 0, ao contrário de price/credits.
     if (Number.isFinite(data.bonus) && data.bonus >= 0) PACKAGES[id].bonus = data.bonus;
   }
+
+  // Remove pacotes que já não vêm da API (desactivados/apagados no
+  // admin) — só depois de já termos recebido uma lista real, e nunca
+  // remove 'avulso' (fluxo de conta temporária depende dele existir
+  // sempre, mesmo que o admin o desactive por engano).
+  Object.keys(PACKAGES).forEach(id => {
+    if (id !== 'avulso' && !incomingIds.includes(id)) delete PACKAGES[id];
+  });
+
+  _packagesHydrated = true;
+}
+
+// NOVO: indica se PACKAGES já reflecte a resposta real de /api/config
+// (usado pelo PaymentController para saber quando pode desenhar os
+// cartões dinâmicos em vez de esperar).
+export function packagesHydrated() {
+  return _packagesHydrated;
 }
 
 // NOVO: total de créditos que o pacote realmente entrega (base + bónus) —
