@@ -32,17 +32,22 @@ export function updateWhatsAppFromConfig(whatsappSupport) {
 // updatePackagesFromConfig() é chamado em app.js logo após o fetch a
 // /api/config, e substitui estes valores pelos reais. Ver
 // api/_lib/packages.js para a mesma lógica espelhada no backend.
+// NOVO (monetização — bónus escada): `bonus` — créditos extra por cima de
+// `credits` na mesma compra, mesmo preço (ver api/_lib/packages.js para a
+// fonte de verdade real). Estes valores locais são só fallback inicial,
+// tal como price/credits já eram — updatePackagesFromConfig() abaixo
+// substitui por dados reais assim que /api/config responder.
 const PACKAGES = {
-  avulso:  { credits: 3,   price: 50,   name: 'Avulso',  popular: false, desc: '3 documentos, sem conta permanente' },
-  starter: { credits: 10,  price: 120,  name: 'Starter',  popular: false },
-  basico:  { credits: 25,  price: 280,  name: 'Básico',   popular: true  },
-  pro:     { credits: 60,  price: 600,  name: 'Pro',      popular: false },
-  empresa: { credits: 150, price: 1500, name: 'Empresa',  popular: false },
+  avulso:  { credits: 3,   price: 50,   name: 'Avulso',  bonus: 0,  popular: false, desc: '3 documentos, sem conta permanente' },
+  starter: { credits: 10,  price: 120,  name: 'Starter',  bonus: 2,  popular: false },
+  basico:  { credits: 25,  price: 280,  name: 'Básico',   bonus: 5,  popular: true  },
+  pro:     { credits: 60,  price: 600,  name: 'Pro',      bonus: 15, popular: false },
+  empresa: { credits: 150, price: 1500, name: 'Empresa',  bonus: 40, popular: false },
 };
 
-// Actualiza PACKAGES in-place a partir de { avulso: {price, credits, name}, ... }
+// Actualiza PACKAGES in-place a partir de { avulso: {price, credits, name, bonus}, ... }
 // vindo de /api/config. Mantém popular/desc (não vêm do backend) e só
-// substitui price/credits/name quando presentes e válidos — nunca apaga
+// substitui price/credits/name/bonus quando presentes e válidos — nunca apaga
 // um pacote inteiro por uma resposta incompleta.
 export function updatePackagesFromConfig(packagesFromApi) {
   if (!packagesFromApi || typeof packagesFromApi !== 'object') return;
@@ -51,7 +56,17 @@ export function updatePackagesFromConfig(packagesFromApi) {
     if (Number.isFinite(data.price) && data.price > 0)     PACKAGES[id].price   = data.price;
     if (Number.isFinite(data.credits) && data.credits > 0) PACKAGES[id].credits = data.credits;
     if (data.name) PACKAGES[id].name = data.name;
+    // bonus pode legitimamente ser 0 (ex: pacote 'avulso') — por isso a
+    // condição aceita >= 0 em vez de > 0, ao contrário de price/credits.
+    if (Number.isFinite(data.bonus) && data.bonus >= 0) PACKAGES[id].bonus = data.bonus;
   }
+}
+
+// NOVO: total de créditos que o pacote realmente entrega (base + bónus) —
+// usado pelo checkout para mostrar "25 + 5 bónus = 30 créditos".
+export function packageTotalCredits(pkg) {
+  if (!pkg) return 0;
+  return (Number(pkg.credits) || 0) + (Number(pkg.bonus) || 0);
 }
 export class PaymentService {
   constructor() {

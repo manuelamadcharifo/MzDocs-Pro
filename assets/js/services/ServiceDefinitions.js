@@ -17,6 +17,13 @@ export const SERVICES = {
     icon:'📋', bg:'#ECFDF5', title:'Currículo (CV)',
     sub:'CV profissional formatado para destacar o seu perfil', hasAI:true,
     category:'pessoal', popularity:1,
+    // NOVO (monetização — diferenciação de créditos por valor do
+    // documento): serviço "Premium" — custa 2 créditos em vez de 1. O
+    // backend já validava qualquer custo entre 1 e 10 (api/_services/
+    // account.js VALID_COSTS) e DocumentController.js já lê `svc.cost`
+    // — só faltava declarar o valor aqui. Sem este campo, o custo
+    // continuaria a ser 1 crédito (comportamento anterior).
+    cost: 2,
     fields:[
       { id:'nome',        label:'Nome Completo', type:'text', required:true, ph:'Ana Sofia Machava' },
       { id:'cargo',       label:'Cargo / Vaga pretendida', type:'text', required:true, ph:'Assistente Administrativo…' },
@@ -103,6 +110,8 @@ export const SERVICES = {
     icon:'✉️', bg:'#FFFBEB', title:'Carta Formal',
     sub:'Carta profissional bem estruturada', hasAI:true,
     category:'pessoal', popularity:3,
+    // NOVO (monetização): serviço "Premium" — 2 créditos (ver nota em cv acima).
+    cost: 2,
     fields:[
       { id:'tipo',          label:'Tipo de Carta', type:'select', required:true,
         opts:['Candidatura a Emprego','Carta de Motivação','Pedido Formal','Reclamação','Demissão','Agradecimento','Apresentação Comercial'] },
@@ -125,6 +134,8 @@ export const SERVICES = {
     icon:'🏠', bg:'#FEF3C7', title:'Contrato de Arrendamento',
     sub:'Contrato legal para aluguer de casa ou loja conforme lei moçambicana', hasAI:true,
     category:'juridico', popularity:4,
+    // NOVO (monetização): serviço "Premium" — 2 créditos (ver nota em cv acima).
+    cost: 2,
     fields:[
       // NOVO (correcção 2.5): mesmo padrão requiredIf/dynamicHint do Recibo/
       // Factura, agora aplicado ao Arrendamento — pedido explícito na
@@ -167,6 +178,8 @@ export const SERVICES = {
     icon:'📄', bg:'#DBEAFE', title:'Requerimento Oficial',
     sub:'Pedidos formais para repartições, escolas, hospitais e serviços públicos', hasAI:true,
     category:'juridico', popularity:5,
+    // NOVO (monetização): serviço "Premium" — 2 créditos (ver nota em cv acima).
+    cost: 2,
     fields:[
       { id:'tipo',        label:'Tipo de Requerimento', type:'select', required:true,
         opts:['Pedido de Certidão','Pedido de Declaração','Transferência Escolar','Matrícula','Isenção de Propinas','Levantamento de Documentos','Outro'] },
@@ -299,6 +312,8 @@ export const SERVICES = {
     icon:'📜', bg:'#E0E7FF', title:'Procuração / Mandato',
     sub:'Documento para representar outra pessoa em repartições, bancos ou negócios', hasAI:true,
     category:'juridico', popularity:7,
+    // NOVO (monetização): serviço "Expert" — 3 créditos (ver nota em cv acima).
+    cost: 3,
     fields:[
       { id:'tipoProc', label:'Tipo de Procuração', type:'select', required:true,
         opts:['Geral (todos os actos)','Especial (acto específico)','Judicial','Bancária','Venda de Imóvel','Herança','Matrícula Escolar'] },
@@ -373,6 +388,8 @@ export const SERVICES = {
     icon:'🤝', bg:'#FCE7F3', title:'Contrato de Prestação de Serviços',
     sub:'Para freelancers, técnicos e pequenos prestadores', hasAI:true,
     category:'negocio', popularity:10,
+    // NOVO (monetização): serviço "Expert" — 3 créditos (ver nota em cv acima).
+    cost: 3,
     fields:[
       { row:true, items:[
         { id:'prestador', label:'Nome do Prestador', type:'text', required:true, ph:'Técnico Pedro Cossa' },
@@ -404,6 +421,8 @@ export const SERVICES = {
     icon:'✍️', bg:'#EDE9FE', title:'Carta de Recomendação',
     sub:'Para emprego, bolsas de estudo ou candidaturas', hasAI:true,
     category:'pessoal', popularity:11,
+    // NOVO (monetização): serviço "Premium" — 2 créditos (ver nota em cv acima).
+    cost: 2,
     fields:[
       { id:'candidato',     label:'Nome do Candidato',          type:'text',     required:true, ph:'Ana Sofia Machava' },
       { id:'recomendador',  label:'Nome de quem recomenda',     type:'text',     required:true, ph:'Dr. Carlos Moreira' },
@@ -424,6 +443,8 @@ export const SERVICES = {
     icon:'📊', bg:'#DBEAFE', title:'Plano de Negócios',
     sub:'Para candidaturas a financiamento, bancos ou incubadoras', hasAI:true,
     category:'negocio', popularity:12,
+    // NOVO (monetização): serviço "Premium" — 2 créditos (ver nota em cv acima).
+    cost: 2,
     fields:[
       { id:'nomeNegocio',  label:'Nome do Negócio / Empresa',    type:'text',     required:true, ph:'Moz Tech Solutions Lda' },
       { id:'setor',        label:'Sector de Actividade',          type:'select',   required:true,
@@ -475,6 +496,8 @@ export const SERVICES = {
     icon:'📑', bg:'#E5E7EB', title:'Acta de Reunião',
     sub:'Para associações, cooperativas, bairros e organizações', hasAI:true,
     category:'juridico', popularity:14,
+    // NOVO (monetização): serviço "Expert" — 3 créditos (ver nota em cv acima).
+    cost: 3,
     fields:[
       { id:'organizacao',  label:'Nome da Organização', type:'text', required:true, ph:'Associação de Moradores do Bairro X' },
       { id:'tipoReuniao',  label:'Tipo de Reunião', type:'select', required:true,
