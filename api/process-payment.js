@@ -49,7 +49,9 @@ async function checkPaymentRateLimit(req) {
 
 // Preços/créditos dos pacotes: única fonte de verdade em _lib/packages.js
 // (ver esse ficheiro para o porquê — corrige duplicação em 5 locais).
-const { loadPackagesFromSettings } = require('./_lib/packages');
+// packageTotalCredits() inclui o bónus escada (NOVO — monetização) por
+// cima dos créditos base, sem tocar em preço nem em lógica de RPC.
+const { loadPackagesFromSettings, packageTotalCredits } = require('./_lib/packages');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -151,6 +153,14 @@ module.exports = async function handler(req, res) {
   if (mode === 'manual') {
     const referenceId = generateRef();
 
+    // NOVO (monetização — bónus escada): `credits` gravado na transacção
+    // já inclui o bónus (base + bónus) — é este valor que a RPC de
+    // confirmação (ou o caminho SMS) vai atribuir ao utilizador quando o
+    // pagamento for confirmado. Preço (pkg.price) fica inalterado.
+    // Declarado fora do try/catch abaixo porque é reutilizado mais tarde
+    // (credit_logs, mensagem de WhatsApp) fora desse bloco.
+    const totalCredits = packageTotalCredits(pkg);
+
     let txData;
     try {
       // ── Verificar pending duplicado (mesmo userId + pacote nos últimos 30min) ─
@@ -181,7 +191,7 @@ module.exports = async function handler(req, res) {
         reference_id:   referenceId,
         user_id:        userId,
         package_id:     packageId,
-        credits:        pkg.credits,
+        credits:        totalCredits,
         amount:         pkg.price,
         status:         'pending',
         payment_method: 'manual',
@@ -201,7 +211,7 @@ module.exports = async function handler(req, res) {
 
     const transactionId = txData?.id;
     console.log('[process-payment] Transação criada:', referenceId, '| id:', transactionId, '| user_id:', userId || 'anónimo');
-    logEvent('payment', 'pending', { transactionId, referenceId, packageId, userId: userId || null, amount: pkg.price });
+    logEvent('payment', 'pending', { transactionId, referenceId, packageId, userId: userId || null, amount: pkg.price, credits: totalCredits });
 
     // Registar em credit_logs — fire-and-forget, nunca bloqueia o fluxo principal
     if (transactionId) {
@@ -210,20 +220,28 @@ module.exports = async function handler(req, res) {
           user_id:        userId,
           transaction_id: transactionId,
           action:         'purchase_pending',
-          credits:        pkg.credits,
+          credits:        totalCredits,
           document_type:  null,
-          note:           `Pacote ${pkg.name} — aguarda confirmação manual (${wallet})`,
+          note:           `Pacote ${pkg.name} — aguarda confirmação manual (${wallet})` +
+                           (pkg.bonus ? ` [inclui ${pkg.bonus} créditos bónus]` : ''),
         });
       } catch (logErr) {
         console.warn('[process-payment] credit_logs insert falhou (não crítico):', logErr.message);
       }
     }
 
+    // NOVO: mostra o bónus explicitamente na mensagem de WhatsApp quando
+    // existir (ex.: "Créditos: 25 + 5 bónus = 30"), para o cliente ver de
+    // imediato que está a receber mais créditos do que os do pacote base
+    // — mesma lógica de transparência usada no checkout.
+    const creditsLine = pkg.bonus
+      ? `Créditos: ${pkg.credits} + ${pkg.bonus} bónus = ${totalCredits}`
+      : `Créditos: ${totalCredits}`;
     const waMessage = encodeURIComponent(
       `*Pagamento MzDocs Pro*\n\n` +
       `Referência: ${referenceId}\n` +
       `Pacote: ${pkg.name}\n` +
-      `Créditos: ${pkg.credits}\n` +
+      `${creditsLine}\n` +
       `Valor: ${pkg.price} MZN\n` +
       `Telemóvel: ${normalizedPhone} (${wallet})\n\n` +
       `Segue o comprovativo de pagamento.`

@@ -55,6 +55,11 @@ const {
 }                                                      = require('./_services/site');
 const { handleTemplates }                             = require('./_services/templates');
 const { handleAffiliate }                             = require('./_services/affiliates');
+// NOVO (monetização — Tarefa 3): confirmação automática de pagamento via
+// SMS M-Pesa reencaminhado (Telegram webhook OU HTTP directo). Continua
+// tudo dentro de /api/misc — não cria uma nova Serverless Function (ver
+// nota no topo deste ficheiro sobre o limite do plano Vercel Hobby).
+const { handleSmsMpesaWebhook }                       = require('./_services/smsConfirm');
 
 // ── Main router ─────────────────────────────────────────────────────────
 module.exports = async function handler(req, res) {
@@ -91,6 +96,8 @@ module.exports = async function handler(req, res) {
   // ultrapassar o limite de 12 Serverless Functions do plano Vercel Hobby
   // — ver vercel.json, que já tinha exactamente 12 ficheiros declarados.
   if (action === 'document-usage')                       return handleDocumentUsage(req, res);
+  // NOVO (monetização — Tarefa 3): webhook de SMS M-Pesa reencaminhado.
+  if (action === 'sms-mpesa')                            return handleSmsMpesaWebhook(req, res);
 
   return res.status(404).json({ error: `Rota desconhecida: "${action}".` });
 };
