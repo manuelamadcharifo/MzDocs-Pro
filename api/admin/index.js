@@ -92,10 +92,15 @@ module.exports = async function handler(req, res) {
     // adminApp._openMaterialForm(), que nunca tinha sido implementado no
     // AdminApp.js nem tinha rota correspondente aqui).
     case 'marketing-materials': return handleMarketingMaterials(req, res);
+    // NOVO (v61): CRUD dos pacotes de créditos (credit_packages deixou de
+    // estar órfã — ver api/_lib/packages.js). Antes só era possível
+    // editar preço/créditos/bónus dos 5 pacotes fixos via 'settings';
+    // agora o admin pode criar/desactivar/remover pacotes.
+    case 'packages':          return handlePackages(req, res);
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
-        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','regenerate-temp-password','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt','ai-providers','qrcodes','funnel','user-timeline','republish-blog','notifications','campaigns','goals','push-subscribe','push-send','finance','template-withdrawals','marketing-materials'],
+        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','regenerate-temp-password','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt','ai-providers','qrcodes','funnel','user-timeline','republish-blog','notifications','campaigns','goals','push-subscribe','push-send','finance','template-withdrawals','marketing-materials','packages'],
       });
   }
 };
@@ -3503,6 +3508,142 @@ async function handleMarketingMaterials(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   } catch (err) {
     console.error('[admin/marketing-materials]', err);
+    return res.status(500).json({ error: err.message || 'Erro interno' });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOVO (v61): PACOTES DE CRÉDITOS DINÂMICOS — CRUD de credit_packages.
+// Segue exactamente o mesmo padrão de handleMarketingMaterials acima:
+// mesma tabela de destino directa via restRequest/insert/update/del,
+// mesmo formato de resposta e mesmo registo em admin_logs. Nenhuma
+// Serverless Function nova foi criada — vive dentro deste router, tal
+// como o resto das acções de /api/admin/*.
+// ─────────────────────────────────────────────────────────────────────────────
+const PKG_ID_RE = /^[a-z0-9][a-z0-9_-]{1,29}$/; // minúsculas/números/_/- , 2–30 chars
+
+async function handlePackages(req, res) {
+  const token = req.headers.authorization?.replace('Bearer ', '').trim();
+  try {
+    const auth = await validateAdmin(token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    if (req.method === 'GET') {
+      // Ao contrário do checkout público (que só vê is_active=true via
+      // api/_lib/packages.js), o admin vê SEMPRE todos os pacotes,
+      // incluindo os desactivados, para poder reactivá-los.
+      const data = await restRequest(
+        `credit_packages?order=sort_order.asc,created_at.asc` +
+        `&select=id,name,description,credits,price_mzn,bonus,is_popular,is_active,sort_order,created_at`
+      );
+      return res.status(200).json({ success: true, packages: data || [] });
+    }
+
+    if (req.method === 'POST') {
+      const body = parseBody(req);
+      const id = (body.id || '').toString().trim().toLowerCase();
+      if (!PKG_ID_RE.test(id)) {
+        return res.status(400).json({ error: 'ID inválido. Use 2–30 caracteres: minúsculas, números, "-" ou "_" (ex.: "mega", "black-friday").' });
+      }
+      const name     = (body.name || '').toString().trim().slice(0, 60);
+      if (!name) return res.status(400).json({ error: 'O nome é obrigatório.' });
+
+      const price   = Number(body.price_mzn ?? body.price);
+      const credits = Number(body.credits);
+      const bonus   = Number(body.bonus ?? 0);
+      if (!Number.isFinite(price) || price <= 0) return res.status(400).json({ error: 'Preço inválido.' });
+      if (!Number.isFinite(credits) || credits <= 0 || !Number.isInteger(credits)) return res.status(400).json({ error: 'Créditos inválidos (deve ser um número inteiro positivo).' });
+      if (!Number.isFinite(bonus) || bonus < 0 || !Number.isInteger(bonus)) return res.status(400).json({ error: 'Bónus inválido (deve ser um número inteiro ≥ 0).' });
+
+      const existing = await selectOne('credit_packages', 'id', id, 'id');
+      if (existing) return res.status(409).json({ error: `Já existe um pacote com o id "${id}".` });
+
+      const insertRow = {
+        id, name,
+        description: (body.description || '').toString().trim().slice(0, 200) || null,
+        credits, price_mzn: price, bonus,
+        is_popular: !!body.is_popular,
+        is_active:  body.is_active !== false,
+        sort_order: Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 99,
+      };
+      const data = await insert('credit_packages', insertRow);
+
+      await insert('admin_logs', {
+        admin_id: auth.user.id, action: 'create_package', target_type: 'credit_packages',
+        target_id: id, details: insertRow,
+      });
+
+      return res.status(200).json({ success: true, package: data });
+    }
+
+    if (req.method === 'PUT') {
+      const body = parseBody(req);
+      const id   = (body.id || '').toString().trim();
+      if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+
+      const patch = {};
+      if (body.name !== undefined) {
+        const name = (body.name || '').toString().trim().slice(0, 60);
+        if (!name) return res.status(400).json({ error: 'O nome não pode ficar vazio.' });
+        patch.name = name;
+      }
+      if (body.description !== undefined) patch.description = (body.description || '').toString().trim().slice(0, 200) || null;
+      if (body.price_mzn !== undefined || body.price !== undefined) {
+        const price = Number(body.price_mzn ?? body.price);
+        if (!Number.isFinite(price) || price <= 0) return res.status(400).json({ error: 'Preço inválido.' });
+        patch.price_mzn = price;
+      }
+      if (body.credits !== undefined) {
+        const credits = Number(body.credits);
+        if (!Number.isFinite(credits) || credits <= 0 || !Number.isInteger(credits)) return res.status(400).json({ error: 'Créditos inválidos.' });
+        patch.credits = credits;
+      }
+      if (body.bonus !== undefined) {
+        const bonus = Number(body.bonus);
+        if (!Number.isFinite(bonus) || bonus < 0 || !Number.isInteger(bonus)) return res.status(400).json({ error: 'Bónus inválido.' });
+        patch.bonus = bonus;
+      }
+      if (body.is_popular !== undefined) patch.is_popular = !!body.is_popular;
+      if (body.is_active  !== undefined) patch.is_active  = !!body.is_active;
+      if (body.sort_order !== undefined && Number.isFinite(Number(body.sort_order))) patch.sort_order = Number(body.sort_order);
+
+      if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'Nada para actualizar.' });
+
+      const updatedRows = await update('credit_packages', 'id', id, patch);
+      const data = updatedRows?.[0] || null;
+      if (!data) return res.status(404).json({ error: 'Pacote não encontrado.' });
+
+      await insert('admin_logs', {
+        admin_id: auth.user.id, action: 'update_package', target_type: 'credit_packages', target_id: id, details: patch,
+      });
+
+      return res.status(200).json({ success: true, package: data });
+    }
+
+    if (req.method === 'DELETE') {
+      const id = req.query?.id || parseBody(req)?.id;
+      if (!id) return res.status(400).json({ error: 'id é obrigatório' });
+
+      // Nunca apagar o último pacote activo — checkout não pode ficar
+      // sem nenhuma opção de compra.
+      const activeCount = await countRows('credit_packages', '?is_active=eq.true');
+      const target = await selectOne('credit_packages', 'id', id, 'is_active');
+      if (target?.is_active && activeCount <= 1) {
+        return res.status(400).json({ error: 'Não é possível remover o único pacote activo. Desactive-o só depois de criar/activar outro.' });
+      }
+
+      await del('credit_packages', 'id', id);
+
+      await insert('admin_logs', {
+        admin_id: auth.user.id, action: 'delete_package', target_type: 'credit_packages', target_id: id,
+      });
+
+      return res.status(200).json({ success: true });
+    }
+
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  } catch (err) {
+    console.error('[admin/packages]', err);
     return res.status(500).json({ error: err.message || 'Erro interno' });
   }
 }
