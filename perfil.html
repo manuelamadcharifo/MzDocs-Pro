@@ -312,31 +312,17 @@
         <div style="flex:1;height:1px;background:#e5e7eb;"></div>
       </div>
     </div>
-    <div class="pkg-grid">
+    <!-- ALTERADO (v61 — pacotes dinâmicos): já não há um card fixo por
+         pacote — a lista pode ter qualquer número de pacotes, criados
+         no admin. renderPackageCards() (PaymentController.js) constrói
+         os .pkg aqui dentro assim que /api/config responde. O card
+         "Starter" abaixo é só um placeholder estático para o utilizador
+         não ver um espaço vazio nos poucos instantes antes disso. -->
+    <div class="pkg-grid" id="pkgGrid">
       <div class="pkg" data-pkg="starter">
         <div class="pkg-name">Starter</div>
-        <div class="pkg-price" id="pkgPriceStarter">MZN 120</div>
-        <div class="pkg-cr" id="pkgCrStarter">10 créditos</div>
-        <div class="pkg-per" id="pkgPerStarter">MZN 12/doc</div>
-      </div>
-      <div class="pkg popular" data-pkg="basico">
-        <div class="pkg-badge">Popular</div>
-        <div class="pkg-name">Básico</div>
-        <div class="pkg-price" id="pkgPriceBasico">MZN 280</div>
-        <div class="pkg-cr" id="pkgCrBasico">25 créditos</div>
-        <div class="pkg-per" id="pkgPerBasico">MZN 11.2/doc</div>
-      </div>
-      <div class="pkg" data-pkg="pro">
-        <div class="pkg-name">Pro</div>
-        <div class="pkg-price" id="pkgPricePro">MZN 600</div>
-        <div class="pkg-cr" id="pkgCrPro">60 créditos</div>
-        <div class="pkg-per" id="pkgPerPro">MZN 10/doc</div>
-      </div>
-      <div class="pkg" data-pkg="empresa">
-        <div class="pkg-name">Empresa</div>
-        <div class="pkg-price" id="pkgPriceEmpresa">MZN 1500</div>
-        <div class="pkg-cr" id="pkgCrEmpresa">150 créditos</div>
-        <div class="pkg-per" id="pkgPerEmpresa">MZN 10/doc</div>
+        <div class="pkg-price">MZN 120</div>
+        <div class="pkg-cr">10 créditos</div>
       </div>
     </div>
     <div id="mpesaSection" style="display:none">
