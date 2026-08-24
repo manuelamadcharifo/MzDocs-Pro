@@ -41,7 +41,13 @@ async function checkReceiptRateLimit(ip) {
 // (ver esse ficheiro para o porquê — corrige duplicação em 5 locais e o
 // bug de a verificação automática de comprovativos nunca reflectir
 // alterações de preço feitas no painel de admin).
-const { loadPackagesFromSettings } = require('../_lib/packages');
+// packageTotalCredits() inclui o bónus escada (NOVO — monetização): sem
+// isto, esta via de confirmação (verificação por IA de imagem) creditava
+// apenas pkg.credits "nu", ignorando o bónus já prometido ao cliente no
+// checkout/mensagem de WhatsApp (ver api/process-payment.js) — o valor
+// gravado na transacção ficava certo, mas o crédito realmente atribuído
+// ficava a menos.
+const { loadPackagesFromSettings, packageTotalCredits } = require('../_lib/packages');
 
 const RECEIPT_PROMPT = (wallet) =>
   `És um verificador de comprovativos de transferência bancária moçambicana (M-Pesa, e-Mola, mKesh). ` +
@@ -265,7 +271,7 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
     // (HTTP externo, não pode viver dentro de uma transacção SQL) — mas
     // usa a MESMA verificação de idempotência (credit_logs) para nunca
     // criar/creditar duas vezes.
-    const credits = pkg ? pkg.credits : 0;
+    const credits = pkg ? packageTotalCredits(pkg) : 0;
     let rpcResult;
     try {
       rpcResult = await rpc('confirm_payment_and_credit', {
@@ -530,7 +536,12 @@ async function handleVerifyReceipt(req, res) {
 }
 
 // Exportar para uso directo em process-payment.js (sem HTTP round-trip)
+// e, agora, para reutilização em api/_services/smsConfirm.js (NOVO —
+// confirmação automática via SMS M-Pesa reencaminhado): _createAvulsoAccount
+// era só de uso interno; passa a ser exportada para não duplicar a lógica
+// de criação de conta avulso num segundo sítio.
 module.exports = {
   handleVerifyReceipt,
   verifyReceiptInternal,
+  _createAvulsoAccount,
 };
