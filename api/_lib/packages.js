@@ -2,35 +2,38 @@
 // ──────────────────────────────────────────────────────────────────────────
 // CORRIGIDO (Junho/2026): os preços/créditos dos pacotes (avulso, starter,
 // básico, pro, empresa) estavam hard-coded e DUPLICADOS em 5 locais
-// diferentes: api/process-payment.js, api/misc.js,
-// assets/js/services/PaymentService.js e
-// assets/js/controllers/PaymentController.js. Alterar um preço no painel
-// de administração (Configurações → system_settings) nunca se reflectia
-// em nenhum desses locais — nem no que o utilizador via no checkout, nem
-// no número de créditos realmente atribuído após pagamento.
+// diferentes. Este módulo passou a ser a ÚNICA fonte de verdade no backend.
 //
-// Este módulo é a ÚNICA fonte de verdade no backend para esses valores.
-// system_settings já tinha as 10 chaves (pkg_<id>_price / pkg_<id>_credits)
-// desde a migration_v8_2_admin_tables.sql — só faltava algo que as lesse.
+// NOVO (v61 — pacotes dinâmicos): até aqui a LISTA de pacotes em si
+// continuava fixa a 5 IDs (Object.entries(FALLBACK_PACKAGES)) — só o
+// preço/créditos/bónus de cada um vinham de system_settings. O admin
+// nunca conseguia criar um 6º pacote. Agora a fonte de verdade é a
+// tabela `credit_packages` (ver migration_v61_dynamic_packages_and_
+// bonus_schedule.sql — "des-obsoleta" a tabela criada na v8 e fechada
+// por RLS na v24): qualquer linha com is_active=true vira um pacote real
+// no checkout, com o id que o admin escolher em /api/admin/packages.
+//
+// Ordem de fontes, cada uma só usada se a anterior falhar/estiver vazia:
+//   1. credit_packages (tabela)              — fonte de verdade actual
+//   2. system_settings (pkg_<id>_*, 5 IDs)    — compat com instalações
+//                                                que ainda não correram
+//                                                a migration_v61
+//   3. FALLBACK_PACKAGES (hard-coded abaixo)  — última rede de segurança
+//      se a base de dados estiver mesmo inacessível
 //
 // Usado por:
 //   - api/process-payment.js → SEM cache (é onde os créditos reais são
 //     atribuídos; não pode arriscar um valor desactualizado)
-//   - api/misc.js (handleConfig) → COM cache de 60s (só para exibição)
+//   - api/_services/site.js (handleConfig) → chamado a cada pedido a
+//     /api/config (sem cache local neste módulo)
 // ──────────────────────────────────────────────────────────────────────────
 
 const { restRequest } = require('./supabaseAdmin');
 
-// Usado apenas se a tabela estiver indisponível (rede em falha, RLS mal
-// configurada, etc.) — nunca deve ser a fonte normal de valores.
-//
-// NOVO (monetização — bónus escada): campo `bonus` — créditos extra
-// atribuídos por cima de `credits` na mesma compra, sem alterar o preço.
-// Pensado para aumentar o ticket médio nos pacotes maiores (quanto maior
-// o pacote, maior o bónus proporcional). `avulso` fica sem bónus de
-// propósito — é o pacote de entrada/experimentação, sem conta permanente.
+// Usado apenas se TUDO o resto falhar (tabela e system_settings
+// inacessíveis) — nunca deve ser a fonte normal de valores.
 const FALLBACK_PACKAGES = {
-  avulso:  { credits: 3,   price: 50,   name: 'Avulso',  bonus: 0  },
+  avulso:  { credits: 3,   price: 50,   name: 'Avulso',  bonus: 0,  description: '3 documentos, sem conta permanente' },
   starter: { credits: 10,  price: 120,  name: 'Starter', bonus: 2  },
   basico:  { credits: 25,  price: 280,  name: 'Básico',  bonus: 5  },
   pro:     { credits: 60,  price: 600,  name: 'Pro',     bonus: 15 },
@@ -38,48 +41,83 @@ const FALLBACK_PACKAGES = {
 };
 
 async function loadPackagesFromSettings() {
+  // 1) Fonte de verdade actual: credit_packages (dinâmica, N pacotes).
   try {
-    const keys = Object.keys(FALLBACK_PACKAGES)
-      .flatMap(id => [`pkg_${id}_price`, `pkg_${id}_credits`, `pkg_${id}_bonus`]);
     const rows = await restRequest(
-      `system_settings?key=in.(${keys.join(',')})&select=key,value`
+      `credit_packages?is_active=eq.true&order=sort_order.asc,created_at.asc` +
+      `&select=id,name,credits,price_mzn,bonus,description,is_popular`
     );
-    if (!Array.isArray(rows) || rows.length === 0) return clonePackages(FALLBACK_PACKAGES);
-
-    const map = {};
-    rows.forEach(r => { map[r.key] = r.value; });
-
-    const packages = {};
-    for (const [id, fallback] of Object.entries(FALLBACK_PACKAGES)) {
-      const price   = Number(map[`pkg_${id}_price`]);
-      const credits = Number(map[`pkg_${id}_credits`]);
-      // NOVO: bónus lido do mesmo padrão (pkg_<id>_bonus), com fallback
-      // para o valor acima — 0 e valores negativos são tratados como
-      // "sem bónus" (Number.isFinite && >= 0), nunca reduzem os créditos
-      // base por engano de configuração no admin.
-      const bonusRaw = map[`pkg_${id}_bonus`];
-      const bonus    = Number(bonusRaw);
-      packages[id] = {
-        name:    fallback.name,
-        price:   Number.isFinite(price)   && price   > 0 ? price   : fallback.price,
-        credits: Number.isFinite(credits) && credits > 0 ? credits : fallback.credits,
-        bonus:   bonusRaw !== undefined && Number.isFinite(bonus) && bonus >= 0 ? bonus : fallback.bonus,
-      };
+    if (Array.isArray(rows) && rows.length > 0) {
+      const packages = {};
+      for (const r of rows) {
+        const price   = Number(r.price_mzn);
+        const credits = Number(r.credits);
+        const bonus   = Number(r.bonus);
+        // Linha malformada (preço/créditos inválidos) é ignorada em vez
+        // de quebrar o checkout inteiro por causa de um pacote só.
+        if (!r.id || !Number.isFinite(price) || price <= 0 || !Number.isFinite(credits) || credits <= 0) {
+          console.warn('[packages] Linha inválida em credit_packages ignorada:', r.id);
+          continue;
+        }
+        packages[r.id] = {
+          name:        r.name || r.id,
+          price,
+          credits,
+          bonus:       Number.isFinite(bonus) && bonus >= 0 ? bonus : 0,
+          description: r.description || undefined,
+          popular:     !!r.is_popular,
+        };
+      }
+      if (Object.keys(packages).length > 0) return packages;
     }
-    return packages;
   } catch (e) {
-    console.warn('[packages] Falha ao carregar de system_settings, a usar fallback:', e.message);
+    console.warn('[packages] Falha ao carregar de credit_packages, a tentar legado:', e.message);
+  }
+
+  // 2) Compat: instalação ainda não correu a migration_v61 — mesma
+  //    lógica que este módulo sempre teve, lendo os 5 IDs fixos de
+  //    system_settings.
+  try {
+    return await loadLegacySettingsPackages();
+  } catch (e) {
+    console.warn('[packages] Falha ao carregar legado de system_settings, a usar fallback:', e.message);
     return clonePackages(FALLBACK_PACKAGES);
   }
 }
 
-// NOVO (monetização — bónus escada): total de créditos que um pacote
-// realmente atribui numa compra (base + bónus). Única função que deve
-// ser usada para creditar o utilizador — nunca ler `pkg.credits`
-// directamente num fluxo de atribuição de créditos, ou o bónus fica de
-// fora (mesmo que apareça correctamente no checkout/pending). Aceita
-// pacotes sem o campo `bonus` (compatibilidade com dados antigos/mocks
-// de teste) tratando-o como 0.
+async function loadLegacySettingsPackages() {
+  const keys = Object.keys(FALLBACK_PACKAGES)
+    .flatMap(id => [`pkg_${id}_price`, `pkg_${id}_credits`, `pkg_${id}_bonus`]);
+  const rows = await restRequest(
+    `system_settings?key=in.(${keys.join(',')})&select=key,value`
+  );
+  if (!Array.isArray(rows) || rows.length === 0) return clonePackages(FALLBACK_PACKAGES);
+
+  const map = {};
+  rows.forEach(r => { map[r.key] = r.value; });
+
+  const packages = {};
+  for (const [id, fallback] of Object.entries(FALLBACK_PACKAGES)) {
+    const price   = Number(map[`pkg_${id}_price`]);
+    const credits = Number(map[`pkg_${id}_credits`]);
+    const bonusRaw = map[`pkg_${id}_bonus`];
+    const bonus    = Number(bonusRaw);
+    packages[id] = {
+      name:        fallback.name,
+      price:       Number.isFinite(price)   && price   > 0 ? price   : fallback.price,
+      credits:     Number.isFinite(credits) && credits > 0 ? credits : fallback.credits,
+      bonus:       bonusRaw !== undefined && Number.isFinite(bonus) && bonus >= 0 ? bonus : fallback.bonus,
+      description: fallback.description,
+    };
+  }
+  return packages;
+}
+
+// Total de créditos que um pacote realmente atribui numa compra (base +
+// bónus). Única função que deve ser usada para creditar o utilizador —
+// nunca ler `pkg.credits` directamente num fluxo de atribuição de
+// créditos, ou o bónus fica de fora. Aceita pacotes sem o campo `bonus`
+// (compatibilidade com dados antigos/mocks de teste) tratando-o como 0.
 function packageTotalCredits(pkg) {
   if (!pkg) return 0;
   return (Number(pkg.credits) || 0) + (Number(pkg.bonus) || 0);
@@ -90,12 +128,10 @@ function clonePackages(src) {
 }
 
 // Usado pela repartição de vendas de templates (v39): os criadores são
-// pagos em créditos (a mesma moeda usada em toda a plataforma — nunca se
-// pede ao comprador um valor monetário à parte), mas o saldo do criador
-// tem de ser levantável em MZN reais via M-Pesa. Esta função converte
-// créditos → MZN usando a média ponderada de todos os pacotes activos
-// (preço/créditos), a mesma fonte de verdade usada no checkout — nunca um
-// valor fixo no código.
+// pagos em créditos, mas o saldo do criador tem de ser levantável em MZN
+// reais via M-Pesa. Esta função converte créditos → MZN usando a média
+// ponderada de todos os pacotes activos (preço/créditos), a mesma fonte
+// de verdade usada no checkout — nunca um valor fixo no código.
 function estimateMznPerCredit(packages) {
   const list = Object.values(packages || {});
   const totalPrice   = list.reduce((s, p) => s + (p.price   || 0), 0);
