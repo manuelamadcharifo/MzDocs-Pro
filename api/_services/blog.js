@@ -10,6 +10,9 @@
 const { restRequest, insert } = require('../_lib/supabaseAdmin');
 const { publishBlogPageToGithub } = require('../_lib/blogTemplate');
 const { ORIGIN, SITE_URL, parseBody } = require('../_lib/httpHelpers');
+// NOVO (Ago/2026): motor de corrida por tiers partilhado com
+// api/generate-document.js — ver nota em _callAiText abaixo.
+const { raceAllProviders, buildApiKeysFromEnv } = require('../_lib/aiRace');
 
 // Páginas SEO estáticas — ao adicionar novas páginas em /pages/, acrescentar
 // aqui também. Páginas geradas pelo admin (blog_pages) são lidas
@@ -170,31 +173,35 @@ function _isTooSimilar(candidateTitle, existingTitles, threshold = 0.55) {
   return existingTitles.some(t => _titleSimilarity(candidateTitle, t) >= threshold);
 }
 
-async function _callAiText(prompt, { maxTokens = 3000, temperature = 0.5 } = {}) {
-  if (process.env.GROQ_API_KEY) {
-    try {
-      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
-        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens, temperature }),
-      });
-      const d = await r.json();
-      const text = d.choices?.[0]?.message?.content;
-      if (text?.length > 50) return { text, provider: 'groq' };
-    } catch (e) { console.warn('[blog-cron] Groq falhou:', e.message); }
+// CORRIGIDO (Ago/2026 — incidente de 19-23/08): esta função só tinha Groq e
+// Gemini fixos, sem tiers, sem timeout, sem disjuntor por modelo — quando
+// os dois esgotaram quota no mesmo dia, TODAS as publicações agendadas
+// passaram a falhar com "Nenhum provider de IA disponível", apesar de
+// existirem outros ~7-11 providers já configurados e a funcionar
+// normalmente na geração de documentos (api/generate-document.js). Passa a
+// usar o mesmo motor partilhado (api/_lib/aiRace.js) — corre por tiers
+// (generoso+médio primeiro, reserva_ativa só como fallback), com timeout
+// de 9s por provider e disjuntor por modelo, tal como a geração de
+// documentos. Zero providers a mais para configurar — usa exactamente as
+// mesmas env vars já ligadas no admin ("IA Providers").
+async function _callAiText(prompt, { maxTokens = 3000 } = {}) {
+  const apiKeys = buildApiKeysFromEnv();
+  if (Object.keys(apiKeys).length === 0) return null;
+
+  try {
+    const result = await raceAllProviders(
+      prompt, apiKeys, /* preferProvider */ null, maxTokens,
+      'És um especialista em SEO e redacção de conteúdo para o mercado moçambicano. Respondes apenas com o conteúdo pedido, sem comentários adicionais.'
+    );
+    return { text: result.content, provider: result.provider };
+  } catch (e) {
+    // AggregateError do Promise.any quando TODOS os providers do grupo
+    // falharam — junta as mensagens individuais em vez de um "[object
+    // AggregateError]" inútil no error_note da fila.
+    const detail = e?.errors?.length ? e.errors.map(x => x.message).join(' | ') : e.message;
+    console.warn('[blog-cron] Todos os providers de IA falharam:', detail);
+    return null;
   }
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      });
-      const d = await r.json();
-      const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text?.length > 50) return { text, provider: 'gemini' };
-    } catch (e) { console.warn('[blog-cron] Gemini falhou:', e.message); }
-  }
-  return null;
 }
 
 // Publica o HTML estático no GitHub — mesma lógica de
