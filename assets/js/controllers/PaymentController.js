@@ -68,13 +68,36 @@ function _pkgTotalCredits(pkg) {
 // preservando os campos só-visuais (description, features, colorClass,
 // pricePerCredit) que não vêm do backend. Chamada em app.js, no mesmo
 // ponto em que updatePackagesFromConfig é chamado.
+// NOVO (v61 — pacotes dinâmicos): antes só actualizava os 5 ids fixos
+// (`if (!PACKAGES_V8[id]) continue` descartava qualquer pacote novo
+// criado no admin). Agora cria entradas novas (com descrição/features
+// genéricas, já que esses campos são só visuais e não vêm todos do
+// backend) e remove as que desapareceram (pacote desactivado/apagado),
+// excepto 'avulso' — o fluxo de conta temporária depende dele existir
+// sempre, mesmo que seja desactivado por engano no admin.
+// NOVO (v61 — pacotes dinâmicos): antes só actualizava os 5 ids fixos
+// (`if (!PACKAGES_V8[id]) continue` descartava qualquer pacote novo
+// criado no admin). Agora cria entradas novas e remove as que
+// desapareceram (pacote desactivado/apagado), excepto 'avulso' — o
+// fluxo de conta temporária depende dele existir sempre, mesmo que
+// seja desactivado por engano no admin.
 export function syncPackagesV8FromConfig(packagesFromApi) {
   if (!packagesFromApi || typeof packagesFromApi !== 'object') return;
+  const incomingIds = Object.keys(packagesFromApi);
+  if (incomingIds.length === 0) return; // resposta vazia — mantém o fallback local
+
   for (const [id, data] of Object.entries(packagesFromApi)) {
-    if (!PACKAGES_V8[id] || !data) continue;
-    if (Number.isFinite(data.price) && data.price > 0)     PACKAGES_V8[id].price   = data.price;
-    if (Number.isFinite(data.credits) && data.credits > 0) PACKAGES_V8[id].credits = data.credits;
+    if (!data) continue;
+    if (!Number.isFinite(data.price) || data.price <= 0) continue;
+    if (!Number.isFinite(data.credits) || data.credits <= 0) continue;
+
+    if (!PACKAGES_V8[id]) {
+      PACKAGES_V8[id] = { id, name: data.name || id, credits: 0, bonus: 0, price: 0, pricePerCredit: 0, popular: false };
+    }
+    PACKAGES_V8[id].price   = data.price;
+    PACKAGES_V8[id].credits = data.credits;
     if (data.name) PACKAGES_V8[id].name = data.name;
+    PACKAGES_V8[id].popular = !!data.popular;
     // NOVO: bonus pode legitimamente ser 0 (ex: 'avulso') — aceita >= 0.
     if (Number.isFinite(data.bonus) && data.bonus >= 0) PACKAGES_V8[id].bonus = data.bonus;
     // Recalcular pricePerCredit para manter consistência visual nos cards
@@ -85,42 +108,56 @@ export function syncPackagesV8FromConfig(packagesFromApi) {
       PACKAGES_V8[id].pricePerCredit = Math.round((PACKAGES_V8[id].price / total) * 100) / 100;
     }
   }
+
+  Object.keys(PACKAGES_V8).forEach(id => {
+    if (id !== 'avulso' && !incomingIds.includes(id)) delete PACKAGES_V8[id];
+  });
 }
 
 // CORRIGIDO: syncPackagesV8FromConfig só actualizava o objecto PACKAGES_V8
 // em memória — os cards visíveis em index.html tinham o preço/créditos
 // escritos directamente no HTML (ex: "MZN 120"), e nunca eram tocados.
-// Resultado: o admin alterava o preço, o objecto JS ficava certo (e o
-// resumo "Pacote Starter → MZN 122" já reflectia isso correctamente, por
-// vir de PACKAGES_V8 no momento da selecção), mas o card visível antes da
-// selecção continuava a mostrar o valor antigo escrito no HTML.
-// Chamar isto a seguir a syncPackagesV8FromConfig em app.js corrige isso,
-// escrevendo nos elementos com id="pkgPrice<Id>"/"pkgCr<Id>"/"pkgPer<Id>".
+// SUBSTITUÍDO NA v61: o HTML já não tem um card por pacote fixo — tem só
+// um contentor vazio (`#pkgGrid`), porque um pacote criado no admin
+// depois do deploy não teria markup nenhum para preencher. Esta função
+// agora CONSTRÓI o DOM dos cards a partir de PACKAGES_V8 (excluindo
+// 'avulso', que continua a ter o seu próprio card estático fora do
+// grid — fluxo de conta temporária inalterado). Chamada em app.js, no
+// mesmo ponto em que syncPackagesV8FromConfig é chamado.
 export function renderPackageCards() {
-  for (const [id, pkg] of Object.entries(PACKAGES_V8)) {
-    const cap = id.charAt(0).toUpperCase() + id.slice(1);
+  const grid = document.getElementById('pkgGrid');
 
-    const priceEl = document.getElementById(`pkgPrice${cap}`);
-    if (priceEl) priceEl.textContent = `MZN ${pkg.price}`;
+  // O card "Avulso" continua estático em HTML (fluxo de conta temporária
+  // à parte do grid dinâmico) — só o preço precisa de reflectir o admin.
+  const avulsoPkg = PACKAGES_V8.avulso;
+  const avulsoPriceEl = document.getElementById('pkgPriceAvulso');
+  if (avulsoPkg && avulsoPriceEl) avulsoPriceEl.textContent = `MZN ${avulsoPkg.price}`;
 
-    // NOVO (monetização — bónus escada): quando o pacote tem bónus, o
-    // card mostra "25 + 5 bónus = 30 créditos" em vez de só "25 créditos"
-    // — é a mudança visível que faz o pacote parecer melhor negócio, sem
-    // mexer no preço.
-    const crEl = document.getElementById(`pkgCr${cap}`);
-    if (crEl) {
-      crEl.textContent = pkg.bonus > 0
-        ? `${pkg.credits} + ${pkg.bonus} bónus = ${_pkgTotalCredits(pkg)} créditos`
-        : `${pkg.credits} créditos`;
-    }
+  if (!grid) return;
+  const entries = Object.entries(PACKAGES_V8).filter(([id]) => id !== 'avulso');
+  if (entries.length === 0) return; // nunca esvazia o grid por uma sincronização vazia
 
-    const perEl = document.getElementById(`pkgPer${cap}`);
+  grid.innerHTML = entries.map(([id, pkg]) => {
     const totalCr = _pkgTotalCredits(pkg);
-    if (perEl && totalCr > 0) {
-      const per = pkg.price / totalCr;
-      perEl.textContent = `MZN ${Number.isInteger(per) ? per : per.toFixed(1)}/doc`;
-    }
-  }
+    const per = totalCr > 0 ? pkg.price / totalCr : 0;
+    const crLabel = pkg.bonus > 0
+      ? `${pkg.credits} + ${pkg.bonus} bónus = ${totalCr} créditos`
+      : `${pkg.credits} créditos`;
+    const perLabel = totalCr > 0
+      ? `MZN ${Number.isInteger(per) ? per : per.toFixed(1)}/doc`
+      : '';
+    // Classes/estrutura idênticas ao markup estático anterior (ver
+    // assets/css/styles.css: .pkg.popular, .pkg-badge, .pkg-name,
+    // .pkg-price, .pkg-cr, .pkg-per) — só a origem dos dados mudou.
+    return `
+      <div class="pkg${pkg.popular ? ' popular' : ''}" data-pkg="${id}">
+        ${pkg.popular ? '<div class="pkg-badge">Popular</div>' : ''}
+        <div class="pkg-name">${pkg.name}</div>
+        <div class="pkg-price" id="pkgPrice${id.charAt(0).toUpperCase() + id.slice(1)}">MZN ${pkg.price}</div>
+        <div class="pkg-cr" id="pkgCr${id.charAt(0).toUpperCase() + id.slice(1)}">${crLabel}</div>
+        ${perLabel ? `<div class="pkg-per" id="pkgPer${id.charAt(0).toUpperCase() + id.slice(1)}">${perLabel}</div>` : ''}
+      </div>`;
+  }).join('');
 }
 
 export class PaymentController {
@@ -144,8 +181,14 @@ export class PaymentController {
       if (e.target.id === 'payOverlay') this.close();
     });
 
-    document.querySelectorAll('.pkg').forEach(el => {
-      el.addEventListener('click', () => this.selectPkg(el, el.dataset.pkg));
+    // ALTERADO (v61): os cards de pacote já não existem no DOM à hora em
+    // que o PaymentController é construído (são criados por
+    // renderPackageCards(), depois de /api/config responder) — por isso
+    // o clique é delegado no contentor #pkgGrid em vez de anexado
+    // directamente a cada .pkg, que já não existiria ainda neste ponto.
+    document.getElementById('pkgGrid')?.addEventListener('click', e => {
+      const el = e.target.closest('.pkg');
+      if (el) this.selectPkg(el, el.dataset.pkg);
     });
     document.querySelector('.pkg-avulso-btn')?.addEventListener('click', e => {
       this.selectPkg(e.currentTarget, 'avulso');
