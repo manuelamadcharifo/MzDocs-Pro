@@ -30,6 +30,16 @@
 //   GET  /api/partners?action=me              — NOVO: parceira vê os seus próprios dados
 //   POST /api/partners?action=update-profile  — NOVO: parceira edita os seus próprios dados
 //   GET  /api/partners?action=check           — NOVO: ponte com afiliados.html — "esta papelaria já se candidatou?"
+//   POST /api/partners?action=create-booking  — NOVO (Ago/2026): cliente cria um pedido de
+//                                                agendamento (foto/documento) junto de uma
+//                                                papelaria escolhida em "Parceiras próximas"
+//   GET  /api/partners?action=my-bookings     — NOVO: parceira lista os seus pedidos/marcações
+//   POST /api/partners?action=update-booking  — NOVO: parceira agenda/conclui/cancela um pedido
+//
+// NOTA (limite de funções Vercel Hobby): as rotas de marcações (bookings)
+// foram acrescentadas a ESTE ficheiro em vez de um novo api/bookings.js —
+// o projecto já está no limite de 12 funções serverless do plano; ver nota
+// da v2.1 acima sobre a mesma decisão para os advogados.
 //
 // Todas as rotas aceitam agora `type` ('papelaria' por omissão | 'advogado'):
 //   POST .../register?         body.type
@@ -579,6 +589,144 @@ async function handleUpdateProfile(req, res) {
   }
 }
 
+// ── MARCAÇÕES (bookings) — agendamento real com a papelaria ─────────────────
+// NOVO (Ago/2026): até aqui, escolher uma papelaria em "Parceiras próximas"
+// só abria o WhatsApp com uma mensagem pronta — nada ficava registado no
+// sistema, a papelaria não tinha nenhuma lista dos seus pedidos, e não havia
+// forma de saber se um pedido tinha sido aceite, agendado, feito ou
+// cancelado. O envio por WhatsApp continua a existir (é onde o cliente
+// entrega a foto/o ficheiro), mas passa a acompanhar a criação de um
+// registo em `bookings` (ver migration_v63_partner_bookings.sql), que a
+// parceira gere no Portal (parceiro-portal.html → aba "Marcações").
+const BOOKING_TYPES    = ['foto', 'documento'];
+const BOOKING_STATUSES = ['pendente', 'agendado', 'em_andamento', 'concluido', 'cancelado'];
+
+function isValidDateStr(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
+function isValidTimeStr(v) { return /^\d{2}:\d{2}(:\d{2})?$/.test(String(v || '')); }
+
+// ── CREATE BOOKING (cliente, público) ────────────────────────────────────────
+async function handleCreateBooking(req, res) {
+  // Público e sem autenticação — mesmo tratamento de rate limit que
+  // register/rate acima, para evitar inundar a tabela com pedidos falsos.
+  const allowed = await checkRateLimit('partners-create-booking', clientIp(req), { limit: 15, windowSec: 3600 }).catch(() => true);
+  if (!allowed) return res.status(429).json({ error: 'Demasiados pedidos. Tente novamente mais tarde.' });
+
+  const b = parseBody(req);
+  const partnerId = String(b.partner_id || '').trim();
+  if (!partnerId) return res.status(400).json({ error: 'Escolha uma papelaria antes de enviar o pedido.' });
+
+  const type = BOOKING_TYPES.includes(b.type) ? b.type : 'documento';
+  const service = String(b.service || '').trim().slice(0, 40);
+
+  const clientName = String(b.client_name || '').trim().slice(0, 100);
+  if (!clientName) return res.status(400).json({ error: 'Nome do cliente é obrigatório' });
+
+  const clientPhone = onlyDigits(b.client_phone);
+  if (!clientPhone || clientPhone.length < 9) {
+    return res.status(400).json({ error: 'Telefone do cliente inválido' });
+  }
+
+  // `details` é o retrato do formulário (finalidade, quantidade, cor de
+  // fundo, tipo de impressão, páginas, etc.) — guardado como texto simples,
+  // com limites defensivos, para a parceira ver tudo no Portal sem ter de
+  // reabrir a conversa de WhatsApp.
+  let details = {};
+  if (b.details && typeof b.details === 'object' && !Array.isArray(b.details)) {
+    details = Object.fromEntries(
+      Object.entries(b.details).slice(0, 30).map(([k, v]) => [String(k).slice(0, 60), String(v ?? '').slice(0, 500)])
+    );
+  }
+
+  const preferredDate = isValidDateStr(b.preferred_date) ? b.preferred_date : null;
+  const preferredTime = isValidTimeStr(b.preferred_time) ? b.preferred_time : null;
+
+  try {
+    // Só cria a marcação se a papelaria escolhida ainda existir, estiver
+    // aprovada e visível — evita marcações "órfãs" a uma papelaria já
+    // desactivada entre a busca e o envio do formulário.
+    const partner = await selectOne('partners', 'id', partnerId, 'id,status,active');
+    if (!partner || partner.status !== 'approved' || !partner.active) {
+      return res.status(404).json({ error: 'Esta papelaria já não está disponível. Escolha outra da lista.' });
+    }
+
+    const row = await insert('bookings', {
+      partner_id: partnerId,
+      type,
+      service,
+      client_name: clientName,
+      client_phone: clientPhone,
+      details,
+      preferred_date: preferredDate,
+      preferred_time: preferredTime,
+      status: 'pendente',
+    });
+
+    return res.status(200).json({ ok: true, booking_id: row?.id || null });
+  } catch (err) {
+    console.error('[partners/create-booking]', err.message);
+    return res.status(500).json({ error: 'Erro ao registar o pedido. Tente novamente.' });
+  }
+}
+
+// ── PORTAL: MY BOOKINGS ──────────────────────────────────────────────────────
+// NOVO: lista as marcações da própria parceira autenticada, mais recentes
+// primeiro. Filtro opcional por estado (?status=pendente).
+async function handleMyBookings(req, res) {
+  const partner = await getPartnerFromRequest(req, res);
+  if (!partner) return res.status(401).json({ error: 'Sessão inválida ou expirada' });
+
+  const statusRaw = req.query?.status;
+  const statusFilter = statusRaw && BOOKING_STATUSES.includes(statusRaw) ? `&status=eq.${statusRaw}` : '';
+
+  try {
+    const data = await restRequest(
+      `bookings?partner_id=eq.${encodeURIComponent(partner.id)}${statusFilter}&order=created_at.desc&limit=100`
+    );
+    return res.status(200).json({ ok: true, bookings: Array.isArray(data) ? data : [] });
+  } catch (err) {
+    console.error('[partners/my-bookings]', err.message);
+    return res.status(500).json({ error: 'Erro ao carregar marcações.' });
+  }
+}
+
+// ── PORTAL: UPDATE BOOKING ────────────────────────────────────────────────────
+// NOVO: a parceira agenda um horário, marca em andamento, concluído ou
+// cancelado, e pode deixar uma nota curta para si própria. Confirma sempre
+// que a marcação pertence à própria parceira autenticada — nunca confia no
+// `partner_id` vindo do corpo do pedido.
+async function handleUpdateBooking(req, res) {
+  const partner = await getPartnerFromRequest(req, res);
+  if (!partner) return res.status(401).json({ error: 'Sessão inválida ou expirada' });
+
+  const b = parseBody(req);
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'id obrigatório' });
+
+  try {
+    const existing = await selectOne('bookings', 'id', id, 'id,partner_id,status');
+    if (!existing || existing.partner_id !== partner.id) {
+      return res.status(404).json({ error: 'Marcação não encontrada' });
+    }
+
+    const patch = {};
+    if (b.status !== undefined) {
+      if (!BOOKING_STATUSES.includes(b.status)) return res.status(400).json({ error: 'Estado inválido' });
+      patch.status = b.status;
+    }
+    if (b.preferred_date !== undefined) patch.preferred_date = isValidDateStr(b.preferred_date) ? b.preferred_date : null;
+    if (b.preferred_time !== undefined) patch.preferred_time = isValidTimeStr(b.preferred_time) ? b.preferred_time : null;
+    if (b.partner_notes !== undefined) patch.partner_notes = String(b.partner_notes).trim().slice(0, 500);
+
+    if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'Nada para actualizar' });
+
+    await update('bookings', 'id', id, patch);
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[partners/update-booking]', err.message);
+    return res.status(500).json({ error: 'Erro ao actualizar a marcação.' });
+  }
+}
+
 // ── PONTE COM O PROGRAMA DE AFILIADOS ────────────────────────────────────────
 // NOVO: quem se regista em afiliado.html com o segmento "Papelaria" (ou
 // Cyber/Universidade) ganha comissão por referências, mas isso é um
@@ -623,6 +771,9 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET'  && action === 'me')              return await handleMe(req, res);
     if (req.method === 'POST' && action === 'update-profile')  return await handleUpdateProfile(req, res);
     if (req.method === 'GET'  && action === 'check')           return await handleCheck(req, res);
+    if (req.method === 'POST' && action === 'create-booking')  return await handleCreateBooking(req, res);
+    if (req.method === 'GET'  && action === 'my-bookings')     return await handleMyBookings(req, res);
+    if (req.method === 'POST' && action === 'update-booking')  return await handleUpdateBooking(req, res);
     return res.status(404).json({ error: `Acção desconhecida: ${action}` });
   } catch (err) {
     console.error('[partners] crash:', err.message);
