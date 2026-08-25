@@ -117,7 +117,7 @@ export class AuthUI {
                                 <span style="font-size:.85rem;line-height:1.4;">Aceito receber mensagens de promoções e novidades do MzDocs Pro (WhatsApp, e-mail) <span style="color:#6b7280;">— opcional</span></span>
                             </label>
                         </div>
-                        <button id="btnRegister" class="btn btn-primary btn-block">Criar Conta</button>
+                        <button id="btnRegister" class="btn btn-primary btn-block" disabled>Criar Conta</button>
                     </div>
                     <p class="auth-footer">Já tem conta? <a href="#" class="auth-link" data-view="login">Entrar</a></p>
                 </div>
@@ -202,6 +202,22 @@ export class AuthUI {
         document.getElementById('btnRegister')?.addEventListener('click', () => this._handleRegister());
         document.getElementById('btnForgot')?.addEventListener('click', () => this._handleForgot());
         document.getElementById('btnAnonymous')?.addEventListener('click', () => this._handleAnonymous());
+
+        // NOVO: "Criar Conta" começa desactivado (ver atributo `disabled` no
+        // HTML acima) e só é activado quando o checkbox dos Termos de
+        // Serviço/Política de Privacidade é marcado. Antes, o botão parecia
+        // sempre clicável e a exigência de consentimento só aparecia DEPOIS
+        // do clique, como mensagem de erro (._showError mais abaixo, em
+        // _handleRegister) — essa validação continua lá como rede de
+        // segurança, mas agora o botão já reflecte visualmente que falta um
+        // passo obrigatório.
+        const regConsentEl = document.getElementById('regConsentTerms');
+        const btnRegisterEl = document.getElementById('btnRegister');
+        if (regConsentEl && btnRegisterEl) {
+            const syncRegisterBtnState = () => { btnRegisterEl.disabled = !regConsentEl.checked; };
+            regConsentEl.addEventListener('change', syncRegisterBtnState);
+            syncRegisterBtnState(); // estado inicial — cobre autofill/preenchimento prévio do browser
+        }
 
         // Preenche o WhatsApp com o mesmo valor do campo Telemóvel (conveniência —
         // a maioria dos utilizadores usa o mesmo número para ambos)
@@ -300,7 +316,12 @@ export class AuthUI {
             }
         } finally {
             this._registerSubmitting = false;
-            if (btn) { btn.disabled = false; btn.textContent = 'Criar Conta'; }
+            if (btn) {
+                btn.textContent = 'Criar Conta';
+                // Reactivar só se os Termos continuarem aceites — mantém
+                // consistência com o estado controlado por syncRegisterBtnState().
+                btn.disabled = !(document.getElementById('regConsentTerms')?.checked === true);
+            }
         }
     }
 
