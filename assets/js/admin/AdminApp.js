@@ -1660,19 +1660,41 @@ USING (EXISTS (
                         failed:    '<span style="background:#FEE2E2;color:#991B1B;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">❌ Falhou</span>',
                     }[it.status] || it.status;
                     const origem = it.source === 'ai' ? '🤖 IA' : '✍️ Manual';
-                    const actions = it.error_note
+                    // NOVO (Ago/2026): itens 'published' com slug conhecido
+                    // (ver blog_page_id + slug devolvidos por
+                    // handleBlogQueue no backend) ganham os mesmos botões
+                    // Ver/Editar/Apagar já usados na tabela de gestão de
+                    // páginas mais abaixo — antes, esta coluna mostrava
+                    // sempre "—" para artigos publicados, mesmo já
+                    // existindo a página real por trás.
+                    let actions;
+                    if (it.error_note) {
                         // CORRIGIDO: "title" (tooltip nativo) só aparece em hover —
                         // no telemóvel não há hover, por isso a mensagem real do
                         // erro ficava invisível (só o ícone "ⓘ erro"). Passa a
                         // abrir num alert ao toque, funciona em qualquer ecrã.
-                        ? `<button type="button" data-action="showBlogQueueError" data-error="${(it.error_note || '').replace(/"/g, '&quot;')}" style="font-size:11px;color:#991B1B;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:8px;padding:3px 8px;cursor:pointer;">ⓘ ver erro</button>`
-                        : '—';
+                        actions = `<button type="button" data-action="showBlogQueueError" data-error="${(it.error_note || '').replace(/"/g, '&quot;')}" style="font-size:11px;color:#991B1B;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:8px;padding:3px 8px;cursor:pointer;">ⓘ ver erro</button>`;
+                    } else if (it.status === 'published' && it.slug) {
+                        const safeTitle = escapeHtml(it.title || '');
+                        actions = `
+                            <button class="btn-ghost" style="font-size:12px;white-space:nowrap;" data-action="openPageEditor" data-id="${escapeHtml(it.blog_page_id)}">✏️ Editar</button>
+                            <a href="/pages/${escapeHtml(it.slug)}" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none;white-space:nowrap;">🔗 Ver</a>
+                            <button class="btn-danger" style="font-size:12px;" data-action="deletePage" data-id="${escapeHtml(it.blog_page_id)}" data-title="${safeTitle}">🗑️</button>`;
+                    } else if (it.status === 'published') {
+                        // Publicado pela fila, mas a página já não existe em
+                        // blog_pages (ex.: apagada manualmente depois) — não há
+                        // nada para ver/editar/apagar, mas o "—" isolado
+                        // enganava, parecendo um artigo intacto sem acções.
+                        actions = '<span style="font-size:11px;color:#94a3b8;">página removida</span>';
+                    } else {
+                        actions = '—';
+                    }
                     return `<tr>
                         <td><strong>${it.title}</strong></td>
                         <td style="font-size:12px;">${origem}</td>
                         <td style="font-size:12px;color:#64748b;">${when}</td>
                         <td>${statusBadge}</td>
-                        <td>${actions}</td>
+                        <td style="white-space:nowrap;">${actions}</td>
                     </tr>`;
                 }).join('');
             }
