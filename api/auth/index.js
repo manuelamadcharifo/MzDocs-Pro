@@ -159,7 +159,7 @@ async function handleSignup(req, res) {
   const body = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
 
-  const { phone, email, fullName, password, ref_code, visitor_id, consentTerms } = body;
+  const { phone, email, fullName, password, ref_code, visitor_id, consentTerms, whatsapp, consentMarketing } = body;
 
   // NOVO (LPD Lei nº 3/2017 + RGPD): consentimento explícito é obrigatório.
   // O checkbox correspondente deve existir no formulário de registo do
@@ -189,6 +189,24 @@ async function handleSignup(req, res) {
 
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedName  = (fullName || '').trim();
+
+  // NOVO: WhatsApp — campo opcional (lead + via alternativa de recuperação,
+  // ver migration_v62). Nunca bloqueia o registo por si só, mas se
+  // preenchido tem de ser um número moçambicano válido (mesma regra do
+  // telemóvel), para não gravar lixo que depois falha silenciosamente na
+  // recuperação de password.
+  let normalizedWhatsapp = null;
+  if (typeof whatsapp === 'string' && whatsapp.trim()) {
+    const cleanWa = whatsapp.replace(/\D/g, '');
+    const normWa  = cleanWa.startsWith('258') ? `+${cleanWa}` : `+258${cleanWa}`;
+    if (!/^\+2588[2-7]\d{7}$/.test(normWa)) {
+      return res.status(400).json({ error: 'Número de WhatsApp inválido. Use formato: 8X XXX XXXX (ou deixe em branco)' });
+    }
+    normalizedWhatsapp = normWa;
+  }
+
+  // NOVO: consentimento de marketing — opcional, nunca obrigatório.
+  const marketingConsent = consentMarketing === true;
 
   if (!SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
     return res.status(503).json({ error: 'Supabase não configurado no servidor' });
@@ -235,6 +253,9 @@ async function handleSignup(req, res) {
       credits:          1,
       credits_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       visitor_id:       visitorId,
+      whatsapp:         normalizedWhatsapp,
+      marketing_consent:    marketingConsent,
+      marketing_consent_at: marketingConsent ? new Date().toISOString() : null,
       consent_terms_at:      new Date().toISOString(),
       consent_terms_version: TERMS_VERSION,
     };
@@ -267,6 +288,7 @@ async function handleSignup(req, res) {
 
     waitUntil(_persistSignupProfile({
       userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId,
+      normalizedWhatsapp, marketingConsent,
       consentIp: ip,
       consentUserAgent: (req.headers['user-agent'] || '').slice(0, 500),
     }));
@@ -288,7 +310,7 @@ async function handleSignup(req, res) {
 // passada a waitUntil(), que diz ao runtime da Vercel para manter a função
 // viva até esta promise terminar, eliminando a perda intermitente de
 // nome/telefone em contas novas.
-async function _persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId, consentIp, consentUserAgent }) {
+async function _persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId, normalizedWhatsapp, marketingConsent, consentIp, consentUserAgent }) {
   if (!SERVICE_KEY) {
     console.warn(`[auth/signup] Sem service role — perfil não actualizado para ${userId.slice(0,8)}***`);
     return;
@@ -307,6 +329,20 @@ async function _persistSignupProfile({ userId, normalized, normalizedEmail, norm
     user_agent:    consentUserAgent || '',
   }).catch(err => console.warn('[auth/signup] Falha ao gravar consent_logs:', err.message));
 
+  // NOVO: registo formal do consentimento de marketing, só se o utilizador
+  // ligou o toggle (opcional) no registo — nunca gravado como 'aceite' por
+  // omissão. Mesma tabela/padrão do consentimento de Termos acima.
+  if (marketingConsent) {
+    insert('consent_logs', {
+      user_id:       userId,
+      email:         normalizedEmail,
+      consent_type:  'marketing',
+      terms_version: profilePayload.consent_terms_version,
+      ip_address:    consentIp || 'unknown',
+      user_agent:    consentUserAgent || '',
+    }).catch(err => console.warn('[auth/signup] Falha ao gravar consent_logs (marketing):', err.message));
+  }
+
   await new Promise(r => setTimeout(r, 800)); // dar tempo ao trigger para terminar
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -323,6 +359,9 @@ async function _persistSignupProfile({ userId, normalized, normalizedEmail, norm
         email:      normalizedEmail,
         full_name:  normalizedName,
         visitor_id: visitorId,
+        whatsapp:   normalizedWhatsapp,
+        marketing_consent:    marketingConsent,
+        marketing_consent_at: marketingConsent ? profilePayload.marketing_consent_at : null,
         updated_at: new Date().toISOString(),
         consent_terms_at:      profilePayload.consent_terms_at,
         consent_terms_version: profilePayload.consent_terms_version,
@@ -388,18 +427,50 @@ async function handleResetPassword(req, res) {
 
   const body = parseBody(req);
   if (!body) return res.status(400).json({ error: 'Body JSON inválido' });
-  const { email } = body;
-  if (!email) return res.status(400).json({ error: 'E-mail é obrigatório' });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido' });
+
+  // NOVO: aceita tanto e-mail como número de telemóvel/WhatsApp (ver
+  // migration_v62 + regWhatsapp em AuthUI.js). `identifier` é o novo campo
+  // único do formulário; `email` mantido por compatibilidade com chamadas
+  // antigas ao endpoint.
+  const identifierRaw = (body.identifier ?? body.email ?? '').toString().trim();
+  if (!identifierRaw) return res.status(400).json({ error: 'Indique o e-mail ou o número de telemóvel/WhatsApp da conta' });
+
+  const isEmail = identifierRaw.includes('@');
+  let targetEmail = null;
+
+  if (isEmail) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifierRaw)) return res.status(400).json({ error: 'E-mail inválido' });
+    targetEmail = identifierRaw.toLowerCase();
+  } else {
+    const clean = identifierRaw.replace(/\D/g, '');
+    const normalized = clean.startsWith('258') ? `+${clean}` : `+258${clean}`;
+    if (!/^\+2588[2-7]\d{7}$/.test(normalized)) {
+      return res.status(400).json({ error: 'Indique um e-mail válido ou um número de telemóvel/WhatsApp moçambicano (8X XXX XXXX)' });
+    }
+    // Procura primeiro por WhatsApp (novo campo dedicado a recuperação) e,
+    // se não encontrar, cai para `phone` (número de login) — cobre contas
+    // que só preencheram um dos dois campos no registo.
+    if (SERVICE_KEY) {
+      try {
+        const profile = (await selectOne('profiles', 'whatsapp', normalized, 'email').catch(() => null))
+                      || (await selectOne('profiles', 'phone', normalized, 'email').catch(() => null));
+        targetEmail = profile?.email || null;
+      } catch (err) {
+        console.warn('[auth/reset-password] Falha ao procurar perfil por telemóvel/WhatsApp:', err.message);
+      }
+    }
+  }
 
   try {
-    await adminSendRecovery(email.trim().toLowerCase(), `${origin}/?reset=true`);
+    if (targetEmail) {
+      await adminSendRecovery(targetEmail, `${origin}/?reset=true`);
+    }
   } catch (err) {
     console.error('[auth/reset-password]', err.message);
   }
-  // Resposta sempre genérica por segurança (não revelar se email existe)
+  // Resposta sempre genérica por segurança (não revelar se a conta existe)
   return res.status(200).json({
     success: true,
-    message: 'Se o e-mail estiver registado, receberá um link de recuperação em breve.',
+    message: 'Se os dados corresponderem a uma conta, receberá um link de recuperação por e-mail em breve.',
   });
 }
