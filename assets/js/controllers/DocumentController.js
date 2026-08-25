@@ -1544,13 +1544,48 @@ export class DocumentController {
   msg = `📋 *Novo pedido — ${svc?.title || 'Documento'}*\n\n👤 Nome: ${nome}\n\n_Via MzDocs Pro_`;
  }
  const targetWA = window._mzSelectedPartnerWA;
+ const targetPartnerId = window._mzSelectedPartnerId;
+ const serviceKey = this.docModel.service;
  window.open(`https://wa.me/${targetWA}?text=${encodeURIComponent(msg)}`, '_blank');
+
+ // NOVO (Ago/2026 — agendamento): além de abrir o WhatsApp (como sempre),
+ // regista o pedido em /api/partners?action=create-booking, para a
+ // papelaria passar a vê-lo — e a poder agendar/concluir/cancelar — no
+ // Portal (parceiro-portal.html → aba "Marcações"). Disparado depois do
+ // window.open (que precisa de correr de forma síncrona dentro do clique
+ // para não ser bloqueado como pop-up) e sem `await`: se este pedido
+ // falhar (rede, servidor em baixo, etc.) o envio por WhatsApp já
+ // aconteceu na mesma — este registo é um extra, nunca um bloqueio.
+ if (targetPartnerId) {
+  fetch('/api/partners?action=create-booking', {
+   method: 'POST',
+   headers: { 'Content-Type': 'application/json' },
+   body: JSON.stringify({
+    partner_id: targetPartnerId,
+    type: serviceKey === 'foto' ? 'foto' : 'documento',
+    service: serviceKey,
+    client_name: data.nome || data.aluno || data.solicitante || 'Cliente',
+    client_phone: data.contacto || '',
+    details: data,
+    preferred_date: data.dataPref || null,
+    preferred_time: data.horaPref || null,
+   }),
+  })
+   .then(r => r.json())
+   .then(resp => {
+    if (resp && resp.ok) {
+     NotificationView.success('✅ Pedido enviado! A papelaria vai confirmar o horário no Portal.');
+    }
+   })
+   .catch(() => { /* silencioso — o WhatsApp já foi enviado; isto é só o registo extra da marcação */ });
+ }
 
  // Reset: a próxima vez que o formulário abrir (ou a lista recarregar) o
  // botão volta a nascer desactivado até nova selecção — ver
  // resetPartnerSelection() em NearbyPartners.js.
  window._mzSelectedPartnerWA = null;
  window._mzSelectedPartnerName = null;
+ window._mzSelectedPartnerId = null;
  const btnWa = document.getElementById('btnWaDirect');
  if (btnWa) btnWa.disabled = true;
  document.querySelectorAll('.np-card.np-selected').forEach(c => c.classList.remove('np-selected'));
