@@ -40,7 +40,11 @@
   .hdr-back{color:rgba(255,255,255,.55);font-size:13px;text-decoration:none;transition:var(--t)}
   .hdr-back:hover{color:#fff}
 
-  .wrap{max-width:720px;margin:0 auto;padding:20px 14px 90px}
+  /* CONTAINER — largura máxima 1024px reutilizável, mesma classe usada em
+     toda a app (ver assets/css/styles.css). Substitui o max-width/margin
+     que estava directamente no .wrap desta página. */
+  .container{max-width:1024px;margin:0 auto;padding:0 16px;box-sizing:border-box}
+  .wrap{padding:20px 14px 90px}
 
   /* LOADING / NOT AUTH */
   .center-box{max-width:420px;margin:60px auto;text-align:center;padding:0 16px}
@@ -131,7 +135,7 @@
   <a href="/" class="hdr-back">← Início</a>
 </header>
 
-<div class="wrap">
+<div class="wrap container">
 
   <!-- ESTADO: A CARREGAR -->
   <div class="center-box" id="loadingState">

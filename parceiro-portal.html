@@ -23,7 +23,11 @@
     .btn-back{color:rgba(255,255,255,.6);font-size:13px;text-decoration:none;background:none;border:none;font-family:inherit;cursor:pointer}
     .btn-back:hover{color:#fff}
 
-    .wrap{max-width:480px;margin:0 auto;padding:28px 16px 60px}
+    /* CONTAINER — largura máxima 1024px reutilizável, mesma classe usada em
+       toda a app (ver assets/css/styles.css). Substitui o max-width/margin
+       que estava directamente no .wrap desta página. */
+    .container{max-width:1024px;margin:0 auto;padding:0 16px;box-sizing:border-box}
+    .wrap{padding:28px 16px 60px}
 
     .fg{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
     .fg label{font-size:12.5px;font-weight:700;color:var(--ink)}
@@ -124,7 +128,7 @@
   <button class="btn-back" id="btnLogout" style="display:none" data-action="doLogout">🚪 Sair</button>
 </header>
 
-<div class="wrap">
+<div class="wrap container">
 
   <!-- LOGIN -->
   <div id="loginScreen">

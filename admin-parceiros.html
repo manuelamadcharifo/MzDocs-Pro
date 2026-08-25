@@ -15,7 +15,11 @@
     .hdr-name{font-size:15px;font-weight:800;color:#fff}
     .hdr-name span{color:var(--gold)}
     .btn-back{color:rgba(255,255,255,.6);font-size:13px;text-decoration:none}
-    .wrap{max-width:760px;margin:0 auto;padding:24px 14px 60px}
+    /* CONTAINER — largura máxima 1024px reutilizável, mesma classe usada em
+       toda a app (ver assets/css/styles.css). Substitui o max-width/margin
+       que estava directamente no .wrap desta página. */
+    .container{max-width:1024px;margin:0 auto;padding:0 16px;box-sizing:border-box}
+    .wrap{padding:24px 14px 60px}
     .page-title{font-size:20px;font-weight:800;margin-bottom:4px}
     .page-sub{font-size:13px;color:var(--muted);margin-bottom:20px}
     .tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
@@ -99,7 +103,7 @@
 
 <!-- PAINEL ADMIN -->
 <div id="adminPanel">
-  <div class="wrap">
+  <div class="wrap container">
     <div class="page-title">🏪 Gestão de Parceiros</div>
     <div class="page-sub">Aprovar, rejeitar e gerir papelarias e gráficas parceiras.</div>
 

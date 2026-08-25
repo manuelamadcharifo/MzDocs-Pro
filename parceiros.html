@@ -16,6 +16,13 @@
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);color:var(--ink);min-height:100vh}
 
+    /* CONTAINER — largura máxima 1024px reutilizável (ver assets/css/styles.css
+       para a mesma classe usada no resto da app; repetida aqui porque esta
+       página também define as suas próprias variáveis/reset locais). Substitui
+       o .hero-inner (antes 520px) e o .section (antes 560px) desta página, que
+       tinham a mesma função com valores diferentes. */
+    .container{max-width:1024px;margin:0 auto;padding:0 16px;box-sizing:border-box}
+
     /* HEADER */
     .hdr{background:var(--ink);padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
     .hdr-logo{display:flex;align-items:center;gap:8px;text-decoration:none}
@@ -28,7 +35,7 @@
     /* HERO */
     .hero{background:linear-gradient(135deg,var(--ink) 0%,#0F2D4A 100%);padding:48px 20px 52px;text-align:center;position:relative;overflow:hidden}
     .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(59,130,246,.2),transparent 70%)}
-    .hero-inner{position:relative;max-width:520px;margin:0 auto}
+    .hero-inner{position:relative}
     .hero-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(0,154,68,.2);border:1px solid rgba(0,154,68,.4);color:#4ade80;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:20px;margin-bottom:18px;letter-spacing:.5px}
     .hero h1{font-family:'Instrument Serif',serif;font-size:clamp(26px,7vw,40px);line-height:1.1;color:#fff;margin-bottom:14px}
     .hero h1 em{font-style:italic;color:#93C5FD}
@@ -39,7 +46,7 @@
     .hs-lbl{font-size:11px;color:rgba(255,255,255,.5);margin-top:2px}
 
     /* BENEFITS */
-    .section{max-width:560px;margin:0 auto;padding:36px 16px}
+    .section{padding:36px 16px}
     .sec-label{font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:18px}
     .benefits-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .benefit{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:18px 14px;box-shadow:var(--sh)}
@@ -111,7 +118,7 @@
 
 <!-- HERO -->
 <section class="hero">
-  <div class="hero-inner">
+  <div class="hero-inner container">
     <div class="hero-tag">🤝 Programa de Parceiros</div>
     <h1>O seu negócio<br/>alcança mais <em>clientes</em></h1>
     <p>Junte-se à rede MzDocs — papelaria, gráfica ou advogado — e receba pedidos de utilizadores próximos que geram documentos na plataforma, sem comissão inicial.</p>
@@ -124,7 +131,7 @@
 </section>
 
 <!-- BENEFÍCIOS -->
-<section class="section">
+<section class="section container">
   <p class="sec-label">Porquê aderir</p>
   <div class="benefits-grid">
     <div class="benefit">
@@ -151,7 +158,7 @@
 </section>
 
 <!-- COMO FUNCIONA -->
-<section class="section" style="padding-top:0">
+<section class="section container" style="padding-top:0">
   <p class="sec-label">Como funciona</p>
   <div class="steps">
     <div class="step">
@@ -186,7 +193,7 @@
 </section>
 
 <!-- FORMULÁRIO -->
-<section class="section" style="padding-top:0;padding-bottom:60px">
+<section class="section container" style="padding-top:0;padding-bottom:60px">
   <p class="sec-label">Candidatura</p>
   <div class="form-card">
     <div class="form-title" id="formTitle">📋 Registar Parceiro</div>
