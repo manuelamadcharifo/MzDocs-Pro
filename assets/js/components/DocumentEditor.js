@@ -307,6 +307,17 @@ export class DocumentEditor {
     // edições do utilizador nesta sessão do editor) — ver comentário na
     // declaração de _editorDirty no construtor.
     this._editorDirty = false;
+    // CORRIGIDO (bug: cores/fonte diferentes entre Preview e Editar): as
+    // folhas .ed-word-page tinham SEMPRE a mesma tipografia fixa definida
+    // em editor.css (Calibri, títulos a azul #2E74B5/#1F3864 com
+    // border-bottom) — um estilo "genérico estilo Word" que nunca teve
+    // qualquer ligação ao que o Preview/PDF/Word realmente usam (Times New
+    // Roman, títulos pretos — DEFAULT_PAGE_CSS em A4Renderer.js — ou o CSS
+    // do template escolhido, this._templateCss). Isto fazia o Editar
+    // parecer sempre visualmente diferente do documento real, seja qual
+    // fosse o conteúdo. Agora injecta-se a MESMA folha de estilos usada no
+    // Preview, escopada às folhas do editor.
+    this._applyEditorPageCss();
     const pages = (Array.isArray(htmlPages) && htmlPages.length) ? htmlPages : ['<p><br></p>'];
     pages.forEach((pageHtml, idx) => {
       if (idx > 0) {
@@ -322,6 +333,50 @@ export class DocumentEditor {
       pageEl.dataset.pageIndex = String(idx);
       pageEl.innerHTML = pageHtml;
       wrap.appendChild(pageEl);
+    });
+  }
+
+  // ── CORRIGIDO: unifica a aparência do modo Editar com o Preview/PDF/Word ──
+  // Injecta um <style> escopado a "#edWordPagesWrap .ed-word-page", com
+  // especificidade suficiente para vencer as regras genéricas e fixas de
+  // editor.css (.ed-word-page h1/h2 {...}). Usa o CSS do template escolhido
+  // quando existe (this._templateCss — o mesmo aplicado no Preview, ver
+  // _renderPreviewInner), ou a tipografia base de DEFAULT_PAGE_CSS
+  // (A4Renderer.js) quando não há template: Times New Roman, títulos a
+  // preto, sem sublinhado/border-bottom artificial.
+  _applyEditorPageCss() {
+    const styleId = 'ed-page-dynamic-style';
+    document.getElementById(styleId)?.remove();
+    const scope = '#edWordPagesWrap .ed-word-page';
+    const styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = this._templateCss
+      ? this._scopeCssToEditorPages(this._templateCss, scope)
+      : `
+        ${scope}{font-family:'Times New Roman',Times,serif;color:#111827;}
+        ${scope} h1{color:#111827;}
+        ${scope} h2{color:#111827;border-bottom:none;padding-bottom:0;}
+        ${scope} h3{font-style:italic;}
+        ${scope} h4{color:#333;}
+      `;
+    document.head.appendChild(styleEl);
+  }
+
+  // Prefixa cada selector top-level de `css` com `scope`, para que regras
+  // pensadas originalmente para uma página inteira (incl. "body{...}") só
+  // afectem as folhas do editor, nunca o resto da aplicação. "body" é
+  // tratado como a própria folha (.ed-word-page), já que aqui o conteúdo
+  // vive directamente dentro dela, sem um <body> real.
+  _scopeCssToEditorPages(css, scope) {
+    if (!css) return '';
+    return css.replace(/(^|\})\s*([^{}@][^{}]*)\{/g, (match, brace, selectorList) => {
+      const scoped = selectorList.split(',').map(sel => {
+        sel = sel.trim();
+        if (!sel) return sel;
+        if (/^body\b/.test(sel)) return scope + sel.replace(/^body/, '');
+        return `${scope} ${sel}`;
+      }).join(', ');
+      return `${brace} ${scoped} {`;
     });
   }
 
@@ -1524,12 +1579,15 @@ export class DocumentEditor {
       if (editFrame && editFrame.contentDocument?.body) {
         try { finalTemplate = editFrame.contentDocument.body.innerHTML; } catch(_) {}
       }
-    } else {
-      const hasEditedContent = this._getEditorPages().some(p => p.innerHTML && p.innerHTML.trim().length > 10);
-      if (hasEditedContent) {
-        this._syncContentFromEditor();
-        finalContent = this.content;
-      }
+    } else if (this._editorDirty) {
+      // CORRIGIDO: mesma causa do bug de paginação já corrigido em
+      // _switchMode('preview') — a heurística antiga ("innerHTML.length > 10")
+      // disparava esta sincronização mesmo sem edição real, e ao fechar
+      // directamente (sem passar por Preview) o mesmo problema de páginas a
+      // juntarem-se podia ocorrer aqui. Agora só sincroniza se
+      // this._editorDirty for verdadeiro (edição real, ver listener 'input').
+      this._syncContentFromEditor();
+      finalContent = this.content;
     }
 
     // v40: só conta como "edição real" se o conteúdo final (ou o template
@@ -1555,6 +1613,7 @@ export class DocumentEditor {
     this.modal.style.display = 'none';
     document.body.style.overflow = '';
     document.getElementById('ed-tpl-style')?.remove();
+    document.getElementById('ed-page-dynamic-style')?.remove();
     this._templateEditFrame = null;
   }
 
