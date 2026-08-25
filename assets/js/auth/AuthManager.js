@@ -145,7 +145,7 @@ export class AuthManager {
  ]);
  }
 
-  async signUp(phone, email, password, fullName = '', consentTerms = false) {
+  async signUp(phone, email, password, fullName = '', consentTerms = false, whatsapp = '', consentMarketing = false) {
     console.log('[AuthManager] signUp: A iniciar criação de conta…', { email, phone });
 
     // Capturar ref_code do link de afiliado se existir.
@@ -184,7 +184,7 @@ export class AuthManager {
         fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, email, password, fullName, ref_code: refCode, visitor_id: visitorId, consentTerms })
+          body: JSON.stringify({ phone, email, password, fullName, ref_code: refCode, visitor_id: visitorId, consentTerms, whatsapp, consentMarketing })
         }),
         15000,
         'O servidor demorou demasiado a criar a conta. Tente novamente.'
@@ -348,24 +348,23 @@ export class AuthManager {
  return data;
  }
 
- async resetPasswordByEmail(email) {
- if (!this.supabase) throw new Error('Supabase não configurado');
- const siteUrl = window.location.origin;
- const { error } = await this.supabase.auth.resetPasswordForEmail(email.trim(), {
- redirectTo: `${siteUrl}/?reset=true`,
- });
- if (error) throw new Error(error.message);
- return { success: true };
- }
-
- async resetPassword(phone, newPassword) {
+ // CORRIGIDO: antes chamava directamente this.supabase.auth.resetPasswordForEmail()
+ // no browser — funcionava, mas contornava por completo o rate limiting e o
+ // endpoint /api/auth/reset-password (api/auth/index.js), que já existiam no
+ // backend mas nunca eram chamados por nenhum ecrã. Na prática, o pedido de
+ // recuperação de password não tinha NENHUMA protecção contra abuso/spam de
+ // e-mails. Agora passa sempre pelo backend, que aplica o limite (5/hora/IP)
+ // e devolve sempre a mesma mensagem genérica (não revela se a conta existe).
+ // `identifier` aceita e-mail OU número de telemóvel/WhatsApp (ver
+ // migration_v62 + campo regWhatsapp em AuthUI.js).
+ async resetPasswordByEmail(identifier) {
  const res = await fetch('/api/auth/reset-password', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
- body: JSON.stringify({ phone, newPassword })
+ body: JSON.stringify({ identifier: (identifier || '').trim() })
  });
- const data = await res.json();
- if (!res.ok) throw new Error(data.error || 'Erro ao redefinir password');
+ const data = await res.json().catch(() => ({}));
+ if (!res.ok) throw new Error(data.error || 'Erro ao pedir recuperação de password');
  return data;
  }
 
