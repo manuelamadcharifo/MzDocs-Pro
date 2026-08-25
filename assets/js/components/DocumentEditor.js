@@ -12,6 +12,14 @@ export class DocumentEditor {
     this.onReedit    = null;
     this._previewFmt = 'pdf';
     this._resizeHandler = null;
+    // CORRIGIDO (bug: entrar em "Editar" já modificava o documento, e ao
+    // voltar ao Preview as páginas juntavam-se numa só): antes, o Preview
+    // por defeito re-sincronizava o conteúdo do editor com base numa
+    // heurística ("a folha tem mais de 10 caracteres?"), que era quase
+    // sempre verdadeira mesmo sem o utilizador ter escrito nada. Esta flag
+    // só fica `true` quando existe uma edição REAL (evento 'input' na folha
+    // editável) — ver _renderEditorPages() e o listener 'input' abaixo.
+    this._editorDirty = false;
     this._createModal();
   }
 
@@ -254,6 +262,7 @@ export class DocumentEditor {
     if (pagesWrap) {
       pagesWrap.addEventListener('input', (e) => {
         if (!e.target.classList?.contains('ed-word-page')) return;
+        this._editorDirty = true;
         this._syncContentFromEditor();
         this._updateStats();
       });
@@ -294,6 +303,10 @@ export class DocumentEditor {
     const wrap = this._getEditorPagesWrap();
     if (!wrap) return;
     wrap.innerHTML = '';
+    // Cada (re)criação das folhas parte de conteúdo "limpo" (ainda sem
+    // edições do utilizador nesta sessão do editor) — ver comentário na
+    // declaração de _editorDirty no construtor.
+    this._editorDirty = false;
     const pages = (Array.isArray(htmlPages) && htmlPages.length) ? htmlPages : ['<p><br></p>'];
     pages.forEach((pageHtml, idx) => {
       if (idx > 0) {
@@ -485,7 +498,15 @@ export class DocumentEditor {
         // Ocultar iframe de edição e restaurar word-page-wrap
         if (editFrame) editFrame.style.display = 'none';
         if (pagesWrap) pagesWrap.style.display = '';
-      } else if (this._getEditorPages().some(p => p.innerHTML && p.innerHTML.trim().length > 10)) {
+      } else if (this._editorDirty) {
+        // CORRIGIDO: antes a condição era
+        // "this._getEditorPages().some(p => innerHTML.trim().length > 10)",
+        // que era quase sempre verdadeira mesmo sem qualquer edição real —
+        // isso fazia o simples acto de abrir a aba "Editar" e voltar ao
+        // "Preview" reconverter o HTML para markdown (ver
+        // _syncContentFromEditor) e perder o marcador de página, unindo as
+        // folhas. Agora só ressincroniza se o utilizador escreveu mesmo
+        // algo (this._editorDirty, definido no listener 'input' da folha).
         this._syncContentFromEditor();
       }
       previewWrap.style.display = 'flex';
@@ -550,7 +571,19 @@ export class DocumentEditor {
           } else if (this._richHTMLPages && this._richHTMLPages.length) {
             this._renderEditorPages(this._richHTMLPages);
           } else {
-            this._renderEditorPages(this._mdToRichHTML(this.content));
+            // CORRIGIDO: usar o conteúdo REAL paginado (this._paginatedContent,
+            // calculado por Paginator.js a partir da altura medida no browser —
+            // ver _schedulePagination/_renderPreview) sempre que já estiver
+            // disponível para o conteúdo actual. Antes, usava-se sempre
+            // this.content em bruto, que não tem o marcador ---PAGE_BREAK---
+            // inserido pela paginação real — por isso o editor mostrava tudo
+            // numa única folha mesmo quando o Preview já mostrava 2 páginas
+            // (paginação por transbordo real de altura, não por marcador
+            // explícito no texto original).
+            const sourceForEdit = (this._paginationSource === this.content && this._paginatedContent)
+              ? this._paginatedContent
+              : this.content;
+            this._renderEditorPages(this._mdToRichHTML(sourceForEdit));
           }
         }
         setTimeout(() => {
