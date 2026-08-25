@@ -323,7 +323,16 @@ async function handleNearby(req, res) {
     const results = (Array.isArray(data) ? data : [])
       .map(p => ({
         ...p,
-        distance_km: Math.round(haversine(lat, p.lat, lng, p.lng) * 10) / 10,
+        // CORRIGIDO (bug crítico — Ago/2026): a chamada trocava lng do
+        // utilizador pela lat da parceira ("haversine(lat, p.lat, lng,
+        // p.lng)"), misturando os dois eixos. A função espera
+        // (lat1, lng1, lat2, lng2); os argumentos corretos são
+        // (lat, lng, p.lat, p.lng). Isto fazia a distância calculada não
+        // corresponder à distância real — o utilizador podia estar a
+        // metros de uma parceira e mesmo assim ela ser filtrada por
+        // "distance_km > km" (ver `.filter` abaixo), aparecendo como "não
+        // há parceiras na sua área".
+        distance_km: Math.round(haversine(lat, lng, p.lat, p.lng) * 10) / 10,
         rating: p.rating_count > 0 ? Math.round((p.rating_sum / p.rating_count) * 10) / 10 : null,
       }))
       .filter(p => p.distance_km <= km)
