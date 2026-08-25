@@ -915,6 +915,13 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .np-empty-ico{font-size:28px;margin-bottom:8px}
 .np-empty-text{font-size:12.5px;line-height:1.6}
 
+/* NOVO (Ago/2026) — cartões "há papelarias perto, mas não fazem este
+   serviço" dentro do estado vazio de buildPartnersHTML() */
+.np-alt-list{display:flex;flex-direction:column;gap:8px;margin:10px 0;text-align:left}
+.np-alt-card{background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:9px 12px}
+.np-alt-head{display:flex;justify-content:space-between;align-items:center;font-size:12.5px}
+.np-alt-services{font-size:11.5px;color:var(--muted);margin-top:3px}
+
 /* NOVO (v2.1) — cards de advogados: selo OAM, tags de área jurídica, aviso legal */
 .np-oam{font-size:11px;font-weight:700;color:#047857;margin-bottom:4px}
 .np-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
