@@ -55,6 +55,10 @@ function selectPartner(el) {
 
   window._mzSelectedPartnerWA   = wa;
   window._mzSelectedPartnerName = el.dataset.name || '';
+  // NOVO (Ago/2026 — agendamento): guarda também o id da papelaria, usado
+  // por DocumentController.sendDirect() para criar o registo de marcação
+  // em /api/partners?action=create-booking antes de abrir o WhatsApp.
+  window._mzSelectedPartnerId   = el.dataset.id || null;
 
   const btnWa = document.getElementById('btnWaDirect');
   if (btnWa) btnWa.disabled = false;
@@ -69,6 +73,7 @@ function selectPartner(el) {
 function resetPartnerSelection() {
   window._mzSelectedPartnerWA   = null;
   window._mzSelectedPartnerName = null;
+  window._mzSelectedPartnerId   = null;
   const btnWa = document.getElementById('btnWaDirect');
   if (btnWa) btnWa.disabled = true;
   const hint = document.getElementById('mzWaHint');
