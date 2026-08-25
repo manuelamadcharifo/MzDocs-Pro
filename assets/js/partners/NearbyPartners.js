@@ -26,6 +26,13 @@ const SPECIALTY_LABEL = {
 };
 
 // ── Geolocalização com cache ──────────────────────────────────────────────
+// CORRIGIDO (Ago/2026): enableHighAccuracy:false usava triangulação de
+// rede/WiFi em vez de GPS — em Moçambique, com poucos pontos de referência
+// WiFi/torres mapeados, isto podia errar por vários km (relatado: cliente
+// fisicamente ao lado de uma papelaria via "não há parceiras na área",
+// porque a localização de rede o colocou longe dali). Passa a pedir GPS
+// real; o timeout sobe de 8s para 12s porque um "fix" de GPS demora mais
+// a assentar do que uma resposta de rede, sobretudo em interiores.
 export function getUserLocation() {
   return new Promise((resolve, reject) => {
     // Usar cache se recente
@@ -35,12 +42,12 @@ export function getUserLocation() {
     if (!navigator.geolocation) return reject(new Error('sem_geo'));
     navigator.geolocation.getCurrentPosition(
       pos => {
-        _geoCache = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        _geoCache = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
         _geoTs = Date.now();
         resolve(_geoCache);
       },
       err => reject(err),
-      { timeout: 8000, maximumAge: CACHE_TTL, enableHighAccuracy: false }
+      { timeout: 12000, maximumAge: CACHE_TTL, enableHighAccuracy: true }
     );
   });
 }
@@ -55,6 +62,10 @@ export async function fetchNearbyPartners(svcId, lat, lng, type = 'papelaria') {
   const url = `/api/partners?action=nearby&lat=${lat}&lng=${lng}&service=${svcId}&type=${type}&km=10`;
   const res  = await fetch(url);
   const data = await res.json();
+  // NOVO: quando não há ninguém dentro do raio habitual, o backend devolve
+  // a(s) parceira(s) mais próxima(s) na mesma, marcadas com
+  // outside_radius=true — ver api/partners.js. Preserva-se essa marca ao
+  // guardar em cache para o aviso continuar a aparecer.
   const partners = data.ok ? (data.partners || []) : [];
   _partnersCache[key] = { data: partners, ts: Date.now() };
   return partners;
@@ -72,6 +83,15 @@ export function buildPartnersHTML(partners, svcLabel) {
       </div>
     </div>`;
   }
+
+  // NOVO: quando a lista veio do fallback "fora do raio habitual" (rede
+  // ainda pequena — ver api/partners.js), avisa antes dos cartões em vez
+  // de os mostrar como se estivessem perto, sem contexto.
+  const anyOutside = partners.some(p => p.outside_radius);
+  const outsideNotice = anyOutside ? `
+    <div class="np-notice" style="background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:10px">
+      📍 Ainda não há parceiras perto de si — mas esta(s) já entregam pela zona:
+    </div>` : '';
 
   const cards = partners.map(p => {
     const dist  = p.distance_km < 1
@@ -99,6 +119,7 @@ export function buildPartnersHTML(partners, svcLabel) {
       <div class="np-title">🏪 Parceiras próximas</div>
       <div class="np-sub">Escolha uma para enviar o pedido</div>
     </div>
+    ${outsideNotice}
     <div class="np-list">${cards}</div>
     <div class="np-footer">
       <a href="/parceiros.html" target="_blank" rel="noopener" class="np-link">
@@ -121,6 +142,12 @@ export function buildLawyersHTML(lawyers) {
       </div>
     </div>`;
   }
+
+  const anyOutside = lawyers.some(p => p.outside_radius);
+  const outsideNotice = anyOutside ? `
+    <div class="np-notice" style="background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:10px">
+      📍 Ainda não há advogados perto de si — mas este(s) já atendem à distância:
+    </div>` : '';
 
   const cards = lawyers.map(p => {
     const dist  = p.distance_km < 1
@@ -151,6 +178,7 @@ export function buildLawyersHTML(lawyers) {
       <div class="np-title">⚖️ Advogados próximos</div>
       <div class="np-sub">Revisão profissional deste documento, se precisar</div>
     </div>
+    ${outsideNotice}
     <div class="np-list">${cards}</div>
     <div class="np-disclaimer">
       O MzDocs Pro apenas liga-o a advogados independentes registados na
