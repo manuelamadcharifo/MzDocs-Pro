@@ -2353,17 +2353,39 @@ async function handleBlogQueue(req, res) {
       );
       const items = data || [];
 
+      // NOVO (Ago/2026): itens publicados guardam blog_page_id (o id real
+      // em blog_pages — ver api/_services/blog.js, PATCH com
+      // { status:'published', blog_page_id: article.id }), mas não o
+      // slug. Sem o slug, o painel "Já Publicados (pela fila)" não tinha
+      // como oferecer Ver/Editar/Apagar (ficava só com "—") — só a tabela
+      // de gestão de páginas, mais abaixo, tinha esses botões. Uma
+      // segunda consulta traz slug+title dos artigos publicados pela
+      // fila, e cada item devolvido ganha `slug` (null se a página já
+      // não existir — ex.: apagada entretanto na tabela de páginas).
+      const publishedIds = [...new Set(items.filter(i => i.status === 'published' && i.blog_page_id).map(i => i.blog_page_id))];
+      let slugById = {};
+      if (publishedIds.length) {
+        const pagesData = await restRequest(
+          `blog_pages?id=in.(${publishedIds.map(id => encodeURIComponent(id)).join(',')})&select=id,slug`
+        ).catch(() => []);
+        (pagesData || []).forEach(p => { slugById[p.id] = p.slug; });
+      }
+      const itemsWithSlug = items.map(i => ({
+        ...i,
+        slug: i.blog_page_id ? (slugById[i.blog_page_id] || null) : null,
+      }));
+
       const now = new Date();
       const curKey = _monthKey(now);
-      const thisMonthCount = items.filter(i => i.status !== 'failed' && _monthKey(new Date(i.scheduled_at)) === curKey).length;
+      const thisMonthCount = itemsWithSlug.filter(i => i.status !== 'failed' && _monthKey(new Date(i.scheduled_at)) === curKey).length;
 
       return res.status(200).json({
         success: true,
-        data: items,
+        data: itemsWithSlug,
         summary: {
-          pendingCount:   items.filter(i => i.status === 'pending').length,
-          publishedCount: items.filter(i => i.status === 'published').length,
-          failedCount:    items.filter(i => i.status === 'failed').length,
+          pendingCount:   itemsWithSlug.filter(i => i.status === 'pending').length,
+          publishedCount: itemsWithSlug.filter(i => i.status === 'published').length,
+          failedCount:    itemsWithSlug.filter(i => i.status === 'failed').length,
           thisMonthCount,
           monthlyLimit,
           minIntervalDays,
