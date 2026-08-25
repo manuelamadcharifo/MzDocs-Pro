@@ -12,6 +12,13 @@ document.addEventListener('click', (e) => {
   if (!el) return;
   if (el.dataset.action === 'partnerClick' && window._mzPartnerClick) window._mzPartnerClick(el.dataset.id);
   if (el.dataset.action === 'retryGeo' && window._mzRetryGeo) window._mzRetryGeo(el.dataset.svc);
+  // NOVO: "tentar novamente" depois de uma busca que já correu (encontrou
+  // 0 parceiras, ou encontrou fora do raio) — ao contrário de "retryGeo"
+  // (só existe quando a geolocalização falhou), este limpa a localização
+  // e a lista em cache e repete tudo do zero, útil ex.: depois do GPS
+  // assentar numa posição mais precisa ou do utilizador se ter deslocado.
+  if (el.dataset.action === 'forceRetryPartners' && window._mzForceRetryPartners) window._mzForceRetryPartners(el.dataset.svc);
+  if (el.dataset.action === 'forceRetryLawyers' && window._mzForceRetryLawyers) window._mzForceRetryLawyers();
 });
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
@@ -72,7 +79,16 @@ export async function fetchNearbyPartners(svcId, lat, lng, type = 'papelaria') {
 }
 
 // ── Gerar HTML do bloco de parceiras (papelaria) ──────────────────────────
-export function buildPartnersHTML(partners, svcLabel) {
+export function buildPartnersHTML(partners, svcId) {
+  // NOVO: botão de retry real (limpa a localização em cache e repete a
+  // busca do zero) — antes só existia para o caso de a geolocalização
+  // falhar (buildGeoErrorHTML); depois de uma busca que correu mas não
+  // encontrou ninguém não havia NENHUMA forma de tentar de novo sem sair
+  // do formulário e reabrir o serviço.
+  const retryBtn = `<button type="button" class="np-btn-geo" data-action="forceRetryPartners" data-svc="${escapeHtml(svcId)}" style="margin-top:8px">
+    🔄 Tentar novamente
+  </button>`;
+
   if (!partners.length) {
     return `<div class="np-empty">
       <div class="np-empty-ico">📍</div>
@@ -81,16 +97,22 @@ export function buildPartnersHTML(partners, svcLabel) {
           Conhece uma papelaria? Convide-a →
         </a>
       </div>
+      ${retryBtn}
     </div>`;
   }
 
   // NOVO: quando a lista veio do fallback "fora do raio habitual" (rede
   // ainda pequena — ver api/partners.js), avisa antes dos cartões em vez
-  // de os mostrar como se estivessem perto, sem contexto.
+  // de os mostrar como se estivessem perto, sem contexto. Inclui o mesmo
+  // botão de retry — útil se a imprecisão da localização for a causa
+  // (ver enableHighAccuracy em getUserLocation) e o utilizador quiser
+  // tentar apanhar um GPS mais preciso antes de assumir que está mesmo
+  // longe.
   const anyOutside = partners.some(p => p.outside_radius);
   const outsideNotice = anyOutside ? `
     <div class="np-notice" style="background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:10px">
       📍 Ainda não há parceiras perto de si — mas esta(s) já entregam pela zona:
+      ${retryBtn}
     </div>` : '';
 
   const cards = partners.map(p => {
@@ -132,6 +154,10 @@ export function buildPartnersHTML(partners, svcLabel) {
 // Mesmo padrão visual do bloco de papelarias, mas com selo de confiança
 // (nº OAM) e tags de área de atuação em vez de tipo de impressão.
 export function buildLawyersHTML(lawyers) {
+  const retryBtn = `<button type="button" class="np-btn-geo" data-action="forceRetryLawyers" style="margin-top:8px">
+    🔄 Tentar novamente
+  </button>`;
+
   if (!lawyers.length) {
     return `<div class="np-empty">
       <div class="np-empty-ico">⚖️</div>
@@ -140,6 +166,7 @@ export function buildLawyersHTML(lawyers) {
           É advogado(a)? Junte-se à rede →
         </a>
       </div>
+      ${retryBtn}
     </div>`;
   }
 
@@ -224,8 +251,17 @@ export async function injectPartnersIntoModal(svcId, containerSelector) {
 
   container.innerHTML = buildLoadingHTML();
 
-  // Retry handler (botão "Activar localização")
+  // Retry handler (botão "Activar localização", quando a geolocalização falha)
   window._mzRetryGeo = (id) => injectPartnersIntoModal(id, containerSelector);
+  // NOVO: retry handler para depois de uma busca que já correu (0
+  // resultados, ou fora do raio) — limpa a localização E a lista em
+  // cache antes de repetir, para não devolver instantaneamente o mesmo
+  // resultado antigo guardado (a cache normal dura 5 minutos).
+  window._mzForceRetryPartners = (id) => {
+    _geoCache = null; _geoTs = 0;
+    _partnersCache = {};
+    injectPartnersIntoModal(id, containerSelector);
+  };
 
   try {
     const { lat, lng } = await getUserLocation();
@@ -253,6 +289,12 @@ export async function injectLawyersIntoModal(containerSelector, specialty = '') 
 
   container.innerHTML = buildLoadingHTML('A procurar advogados próximos…');
   window._mzRetryGeoLawyer = () => injectLawyersIntoModal(containerSelector, specialty);
+  // NOVO: mesmo retry "a sério" do bloco de papelarias acima.
+  window._mzForceRetryLawyers = () => {
+    _geoCache = null; _geoTs = 0;
+    _partnersCache = {};
+    injectLawyersIntoModal(containerSelector, specialty);
+  };
 
   try {
     const { lat, lng } = await getUserLocation();
