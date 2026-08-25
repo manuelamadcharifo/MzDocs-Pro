@@ -10,7 +10,11 @@ import { escapeHtml } from '../utils/Sanitizer.js';
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if (!el) return;
-  if (el.dataset.action === 'partnerClick' && window._mzPartnerClick) window._mzPartnerClick(el.dataset.id);
+  // ALTERADO: "partnerClick" já não abre o WhatsApp directamente — passa a
+  // seleccionar a papelaria (ver selectPartner() abaixo), que activa o botão
+  // fixo "Enviar pelo WhatsApp Grátis" do formulário em vez de contactar a
+  // papelaria sem os dados do pedido.
+  if (el.dataset.action === 'partnerClick') selectPartner(el);
   if (el.dataset.action === 'retryGeo' && window._mzRetryGeo) window._mzRetryGeo(el.dataset.svc);
   // NOVO: "tentar novamente" depois de uma busca que já correu (encontrou
   // 0 parceiras, ou encontrou fora do raio) — ao contrário de "retryGeo"
@@ -25,6 +29,51 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 let _geoCache   = null;
 let _geoTs      = 0;
 let _partnersCache = {}; // key: "type-svc-lat-lng"
+
+// ── Selecção de papelaria (NOVO) ──────────────────────────────────────────
+// Chamado ao clicar num cartão da lista "Parceiras próximas". Marca o
+// cartão como seleccionado, guarda o WhatsApp da papelaria escolhida em
+// window._mzSelectedPartnerWA (lido por DocumentController.sendDirect()) e
+// activa o botão fixo "Enviar pelo WhatsApp Grátis", que nasce desactivado
+// em Views.renderForm() até o utilizador escolher uma papelaria.
+function selectPartner(el) {
+  const wa = (el.dataset.wa || '').replace(/\D/g, '');
+  if (!wa) return; // papelaria sem WhatsApp configurado — não activa o envio
+
+  const card = el.closest('.np-card');
+  const list = el.closest('.np-list');
+
+  // Só um cartão seleccionado de cada vez
+  list?.querySelectorAll('.np-card.np-selected').forEach(c => c.classList.remove('np-selected'));
+  card?.classList.add('np-selected');
+  list?.querySelectorAll('.np-btn-select').forEach(b => {
+    b.classList.remove('np-btn-select--active');
+    b.innerHTML = '<span>📲</span> Selecionar esta papelaria';
+  });
+  el.classList.add('np-btn-select--active');
+  el.innerHTML = '<span>✅</span> Papelaria seleccionada';
+
+  window._mzSelectedPartnerWA   = wa;
+  window._mzSelectedPartnerName = el.dataset.name || '';
+
+  const btnWa = document.getElementById('btnWaDirect');
+  if (btnWa) btnWa.disabled = false;
+  const hint = document.getElementById('mzWaHint');
+  if (hint) hint.textContent = `✓ Pronto a enviar para ${window._mzSelectedPartnerName || 'a papelaria seleccionada'}`;
+}
+
+// ── Reset da selecção (NOVO) ──────────────────────────────────────────────
+// Chamado sempre que a lista de parceiras é (re)carregada — nova busca,
+// "tentar novamente", ou abertura de um novo formulário — para nenhuma
+// selecção antiga ficar "presa" a uma papelaria que já não está na lista.
+function resetPartnerSelection() {
+  window._mzSelectedPartnerWA   = null;
+  window._mzSelectedPartnerName = null;
+  const btnWa = document.getElementById('btnWaDirect');
+  if (btnWa) btnWa.disabled = true;
+  const hint = document.getElementById('mzWaHint');
+  if (hint) hint.textContent = '📍 Escolha uma papelaria abaixo para activar o envio';
+}
 
 // Rótulos de área jurídica para as tags do card de advogado.
 const SPECIALTY_LABEL = {
@@ -115,24 +164,31 @@ export function buildPartnersHTML(partners, svcId) {
       ${retryBtn}
     </div>` : '';
 
+  // ALTERADO: já não é um <a href="wa.me/..."> que abre o WhatsApp de
+  // imediato (sem os dados do pedido preenchidos no formulário) — passa a
+  // ser um <button> que apenas SELECCIONA a papelaria (selectPartner()),
+  // activando o botão fixo "Enviar pelo WhatsApp Grátis", que é quem
+  // realmente monta e envia a mensagem com os dados do pedido para o
+  // WhatsApp da papelaria escolhida (ver DocumentController.sendDirect()).
   const cards = partners.map(p => {
     const dist  = p.distance_km < 1
       ? `${Math.round(p.distance_km * 1000)}m`
       : `${p.distance_km}km`;
     const rating = p.rating ? `⭐ ${p.rating}` : '';
-    const wa = `https://wa.me/${(p.whatsapp||'').replace(/\D/g,'')}`;
+    const waDigits = (p.whatsapp || '').replace(/\D/g, '');
     return `
-      <div class="np-card">
+      <div class="np-card" data-partner-id="${escapeHtml(p.id)}">
         <div class="np-card-head">
           <div class="np-name">${escapeHtml(p.name)}</div>
           <div class="np-dist">${dist}</div>
         </div>
         ${p.hours ? `<div class="np-hours">🕐 ${escapeHtml(p.hours)}</div>` : ''}
         ${rating   ? `<div class="np-rating">${rating}</div>` : ''}
-        <a href="${wa}" target="_blank" rel="noopener" class="np-btn-wa"
-           data-action="partnerClick" data-id="${escapeHtml(p.id)}">
-          <span>📲</span> Contactar via WhatsApp
-        </a>
+        <button type="button" class="np-btn-select"
+           data-action="partnerClick" data-id="${escapeHtml(p.id)}"
+           data-wa="${escapeHtml(waDigits)}" data-name="${escapeHtml(p.name)}">
+          <span>📲</span> Selecionar esta papelaria
+        </button>
       </div>`;
   }).join('');
 
@@ -248,6 +304,12 @@ export function buildGeoErrorHTML(svcId) {
 export async function injectPartnersIntoModal(svcId, containerSelector) {
   const container = document.querySelector(containerSelector);
   if (!container) return;
+
+  // NOVO: qualquer (re)carregamento da lista limpa a selecção anterior e
+  // desactiva de novo o botão "Enviar pelo WhatsApp Grátis" — evita enviar
+  // para uma papelaria seleccionada numa busca anterior que já não é
+  // mostrada (ex.: depois de "tentar novamente").
+  resetPartnerSelection();
 
   container.innerHTML = buildLoadingHTML();
 
