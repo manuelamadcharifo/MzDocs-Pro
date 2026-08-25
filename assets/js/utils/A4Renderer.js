@@ -563,13 +563,22 @@ export function openFullscreenA4Preview(pageMarkdowns, opts = {}) {
 // ── CSS partilhado das folhas A4 (sombra, espaçamento, separador) ──────────
 // Deve ser injectado uma vez em cada ecrã que use renderA4Pages (TemplatePicker
 // já tem o seu próprio bloco de CSS — Views.js precisa deste).
+// CORRIGIDO: max-width tinha de acompanhar SEMPRE a largura real do .sheet
+// que envolve este preview (ver assets/css/styles.css). scalePage() calcula a
+// escala do iframe a partir da largura REAL do contentor (.res-a4-wrap, que
+// vive dentro de .sheet) — se este .a4-page tiver um max-width mais estreito
+// do que essa largura medida, o iframe é escalado maior do que a caixa que o
+// deve conter e o texto passa a transbordar para fora da folha (branco) para
+// o fundo escuro. .sheet passou de 560px para 720px — este valor tem de ser
+// o mesmo, ou a mesma incompatibilidade volta a acontecer da próxima vez que
+// um dos dois for alterado sem o outro.
 export const A4_PAGES_CONTAINER_CSS = `
 .a4-pages-outer{
   display:flex;flex-direction:column;align-items:center;
   gap:14px;padding:16px 12px;background:#475569;
 }
 .a4-page{
-  background:#fff;width:100%;max-width:560px;min-height:200px;
+  background:#fff;width:100%;max-width:720px;min-height:200px;
   border-radius:3px;overflow:hidden;flex-shrink:0;position:relative;
   box-shadow:0 4px 24px rgba(0,0,0,.35),0 1px 4px rgba(0,0,0,.15);
 }
