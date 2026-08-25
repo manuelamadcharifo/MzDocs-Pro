@@ -184,14 +184,15 @@ function _isTooSimilar(candidateTitle, existingTitles, threshold = 0.55) {
 // de 9s por provider e disjuntor por modelo, tal como a geração de
 // documentos. Zero providers a mais para configurar — usa exactamente as
 // mesmas env vars já ligadas no admin ("IA Providers").
-async function _callAiText(prompt, { maxTokens = 3000 } = {}) {
+async function _callAiText(prompt, { maxTokens = 3000, temperature = 0.5 } = {}) {
   const apiKeys = buildApiKeysFromEnv();
   if (Object.keys(apiKeys).length === 0) return null;
 
   try {
     const result = await raceAllProviders(
       prompt, apiKeys, /* preferProvider */ null, maxTokens,
-      'És um especialista em SEO e redacção de conteúdo para o mercado moçambicano. Respondes apenas com o conteúdo pedido, sem comentários adicionais.'
+      'És um especialista em SEO e redacção de conteúdo para o mercado moçambicano. Respondes apenas com o conteúdo pedido, sem comentários adicionais.',
+      temperature
     );
     return { text: result.content, provider: result.provider };
   } catch (e) {
