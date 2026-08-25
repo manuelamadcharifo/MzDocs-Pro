@@ -67,6 +67,42 @@
     .rating-badge{display:inline-flex;align-items:center;gap:4px;background:#FEF9C3;color:#854D0E;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700}
     #portalScreen{display:none}
     .hint{font-size:11.5px;color:var(--muted);margin-top:-8px;margin-bottom:14px;line-height:1.5}
+
+    /* NOVO (Ago/2026 — agendamento): abas Perfil / Marcações dentro do
+       Portal, e cartões de marcação (bookings) na aba nova. */
+    .ptabs{display:flex;gap:8px;margin-bottom:16px;background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:5px}
+    .ptab{flex:1;text-align:center;padding:10px 6px;border-radius:10px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;user-select:none;position:relative}
+    .ptab.active{background:var(--ink);color:#fff}
+    .ptab-badge{display:inline-block;min-width:18px;padding:0 5px;background:var(--red);color:#fff;border-radius:20px;font-size:10.5px;font-weight:800;margin-left:5px;vertical-align:middle}
+    #tabProfile,#tabBookings{display:none}
+    #tabProfile.show,#tabBookings.show{display:block}
+
+    .bk-filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:14px}
+    .bk-filter{flex-shrink:0;padding:8px 13px;border-radius:20px;border:1.5px solid var(--border);background:var(--white);font-family:inherit;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer}
+    .bk-filter.active{background:#EFF6FF;border-color:var(--blue);color:var(--blue)}
+
+    .bk-card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--sh)}
+    .bk-card + .bk-card{margin-top:12px}
+    .bk-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+    .bk-title{font-size:14.5px;font-weight:800}
+    .bk-sub{font-size:12px;color:var(--muted);margin-top:2px}
+    .bk-status{flex-shrink:0;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:800;white-space:nowrap}
+    .bk-status.pendente{background:#FEF9C3;color:#854D0E}
+    .bk-status.agendado{background:#DBEAFE;color:#1D4ED8}
+    .bk-status.em_andamento{background:#EDE9FE;color:#6D28D9}
+    .bk-status.concluido{background:#DCFCE7;color:#166534}
+    .bk-status.cancelado{background:#FEE2E2;color:#991B1B}
+    .bk-details{font-size:12.5px;color:var(--ink);background:var(--surface);border-radius:10px;padding:10px 12px;margin:8px 0;line-height:1.7}
+    .bk-details b{font-weight:700}
+    .bk-when{display:flex;gap:8px;margin:10px 0}
+    .bk-when input{flex:1;padding:9px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:12.5px}
+    .bk-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .bk-btn{flex:1;min-width:100px;padding:10px;border-radius:9px;border:1.5px solid var(--border);background:var(--white);font-family:inherit;font-size:12px;font-weight:800;cursor:pointer}
+    .bk-btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+    .bk-btn.ok{background:var(--green);border-color:var(--green);color:#fff}
+    .bk-btn.danger{color:var(--red);border-color:#FCA5A5}
+    .bk-empty{text-align:center;padding:40px 16px;color:var(--muted);font-size:13.5px}
+    .bk-wa{display:inline-flex;align-items:center;gap:4px;color:var(--green);font-weight:700;font-size:12px;text-decoration:none;margin-top:4px}
   </style>
 </head>
 <body>
@@ -112,6 +148,28 @@
 
   <!-- PORTAL -->
   <div id="portalScreen">
+
+    <!-- NOVO (Ago/2026 — agendamento): abas Perfil / Marcações -->
+    <div class="ptabs">
+      <div class="ptab active" id="ptabProfile" data-action="showTabProfile">👤 Perfil</div>
+      <div class="ptab" id="ptabBookings" data-action="showTabBookings">📋 Marcações<span class="ptab-badge" id="bkPendingBadge" style="display:none">0</span></div>
+    </div>
+
+    <!-- ABA: MARCAÇÕES (NOVO) -->
+    <div id="tabBookings">
+      <div class="bk-filters">
+        <button type="button" class="bk-filter active" data-bk-filter="">Todas</button>
+        <button type="button" class="bk-filter" data-bk-filter="pendente">Pendentes</button>
+        <button type="button" class="bk-filter" data-bk-filter="agendado">Agendadas</button>
+        <button type="button" class="bk-filter" data-bk-filter="em_andamento">Em andamento</button>
+        <button type="button" class="bk-filter" data-bk-filter="concluido">Concluídas</button>
+        <button type="button" class="bk-filter" data-bk-filter="cancelado">Canceladas</button>
+      </div>
+      <div id="bkList"><div class="bk-empty">A carregar marcações…</div></div>
+    </div>
+
+    <!-- ABA: PERFIL (conteúdo já existente) -->
+    <div id="tabProfile" class="show">
     <div class="card">
       <div class="title" id="pName">—</div>
       <div class="sub" id="pStatusLine">—</div>
@@ -174,7 +232,9 @@
 
     <button class="btn btn-primary" id="btnSave" data-action="saveProfile" style="margin-top:16px">💾 Guardar alterações</button>
     <div class="msg" id="saveMsg"></div>
-  </div>
+    </div><!-- /#tabProfile -->
+
+  </div><!-- /#portalScreen -->
 
 </div>
 
@@ -188,12 +248,26 @@ const _portalActionHandlers = {
   toggleActive: () => toggleActive(),
   getGPS:       () => getGPS(),
   saveProfile:  () => saveProfile(),
+  // NOVO (Ago/2026 — agendamento)
+  showTabProfile:  () => showTab('profile'),
+  showTabBookings: () => showTab('bookings'),
 };
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
-  if (!el) return;
-  const handler = _portalActionHandlers[el.dataset.action];
-  if (handler) handler();
+  if (el) {
+    const handler = _portalActionHandlers[el.dataset.action];
+    if (handler) handler();
+  }
+  // NOVO: filtros de estado da aba Marcações
+  const filterEl = e.target.closest('[data-bk-filter]');
+  if (filterEl) {
+    document.querySelectorAll('.bk-filter').forEach(b => b.classList.remove('active'));
+    filterEl.classList.add('active');
+    loadBookings(filterEl.dataset.bkFilter);
+  }
+  // NOVO: acções por marcação (agendar, em andamento, concluir, cancelar)
+  const bkActionEl = e.target.closest('[data-bk-action]');
+  if (bkActionEl) handleBookingAction(bkActionEl);
 });
 document.addEventListener('change', (e) => {
   const el = e.target.closest('[data-change-action]');
@@ -237,6 +311,7 @@ async function doLogin() {
     localStorage.setItem('mzd_partner_token', TOKEN);
     showScreen();
     await loadMe();
+    refreshPendingBadge();
   } catch (err) {
     msgEl.className = 'msg error'; msgEl.textContent = '❌ ' + err.message;
   } finally {
@@ -363,8 +438,184 @@ async function saveProfile() {
   }
 }
 
+// ── ABAS Perfil / Marcações (NOVO — Ago/2026) ────────────────────────────────
+function showTab(tab) {
+  const isBookings = tab === 'bookings';
+  document.getElementById('tabProfile').classList.toggle('show', !isBookings);
+  document.getElementById('tabBookings').classList.toggle('show', isBookings);
+  document.getElementById('ptabProfile').classList.toggle('active', !isBookings);
+  document.getElementById('ptabBookings').classList.toggle('active', isBookings);
+  if (isBookings) loadBookings(_currentBkFilter);
+}
+
+// ── MARCAÇÕES (bookings) ──────────────────────────────────────────────────────
+// NOVO: cada pedido de foto/impressão feito por um cliente ao escolher esta
+// papelaria em "Parceiras próximas" (ver assets/js/partners/NearbyPartners.js
+// + DocumentController.sendDirect()) fica aqui, para a parceira aceitar,
+// agendar um horário, marcar em andamento/concluído, ou cancelar.
+let _currentBkFilter = '';
+
+const BK_STATUS_LABEL = {
+  pendente:     '🕐 Pendente',
+  agendado:     '📅 Agendado',
+  em_andamento: '🔧 Em andamento',
+  concluido:    '✅ Concluído',
+  cancelado:    '❌ Cancelado',
+};
+
+// Rótulos amigáveis dos campos guardados em `details` (ver ServiceDefinitions.js
+// → foto/impressao) — só para não mostrar chaves técnicas (ex.: "qtd") na UI.
+const BK_DETAIL_LABEL = {
+  finalidade: 'Finalidade', qtd: 'Quantidade', fundo: 'Fundo',
+  tipo: 'Tipo', paginas: 'Páginas', copias: 'Cópias', papel: 'Papel', obs: 'Obs.',
+};
+
+function fmtBkDetails(details) {
+  if (!details || typeof details !== 'object') return '';
+  return Object.entries(details)
+    .filter(([k, v]) => v && !['nome', 'contacto', 'dataPref', 'horaPref'].includes(k))
+    .map(([k, v]) => `<b>${BK_DETAIL_LABEL[k] || k}:</b> ${v}`)
+    .join('<br>');
+}
+
+async function loadBookings(status = '') {
+  _currentBkFilter = status;
+  const list = document.getElementById('bkList');
+  list.innerHTML = '<div class="bk-empty">A carregar marcações…</div>';
+  try {
+    const qs = status ? `&status=${encodeURIComponent(status)}` : '';
+    const res = await fetch(`/api/partners?action=my-bookings${qs}`, { headers: { Authorization: 'Bearer ' + TOKEN } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao carregar marcações');
+    renderBookings(data.bookings || []);
+    updatePendingBadge(data.bookings || []);
+  } catch (err) {
+    list.innerHTML = `<div class="bk-empty">❌ ${err.message}</div>`;
+  }
+}
+
+// Badge de pendentes visível mesmo sem estar na aba Marcações — carrega
+// sempre a contagem ao entrar no portal (loadMe), sem filtro aplicado.
+async function refreshPendingBadge() {
+  try {
+    const res = await fetch('/api/partners?action=my-bookings&status=pendente', { headers: { Authorization: 'Bearer ' + TOKEN } });
+    const data = await res.json();
+    if (res.ok) updatePendingBadge(data.bookings || [], true);
+  } catch (_) {}
+}
+
+function updatePendingBadge(bookings, isPendingOnly = false) {
+  const count = isPendingOnly ? bookings.length : bookings.filter(b => b.status === 'pendente').length;
+  const badge = document.getElementById('bkPendingBadge');
+  badge.textContent = count;
+  badge.style.display = count > 0 ? 'inline-block' : 'none';
+}
+
+function renderBookings(bookings) {
+  const list = document.getElementById('bkList');
+  if (!bookings.length) {
+    list.innerHTML = '<div class="bk-empty">📋 Nenhuma marcação aqui por enquanto.</div>';
+    return;
+  }
+  list.innerHTML = bookings.map(bookingCardHTML).join('');
+}
+
+function bookingCardHTML(b) {
+  const icon = b.type === 'foto' ? '📷' : '🖨️';
+  const created = new Date(b.created_at).toLocaleString('pt-PT', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  const waLink = b.client_phone ? `<a class="bk-wa" href="https://wa.me/${b.client_phone}" target="_blank" rel="noopener">📱 Falar no WhatsApp</a>` : '';
+  const detailsHtml = fmtBkDetails(b.details);
+
+  // Acções disponíveis dependem do estado actual — evita, por exemplo,
+  // "Concluir" uma marcação já cancelada.
+  let actions = '';
+  if (b.status === 'pendente') {
+    actions = `
+      <div class="bk-when">
+        <input type="date" id="bkDate_${b.id}" value="${b.preferred_date || ''}"/>
+        <input type="time" id="bkTime_${b.id}" value="${(b.preferred_time || '').slice(0,5)}"/>
+      </div>
+      <div class="bk-actions">
+        <button type="button" class="bk-btn primary" data-bk-action="agendado" data-bk-id="${b.id}">📅 Aceitar &amp; agendar</button>
+        <button type="button" class="bk-btn danger" data-bk-action="cancelado" data-bk-id="${b.id}">Cancelar</button>
+      </div>`;
+  } else if (b.status === 'agendado') {
+    actions = `
+      <div class="bk-actions">
+        <button type="button" class="bk-btn primary" data-bk-action="em_andamento" data-bk-id="${b.id}">🔧 Em andamento</button>
+        <button type="button" class="bk-btn ok" data-bk-action="concluido" data-bk-id="${b.id}">✅ Concluído</button>
+        <button type="button" class="bk-btn danger" data-bk-action="cancelado" data-bk-id="${b.id}">Cancelar</button>
+      </div>`;
+  } else if (b.status === 'em_andamento') {
+    actions = `
+      <div class="bk-actions">
+        <button type="button" class="bk-btn ok" data-bk-action="concluido" data-bk-id="${b.id}">✅ Concluído</button>
+        <button type="button" class="bk-btn danger" data-bk-action="cancelado" data-bk-id="${b.id}">Cancelar</button>
+      </div>`;
+  }
+  // concluído/cancelado: sem acções — estado final.
+
+  const quando = (b.preferred_date || b.preferred_time)
+    ? `🗓 Pedido para: ${b.preferred_date || '—'} ${(b.preferred_time || '').slice(0,5)}`
+    : '🗓 Sem horário preferido indicado';
+
+  return `
+    <div class="bk-card" id="bkCard_${b.id}">
+      <div class="bk-head">
+        <div>
+          <div class="bk-title">${icon} ${escapeHtmlPortal(b.client_name)}</div>
+          <div class="bk-sub">${quando} · pedido em ${created}</div>
+        </div>
+        <span class="bk-status ${b.status}">${BK_STATUS_LABEL[b.status] || b.status}</span>
+      </div>
+      ${detailsHtml ? `<div class="bk-details">${detailsHtml}</div>` : ''}
+      ${waLink}
+      ${actions}
+    </div>`;
+}
+
+// Pequeno escape local — parceiro-portal.html não importa módulos ES
+// (é tudo inline), por isso não reutiliza assets/js/utils/Sanitizer.js aqui.
+function escapeHtmlPortal(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+async function handleBookingAction(el) {
+  const id = el.dataset.bkId;
+  const status = el.dataset.bkAction;
+  const card = document.getElementById(`bkCard_${id}`);
+  const payload = { id, status };
+
+  // Ao "Aceitar & agendar", envia também a data/hora escolhidas pela
+  // parceira (pré-preenchidas com o que o cliente pediu, mas editáveis).
+  if (status === 'agendado') {
+    const dateEl = document.getElementById(`bkDate_${id}`);
+    const timeEl = document.getElementById(`bkTime_${id}`);
+    if (dateEl && dateEl.value) payload.preferred_date = dateEl.value;
+    if (timeEl && timeEl.value) payload.preferred_time = timeEl.value;
+  }
+
+  if (status === 'cancelado' && !confirm('Cancelar esta marcação?')) return;
+
+  el.disabled = true;
+  try {
+    const res = await fetch('/api/partners?action=update-booking', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao actualizar');
+    loadBookings(_currentBkFilter);
+  } catch (err) {
+    el.disabled = false;
+    alert('❌ ' + err.message);
+    if (card) card.style.outline = '2px solid var(--red)';
+  }
+}
+
 showScreen();
-if (TOKEN) loadMe();
+if (TOKEN) { loadMe(); refreshPendingBadge(); }
 </script>
 </body>
 </html>
