@@ -80,6 +80,13 @@ function resetPartnerSelection() {
   if (hint) hint.textContent = '📍 Escolha uma papelaria abaixo para activar o envio';
 }
 
+// Rótulos dos serviços de papelaria — usados na mensagem "há papelarias
+// perto, mas nenhuma faz X" (ver buildPartnersHTML) e para listar os
+// serviços que as papelarias vizinhas realmente fazem.
+const SERVICE_LABEL = {
+  impressao: 'Impressão', foto: 'Foto para Documentos',
+  plastificacao: 'Plastificação', encadernacao: 'Encadernação',
+};
 // Rótulos de área jurídica para as tags do card de advogado.
 const SPECIALTY_LABEL = {
   civil: 'Civil', laboral: 'Laboral', comercial: 'Comercial', familia: 'Família',
@@ -115,6 +122,12 @@ export function getUserLocation() {
 
 // ── Buscar parceiras próximas ─────────────────────────────────────────────
 // NOVO (v2.1): 4º parâmetro `type` ('papelaria' por omissão | 'advogado').
+// ALTERADO (Ago/2026): passa a devolver um objecto { partners, meta } em
+// vez de só o array — `meta` carrega `service_unavailable` +
+// `nearby_without_service`, devolvidos pelo backend quando há parceiras na
+// área mas nenhuma faz o serviço pedido (ver handleNearby em
+// api/partners.js e buildPartnersHTML abaixo). Nenhum chamador antigo
+// dependia do valor de retorno ser um array puro fora deste ficheiro.
 export async function fetchNearbyPartners(svcId, lat, lng, type = 'papelaria') {
   const key = `${type}-${svcId}-${lat.toFixed(3)}-${lng.toFixed(3)}`;
   if (_partnersCache[key] && Date.now() - _partnersCache[key].ts < CACHE_TTL) {
@@ -127,13 +140,19 @@ export async function fetchNearbyPartners(svcId, lat, lng, type = 'papelaria') {
   // a(s) parceira(s) mais próxima(s) na mesma, marcadas com
   // outside_radius=true — ver api/partners.js. Preserva-se essa marca ao
   // guardar em cache para o aviso continuar a aparecer.
-  const partners = data.ok ? (data.partners || []) : [];
-  _partnersCache[key] = { data: partners, ts: Date.now() };
-  return partners;
+  const result = {
+    partners: data.ok ? (data.partners || []) : [],
+    meta: {
+      service_unavailable: !!data.service_unavailable,
+      nearby_without_service: data.nearby_without_service || [],
+    },
+  };
+  _partnersCache[key] = { data: result, ts: Date.now() };
+  return result;
 }
 
 // ── Gerar HTML do bloco de parceiras (papelaria) ──────────────────────────
-export function buildPartnersHTML(partners, svcId) {
+export function buildPartnersHTML(partners, svcId, meta = {}) {
   // NOVO: botão de retry real (limpa a localização em cache e repete a
   // busca do zero) — antes só existia para o caso de a geolocalização
   // falhar (buildGeoErrorHTML); depois de uma busca que correu mas não
@@ -144,6 +163,39 @@ export function buildPartnersHTML(partners, svcId) {
   </button>`;
 
   if (!partners.length) {
+    // NOVO (Ago/2026): distingue "não há NENHUMA papelaria na área" de "há
+    // papelarias na área, mas nenhuma faz este serviço" — antes as duas
+    // situações mostravam exactamente a mesma mensagem genérica, o que
+    // levava o cliente a pensar (erradamente) que não havia papelaria
+    // nenhuma por perto, quando na verdade havia uma mesmo ao lado, só que
+    // sem aquele serviço específico (ver `service_unavailable` +
+    // `nearby_without_service`, devolvidos por handleNearby em
+    // api/partners.js).
+    if (meta.service_unavailable && meta.nearby_without_service?.length) {
+      const label = SERVICE_LABEL[svcId] || 'este serviço';
+      const altCards = meta.nearby_without_service.map(p => {
+        const dist = p.distance_km < 1 ? `${Math.round(p.distance_km * 1000)}m` : `${p.distance_km}km`;
+        const otherServices = (p.services || []).map(s => SERVICE_LABEL[s] || s).join(', ') || '—';
+        return `<div class="np-alt-card">
+          <div class="np-alt-head"><b>${escapeHtml(p.name)}</b><span class="np-dist">${dist}</span></div>
+          <div class="np-alt-services">Faz: ${escapeHtml(otherServices)}</div>
+        </div>`;
+      }).join('');
+      return `<div class="np-empty">
+        <div class="np-empty-ico">📍</div>
+        <div class="np-empty-text">
+          Há papelarias perto de si, mas nenhuma faz <b>${escapeHtml(label)}</b> por enquanto:
+        </div>
+        <div class="np-alt-list">${altCards}</div>
+        <div class="np-empty-text" style="margin-top:8px">
+          <a href="/parceiros.html" target="_blank" rel="noopener" class="np-link">
+            Conhece uma papelaria que faça? Convide-a →
+          </a>
+        </div>
+        ${retryBtn}
+      </div>`;
+    }
+
     return `<div class="np-empty">
       <div class="np-empty-ico">📍</div>
       <div class="np-empty-text">Ainda não há parceiras na sua área.<br/>
@@ -332,8 +384,8 @@ export async function injectPartnersIntoModal(svcId, containerSelector) {
 
   try {
     const { lat, lng } = await getUserLocation();
-    const partners = await fetchNearbyPartners(svcId, lat, lng, 'papelaria');
-    container.innerHTML = buildPartnersHTML(partners, svcId);
+    const { partners, meta } = await fetchNearbyPartners(svcId, lat, lng, 'papelaria');
+    container.innerHTML = buildPartnersHTML(partners, svcId, meta);
   } catch (err) {
     const isGeoErr = err.message === 'sem_geo' || err.code;
     if (isGeoErr) {
@@ -365,7 +417,7 @@ export async function injectLawyersIntoModal(containerSelector, specialty = '') 
 
   try {
     const { lat, lng } = await getUserLocation();
-    const lawyers = await fetchNearbyPartners(specialty, lat, lng, 'advogado');
+    const { partners: lawyers } = await fetchNearbyPartners(specialty, lat, lng, 'advogado');
     container.innerHTML = buildLawyersHTML(lawyers);
   } catch (err) {
     container.innerHTML = buildGeoErrorHTML(specialty);
