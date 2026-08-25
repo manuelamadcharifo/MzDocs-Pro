@@ -62,8 +62,9 @@ const PROVIDER_TIMEOUT_MS = 9000; // 9s por provider — evita que um lento bloq
 
 const DEFAULT_SYSTEM_PROMPT = 'És um assistente de IA que responde exactamente no formato pedido pelo utilizador, sem comentários adicionais.';
 
-async function raceAllProviders(prompt, apiKeys, preferProvider, maxTokens, systemPrompt) {
+async function raceAllProviders(prompt, apiKeys, preferProvider, maxTokens, systemPrompt, temperature) {
     const sysPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
+    const temp      = Number.isFinite(temperature) ? temperature : 0.7;
 
     // avail: todos os providers do registo central que têm chave configurada
     // (independentemente do tier — usado para o fallback de reserva depois)
@@ -90,7 +91,7 @@ async function raceAllProviders(prompt, apiKeys, preferProvider, maxTokens, syst
     if (primaryIds.length === 0) primaryIds = Object.keys(avail);
 
     try {
-        return await raceGroup(primaryIds, avail, apiKeys, prompt, maxTokens, sysPrompt);
+        return await raceGroup(primaryIds, avail, apiKeys, prompt, maxTokens, sysPrompt, temp);
     } catch (primaryErr) {
         // Fallback: só os providers "reserva_ativa" que ainda não foram tentados
         const reserveIds = Object.keys(avail)
@@ -99,13 +100,13 @@ async function raceAllProviders(prompt, apiKeys, preferProvider, maxTokens, syst
         if (reserveIds.length === 0) throw primaryErr;
 
         console.warn('[raceAllProviders] Grupo primário (generoso+médio) falhou por completo — fallback para reserva_ativa:', reserveIds);
-        return await raceGroup(reserveIds, avail, apiKeys, prompt, maxTokens, sysPrompt);
+        return await raceGroup(reserveIds, avail, apiKeys, prompt, maxTokens, sysPrompt, temp);
     }
 }
 
 // Corre um grupo de providers em paralelo com Promise.any, timeout
 // individual por provider e cancelamento dos restantes assim que um vencer.
-async function raceGroup(ids, avail, apiKeys, prompt, maxTokens, systemPrompt) {
+async function raceGroup(ids, avail, apiKeys, prompt, maxTokens, systemPrompt, temperature) {
     const winner = new AbortController();
 
     const makeRacer = async (providerCfg, apiKey) => {
@@ -115,7 +116,7 @@ async function raceGroup(ids, avail, apiKeys, prompt, maxTokens, systemPrompt) {
 
         try {
             const t0     = Date.now();
-            const result = await tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, systemPrompt);
+            const result = await tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, systemPrompt, temperature);
             winner.abort();
             logProviderUsageAsync(providerCfg.id, true, result, null);
             return { ...result, ms: Date.now() - t0 };
@@ -146,7 +147,7 @@ async function raceGroup(ids, avail, apiKeys, prompt, maxTokens, systemPrompt) {
 // Para cada provider: descobre ao vivo que modelos ele realmente tem agora
 // (best-effort), cruza com a lista curada, salta modelos desactivados pelo
 // disjuntor, e tenta cada candidato por ordem até um responder.
-async function tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, systemPrompt) {
+async function tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, systemPrompt, temperature) {
     let lastErr;
 
     const discovered = await getAvailableModels(providerCfg, apiKey);
@@ -172,8 +173,8 @@ async function tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, 
 
         try {
             const result = providerCfg.kind === 'gemini'
-                ? await tryGeminiModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt)
-                : await tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt);
+                ? await tryGeminiModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt, temperature)
+                : await tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt, temperature);
             recordModelResult(providerCfg.id, model, true, null); // fire-and-forget
             return result;
         } catch (err) {
@@ -189,7 +190,7 @@ async function tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, 
 
 // ─── Chamada genérica a um modelo OpenAI-compatible (Groq, Cerebras,
 //     OpenRouter, NVIDIA, Mistral, SambaNova, Together, Fireworks...) ──────
-async function tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt) {
+async function tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt, temperature) {
     const res = await fetch(providerCfg.chatUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...providerCfg.authHeader(apiKey) },
@@ -201,7 +202,7 @@ async function tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTok
                 { role: 'user',   content: prompt },
             ],
             max_tokens: Math.min(maxTokens, providerCfg.maxTokensCap),
-            temperature: 0.7,
+            temperature,
         }),
     });
     if (!res.ok) {
@@ -220,7 +221,7 @@ async function tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTok
 }
 
 // ─── Chamada específica à API Gemini (formato próprio) ────────────────────
-async function tryGeminiModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt) {
+async function tryGeminiModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt, temperature) {
     const res = await fetch(`${providerCfg.chatUrlBase}/${model}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,7 +231,7 @@ async function tryGeminiModel(providerCfg, model, apiKey, prompt, signal, maxTok
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: {
                 maxOutputTokens: Math.min(maxTokens, providerCfg.maxTokensCap),
-                temperature: 0.7, topP: 0.9,
+                temperature, topP: 0.9,
             },
             safetySettings: [
                 { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
