@@ -462,7 +462,7 @@ export class HistoryController {
     overlay.id = 'histLiteOverlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(7,16,31,.65);backdrop-filter:blur(6px);display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .18s ease';
     overlay.innerHTML = `
-      <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:88svh;overflow-y:auto;display:flex;flex-direction:column;animation:slideUp .3s cubic-bezier(.34,1.1,.64,1)">
+      <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:720px;max-height:88svh;overflow-y:auto;display:flex;flex-direction:column;animation:slideUp .3s cubic-bezier(.34,1.1,.64,1)">
         <div style="display:flex;align-items:center;gap:12px;padding:18px 18px 14px;border-bottom:1px solid #E2E8F0;position:sticky;top:0;background:#fff">
           <div style="flex:1;min-width:0">
             <div style="font-size:15px;font-weight:800;color:#07101F;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(doc.title || doc.service_type || 'Documento').replace(/</g,'&lt;')}</div>
