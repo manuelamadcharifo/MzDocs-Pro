@@ -93,8 +93,14 @@ export const DocumentView = {
         </button>
       `;
     } else {
+      // NOVO: o botão nasce desactivado — só é activado quando o utilizador
+      // selecciona uma papelaria na lista "Parceiras próximas" (ver
+      // NearbyPartners.js → selectPartner()), que também define
+      // window._mzSelectedPartnerWA lido por DocumentController.sendDirect().
+      // Evita o pedido ser enviado sem destinatário definido.
       formFootEl.innerHTML = `
-        <button id="btnWaDirect" class="btn-wa btn-wa-direct" type="button">
+        <div id="mzWaHint" class="mz-wa-hint">📍 Escolha uma papelaria abaixo para activar o envio</div>
+        <button id="btnWaDirect" class="btn-wa btn-wa-direct" type="button" disabled>
           <span>📱 Enviar pelo WhatsApp</span>
           <small>Grátis</small>
         </button>
