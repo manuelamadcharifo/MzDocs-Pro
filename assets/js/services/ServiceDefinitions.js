@@ -528,6 +528,13 @@ export const SERVICES = {
     category:'servicos', popularity:16,
     fields:[
       { id:'nome',   label:'O seu Nome', type:'text', required:true, ph:'Maria Nhantumbo' },
+      // NOVO (Ago/2026 — agendamento): telefone do cliente passa a ser
+      // obrigatório em serviços de papelaria — além de continuar a ser o
+      // WhatsApp para onde a mensagem é enviada, é agora também guardado na
+      // marcação (ver api/partners.js → create-booking), para a papelaria
+      // poder contactar o cliente directamente a partir do Portal, sem
+      // depender só da conversa de WhatsApp.
+      { id:'contacto', label:'O seu Telefone (WhatsApp)', type:'tel', required:true, ph:'84 XXX XXXX', pattern:'8[2-7][0-9]{7}', maxlength:'9', inputmode:'tel' },
       { id:'tipo',   label:'Tipo de Impressão', type:'select', required:true,
         opts:['Preto e Branco','Colorido','Frente e Verso P&B','Frente e Verso Colorido'] },
       { row:true, items:[
@@ -535,10 +542,18 @@ export const SERVICES = {
         { id:'copias',  label:'N.º de Cópias',  type:'number', val:'1',  min:'1' },
       ]},
       { id:'papel', label:'Tamanho do Papel', type:'select', opts:['A4 (padrão)','A3','A5','Carta'] },
+      // NOVO: dia/hora em que o cliente pretende levantar/entregar — a
+      // papelaria vê isto no Portal e pode confirmar ou propor outro
+      // horário directamente com o cliente (ver aba "Marcações").
+      { row:true, items:[
+        { id:'dataPref', label:'Dia pretendido (opcional)',  type:'date' },
+        { id:'horaPref', label:'Hora pretendida (opcional)', type:'time' },
+      ]},
       { id:'obs',   label:'Observações', type:'text', ph:'Ex: urgente, encadernar, plastificar…' },
     ],
     buildWA(d) {
-      return `🖨️ *PEDIDO DE IMPRESSÃO – MzDocs Pro*\n\n👤 Nome: ${d.nome}\n🎨 Tipo: ${d.tipo}\n📄 Páginas: ${d.paginas||'?'} | Cópias: ${d.copias||'1'}\n📐 Papel: ${d.papel}\n📌 Obs: ${d.obs||'Nenhuma'}\n\n✅ _Envio o ficheiro nesta conversa. Obrigado!_`;
+      const quando = (d.dataPref || d.horaPref) ? `\n🗓 Pretendido para: ${d.dataPref||'a combinar'} ${d.horaPref||''}`.trimEnd() : '';
+      return `🖨️ *PEDIDO DE IMPRESSÃO – MzDocs Pro*\n\n👤 Nome: ${d.nome}\n📞 Contacto: ${d.contacto||'-'}\n🎨 Tipo: ${d.tipo}\n📄 Páginas: ${d.paginas||'?'} | Cópias: ${d.copias||'1'}\n📐 Papel: ${d.papel}${quando}\n📌 Obs: ${d.obs||'Nenhuma'}\n\n✅ _Envio o ficheiro nesta conversa. Obrigado!_`;
     },
   },
 
@@ -548,15 +563,25 @@ export const SERVICES = {
     category:'servicos', popularity:17,
     fields:[
       { id:'nome',      label:'O seu Nome', type:'text', required:true, ph:'Pedro Cossa' },
+      // NOVO (Ago/2026 — agendamento): ver nota igual em 'impressao' acima.
+      { id:'contacto', label:'O seu Telefone (WhatsApp)', type:'tel', required:true, ph:'84 XXX XXXX', pattern:'8[2-7][0-9]{7}', maxlength:'9', inputmode:'tel' },
       { id:'finalidade',label:'Finalidade', type:'select', required:true,
         opts:['BI / Cartão de Identidade','Passaporte','Visto','Currículo (CV)','Matrícula Escolar','Outro'] },
       { row:true, items:[
         { id:'qtd',   label:'Quantidade', type:'number', val:'6', min:'1' },
         { id:'fundo', label:'Cor do Fundo', type:'select', opts:['Branco','Azul claro','Cinzento'] },
       ]},
+      // NOVO: dia/hora ideal para tirar a fotografia — é isto que a
+      // papelaria confirma (ou ajusta) no Portal, aba "Marcações", em vez
+      // de o cliente aparecer sem hora marcada.
+      { row:true, items:[
+        { id:'dataPref', label:'Dia ideal (opcional)',  type:'date' },
+        { id:'horaPref', label:'Hora ideal (opcional)', type:'time' },
+      ]},
     ],
     buildWA(d) {
-      return `📷 *FOTO PARA DOCUMENTOS – MzDocs Pro*\n\n👤 Nome: ${d.nome}\n🎯 Finalidade: ${d.finalidade}\n🖼 Quantidade: ${d.qtd||'6'} fotos\n🎨 Fundo: ${d.fundo}\n\n✅ _Envio a minha foto nesta conversa._`;
+      const quando = (d.dataPref || d.horaPref) ? `\n🗓 Horário ideal: ${d.dataPref||'a combinar'} ${d.horaPref||''}`.trimEnd() : '';
+      return `📷 *FOTO PARA DOCUMENTOS – MzDocs Pro*\n\n👤 Nome: ${d.nome}\n📞 Contacto: ${d.contacto||'-'}\n🎯 Finalidade: ${d.finalidade}\n🖼 Quantidade: ${d.qtd||'6'} fotos\n🎨 Fundo: ${d.fundo}${quando}\n\n✅ _Envio a minha foto nesta conversa._`;
     },
   },
 
