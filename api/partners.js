@@ -316,8 +316,18 @@ async function handleNearby(req, res) {
   if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: 'lat e lng são obrigatórios' });
 
   const delta = km / 111;
-  let path = `partners?status=eq.approved&active=eq.true&type=eq.${type}&lat=gte.${lat - delta}&lat=lte.${lat + delta}&lng=gte.${lng - delta}&lng=lte.${lng + delta}&select=id,name,owner_name,phone,whatsapp,city,address,lat,lng,type,services,hours,credential_number,bio,rating_sum,rating_count&limit=50`;
-  if (svc) path += `&services=cs.{"${svc}"}`;
+  // NOVO (Ago/2026): a busca já não filtra o serviço directamente na
+  // query PostgREST — passa a trazer TODAS as parceiras do tipo dentro do
+  // raio, e o filtro por serviço é aplicado depois, em JS (ver `results`
+  // abaixo). Isto permite distinguir "não há NENHUMA parceira na área" de
+  // "há parceiras na área, mas nenhuma faz este serviço específico" — a
+  // segunda situação tem uma mensagem própria no ecrã do cliente (ver
+  // `service_unavailable`/`nearby_without_service` e buildPartnersHTML()
+  // em NearbyPartners.js), em vez do genérico "não há parceiras na sua
+  // área", que levava o cliente a pensar que a zona não tinha NENHUMA
+  // papelaria, quando na verdade tinha uma mesmo ao lado — só que sem
+  // aquele serviço específico.
+  const path = `partners?status=eq.approved&active=eq.true&type=eq.${type}&lat=gte.${lat - delta}&lat=lte.${lat + delta}&lng=gte.${lng - delta}&lng=lte.${lng + delta}&select=id,name,owner_name,phone,whatsapp,city,address,lat,lng,type,services,hours,credential_number,bio,rating_sum,rating_count&limit=50`;
 
   try {
     const data = await restRequest(path);
@@ -330,7 +340,7 @@ async function handleNearby(req, res) {
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
-    const results = (Array.isArray(data) ? data : [])
+    const allNearby = (Array.isArray(data) ? data : [])
       .map(p => ({
         ...p,
         // CORRIGIDO (bug crítico — Ago/2026): a chamada trocava lng do
@@ -346,10 +356,29 @@ async function handleNearby(req, res) {
         rating: p.rating_count > 0 ? Math.round((p.rating_sum / p.rating_count) * 10) / 10 : null,
       }))
       .filter(p => p.distance_km <= km)
-      .sort((a, b) => a.distance_km - b.distance_km)
-      .slice(0, 5);
+      .sort((a, b) => a.distance_km - b.distance_km);
 
-    return res.status(200).json({ ok: true, partners: results });
+    const results = (svc
+      ? allNearby.filter(p => Array.isArray(p.services) && p.services.includes(svc))
+      : allNearby
+    ).slice(0, 5);
+
+    const response = { ok: true, partners: results };
+
+    // NOVO: quando se pediu um serviço específico (ex.: 'foto') e não há
+    // NENHUMA parceira que o faça, mas EXISTEM parceiras na área que
+    // fazem outros serviços, avisa disso — em vez do cliente concluir
+    // (erradamente) que não há papelarias nenhumas por perto.
+    if (svc && results.length === 0 && allNearby.length > 0) {
+      response.service_unavailable = true;
+      response.nearby_without_service = allNearby.slice(0, 3).map(p => ({
+        name: p.name,
+        distance_km: p.distance_km,
+        services: p.services || [],
+      }));
+    }
+
+    return res.status(200).json(response);
   } catch (err) {
     console.error('[partners/nearby]', err.message);
     return res.status(500).json({ error: 'Erro ao buscar parceiras' });
