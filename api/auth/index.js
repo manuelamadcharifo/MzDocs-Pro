@@ -39,9 +39,21 @@ const {
   rpc,
   anonAuthRequest,
   adminSendRecovery,
-  SUPABASE_URL,
-  SERVICE_KEY,
 } = require('../_lib/supabaseAdmin');
+
+// CORRIGIDO (bug crítico — signup sempre a devolver 503 "Supabase não
+// configurado no servidor", mesmo com todas as env vars correctas no
+// Vercel): este ficheiro importava SUPABASE_URL e SERVICE_KEY de
+// '../_lib/supabaseAdmin', mas esse módulo deixou de os exportar (ver o
+// comentário "NOTA" em supabaseAdmin.js — a alteração assumiu, incorrectamente,
+// que nada no projecto os importava directamente). Como resultado,
+// SUPABASE_URL e SERVICE_KEY chegavam sempre `undefined` aqui, e a
+// verificação abaixo ("if (!SUPABASE_URL...)") falhava SEMPRE, para
+// qualquer registo, independentemente da configuração real do servidor.
+// Agora lêem-se directamente de process.env, tal como já é feito em
+// api/_services/account.js e api/_services/site.js.
+function SUPABASE_URL_() { return process.env.SUPABASE_URL; }
+function SERVICE_KEY_()  { return process.env.SUPABASE_SERVICE_ROLE_KEY; }
 const { checkRateLimit } = require('../_lib/rateLimit');
 
 const origin = process.env.SITE_URL || 'https://mzdocs.co.mz';
@@ -208,13 +220,13 @@ async function handleSignup(req, res) {
   // NOVO: consentimento de marketing — opcional, nunca obrigatório.
   const marketingConsent = consentMarketing === true;
 
-  if (!SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+  if (!SUPABASE_URL_() || !process.env.SUPABASE_ANON_KEY) {
     return res.status(503).json({ error: 'Supabase não configurado no servidor' });
   }
 
   try {
     // Verificar duplicados (com service_role, contorna RLS)
-    if (SERVICE_KEY) {
+    if (SERVICE_KEY_()) {
       const [byEmail, byPhone] = await Promise.all([
         selectOne('profiles', 'email', normalizedEmail, 'id').catch(() => null),
         selectOne('profiles', 'phone', normalized, 'id').catch(() => null),
@@ -311,7 +323,7 @@ async function handleSignup(req, res) {
 // viva até esta promise terminar, eliminando a perda intermitente de
 // nome/telefone em contas novas.
 async function _persistSignupProfile({ userId, normalized, normalizedEmail, normalizedName, profilePayload, visitorId, normalizedWhatsapp, marketingConsent, consentIp, consentUserAgent }) {
-  if (!SERVICE_KEY) {
+  if (!SERVICE_KEY_()) {
     console.warn(`[auth/signup] Sem service role — perfil não actualizado para ${userId.slice(0,8)}***`);
     return;
   }
@@ -450,7 +462,7 @@ async function handleResetPassword(req, res) {
     // Procura primeiro por WhatsApp (novo campo dedicado a recuperação) e,
     // se não encontrar, cai para `phone` (número de login) — cobre contas
     // que só preencheram um dos dois campos no registo.
-    if (SERVICE_KEY) {
+    if (SERVICE_KEY_()) {
       try {
         const profile = (await selectOne('profiles', 'whatsapp', normalized, 'email').catch(() => null))
                       || (await selectOne('profiles', 'phone', normalized, 'email').catch(() => null));
