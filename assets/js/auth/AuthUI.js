@@ -98,9 +98,23 @@ export class AuthUI {
                             </div>
                         </div>
                         <div class="form-group">
+                            <label>WhatsApp <span style="font-weight:400;color:#6b7280;">(opcional)</span></label>
+                            <div style="display:flex;gap:8px;">
+                                <input type="tel" id="regWhatsapp" placeholder="84 XXX XXXX" maxlength="13" inputmode="tel" autocomplete="tel" style="flex:1;">
+                                <button type="button" id="btnSameAsPhone" class="btn btn-ghost" style="white-space:nowrap;padding:.6rem .75rem;font-size:.8rem;">= Telemóvel</button>
+                            </div>
+                            <small style="color:#6b7280;font-size:.75rem;">Também pode ser usado para recuperar a conta</small>
+                        </div>
+                        <div class="form-group">
                             <label style="display:flex;align-items:flex-start;gap:8px;font-weight:400;cursor:pointer;">
                                 <input type="checkbox" id="regConsentTerms" style="margin-top:3px;flex-shrink:0;">
                                 <span style="font-size:.85rem;line-height:1.4;">Li e aceito os <a href="/legal.html" target="_blank" class="auth-link">Termos de Serviço e a Política de Privacidade</a> <span style="color:#ef4444">*</span></span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label style="display:flex;align-items:flex-start;gap:8px;font-weight:400;cursor:pointer;">
+                                <input type="checkbox" id="regConsentMarketing" style="margin-top:3px;flex-shrink:0;">
+                                <span style="font-size:.85rem;line-height:1.4;">Aceito receber mensagens de promoções e novidades do MzDocs Pro (WhatsApp, e-mail) <span style="color:#6b7280;">— opcional</span></span>
                             </label>
                         </div>
                         <button id="btnRegister" class="btn btn-primary btn-block">Criar Conta</button>
@@ -112,13 +126,13 @@ export class AuthUI {
                 <div id="authForgot" class="auth-view" style="display:none;">
                     <div class="auth-header">
                         <h2>🔑 Recuperar Password</h2>
-                        <p>Insira o seu e-mail para receber o link de recuperação</p>
+                        <p>Insira o seu e-mail ou WhatsApp para receber o link de recuperação</p>
                     </div>
                     <div class="auth-form">
                         <div class="form-group">
-                            <label>E-mail da conta</label>
-                            <input type="email" id="forgotEmail" placeholder="email@exemplo.com" inputmode="email" autocomplete="email">
-                            <small style="color:#6b7280;font-size:.75rem;">Receberá um link para redefinir a password — verifique também o spam</small>
+                            <label>E-mail ou WhatsApp da conta</label>
+                            <input type="text" id="forgotEmail" placeholder="email@exemplo.com ou 8X XXX XXXX" inputmode="email" autocomplete="username">
+                            <small style="color:#6b7280;font-size:.75rem;">Enviamos sempre o link por e-mail — verifique também o spam</small>
                         </div>
                         <button id="btnForgot" class="btn btn-primary btn-block">Enviar link de recuperação</button>
                     </div>
@@ -189,6 +203,14 @@ export class AuthUI {
         document.getElementById('btnForgot')?.addEventListener('click', () => this._handleForgot());
         document.getElementById('btnAnonymous')?.addEventListener('click', () => this._handleAnonymous());
 
+        // Preenche o WhatsApp com o mesmo valor do campo Telemóvel (conveniência —
+        // a maioria dos utilizadores usa o mesmo número para ambos)
+        document.getElementById('btnSameAsPhone')?.addEventListener('click', () => {
+            const phone = document.getElementById('regPhone')?.value?.trim();
+            const wa    = document.getElementById('regWhatsapp');
+            if (wa && phone) wa.value = phone;
+        });
+
         // Enter nos campos de login
         ['loginIdentifier', 'loginPassword'].forEach(id => {
             document.getElementById(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') this._handleLogin(); });
@@ -227,13 +249,15 @@ export class AuthUI {
         // Guard: prevent concurrent submissions (e.g. double-click or duplicate event listeners)
         if (this._registerSubmitting) return;
 
-        const btn     = document.getElementById('btnRegister');
-        const name    = document.getElementById('regName')?.value?.trim();
-        const phone   = document.getElementById('regPhone')?.value?.trim();
-        const email   = document.getElementById('regEmail')?.value?.trim();
-        const pass    = document.getElementById('regPassword')?.value;
-        const confirm = document.getElementById('regPasswordConfirm')?.value;
-        const consentTerms = document.getElementById('regConsentTerms')?.checked === true;
+        const btn      = document.getElementById('btnRegister');
+        const name     = document.getElementById('regName')?.value?.trim();
+        const phone    = document.getElementById('regPhone')?.value?.trim();
+        const email    = document.getElementById('regEmail')?.value?.trim();
+        const pass     = document.getElementById('regPassword')?.value;
+        const confirm  = document.getElementById('regPasswordConfirm')?.value;
+        const whatsapp = document.getElementById('regWhatsapp')?.value?.trim();
+        const consentTerms    = document.getElementById('regConsentTerms')?.checked === true;
+        const consentMarketing = document.getElementById('regConsentMarketing')?.checked === true;
 
         if (!phone)              return this._showError('Número de telemóvel é obrigatório');
         if (!email)              return this._showError('E-mail é obrigatório');
@@ -245,7 +269,7 @@ export class AuthUI {
         this._registerSubmitting = true;
         if (btn) { btn.disabled = true; btn.textContent = '⏳ A criar conta...'; }
         try {
-            const result = await authManager.signUp(phone, email, pass, name, consentTerms);
+            const result = await authManager.signUp(phone, email, pass, name, consentTerms, whatsapp, consentMarketing);
             const loggedIn = !!(result?.session || result?._autoLogin);
 
             if (loggedIn) {
@@ -281,16 +305,18 @@ export class AuthUI {
     }
 
     async _handleForgot() {
-        const btn   = document.getElementById('btnForgot');
-        const email = document.getElementById('forgotEmail')?.value?.trim();
+        const btn        = document.getElementById('btnForgot');
+        const identifier = document.getElementById('forgotEmail')?.value?.trim();
 
-        if (!email) return this._showError('Introduza o e-mail da conta');
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this._showError('E-mail inválido');
+        if (!identifier) return this._showError('Introduza o e-mail ou o WhatsApp da conta');
+        const isEmail = identifier.includes('@');
+        if (isEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) return this._showError('E-mail inválido');
+        if (!isEmail && identifier.replace(/\D/g, '').length < 9) return this._showError('Número de telemóvel/WhatsApp inválido');
 
         btn.disabled    = true;
         btn.textContent = '⏳ A enviar...';
         try {
-            await authManager.resetPasswordByEmail(email);
+            await authManager.resetPasswordByEmail(identifier);
             this._switchView('forgotSent');
         } catch (err) {
             // Mostrar sempre sucesso por segurança (não revelar se o email existe)
