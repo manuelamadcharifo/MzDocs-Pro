@@ -1522,6 +1522,17 @@ export class DocumentController {
  }
 
  sendDirect() {
+ // CORRIGIDO: o botão #btnWaDirect nasce desactivado (ver
+ // Views.renderForm()) e só é activado quando o utilizador selecciona uma
+ // papelaria na lista "Parceiras próximas" (ver NearbyPartners.js →
+ // selectPartner()). Esta verificação é só uma rede de segurança — um
+ // botão disabled não deve disparar clique, mas evita, em qualquer caso,
+ // enviar o pedido sem destinatário definido.
+ if (!window._mzSelectedPartnerWA) {
+  NotificationView.warn('⚠️ Selecione uma papelaria da lista antes de enviar.');
+  return;
+ }
+
  const svc = SERVICES[this.docModel.service];
  const data = DocumentView.collectData(svc?.fields || []);
  let msg;
@@ -1532,10 +1543,17 @@ export class DocumentController {
   const nome = data.nome || data.aluno || data.solicitante || 'Cliente';
   msg = `📋 *Novo pedido — ${svc?.title || 'Documento'}*\n\n👤 Nome: ${nome}\n\n_Via MzDocs Pro_`;
  }
- // Se há parceira seleccionada pelo utilizador, usar o número dela
- const targetWA = window._mzSelectedPartnerWA || WA_NUMBER();
+ const targetWA = window._mzSelectedPartnerWA;
  window.open(`https://wa.me/${targetWA}?text=${encodeURIComponent(msg)}`, '_blank');
- window._mzSelectedPartnerWA = null; // reset
+
+ // Reset: a próxima vez que o formulário abrir (ou a lista recarregar) o
+ // botão volta a nascer desactivado até nova selecção — ver
+ // resetPartnerSelection() em NearbyPartners.js.
+ window._mzSelectedPartnerWA = null;
+ window._mzSelectedPartnerName = null;
+ const btnWa = document.getElementById('btnWaDirect');
+ if (btnWa) btnWa.disabled = true;
+ document.querySelectorAll('.np-card.np-selected').forEach(c => c.classList.remove('np-selected'));
  }
 
  _applyTemplate(tpl) {
