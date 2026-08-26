@@ -156,9 +156,7 @@ export const TEMPLATES = [
       htmlTemplate: `
 <div class="cv-page cv-two-col">
   <aside class="cv-sidebar">
-    <div class="cv-sidebar-photo">
-      <div class="cv-photo-placeholder">{{INICIAIS}}</div>
-    </div>
+    <div class="cv-sidebar-photo">{{FOTO}}</div>
     <div class="cv-sidebar-block">
       <h3 class="cv-sidebar-title">Resumo Profissional</h3>
       <p class="cv-sidebar-text">{{OBJECTIVO}}</p>
@@ -222,6 +220,14 @@ export const TEMPLATES = [
           background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.4);
           display: inline-flex; align-items: center; justify-content: center;
           font-size: 22pt; font-weight: 800; color: #fff;
+        }
+        /* NOVO: foto real do utilizador (quando carregada) — mesmo
+           tamanho/forma do monograma, para o layout nunca mudar consoante
+           existe ou não foto. */
+        .cv-photo-real {
+          width: 60pt; height: 60pt; border-radius: 50%;
+          object-fit: cover; border: 2px solid rgba(255,255,255,.4);
+          display: inline-block;
         }
         .cv-sidebar-block { margin-bottom: 16pt; }
         .cv-sidebar-title {
