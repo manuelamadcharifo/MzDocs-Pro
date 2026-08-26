@@ -31,7 +31,24 @@ export const A4_HEIGHT_PX = 1123;  // 297mm @ 96dpi
 // preview seja fiel ao ficheiro final exportado.
 export const DEFAULT_PAGE_CSS = `
 *{box-sizing:border-box}
-html,body{margin:0;padding:0}
+/* CORRIGIDO (bug: barras/colunas coloridas de templates da Galeria
+   Comunitária não preenchiam a folha inteira, deixando espaço branco
+   desproporcional por baixo): "height:100%" é a técnica mais comum para uma
+   coluna lateral (sidebar) ocupar sempre a altura total da página — mas
+   uma percentagem de altura só resolve correctamente se TODOS os elementos
+   antecessores (html, body) também tiverem uma altura definida. Sem esta
+   linha, html/body não tinham QUALQUER altura própria (só margin/padding
+   estavam definidos), pelo que "height:100%" escrito por qualquer template
+   — próprio ou de terceiros — colapsava sempre para o tamanho natural do
+   conteúdo, nunca para a folha A4 inteira. Como o motor força sempre a
+   altura real do iframe para, no mínimo, A4_HEIGHT_PX (297mm — ver
+   scalePage() nesta mesma ficheiro), dar aqui 100% de altura a html/body
+   fá-los corresponder exactamente a essa folha A4 completa, permitindo que
+   qualquer sidebar/coluna com height:100% (ou min-height:100%) a preencha
+   de facto. Conteúdo mais alto do que uma página continua a ser medido
+   correctamente (scrollHeight não é afectado por overflow visível).
+*/
+html,body{margin:0;padding:0;height:100%;}
 body{
   font-family:'Times New Roman',Times,serif;
   font-size:12pt;
