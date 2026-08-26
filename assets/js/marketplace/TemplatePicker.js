@@ -27,6 +27,62 @@ function _notify(msg) {
 
 const OVERLAY_ID = 'templatePickerOverlay';
 
+// ── Sinónimos de placeholders da Galeria Comunitária ─────────────────────────
+// _extractRealData() (mais abaixo) produz sempre as MESMAS chaves internas —
+// NOME, CONTACTO, EMAIL, LOCALIZACAO, OBJECTIVO, FORMACAO, EXPERIENCIA,
+// HABILIDADES, LINGUAS, EXTRA, etc. Mas os templates da Galeria Comunitária
+// são escritos por terceiros, que usam à vontade nomes diferentes para o
+// mesmo conceito — {{telefone}} em vez de {{CONTACTO}}, {{morada}} em vez de
+// {{LOCALIZACAO}}, {{perfil}} em vez de {{OBJECTIVO}}, etc. Sem este mapa,
+// esses placeholders nunca encontram correspondência e ficavam visíveis tal
+// e qual no documento final (ver _fillTemplate). As chaves e valores aqui já
+// estão em minúsculas/normalizadas — a normalização acontece em _fillTemplate.
+const PLACEHOLDER_ALIASES = {
+  nome_completo: 'nome',
+  nomecompleto:  'nome',
+  full_name:     'nome',
+  fullname:      'nome',
+  telefone:      'contacto',
+  telemovel:     'contacto',
+  celular:       'contacto',
+  phone:         'contacto',
+  morada:        'localizacao',
+  endereco:      'localizacao',
+  address:       'localizacao',
+  localidade:    'localizacao',
+  cidade:        'localizacao',
+  perfil:        'objectivo',
+  resumo:        'objectivo',
+  sumario:       'objectivo',
+  summary:       'objectivo',
+  objetivo:      'objectivo', // variante ortográfica sem "c" (PT-BR)
+  idiomas:       'linguas',
+  languages:     'linguas',
+  referencias:   'extra',
+  observacoes:   'extra',
+  notas:         'extra',
+  competencias:  'habilidades',
+  competencia:   'habilidades', // forma no singular — usada como BASE em {{competencia1}}, {{competencia2}}...
+  skills:        'habilidades',
+  skill:         'habilidades',
+  idioma:        'linguas', // forma no singular — usada como BASE em {{idioma1}}, {{idioma2}}...
+  // Blocos estruturados repetidos (experiência/formação com vários números) —
+  // mapeiam todos para o MESMO bloco completo já formatado; mostra o mesmo
+  // conteúdo em cada placeholder numerado em vez de deixar em branco ou visível
+  // como {{experiencia2}} — não é perfeito, mas nunca quebra visualmente.
+  experiencia1:  'experiencia',
+  experiencia2:  'experiencia',
+  experiencia3:  'experiencia',
+  formacao1:     'formacao',
+  formacao2:     'formacao',
+};
+
+// Campos que são, por natureza, uma lista de itens curtos (não texto corrido
+// nem HTML estruturado) — usados para preencher placeholders indexados como
+// {{competencia1}}, {{competencia2}}, {{competencia3}} ou {{idioma1}},
+// {{idioma2}}, dividindo o texto por vírgula/ponto-e-vírgula/quebra de linha.
+const PLACEHOLDER_LIST_FIELDS = { habilidades: true, linguas: true };
+
 // ── CSS completo ──────────────────────────────────────────────────────────────
 const PICKER_CSS = `
 /* ── Overlay ── */
@@ -570,17 +626,97 @@ export class TemplatePicker {
   // placeholders {{...}} do template HTML de forma dinâmica, sem listas fixas.
 
   // ── Helper: aplica substituições de um objecto de dados a um template HTML ──
+  // CORRIGIDO (bug: placeholders como {{nome_completo}} apareciam literalmente
+  // no documento final, em vez dos dados reais): esta função construía UMA
+  // regex por cada chave de `data` (ex: /\{\{nome_completo\}\}/g) e só
+  // substituía se a grafia batesse EXACTAMENTE, caractere a caractere,
+  // maiúsculas incluídas, com o que estivesse escrito no HTML do template.
+  // Como cada criador de template (próprio ou da Galeria Comunitária) escreve
+  // as suas chaves à vontade — {{Nome_Completo}}, {{NOME}}, {{nome-completo}},
+  // {{ nome_completo }} com espaços, etc. — bastava UMA diferença de caixa ou
+  // de formatação para o placeholder nunca ser substituído.
+  //
+  // Pior ainda: a limpeza final de placeholders não preenchidos só apanhava
+  // o padrão TOTALMENTE EM MAIÚSCULAS (/\{\{[A-Z0-9_]+\}\}/g) — qualquer
+  // placeholder em minúsculas ou misto que escapasse à substituição ficava
+  // visível tal e qual no documento, sem qualquer rede de segurança (exactamente
+  // o que aconteceu nos templates "Documento completo" e "CV Profissional ATS").
+  //
+  // Agora corre-se UMA ÚNICA vez sobre os placeholders que realmente existem
+  // no template (nunca sobre chaves de `data` interpoladas cegamente numa
+  // regex — isso também evitava um risco de regex inválida/imprevisível se
+  // uma chave de dados contivesse caracteres especiais de regex), comparando
+  // cada um com os dados através de uma chave NORMALIZADA (minúsculas, sem
+  // acentos, sem símbolos) — por isso {{Nome_Completo}}, {{NOME COMPLETO}} e
+  // {{nome-completo}} correspondem todos à mesma entrada de dados
+  // "nome_completo", seja qual for a forma como o autor do template a
+  // escreveu. Qualquer placeholder que mesmo assim não tenha correspondência
+  // é sempre removido (nunca mostrado em bruto ao utilizador).
   _fillTemplate(htmlTemplate, data) {
     if (!htmlTemplate) return '';
-    let result = htmlTemplate;
-    // Substituir cada placeholder {{CHAVE}} pelo valor correspondente no data
-    for (const [key, value] of Object.entries(data)) {
-      const rx = new RegExp('\\{\\{' + key + '\\}\\}', 'g');
-      result = result.replace(rx, value != null ? String(value) : '');
+
+    // Normaliza uma chave para comparação: minúsculas, sem acentos, apenas
+    // letras/números/underscore — assim variações de grafia do mesmo campo
+    // são tratadas como idênticas.
+    const normalizeKey = (k) => (k || '')
+      .toString()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const normalizedData = {};
+    for (const [key, value] of Object.entries(data || {})) {
+      normalizedData[normalizeKey(key)] = value;
     }
-    // Limpar placeholders não substituídos
-    result = result.replace(/\{\{[A-Z0-9_]+\}\}/g, '');
-    return result;
+
+    // Cache dos campos-lista já divididos (uma vez por chamada), para não
+    // repetir o split() a cada placeholder indexado encontrado.
+    const listCache = {};
+    const getListItem = (baseKey, index) => {
+      if (!listCache[baseKey]) {
+        const raw = normalizedData[baseKey] || '';
+        listCache[baseKey] = String(raw)
+          .split(/,|;|\n/)
+          .map(s => s.trim())
+          .filter(Boolean);
+      }
+      return listCache[baseKey][index - 1] || '';
+    };
+
+    // Uma única passagem sobre TODOS os placeholders {{...}} presentes no
+    // template — cada um é resolvido por ordem de prioridade, ou removido.
+    return htmlTemplate.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (fullMatch, rawKey) => {
+      const norm = normalizeKey(rawKey);
+
+      // 1. Correspondência directa (mesma chave, independente de caixa/acentos)
+      if (normalizedData[norm] !== undefined && normalizedData[norm] !== '') {
+        return String(normalizedData[norm]);
+      }
+
+      // 2. Placeholder indexado sobre um campo-lista conhecido — ex:
+      //    {{competencia1}} → base "competencia" → sinónimo "habilidades"
+      //    → 1º item de "Informática, carta de condução C".
+      const indexedMatch = norm.match(/^([a-z_]+?)_?(\d+)$/);
+      if (indexedMatch) {
+        const [, base, idxStr] = indexedMatch;
+        const aliasBase = PLACEHOLDER_ALIASES[base] || base;
+        if (PLACEHOLDER_LIST_FIELDS[aliasBase]) {
+          const item = getListItem(aliasBase, parseInt(idxStr, 10));
+          if (item) return item;
+        }
+      }
+
+      // 3. Sinónimo conhecido (telefone→contacto, morada→localizacao, etc.)
+      const alias = PLACEHOLDER_ALIASES[norm];
+      if (alias && normalizedData[alias] !== undefined && normalizedData[alias] !== '') {
+        return String(normalizedData[alias]);
+      }
+
+      // 4. Sem correspondência possível de nenhuma forma — remove sempre o
+      //    placeholder em vez de o deixar visível em bruto no documento.
+      return '';
+    });
   }
 
   // ── Extracção universal: retorna um Map de todos os dados do markdown ─────
