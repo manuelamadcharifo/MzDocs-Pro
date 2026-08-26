@@ -81,22 +81,49 @@ async function tplList(req, res) {
     .exec(String(req.query?.id || ''));
   const id = idMatch ? idMatch[1] : null;
 
-  // CORRIGIDO: faltava template_html aqui — só template_css estava no
-  // select. Sem o HTML, o frontend (templates.html → _buildSampleHtml)
-  // nunca conseguia preencher os placeholders {{...}} com dados de
-  // exemplo e caía sempre no fallback markdown genérico ("Título do
-  // Documento de Exemplo... texto de demonstração"), mesmo para
-  // templates com HTML real guardado na tabela.
-  const fields  = 'id,service_type,template_name,description,thumbnail_url,template_html,template_css,downloads,likes,rating_sum,rating_count,created_at';
+  // CORRIGIDO (bug grave, confirmado por captura de ecrã — fuga de receita
+  // real, não só visual): faltava a coluna "credit_cost" neste SELECT. O
+  // cartão da grelha (endpoint /gallery, tabela v_templates_gallery) mostra
+  // correctamente "⭐ 2 cr" porque usa SELECT *, mas este endpoint /list —
+  // usado tanto para a listagem geral como para o modal de detalhe de UM
+  // template específico — construía a lista de colunas à mão e nunca
+  // incluiu credit_cost. Resultado: no modal de detalhe, currentTpl.credit_cost
+  // vinha sempre undefined → mostrava "✓ Gratuito" para um template PAGO, e
+  // o botão "Usar este Template" (useTemplate() em templates.html, que lê
+  // exactamente este mesmo campo) NUNCA debitava créditos, mesmo em
+  // templates premium. Aproveitou-se para também incluir use_count e tags,
+  // que o modal de detalhe (openDetail) também espera mas também faltavam
+  // aqui pela mesma razão (apenas menos visível: secções vazias, sem
+  // mostrar informação errada).
+  const fields  = 'id,service_type,template_name,description,thumbnail_url,template_html,template_css,downloads,use_count,likes,rating_sum,rating_count,credit_cost,tags,created_at';
   let path = `templates_custom?status=eq.approved&is_public=eq.true&order=downloads.desc&limit=${limit}&select=${fields}`;
   if (service) path += `&service_type=eq.${encodeURIComponent(service)}`;
   if (id) path += `&id=eq.${id}`;
   try {
     const data = await restRequest(path);
-    const templates = (Array.isArray(data) ? data : []).map(t => ({
+    let templates = (Array.isArray(data) ? data : []).map(t => ({
       ...t,
       avg_rating: t.rating_count > 0 ? Math.round((t.rating_sum / t.rating_count) * 10) / 10 : null,
     }));
+
+    // NOVO (v64): quando é pedido UM template específico (modal de
+    // detalhe) e existe uma sessão válida, informar se o utilizador já
+    // pagou por ele antes — "uma vez pago, fica disponível por tempo
+    // indefinido" (pedido do cliente). O frontend usa already_purchased
+    // para mostrar "✓ Já comprado" em vez do preço, e para NÃO voltar a
+    // debitar créditos em useTemplate(). Autenticação aqui é best-effort:
+    // um visitante sem sessão continua a ver o preço normalmente.
+    if (id && templates.length) {
+      const user = await getAuthUser(req).catch(() => null);
+      if (user?.id) {
+        const owned = await restRequest(
+          `template_purchases?template_id=eq.${id}&user_id=eq.${user.id}&select=id&limit=1`
+        ).catch(() => []);
+        const alreadyPurchased = Array.isArray(owned) && owned.length > 0;
+        templates = templates.map(t => ({ ...t, already_purchased: alreadyPurchased }));
+      }
+    }
+
     return res.status(200).json({ success: true, templates });
   } catch (err) {
     console.error('[tplList] erro:', err.message);
@@ -426,6 +453,20 @@ async function tplUse(req, res) {
   const { template_id, service_key, session_id } = parseBody(req);
   if (!template_id) return res.status(400).json({ error: 'template_id obrigatório' });
   try {
+    // NOVO (v64): "uma vez pago, o template fica disponível para o
+    // utilizador que pagou por tempo indefinido" (pedido explícito do
+    // cliente). Sem esta verificação, cada reutilização de um template
+    // pago voltava a debitar créditos (bug do SELECT em tplList já
+    // corrigido) E pagaria royalties ao autor outra vez, indefinidamente,
+    // pela MESMA compra original.
+    let alreadyOwned = false;
+    if (user?.id) {
+      const existing = await restRequest(
+        `template_purchases?template_id=eq.${template_id}&user_id=eq.${user.id}&select=id&limit=1`
+      ).catch(() => []);
+      alreadyOwned = Array.isArray(existing) && existing.length > 0;
+    }
+
     const result = await rpc('use_template', {
       p_template_id: template_id,
       p_user_id: user?.id || null,
@@ -445,7 +486,12 @@ async function tplUse(req, res) {
     // para o criador poder levantar via M-Pesa: convertemos os créditos
     // gastos para MZN usando a taxa média (dinâmica) dos pacotes activos
     // — a mesma fonte de verdade do checkout — nunca um valor fixo.
-    if (result?.success && user?.id && (result.credit_cost || 0) > 0) {
+    //
+    // CORRIGIDO (v64): só processar a venda (e registar a compra) quando
+    // NÃO for uma reutilização de um template já pago anteriormente —
+    // "!alreadyOwned" — para nunca cobrar créditos nem pagar royalties
+    // duas vezes pela mesma compra.
+    if (result?.success && user?.id && (result.credit_cost || 0) > 0 && !alreadyOwned) {
       const packages    = await loadPackagesFromSettings();
       const mznPerCredit = estimateMznPerCredit(packages);
       const amountMzn    = Math.round(result.credit_cost * mznPerCredit * 100) / 100;
@@ -455,8 +501,16 @@ async function tplUse(req, res) {
         p_credits_spent: result.credit_cost,
         p_amount_mzn:    amountMzn,
       }).catch(e => console.warn('[tplUse] process_template_sale falhou:', e.message));
+
+      // Desbloqueio permanente: registar que este utilizador já pagou por
+      // este template, para nunca mais ser cobrado ao reutilizá-lo.
+      insert('template_purchases', {
+        template_id,
+        user_id: user.id,
+        credits_paid: result.credit_cost,
+      }).catch(e => console.warn('[tplUse] registo de compra falhou:', e.message));
     }
-    return res.status(200).json(result);
+    return res.status(200).json({ ...result, already_owned: alreadyOwned });
   } catch (err) {
     console.error('[tplUse] erro:', err.message);
     // Não bloquear o fluxo de aplicação do template por falha no registo
