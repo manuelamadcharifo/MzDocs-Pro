@@ -242,6 +242,28 @@ const PICKER_CSS = `
 .tpl-upload-zone.active .tpl-upload-badge{display:block}
 .tpl-upload-zone.active .tpl-upload-sub{color:#059669}
 
+/* ── NOVO: zona de foto de perfil — só visível para modelos com {{FOTO}} ── */
+.tpl-photo-zone{
+  flex-shrink:0;margin:0 12px 8px;
+  border:2px dashed #cbd5e1;border-radius:12px;
+  background:#f8fafc;padding:10px 14px;
+  display:flex;align-items:center;gap:10px;
+  cursor:pointer;transition:border-color .15s,background .15s;
+}
+.tpl-photo-zone:hover{border-color:#3B82F6;background:#eff6ff}
+.tpl-photo-preview{
+  flex-shrink:0;width:40px;height:40px;border-radius:50%;
+  background:#e2e8f0;display:flex;align-items:center;justify-content:center;
+  font-size:20px;overflow:hidden;
+}
+.tpl-photo-text{flex:1;min-width:0}
+.tpl-photo-title{font-size:12px;font-weight:700;color:#334155}
+.tpl-photo-sub{font-size:10px;color:#64748b;margin-top:1px}
+.tpl-photo-remove{
+  flex-shrink:0;width:26px;height:26px;border-radius:50%;border:none;
+  background:#fee2e2;color:#dc2626;font-size:13px;font-weight:700;cursor:pointer;
+}
+
 .tpl-gallery-link{
   flex-shrink:0;margin:8px 12px 0;text-align:center;
   font-size:12px;font-weight:700;color:#3B82F6;text-decoration:none;
@@ -352,6 +374,10 @@ export class TemplatePicker {
     this._customFile   = null;
     this._customName   = null;
     this._customActive = false;
+    // NOVO: limpar foto de perfil — cada documento começa sem foto herdada
+    // de uma sessão anterior do selector de modelos.
+    this._userPhotoDataUrl = null;
+    this._photoSupported   = false;
   }
 
   // ── Injectar HTML + CSS (uma vez) ────────────────────────────────────────
@@ -386,6 +412,17 @@ export class TemplatePicker {
         </div>
         <div class="tpl-sel-bar" id="tplSelBar">Seleccione um modelo acima</div>
 
+        <!-- NOVO: foto de perfil — só aparece quando o modelo escolhido declara {{FOTO}} -->
+        <div class="tpl-photo-zone" id="tplPhotoZone" style="display:none">
+          <div class="tpl-photo-preview" id="tplPhotoPreview">👤</div>
+          <div class="tpl-photo-text">
+            <div class="tpl-photo-title">📷 Foto de perfil (opcional)</div>
+            <div class="tpl-photo-sub" id="tplPhotoSub">Este modelo tem espaço para foto — toque para carregar</div>
+          </div>
+          <button type="button" class="tpl-photo-remove" id="tplPhotoRemove" style="display:none" title="Remover foto">✕</button>
+          <input type="file" id="tplPhotoInput" accept="image/*" style="display:none">
+        </div>
+
         <!-- Zona de upload de modelo próprio -->
         <div class="tpl-upload-zone" id="tplUploadZone" title="Carregar modelo próprio (imagem, PDF ou Word)">
           <div class="tpl-upload-icon">📎</div>
@@ -415,7 +452,27 @@ export class TemplatePicker {
     document.getElementById('tplBtnPDF')?.addEventListener('click',   () => this._onPDF?.(this._tpl));
     document.getElementById('tplBtnWord')?.addEventListener('click',  () => this._onWord?.(this._tpl));
 
-    // ── v38: mini filtro Grátis/Pagos ─────────────────────────────────────
+    // ── NOVO: foto de perfil (opcional, depende do modelo) ─────────────────
+    const photoZone      = document.getElementById('tplPhotoZone');
+    const photoInput     = document.getElementById('tplPhotoInput');
+    const photoRemoveBtn = document.getElementById('tplPhotoRemove');
+
+    photoZone?.addEventListener('click', e => {
+      if (e.target === photoRemoveBtn) return; // remoção tratada à parte
+      if (e.target !== photoInput) photoInput?.click();
+    });
+    photoInput?.addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (file) this._handlePhotoUpload(file);
+      e.target.value = ''; // permite voltar a escolher o mesmo ficheiro depois de remover
+    });
+    photoRemoveBtn?.addEventListener('click', e => {
+      e.stopPropagation();
+      this._userPhotoDataUrl = null;
+      this._refreshPhotoPreview();
+    });
+
+
     document.querySelectorAll('#tplFilterBar .tpl-filter-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         if (this._filter === btn.dataset.filter) return;
@@ -555,6 +612,94 @@ export class TemplatePicker {
     }
 
     this._renderPreview(tpl);
+    // NOVO: mostrar/esconder a opção de foto consoante o modelo escolhido
+    // declare (ou não) um placeholder {{FOTO}} no seu htmlTemplate.
+    this._updatePhotoZoneVisibility(tpl);
+  }
+
+  // ── NOVO: foto de perfil — operacional e dependente do modelo escolhido ───
+  // Só templates cujo htmlTemplate contenha literalmente "{{FOTO}}" mostram
+  // esta opção (hoje, apenas 'cv-executivo' em templates/cv.js — mas
+  // qualquer template futuro, próprio ou da Galeria Comunitária, herda
+  // automaticamente o suporte só por incluir esse placeholder, sem precisar
+  // de alterar este ficheiro). Sem foto carregada, mantém-se o
+  // comportamento anterior (monograma com iniciais) — nunca fica um espaço
+  // vazio nem quebra modelos que nunca tiveram noção de fotos.
+  _updatePhotoZoneVisibility(tpl) {
+    const zone = document.getElementById('tplPhotoZone');
+    if (!zone) return;
+    this._photoSupported = !!(tpl?.htmlTemplate && tpl.htmlTemplate.includes('{{FOTO}}'));
+    zone.style.display = this._photoSupported ? '' : 'none';
+    this._refreshPhotoPreview();
+  }
+
+  // Actualiza o círculo de pré-visualização da foto no selector de modelos,
+  // e volta a renderizar o preview do documento para reflectir a foto
+  // (ou a sua remoção) de imediato, sem esperar por "Usar este Modelo".
+  _refreshPhotoPreview() {
+    const previewEl = document.getElementById('tplPhotoPreview');
+    const subEl     = document.getElementById('tplPhotoSub');
+    const removeBtn = document.getElementById('tplPhotoRemove');
+    if (previewEl) {
+      previewEl.innerHTML = this._userPhotoDataUrl
+        ? `<img src="${this._userPhotoDataUrl}" alt="Foto" style="width:100%;height:100%;object-fit:cover;">`
+        : '👤';
+    }
+    if (subEl) {
+      subEl.textContent = this._userPhotoDataUrl
+        ? 'Foto carregada — toque para trocar'
+        : 'Este modelo tem espaço para foto — toque para carregar';
+    }
+    if (removeBtn) removeBtn.style.display = this._userPhotoDataUrl ? '' : 'none';
+    if (this._tpl && this._photoSupported) this._renderPreview(this._tpl);
+  }
+
+  // Valida, recorta (quadrado centrado) e comprime a foto carregada antes de
+  // a guardar — mantém o PDF/Word final leve mesmo com fotos grandes da
+  // câmara do telemóvel, e o recorte quadrado combina com o contentor
+  // circular (border-radius:50%) usado nos templates com foto.
+  async _handlePhotoUpload(file) {
+    if (!file.type?.startsWith('image/')) {
+      _notify('Por favor escolha um ficheiro de imagem (JPG, PNG...).');
+      return;
+    }
+    const MAX_SIZE_MB = 8;
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      _notify(`Imagem demasiado grande (máx. ${MAX_SIZE_MB}MB).`);
+      return;
+    }
+    try {
+      this._userPhotoDataUrl = await this._resizePhotoToDataUrl(file, 400, 0.85);
+      this._refreshPhotoPreview();
+    } catch (err) {
+      console.error('[TemplatePicker] erro ao processar foto:', err);
+      _notify('Não foi possível processar essa imagem.');
+    }
+  }
+
+  _resizePhotoToDataUrl(file, maxSide, quality) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Falha a ler o ficheiro'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Ficheiro não é uma imagem válida'));
+        img.onload = () => {
+          // Recorte quadrado centrado — combina com o círculo do template.
+          const side = Math.min(img.width, img.height);
+          const sx = (img.width - side) / 2;
+          const sy = (img.height - side) / 2;
+          const size = Math.min(maxSide, side);
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, size, size);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   // ── Renderizar preview ───────────────────────────────────────────────────
@@ -931,6 +1076,17 @@ export class TemplatePicker {
     );
     data['NOME']    = esc(nomeRaw);
     data['INICIAIS']= nomeRaw.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || 'XX';
+
+    // ── NOVO: foto de perfil (operacional, depende do modelo) ────────────────
+    // this._userPhotoDataUrl só existe se o utilizador carregou uma foto no
+    // selector de modelos (ver _handlePhotoUpload) — e a opção de carregar
+    // só aparece para templates cujo htmlTemplate contenha {{FOTO}} (ver
+    // _updatePhotoZoneVisibility). Sem foto carregada, mantém-se o
+    // monograma circular com as iniciais (comportamento anterior a esta
+    // funcionalidade) — nunca fica um espaço vazio no lugar da foto.
+    data['FOTO'] = this._userPhotoDataUrl
+      ? `<img class="cv-photo-real" src="${this._userPhotoDataUrl}" alt="${esc(nomeRaw)}">`
+      : `<div class="cv-photo-placeholder">${esc(data['INICIAIS'])}</div>`;
 
     if (key === 'cv') {
       // Cargo: linha logo após o nome (antes dos contactos)
