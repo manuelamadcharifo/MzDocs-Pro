@@ -592,13 +592,26 @@ export class TemplatePicker {
       // na primeira página. Se não temos htmlTemplate, ou para páginas
       // seguintes, renderizamos o markdown com o conversor GFM partilhado
       // (markdownToHtml) — que agora trata tabelas "|" como tabelas reais.
-      const rawHtmlPages = pageContents.map((pageMarkdown, i) => {
-        if (tpl.htmlTemplate && i === 0) {
-          const rd = this._extractRealData(rawContent, this._key);
-          return this._fillTemplate(tpl.htmlTemplate, rd);
-        }
-        return `<div style="padding:10mm">${markdownToHtml(pageMarkdown)}</div>`;
-      });
+      //
+      // CORRIGIDO (bug: secções como "Experiência" apareciam duplicadas no
+      // preview): _extractRealData(rawContent, ...) lê SEMPRE o conteúdo
+      // COMPLETO (todas as secções, de todas as "páginas"), porque o
+      // template com layout próprio (sidebar, 2 colunas) precisa de TODOS
+      // os dados para preencher a página 1. O código antigo, no entanto,
+      // ALÉM disso continuava a percorrer pageContents (as fatias calculadas
+      // para o texto simples SEM template) e renderizava cada fatia extra
+      // como uma página adicional — repetindo secções que a página 1 (com o
+      // template) já tinha mostrado por inteiro. Um documento com HTML
+      // template mostra sempre UMA única página com todos os dados; a
+      // paginação por ---PAGE_BREAK--- só se aplica ao texto simples, sem
+      // template, cujo layout de facto pode transbordar para várias folhas.
+      let rawHtmlPages;
+      if (tpl.htmlTemplate) {
+        const rd = this._extractRealData(rawContent, this._key);
+        rawHtmlPages = [ this._fillTemplate(tpl.htmlTemplate, rd) ];
+      } else {
+        rawHtmlPages = pageContents.map(pageMarkdown => `<div style="padding:10mm">${markdownToHtml(pageMarkdown)}</div>`);
+      }
 
       renderA4Pages(outer, rawContent, {
         css:          tpl.css || '',
@@ -686,7 +699,7 @@ export class TemplatePicker {
 
     // Uma única passagem sobre TODOS os placeholders {{...}} presentes no
     // template — cada um é resolvido por ordem de prioridade, ou removido.
-    return htmlTemplate.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (fullMatch, rawKey) => {
+    const filled = htmlTemplate.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (fullMatch, rawKey) => {
       const norm = normalizeKey(rawKey);
 
       // 1. Correspondência directa (mesma chave, independente de caixa/acentos)
@@ -717,6 +730,17 @@ export class TemplatePicker {
       //    placeholder em vez de o deixar visível em bruto no documento.
       return '';
     });
+
+    // CORRIGIDO (bug: marcadores de lista vazios "•" visíveis, ex: 3
+    // bullets em branco a seguir às competências reais): alguns templates
+    // têm um número FIXO de "slots" (ex: {{competencia1}} a
+    // {{competencia5}}), mas o utilizador pode ter menos itens reais do que
+    // isso. Depois de preencher tudo o que existe, remove <li>/<p> que
+    // ficaram completamente vazios — nunca deixa um marcador ou linha em
+    // branco visível apenas porque faltavam dados para aquele slot.
+    return filled
+      .replace(/<li[^>]*>\s*<\/li>/gi, '')
+      .replace(/<p[^>]*>\s*<\/p>/gi, '');
   }
 
   // ── Extracção universal: retorna um Map de todos os dados do markdown ─────
@@ -765,6 +789,23 @@ export class TemplatePicker {
         sections.push(current);
       }
 
+      // CORRIGIDO (bug: texto extraído terminava com "---" visível, ex:
+      // "...atmosfera positiva das organizações. ---"): o prompt da IA usa
+      // uma linha "---" (separador horizontal) entre CADA secção do
+      // documento — mas o corte de conteúdo acima ("allLines.slice(...)")
+      // vai sempre até à linha ANTES do próximo heading, o que inclui essa
+      // linha "---" dentro do conteúdo da secção anterior (o separador vem
+      // depois do texto, mas antes do próximo "##"). Isto acontecia com
+      // QUALQUER secção extraída (Objectivo, Realização, etc.), não só CV.
+      // Remove-se aqui, uma única vez, para todas.
+      sections.forEach(s => {
+        s.content = s.content
+          .split('\n')
+          .filter(line => !/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line))
+          .join('\n')
+          .trim();
+      });
+
       // Procurar secção cujo título coincide
       const rx = new RegExp(titlePat, 'i');
       for (const s of sections) {
@@ -802,8 +843,15 @@ export class TemplatePicker {
           flush();
           const title = stripMd(m[1].trim());
           const rest  = (m[2] || '').trim();
-          // Separar org e período
-          const parts = rest.split(/\s*[|—–]\s*/);
+          // Separar org e período — SÓ pelo pipe "|", que é o separador de
+          // campos real usado pela IA ("**Cargo** | Organização | Período").
+          // CORRIGIDO: dividir também por "—"/"–" (travessão/hífen) partia o
+          // próprio Período ao meio sempre que este era um INTERVALO de anos
+          // como "2018 — 2020" — o travessão do intervalo era confundido com
+          // um separador de campo, produzindo "período: 2020" e
+          // "organização: Igreja de São João · 2018" (o ano de início ficava
+          // preso à organização em vez de fazer parte do período completo).
+          const parts = rest.split(/\s*\|\s*/);
           // Detectar qual parte é período (contém dígitos de ano)
           let org = '', period = '';
           if (parts.length >= 2) {
@@ -930,8 +978,17 @@ export class TemplatePicker {
 
       // Línguas
       const linguasRaw = section('L[íi]ngua|Idioma|Language') || '';
-      data['LINGUAS'] = linguasRaw
-        .split(/[\n,;•·]/)
+      let linguaSegments = linguasRaw.split(/[\n,;•·]/).map(s => s.trim()).filter(Boolean);
+      // CORRIGIDO (bug: línguas apareciam coladas, ex: "InglêsFluente | Changana"):
+      // quando a IA escreve todas as línguas seguidas numa única linha, sem
+      // vírgulas nem quebras de linha entre elas, o split acima devolve um
+      // ÚNICO bloco (não uma entrada por língua). Detecta esse caso e extrai
+      // cada par "Nome — Nível" directamente por regex.
+      if (linguaSegments.length <= 1) {
+        const pairs = [...linguasRaw.matchAll(/([A-ZÀ-Úa-zà-ú]+)\s*[—–\-:]\s*(Nativo|Fluente|Avan[cç]ado|Interm[eé]dio|B[aá]sico)/gi)];
+        if (pairs.length > 1) linguaSegments = pairs.map(p => `${p[1]} — ${p[2]}`);
+      }
+      data['LINGUAS'] = linguaSegments
         .map(l => {
           const clean = stripMd(l.replace(/^[-*+]\s*/,'')).trim();
           if (clean.length < 2) return '';
@@ -939,7 +996,14 @@ export class TemplatePicker {
           const parts = clean.split(/\s*[—–\-]\s*|\s*[\(\)]\s*|\s{2,}/);
           const name  = parts[0].trim();
           const level = parts[1] ? parts[1].replace(/[()]/g,'').trim() : '';
-          return `<div class="cv-lang-item"><span class="cv-lang-name">${esc(name)}</span>${level ? `<span class="cv-lang-level">${esc(level)}</span>` : ''}</div>`;
+          // CORRIGIDO: o separador entre nome e nível dependia inteiramente
+          // do CSS do template (display:block em .cv-lang-name) para não
+          // ficarem colados visualmente — nos templates da Galeria
+          // Comunitária, que não conhecem estas classes, "Inglês" e
+          // "Fluente" apareciam encostados um ao outro sem espaço. Agora o
+          // separador " — " faz parte do próprio texto, funcionando em
+          // qualquer template independentemente do CSS.
+          return `<div class="cv-lang-item"><span class="cv-lang-name">${esc(name)}</span>${level ? `<span class="cv-lang-level"> — ${esc(level)}</span>` : ''}</div>`;
         })
         .filter(Boolean)
         .join('') || `<div class="cv-lang-item"><span class="cv-lang-name">${esc(linguasRaw || 'Português')}</span></div>`;
