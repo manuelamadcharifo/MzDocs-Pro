@@ -615,6 +615,15 @@ export class TemplatePicker {
     // NOVO: mostrar/esconder a opção de foto consoante o modelo escolhido
     // declare (ou não) um placeholder {{FOTO}} no seu htmlTemplate.
     this._updatePhotoZoneVisibility(tpl);
+
+    // NOVO: o botão principal mostra sempre o custo antes de o utilizador
+    // confirmar — evita surpresas, e deixa claro quando é grátis.
+    const applyBtn = document.getElementById('tplBtnApply');
+    if (applyBtn) {
+      applyBtn.textContent = (tpl._fromMarketplace && tpl.credit_cost > 0)
+        ? `✅ Usar este Modelo — ${tpl.credit_cost} créd.`
+        : '✅ Usar este Modelo';
+    }
   }
 
   // ── NOVO: foto de perfil — operacional e dependente do modelo escolhido ───
@@ -1302,7 +1311,24 @@ export class TemplatePicker {
   }
 
   // ── Aplicar template e fechar ────────────────────────────────────────────
-  _apply() {
+  // CORRIGIDO (bug grave — fuga de receita, confirmado por captura de
+  // ecrã do utilizador): esta função aplicava QUALQUER modelo, incluindo
+  // os marcados como pagos (badge "💰 N créd."), sem nunca debitar
+  // créditos nem registar a compra — o preço era puramente decorativo.
+  // Este selector ("Escolher Modelo", dentro do resultado do documento)
+  // carrega os templates do marketplace directamente via Supabase (RLS —
+  // ver TemplateLibrary.js/loadPublicTemplatesFromSupabase), um caminho
+  // completamente separado da galeria standalone (templates.html), que já
+  // tinha sido corrigida para este mesmo problema — era necessário
+  // corrigir aqui também, em separado.
+  //
+  // Antes de aplicar um modelo com credit_cost > 0, confirma-se sempre o
+  // preço actual e se o utilizador já o comprou antes (desbloqueio
+  // permanente — tabela template_purchases, partilhada com a galeria
+  // standalone) directamente no servidor, nunca confiando só no valor já
+  // carregado no browser. Só se debitam créditos e regista-se a compra
+  // quando é mesmo uma compra nova.
+  async _apply() {
     if (!this._tpl) {
       _notify('Seleccione um modelo primeiro.');
       return;
@@ -1318,9 +1344,73 @@ export class TemplatePicker {
       return;
     }
 
-    // Template pré-definido ou extraído de imagem → aplicar normalmente
-    this._onApply?.(this._tpl);
-    this.close();
+    const applyNow = () => { this._onApply?.(this._tpl); this.close(); };
+
+    // Só os templates carregados do marketplace (_fromMarketplace) podem
+    // ter custo — os embutidos localmente (cv.js, etc.) são sempre grátis.
+    if (!this._tpl._fromMarketplace || !(this._tpl.credit_cost > 0)) {
+      applyNow();
+      return;
+    }
+
+    const token = window.authManager?.getToken ? window.authManager.getToken() : null;
+    if (!token) { _notify('Sessão expirada. Inicie sessão novamente.'); return; }
+
+    const btn = document.getElementById('tplBtnApply');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ A verificar…'; }
+    try {
+      // 1. Confirmar preço/posse actual no servidor — nunca confiar só no
+      //    valor já carregado no browser (podia estar desactualizado, ou
+      //    ter sido manipulado no cliente).
+      const listRes  = await fetch(`/api/templates?action=list&id=eq.${this._tpl.id}&limit=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const listData   = await listRes.json().catch(() => null);
+      const serverTpl  = listData?.templates?.[0];
+      const cost        = serverTpl?.credit_cost ?? this._tpl.credit_cost ?? 0;
+      const alreadyOwned = !!serverTpl?.already_purchased;
+
+      if (cost > 0 && !alreadyOwned) {
+        if (btn) btn.textContent = `⏳ A debitar ${cost} crédito(s)…`;
+        const operationId = crypto.randomUUID();
+        const deductRes = await fetch('/api/deduct-credit', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ cost, documentType: `template_${this._key || ''}`, operationId }),
+        });
+        if (deductRes.status === 402) { _notify('⚠️ Créditos insuficientes para este modelo premium.'); return; }
+        if (deductRes.status === 401) { _notify('Sessão expirada. Inicie sessão novamente.'); return; }
+        if (deductRes.status === 403) { _notify('Conta bloqueada. Contacte o suporte.'); return; }
+        if (!deductRes.ok) { _notify('Erro ao debitar créditos. Tente novamente.'); return; }
+        const deductData = await deductRes.json().catch(() => null);
+        if (!deductData?.success) { _notify('Erro ao debitar créditos. Tente novamente.'); return; }
+
+        // Regista a compra (desbloqueio permanente) — mesmo endpoint já
+        // corrigido em api/_services/templates.js (tplUse), que grava em
+        // template_purchases para nunca mais cobrar por este modelo.
+        fetch('/api/templates?action=use', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ template_id: this._tpl.id, service_key: this._key || '' }),
+        }).catch(() => {});
+
+        _notify(`✓ ${cost} crédito(s) debitado(s).`);
+      } else if (alreadyOwned) {
+        _notify('✓ Já comprou este modelo — sem custo adicional.');
+      }
+
+      applyNow();
+    } catch (err) {
+      console.error('[TemplatePicker] erro ao processar pagamento do modelo:', err);
+      _notify('Erro de rede ao processar o pagamento. Tente novamente.');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = (this._tpl?._fromMarketplace && this._tpl?.credit_cost > 0)
+          ? `✅ Usar este Modelo — ${this._tpl.credit_cost} créd.`
+          : '✅ Usar este Modelo';
+      }
+    }
   }
 
   // ── Upload de modelo próprio ─────────────────────────────────────────────
