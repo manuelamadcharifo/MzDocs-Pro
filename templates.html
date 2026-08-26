@@ -921,7 +921,14 @@ async function openDetail(id) {
   // Buscar dados se não em cache
   if (!tplCache[id]) {
     try {
-      const r = await fetch(`${API}/list?id=eq.${id}&limit=1`);
+      // NOVO (v64): enviar o token (se existir sessão) para que o servidor
+      // possa verificar se este utilizador já pagou por este template antes
+      // — ver tplList em api/_services/templates.js. Sem sessão, o pedido
+      // continua a funcionar normalmente (visitante anónimo vê só o preço).
+      const token = getToken();
+      const r = await fetch(`${API}/list?id=eq.${id}&limit=1`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       const { templates } = await r.json();
       tplCache[id] = templates?.[0];
     } catch { notify('Erro ao carregar template','error'); return; }
@@ -956,14 +963,36 @@ async function openDetail(id) {
   }
 
   // Meta
+  // CORRIGIDO (bug grave — fuga de receita, ver comentário em tplList):
+  // t.credit_cost agora vem sempre correcto do servidor. NOVO (v64):
+  // t.already_purchased (só definido quando há sessão válida) mostra
+  // "✓ Já comprado" em vez do preço, para deixar claro que reutilizar
+  // este template não volta a custar créditos.
   const metaEl = document.getElementById('detailMeta');
+  const priceTag = t.already_purchased
+    ? `<span class="tpl-detail-stat" style="color:#10B981;font-weight:700">✓ Já comprado — sem custo adicional</span>`
+    : t.credit_cost > 0
+      ? `<span class="tpl-detail-stat" style="color:#F59E0B;font-weight:700">⭐ ${t.credit_cost} créditos</span>`
+      : `<span class="tpl-detail-stat" style="color:#10B981;font-weight:700">✓ Gratuito</span>`;
   metaEl.innerHTML = [
     t.use_count  ? `<span class="tpl-detail-stat">📄 ${t.use_count} usos</span>` : '',
     t.downloads  ? `<span class="tpl-detail-stat">⬇️ ${t.downloads}</span>` : '',
     t.avg_rating ? `<span class="tpl-detail-stat">⭐ ${t.avg_rating} (${t.rating_count})</span>` : '',
-    t.credit_cost > 0 ? `<span class="tpl-detail-stat" style="color:#F59E0B;font-weight:700">⭐ ${t.credit_cost} créditos</span>` : '<span class="tpl-detail-stat" style="color:#10B981;font-weight:700">✓ Gratuito</span>',
+    priceTag,
     t.author_name ? `<span class="tpl-detail-stat">👤 ${t.author_name}</span>` : '',
   ].join('');
+
+  // NOVO (v64): o botão principal também mostra o custo directamente —
+  // o utilizador pede explicitamente para saber quanto vai pagar ANTES
+  // de tocar em "Usar este Template", não só numa etiqueta secundária.
+  const useBtn = document.getElementById('btnTplUse');
+  if (useBtn) {
+    useBtn.textContent = t.already_purchased
+      ? '✦ Usar este Template (já comprado)'
+      : t.credit_cost > 0
+        ? `✦ Usar este Template — ${t.credit_cost} créditos`
+        : '✦ Usar este Template (grátis)';
+  }
 
   // Tags
   const tagsEl = document.getElementById('detailTags');
@@ -1001,6 +1030,11 @@ function closeDetail() {
 // padrão já usado em DocumentController.handleReedit — e só se prossegue
 // com sucesso confirmado. Templates gratuitos (credit_cost = 0) seguem
 // exactamente como antes, sem nenhuma dedução.
+//
+// NOVO (v64): "uma vez pago, o template fica disponível para o utilizador
+// que pagou por tempo indefinido" — currentTpl.already_purchased (vindo do
+// servidor, ver tplList) salta a dedução de créditos por completo quando
+// este utilizador já tinha pago por este MESMO template antes.
 async function useTemplate() {
   if (!currentTpl) return;
   if (!currentUser) { notify('Faça login para usar templates','warning'); return; }
@@ -1009,7 +1043,9 @@ async function useTemplate() {
   if (!token) { notify('Sessão expirada. Inicie sessão novamente.','error'); return; }
 
   const cost = currentTpl.credit_cost || 0;
-  if (cost > 0) {
+  if (cost > 0 && currentTpl.already_purchased) {
+    notify('✓ Já pagou por este template — a aplicar sem custo adicional.', 'success');
+  } else if (cost > 0) {
     notify(`A debitar ${cost} crédito(s)…`, 'info');
     try {
       const deductRes = await fetch('/api/deduct-credit', {
