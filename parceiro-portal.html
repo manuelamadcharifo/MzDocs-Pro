@@ -174,6 +174,20 @@
 
     <!-- ABA: PERFIL (conteúdo já existente) -->
     <div id="tabProfile" class="show">
+    <!-- NOVO: ponte inversa — "torna-te também afiliado". Só para
+         papelarias (type='papelaria'): 'advogado' não tem segmento
+         equivalente no programa de afiliados (ver CHECK constraint em
+         profiles.aff_segment — não inclui 'advogado'). Espelha a ponte
+         já existente em afiliado.html na direcção oposta. -->
+    <div id="affiliateBridgeBanner" style="display:none;background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:16px;padding:16px;margin-bottom:16px">
+      <div style="font-weight:800;font-size:14px;margin-bottom:4px">🤝 Ganhe também como afiliado</div>
+      <div style="font-size:12.5px;color:#475569;line-height:1.5;margin-bottom:10px">
+        Isto é diferente do mapa "Perto de Si": partilhe o seu link único e ganhe comissão em cada pagamento de quem se registar através dele — sem sair do que já faz no balcão.
+      </div>
+      <a id="affiliateBridgeLink" href="/afiliado.html" style="display:inline-block;background:#16A34A;color:#fff;text-decoration:none;font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:10px">Tornar-me também afiliado →</a>
+      <button data-action="dismissAffiliateBridge" style="background:none;border:none;color:#64748B;font-size:12px;font-weight:600;margin-left:8px;cursor:pointer">Já fiz isto</button>
+    </div>
+
     <div class="card">
       <div class="title" id="pName">—</div>
       <div class="sub" id="pStatusLine">—</div>
@@ -255,6 +269,8 @@ const _portalActionHandlers = {
   // NOVO (Ago/2026 — agendamento)
   showTabProfile:  () => showTab('profile'),
   showTabBookings: () => showTab('bookings'),
+  // NOVO: ponte inversa para o programa de afiliados
+  dismissAffiliateBridge: () => dismissAffiliateBridge(),
 };
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
@@ -361,12 +377,40 @@ async function loadMe() {
       cb.checked = (p.services || []).includes(cb.value);
       label.classList.toggle('checked', cb.checked);
     });
+
+    // NOVO: ponte inversa — "torna-te também afiliado" (ver comentário no
+    // HTML do banner). Só para papelarias.
+    maybeShowAffiliateBridge(p);
   } catch (err) {
     // Sessão inválida/expirada — volta ao login.
     localStorage.removeItem('mzd_partner_token');
     TOKEN = '';
     showScreen();
   }
+}
+
+// NOVO: decide se mostra o convite "torna-te também afiliado" — espelha
+// maybeShowPartnerBridge em afiliado.html, na direcção oposta. Só para
+// papelarias (advogado não tem segmento de afiliado equivalente — ver
+// CHECK constraint em profiles.aff_segment).
+async function maybeShowAffiliateBridge(p) {
+  const banner = document.getElementById('affiliateBridgeBanner');
+  if (!banner || PARTNER_TYPE !== 'papelaria') return;
+  if (localStorage.getItem('mzd_affiliate_bridge_dismissed') === '1') return;
+
+  const link = document.getElementById('affiliateBridgeLink');
+  const params = new URLSearchParams();
+  if (p.name) params.set('nome', p.name);
+  const phoneDigits = String(p.whatsapp || '').replace(/\D/g, '');
+  if (phoneDigits) params.set('telefone', phoneDigits);
+  params.set('seg', 'papelaria');
+  link.href = '/afiliado.html' + (params.toString() ? '?' + params.toString() : '');
+  banner.style.display = 'block';
+}
+
+function dismissAffiliateBridge() {
+  localStorage.setItem('mzd_affiliate_bridge_dismissed', '1');
+  document.getElementById('affiliateBridgeBanner').style.display = 'none';
 }
 
 // ── TOGGLE VISÍVEL/INVISÍVEL (imediato, sem esperar por "Guardar") ──────────
