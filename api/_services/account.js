@@ -123,6 +123,65 @@ async function handleVerifyCredits(req, res) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// 1.5. MY-PACKAGES (NOVO v65) — pacotes exclusivos por categoria de
+//      parceiro/afiliado ("... os créditos e preço que aparecer para eles
+//      têm de ser diferentes de acordo com a sua categoria", pedido
+//      explícito do cliente). Endpoint autenticado, à parte de
+//      /api/config (que é público e fica em cache partilhado na CDN — ver
+//      nota em handleConfig, site.js): a categoria é sempre resolvida a
+//      partir do TOKEN, nunca de um valor enviado pelo cliente.
+// ══════════════════════════════════════════════════════════════════════════
+async function handleMyPackages(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Nunca cachear — é uma resposta pessoal, diferente por utilizador.
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET')     return res.status(405).json({ error: 'Método não permitido' });
+
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  if (!token) {
+    // Visitante sem sessão simplesmente não tem pacotes exclusivos —
+    // não é um erro, é o estado normal de quem ainda não é parceiro.
+    return res.status(200).json({ success: true, segment: null, exclusivePackages: {} });
+  }
+
+  try {
+    const { user, error: authErr } = await getUserFromToken(token);
+    if (authErr || !user) {
+      return res.status(200).json({ success: true, segment: null, exclusivePackages: {} });
+    }
+
+    const { loadPackagesFromSettings, resolveUserPricingSegment, filterPackagesForSegment } = require('../_lib/packages');
+    const segment = await resolveUserPricingSegment(user.id);
+    if (!segment) {
+      return res.status(200).json({ success: true, segment: null, exclusivePackages: {} });
+    }
+
+    const allPackages       = await loadPackagesFromSettings();
+    const exclusivePackages = filterPackagesForSegment(allPackages, segment);
+    // filterPackagesForSegment também deixa passar os pacotes públicos
+    // (partnerSegment nulo) — esses já vêm de /api/config, por isso
+    // filtram-se aqui só os que são mesmo exclusivos desta categoria.
+    const onlyExclusive = {};
+    for (const [id, pkg] of Object.entries(exclusivePackages)) {
+      if (pkg.partnerSegment === segment) onlyExclusive[id] = pkg;
+    }
+
+    return res.status(200).json({ success: true, segment, exclusivePackages: onlyExclusive });
+  } catch (e) {
+    console.error('[my-packages] Erro:', e.message);
+    // Falhar em aberto para "sem pacotes exclusivos" — nunca bloquear o
+    // resto do checkout por causa desta funcionalidade extra.
+    return res.status(200).json({ success: true, segment: null, exclusivePackages: {} });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // 2. DEDUCT-CREDIT (ex-api/deduct-credit.js, v3.0)
 // ══════════════════════════════════════════════════════════════════════════
 const VALID_COSTS = Array.from({ length: 10 }, (_, i) => i + 1); // 1 a 10 créditos por operação
@@ -695,4 +754,5 @@ module.exports = {
   handleDeductCredit,
   handleDeleteTempAccount,
   handleCleanupTempAccounts,
+  handleMyPackages,
 };
