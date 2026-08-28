@@ -23,7 +23,7 @@ import { initHome } from './homeController.js';
 import { CreditModel, DocumentModel } from './models/Models.js';
 import { DocumentController } from './controllers/DocumentController.js';
 import { PaymentController, syncPackagesV8FromConfig, renderPackageCards } from './controllers/PaymentController.js';
-import { updatePackagesFromConfig, updateWhatsAppFromConfig } from './services/PaymentService.js';
+import { updatePackagesFromConfig, updateWhatsAppFromConfig, loadMyExclusivePackages } from './services/PaymentService.js';
 import { OCRController } from './controllers/OCRController.js';
 import { HistoryController } from './controllers/HistoryController.js';
 import { authManager } from './auth/AuthManager.js';
@@ -61,6 +61,11 @@ async function bootstrap() {
   window._mzConfig = _config;
   updatePackagesFromConfig(_config.packages);
   syncPackagesV8FromConfig(_config.packages);
+  // NOVO (v65): pacotes exclusivos por categoria de parceiro/afiliado —
+  // carregados ANTES da primeira renderização dos cartões, para que já
+  // apareçam de imediato se o utilizador tiver sessão activa (evita um
+  // "flash" sem eles seguido de uma re-renderização).
+  await loadMyExclusivePackages(authManager.getToken ? authManager.getToken() : null);
   renderPackageCards();
   updateWhatsAppFromConfig(_config.whatsappSupport);
 
@@ -89,6 +94,12 @@ async function bootstrap() {
 
   authManager.onChange(() => {
     authGuard.applyVisibility();
+    // NOVO (v65): login/logout a meio da sessão muda quem é/não é
+    // parceiro — recarrega os pacotes exclusivos e actualiza os cartões
+    // do checkout de imediato, em vez de só na próxima visita à página.
+    loadMyExclusivePackages(authManager.getToken ? authManager.getToken() : null)
+      .then(() => renderPackageCards())
+      .catch(() => {});
   });
 
   // ── Credit badge colorido ─────────────────────────────────────────────
