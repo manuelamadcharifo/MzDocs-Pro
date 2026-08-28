@@ -216,7 +216,20 @@ async function handleConfig(req, res) {
   // via _lib/packages.js. Antes desta correcção, o frontend usava valores
   // hard-coded em PaymentService.js/PaymentController.js que nunca
   // reflectiam alterações feitas no painel de admin.
-  const packages = await loadPackagesFromSettings();
+  const allPackages = await loadPackagesFromSettings();
+
+  // NOVO (v65): esta resposta é PÚBLICA e fica em cache partilhado na CDN
+  // (ver Cache-Control acima) — nunca pode variar por utilizador. Por
+  // isso, os pacotes exclusivos de categoria (partnerSegment definido —
+  // "só eles têm acesso", pedido explícito do cliente) são sempre
+  // excluídos daqui, mesmo antes de qualquer verificação de quem está a
+  // pedir. Um utilizador elegível vê os seus pacotes exclusivos através
+  // de um pedido AUTENTICADO à parte (GET /api/account?action=my-packages),
+  // nunca através deste endpoint partilhado.
+  const packages = {};
+  for (const [id, pkg] of Object.entries(allPackages)) {
+    if (!pkg.partnerSegment) packages[id] = pkg;
+  }
 
   // CORRIGIDO: mesmo problema dos pacotes, mas para os campos de
   // "Configurações do Sistema" (Nome do Site, Créditos Grátis, WhatsApp
