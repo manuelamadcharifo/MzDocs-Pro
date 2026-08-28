@@ -9,7 +9,7 @@
 //  6. Notificação push via Service Worker quando créditos são adicionados.
 //  7. Mantida toda a lógica v8.0 de pacotes, selectPkg, showPricing, etc.
 
-import { paymentService } from '../services/PaymentService.js';
+import { paymentService, getExclusivePackages, getPricingSegment } from '../services/PaymentService.js';
 import { ModalView, NotificationView } from '../views/Views.js';
 import { Validator } from '../utils/Formatter.js';
 import { Storage } from '../utils/Storage.js';
@@ -135,9 +135,17 @@ export function renderPackageCards() {
 
   if (!grid) return;
   const entries = Object.entries(PACKAGES_V8).filter(([id]) => id !== 'avulso');
-  if (entries.length === 0) return; // nunca esvazia o grid por uma sincronização vazia
 
-  grid.innerHTML = entries.map(([id, pkg]) => {
+  // NOVO (v65): pacotes exclusivos por categoria de parceiro/afiliado —
+  // vivem à parte de PACKAGES_V8 (ver PaymentService.js), só existem para
+  // quem tiver sessão e for resolvido nessa categoria no servidor. Nunca
+  // sobrepõem nem substituem os pacotes públicos, são sempre ADICIONAIS,
+  // com badge "Exclusivo" para se distinguirem claramente no ecrã.
+  const exclusiveEntries = Object.entries(getExclusivePackages());
+
+  if (entries.length === 0 && exclusiveEntries.length === 0) return; // nunca esvazia o grid por uma sincronização vazia
+
+  const renderCard = (id, pkg, isExclusive) => {
     const totalCr = _pkgTotalCredits(pkg);
     const per = totalCr > 0 ? pkg.price / totalCr : 0;
     const crLabel = pkg.bonus > 0
@@ -146,18 +154,25 @@ export function renderPackageCards() {
     const perLabel = totalCr > 0
       ? `MZN ${Number.isInteger(per) ? per : per.toFixed(1)}/doc`
       : '';
+    const badge = isExclusive
+      ? `<div class="pkg-badge pkg-badge-exclusive">🔒 Exclusivo</div>`
+      : (pkg.popular ? '<div class="pkg-badge">Popular</div>' : '');
     // Classes/estrutura idênticas ao markup estático anterior (ver
     // assets/css/styles.css: .pkg.popular, .pkg-badge, .pkg-name,
     // .pkg-price, .pkg-cr, .pkg-per) — só a origem dos dados mudou.
     return `
-      <div class="pkg${pkg.popular ? ' popular' : ''}" data-pkg="${id}">
-        ${pkg.popular ? '<div class="pkg-badge">Popular</div>' : ''}
+      <div class="pkg${pkg.popular ? ' popular' : ''}${isExclusive ? ' pkg-exclusive' : ''}" data-pkg="${id}">
+        ${badge}
         <div class="pkg-name">${pkg.name}</div>
         <div class="pkg-price" id="pkgPrice${id.charAt(0).toUpperCase() + id.slice(1)}">MZN ${pkg.price}</div>
         <div class="pkg-cr" id="pkgCr${id.charAt(0).toUpperCase() + id.slice(1)}">${crLabel}</div>
         ${perLabel ? `<div class="pkg-per" id="pkgPer${id.charAt(0).toUpperCase() + id.slice(1)}">${perLabel}</div>` : ''}
       </div>`;
-  }).join('');
+  };
+
+  grid.innerHTML =
+    entries.map(([id, pkg]) => renderCard(id, pkg, false)).join('') +
+    exclusiveEntries.map(([id, pkg]) => renderCard(id, pkg, true)).join('');
 }
 
 export class PaymentController {
