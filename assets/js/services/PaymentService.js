@@ -52,6 +52,48 @@ const PACKAGES = {
 };
 let _packagesHydrated = false; // true assim que /api/config já respondeu pelo menos uma vez
 
+// NOVO (v65): pacotes exclusivos por categoria de parceiro/afiliado —
+// nunca vêm de /api/config (público, em cache partilhado — ver nota em
+// handleConfig, api/_services/site.js), só de um pedido autenticado à
+// parte (GET /api/account?_op=my-packages). Guardados à parte de
+// PACKAGES para nunca serem confundidos com pacotes públicos, e para
+// serem fáceis de mostrar com destaque visual próprio ("Exclusivo").
+let _exclusivePackages = {};
+let _pricingSegment    = null;
+
+// Chamado em app.js, depois do login/hidratação da sessão — carrega os
+// pacotes exclusivos deste utilizador, se pertencer a alguma categoria.
+// Falha em aberto (silenciosamente) para nunca bloquear o checkout normal
+// por causa desta funcionalidade extra.
+export async function loadMyExclusivePackages(token) {
+  if (!token) { _exclusivePackages = {}; _pricingSegment = null; return; }
+  try {
+    const res  = await fetch('/api/account?_op=my-packages', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => null);
+    if (!data?.success) return;
+    _pricingSegment = data.segment || null;
+    const incoming = {};
+    for (const [id, pkg] of Object.entries(data.exclusivePackages || {})) {
+      if (!Number.isFinite(pkg.price) || pkg.price <= 0) continue;
+      if (!Number.isFinite(pkg.credits) || pkg.credits <= 0) continue;
+      incoming[id] = {
+        credits: pkg.credits, price: pkg.price, name: pkg.name || id,
+        bonus: Number.isFinite(pkg.bonus) ? pkg.bonus : 0,
+        popular: false, desc: pkg.description,
+        partnerSegment: pkg.partnerSegment,
+      };
+    }
+    _exclusivePackages = incoming;
+  } catch (e) {
+    console.warn('[PaymentService] Falha ao carregar pacotes exclusivos:', e.message);
+  }
+}
+
+export function getExclusivePackages() { return _exclusivePackages; }
+export function getPricingSegment()    { return _pricingSegment; }
+
 // Actualiza PACKAGES a partir de { avulso: {price, credits, name, bonus,
 // description, popular}, ... } vindo de /api/config (fonte de verdade:
 // api/_lib/packages.js, que por sua vez lê a tabela credit_packages).
@@ -110,12 +152,17 @@ export class PaymentService {
     this.mpesaActive = false;
   }
 
+  // NOVO (v65): inclui os pacotes exclusivos deste utilizador (se
+  // pertencer a alguma categoria) a seguir aos públicos — ver
+  // loadMyExclusivePackages(), chamado em app.js após o login.
   getPackages() {
-    return PACKAGES;
+    return { ...PACKAGES, ...getExclusivePackages() };
   }
 
   async processPayment(packageId, phoneNumber = null, userId = 'anon') {
-    const pkg = PACKAGES[packageId];
+    // NOVO (v65): um pacote exclusivo de categoria vive em
+    // _exclusivePackages, não em PACKAGES — procurar nos dois.
+    const pkg = PACKAGES[packageId] || getExclusivePackages()[packageId];
     if (!pkg) throw new Error('Pacote inválido');
 
     if (phoneNumber && this.mpesaActive) {
@@ -162,9 +209,20 @@ export class PaymentService {
   }
 
   async _payManual(packageId, phoneNumber, userId) {
+    // NOVO (v65): pacotes exclusivos de categoria exigem sessão
+    // autenticada real no servidor (ver validação em process-payment.js —
+    // nunca confia só no userId enviado aqui). Sem o token, o servidor
+    // recusa a compra com 401, mesmo que o preço pareça certo no ecrã.
+    const pkg = PACKAGES[packageId] || getExclusivePackages()[packageId];
+    const headers = { 'Content-Type': 'application/json' };
+    if (pkg?.partnerSegment) {
+      const token = window.authManager?.getToken ? window.authManager.getToken() : null;
+      if (token) headers.Authorization = `Bearer ${token}`;
+    }
+
     const res = await fetch(this.endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         mode: 'manual',
         packageId,
