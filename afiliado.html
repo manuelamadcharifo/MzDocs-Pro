@@ -637,6 +637,37 @@ async function loadDashboard() {
 function showRegister() {
   document.getElementById('registerSection').style.display = 'block';
   setupRegister();
+  prefillRegisterFromUrl();
+}
+
+// NOVO: ponte inversa — parceiro (papelaria/advogado) que chega aqui a
+// partir do "Torne-se também afiliado" no portal de parceiros
+// (parceiro-portal.html). Lê nome/telefone/segmento da query string e
+// pré-preenche o formulário, tal como o parceiros.html já faz na direcção
+// oposta (ver comentário em maybeShowPartnerBridge/parceiros.html).
+function prefillRegisterFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const nome     = params.get('nome');
+  const telefone = params.get('telefone');
+  const seg      = params.get('seg');
+
+  if (nome) {
+    const busNameEl = document.getElementById('businessName');
+    if (busNameEl) busNameEl.value = nome;
+  }
+  if (telefone) {
+    const mpesaEl = document.getElementById('affMpesa');
+    if (mpesaEl) mpesaEl.value = telefone;
+  }
+  // Só 'papelaria' tem equivalente directo no programa de afiliados —
+  // 'advogado' (o outro tipo de parceiro) não é um segmento de afiliado
+  // válido (ver CHECK constraint em profiles.aff_segment), por isso não
+  // há nada para pré-seleccionar nesse caso; o resto do formulário
+  // continua utilizável normalmente.
+  if (seg) {
+    const segBtn = document.querySelector(`.seg-btn[data-seg="${seg}"]`);
+    if (segBtn) window.selectSeg(segBtn);
+  }
 }
 
 // NOVO: decide se mostra o convite "candidate o seu negócio ao mapa".
