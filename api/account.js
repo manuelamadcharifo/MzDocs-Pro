@@ -16,6 +16,7 @@ const {
   handleDeductCredit,
   handleDeleteTempAccount,
   handleCleanupTempAccounts,
+  handleMyPackages,
 } = require('./_services/account');
 
 module.exports = async function handler(req, res) {
@@ -25,6 +26,10 @@ module.exports = async function handler(req, res) {
   if (op === 'deduct-credit')         return handleDeductCredit(req, res);
   if (op === 'delete-temp-account')   return handleDeleteTempAccount(req, res);
   if (op === 'cleanup-temp-accounts') return handleCleanupTempAccounts(req, res);
+  // NOVO (v65): pacotes exclusivos por categoria de parceiro/afiliado —
+  // GET /api/account?_op=my-packages (não precisa de rewrite próprio em
+  // vercel.json, chamado directamente com a query string pelo frontend).
+  if (op === 'my-packages')           return handleMyPackages(req, res);
 
   return res.status(404).json({ error: `Rota desconhecida: "${op}".` });
 };
