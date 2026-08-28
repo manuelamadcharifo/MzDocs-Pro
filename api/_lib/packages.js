@@ -164,16 +164,20 @@ async function resolveUserPricingSegment(userId) {
   if (!userId) return null;
 
   try {
+    // CORRIGIDO: esta função consultava uma tabela "affiliates" com uma
+    // coluna "user_id" que nunca existiu — os dados de afiliado (incl.
+    // aff_segment) vivem directamente em colunas de "profiles"
+    // (migration_v14_affiliates_pro.sql: profiles.aff_segment,
+    // profiles.is_affiliate), não numa tabela separada. O pedido a
+    // "affiliates?user_id=eq...." falhava sempre (relação inexistente),
+    // silenciosamente engolido pelo catch — o ramo de segmento de
+    // afiliado nunca chegava a funcionar, só o de parceiro (partners)
+    // abaixo. Uma única leitura a profiles resolve os dois campos.
     const profileRows = await restRequest(
-      `profiles?id=eq.${userId}&select=is_affiliate&limit=1`
+      `profiles?id=eq.${userId}&select=is_affiliate,aff_segment&limit=1`
     );
-    if (Array.isArray(profileRows) && profileRows[0]?.is_affiliate) {
-      const affRows = await restRequest(
-        `affiliates?user_id=eq.${userId}&select=aff_segment&limit=1`
-      );
-      const seg = Array.isArray(affRows) && affRows[0]?.aff_segment;
-      if (seg) return seg;
-    }
+    const profile = Array.isArray(profileRows) ? profileRows[0] : null;
+    if (profile?.is_affiliate && profile?.aff_segment) return profile.aff_segment;
   } catch (e) {
     console.warn('[packages] resolveUserPricingSegment (afiliado) falhou:', e.message);
   }
