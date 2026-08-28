@@ -45,7 +45,7 @@ async function loadPackagesFromSettings() {
   try {
     const rows = await restRequest(
       `credit_packages?is_active=eq.true&order=sort_order.asc,created_at.asc` +
-      `&select=id,name,credits,price_mzn,bonus,description,is_popular`
+      `&select=id,name,credits,price_mzn,bonus,description,is_popular,partner_segment`
     );
     if (Array.isArray(rows) && rows.length > 0) {
       const packages = {};
@@ -66,6 +66,11 @@ async function loadPackagesFromSettings() {
           bonus:       Number.isFinite(bonus) && bonus >= 0 ? bonus : 0,
           description: r.description || undefined,
           popular:     !!r.is_popular,
+          // NOVO (v65): pacotes exclusivos por categoria de parceiro/
+          // afiliado (papelaria, cyber, universidade, explicacao,
+          // digitador, individual, advogado). NULL/undefined = pacote
+          // público, comportamento idêntico ao que já existia.
+          partnerSegment: r.partner_segment || null,
         };
       }
       if (Object.keys(packages).length > 0) return packages;
@@ -140,4 +145,68 @@ function estimateMznPerCredit(packages) {
   return totalPrice / totalCredits;
 }
 
-module.exports = { loadPackagesFromSettings, FALLBACK_PACKAGES, estimateMznPerCredit, packageTotalCredits };
+// ── NOVO (v65): categoria de preços por parceiro/afiliado ──────────────────
+// Resolve a categoria de um utilizador AUTENTICADO — usada para decidir que
+// pacotes exclusivos (credit_packages.partner_segment) lhe são
+// visíveis/compráveis. NUNCA aceitar esta categoria vinda do cliente: quem
+// chama isto deve sempre passar um userId já validado por um token real
+// (ver getUserFromToken em supabaseAdmin.js), nunca body.userId em bruto.
+//
+// Prioridade:
+//   1. Afiliado aprovado com segmento definido (profiles.is_affiliate +
+//      affiliates.aff_segment) — papelaria, cyber, universidade,
+//      explicacao, digitador, individual.
+//   2. Parceiro aprovado e activo, ligado à conta (partners.linked_user_id
+//      + partners.type — migration_v55) — papelaria, advogado. Só
+//      consultado se (1) não encontrar nada.
+// Devolve null para um consumidor normal (sem categoria especial).
+async function resolveUserPricingSegment(userId) {
+  if (!userId) return null;
+
+  try {
+    const profileRows = await restRequest(
+      `profiles?id=eq.${userId}&select=is_affiliate&limit=1`
+    );
+    if (Array.isArray(profileRows) && profileRows[0]?.is_affiliate) {
+      const affRows = await restRequest(
+        `affiliates?user_id=eq.${userId}&select=aff_segment&limit=1`
+      );
+      const seg = Array.isArray(affRows) && affRows[0]?.aff_segment;
+      if (seg) return seg;
+    }
+  } catch (e) {
+    console.warn('[packages] resolveUserPricingSegment (afiliado) falhou:', e.message);
+  }
+
+  try {
+    const partnerRows = await restRequest(
+      `partners?linked_user_id=eq.${userId}&status=eq.approved&active=eq.true&select=type&limit=1`
+    );
+    if (Array.isArray(partnerRows) && partnerRows[0]?.type) return partnerRows[0].type;
+  } catch (e) {
+    console.warn('[packages] resolveUserPricingSegment (parceiro) falhou:', e.message);
+  }
+
+  return null;
+}
+
+// Filtra um mapa de pacotes (já carregado por loadPackagesFromSettings)
+// para o que ESTE utilizador pode ver/comprar: pacotes sem partnerSegment
+// são sempre visíveis para todos; pacotes com partnerSegment só aparecem
+// para quem tiver exactamente esse segmento resolvido no servidor.
+function filterPackagesForSegment(packages, segment) {
+  const out = {};
+  for (const [id, pkg] of Object.entries(packages || {})) {
+    if (!pkg.partnerSegment || pkg.partnerSegment === segment) out[id] = pkg;
+  }
+  return out;
+}
+
+module.exports = {
+  loadPackagesFromSettings,
+  FALLBACK_PACKAGES,
+  estimateMznPerCredit,
+  packageTotalCredits,
+  resolveUserPricingSegment,
+  filterPackagesForSegment,
+};
