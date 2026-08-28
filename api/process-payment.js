@@ -51,7 +51,9 @@ async function checkPaymentRateLimit(req) {
 // (ver esse ficheiro para o porquê — corrige duplicação em 5 locais).
 // packageTotalCredits() inclui o bónus escada (NOVO — monetização) por
 // cima dos créditos base, sem tocar em preço nem em lógica de RPC.
-const { loadPackagesFromSettings, packageTotalCredits } = require('./_lib/packages');
+// NOVO (v65): resolveUserPricingSegment — verificação obrigatória para
+// pacotes exclusivos de categoria (partnerSegment).
+const { loadPackagesFromSettings, packageTotalCredits, resolveUserPricingSegment } = require('./_lib/packages');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -140,8 +142,47 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const userId = rawUserId && UUID_REGEX.test(String(rawUserId)) ? String(rawUserId) : null;
-  const pkg    = PACKAGES[packageId];
+  let userId = rawUserId && UUID_REGEX.test(String(rawUserId)) ? String(rawUserId) : null;
+  const pkg  = PACKAGES[packageId];
+
+  // ── NOVO (v65): pacotes exclusivos por categoria de parceiro/afiliado ──
+  // "os créditos e preço que aparecer para eles têm de ser diferentes de
+  // acordo com a sua categoria" — pedido explícito do cliente. Este é o
+  // ÚNICO sítio onde isto é realmente aplicado: o frontend só decide o
+  // que MOSTRAR (ver handleMyPackages em account.js e /api/config, que
+  // nunca expõe estes pacotes publicamente) — quem impede alguém de
+  // COMPRAR um pacote que não lhe pertence é sempre este servidor.
+  //
+  // Em todo o resto deste ficheiro, `userId` vem de body.userId, sem
+  // qualquer verificação contra o token (o pagamento manual/por WhatsApp
+  // suporta compra anónima, antes de a conta existir) — mas para um
+  // pacote exclusivo isso não é aceitável: exige-se sempre um token real,
+  // e o userId usado a partir daqui é sempre o do TOKEN, nunca o do body
+  // (impede alguém de passar o UUID de outra pessoa para se fazer passar
+  // por parceiro).
+  if (pkg.partnerSegment) {
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    if (!token) {
+      return res.status(401).json({
+        error: 'Este pacote é exclusivo para parceiros — inicie sessão para continuar.',
+        code:  'AUTH_REQUIRED',
+      });
+    }
+    const { user, error: authErr } = await getUserFromToken(token);
+    if (authErr || !user) {
+      return res.status(401).json({ error: 'Sessão inválida ou expirada.', code: 'AUTH_REQUIRED' });
+    }
+    const segment = await resolveUserPricingSegment(user.id);
+    if (segment !== pkg.partnerSegment) {
+      return res.status(403).json({
+        error: 'Este pacote é exclusivo para parceiros da categoria correspondente.',
+        code:  'SEGMENT_MISMATCH',
+      });
+    }
+    // Confirmado: usar sempre o utilizador do token a partir daqui.
+    userId = user.id;
+  }
 
   // ── Supabase configurado? ─────────────────────────────────────────────────
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
