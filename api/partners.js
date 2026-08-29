@@ -773,8 +773,18 @@ async function handleCheck(req, res) {
   const phoneDigits = onlyDigits(req.query?.phone);
   if (!phoneDigits) return res.status(400).json({ error: 'phone obrigatório' });
   try {
-    const partner = await selectOne('partners', 'phone', phoneDigits, 'status').catch(() => null);
-    return res.status(200).json({ exists: !!partner, status: partner?.status || null });
+    // NOVO (perfil.html — "Tipo de conta" com prioridade Admin > Parceiro >
+    // Afiliado > Normal): além de status, devolve também type/active, mas
+    // só quando o parceiro está aprovado E activo — nunca revelamos o tipo
+    // de negócio de um registo pending/rejected/inactive a quem apenas
+    // sabe o número de telefone.
+    const partner = await selectOne('partners', 'phone', phoneDigits, 'status,type,active').catch(() => null);
+    const approved = !!partner && partner.status === 'approved' && partner.active === true;
+    return res.status(200).json({
+      exists: !!partner,
+      status: partner?.status || null,
+      type: approved ? partner.type : null,
+    });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
