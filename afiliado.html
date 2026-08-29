@@ -966,11 +966,15 @@ window.copyLink = function() {
 };
 
 window.shareWhatsApp = function() {
+  // NOVO (v66): qualquer registo feito a partir destes links é um registo
+  // "referido" (profiles.referred_by fica preenchido) — passa a ter
+  // direito a 2 documentos grátis, não a 1 crédito como antes (ver
+  // grant_free_document() em migration_v66_first_document_free.sql).
   const segMsg = {
-    papelaria: '🖨️ *Precisa de documentos profissionais? Use MzDocs Pro!*\n\nCVs, cartas, contratos e muito mais — gerados por IA em segundos. Depois imprima aqui connosco!\n\n👉 Registe-se: ',
-    cyber:     '💻 *Crie documentos profissionais em segundos com MzDocs Pro!*\n\nCVs, requerimentos, cartas formais — feitos por IA. Use no nosso cyber café!\n\n👉 Registe-se: ',
-    universidade: '🎓 *Estudantes MzDocs Pro — Documentos académicos em segundos!*\n\nTrabalhos, cartas de candidatura, CVs e mais, com IA adaptada a Moçambique.\n\n👉 Registe-se gratuitamente: ',
-    individual: '📄 *MzDocs Pro — Documentos profissionais em segundos!*\n\nCVs, cartas formais, contratos e muito mais, gerados por IA em português moçambicano.\n\n👉 Registe-se e ganhe 1 crédito grátis: ',
+    papelaria: '🖨️ *Precisa de documentos profissionais? Use MzDocs Pro!*\n\nCVs, cartas, contratos e muito mais — gerados por IA em segundos. Depois imprima aqui connosco!\n\n👉 Registe-se e ganhe 2 documentos grátis: ',
+    cyber:     '💻 *Crie documentos profissionais em segundos com MzDocs Pro!*\n\nCVs, requerimentos, cartas formais — feitos por IA. Use no nosso cyber café!\n\n👉 Registe-se e ganhe 2 documentos grátis: ',
+    universidade: '🎓 *Estudantes MzDocs Pro — Documentos académicos em segundos!*\n\nTrabalhos, cartas de candidatura, CVs e mais, com IA adaptada a Moçambique.\n\n👉 Registe-se e ganhe 2 documentos grátis: ',
+    individual: '📄 *MzDocs Pro — Documentos profissionais em segundos!*\n\nCVs, cartas formais, contratos e muito mais, gerados por IA em português moçambicano.\n\n👉 Registe-se e ganhe 2 documentos grátis: ',
   };
   const msg = encodeURIComponent((segMsg[_segment] || segMsg.individual) + _affLink);
   window.open('https://wa.me/?text=' + msg, '_blank');
