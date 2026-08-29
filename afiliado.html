@@ -157,12 +157,22 @@
     .sa-blocked{background:var(--red-s);border:1.5px solid #FCA5A5;color:#991B1B}
     .sa-approved{background:var(--green-s);border:1.5px solid #6EE7B7;color:#065F46}
 
-    /* TABS */
-    .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0}
-    .tab-btn{background:none;border:none;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:700;color:var(--muted);padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:var(--t)}
+    /* TABS — barra com scroll horizontal (mesmo padrão dos filtros de
+       categoria da homepage), para nunca "quebrar" a tela em ecrãs
+       estreitos: os separadores que não cabem ficam ocultos até o
+       utilizador arrastar/tocar nas setas. */
+    .tabs-wrap{position:relative;margin-bottom:16px}
+    .tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:0;padding-right:28px;border-bottom:2px solid var(--border);scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .tabs::-webkit-scrollbar{display:none}
+    .tab-btn{flex-shrink:0;white-space:nowrap;background:none;border:none;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:700;color:var(--muted);padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:var(--t)}
     .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
     .tab-panel{display:none}
     .tab-panel.active{display:block}
+    .tabs-scroll-arrow{position:absolute;top:50%;transform:translateY(-50%);width:22px;height:28px;border:none;background:none;color:rgba(0,0,0,.28);font-size:20px;font-weight:400;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:opacity .25s,color .2s;z-index:3;line-height:1}
+    .tabs-scroll-arrow:hover{color:rgba(0,0,0,.55)}
+    .tabs-scroll-left{left:-2px}
+    .tabs-scroll-right{right:-4px}
+    .tabs-wrap::after{content:'';position:absolute;top:0;right:0;width:36px;height:calc(100% - 2px);background:linear-gradient(to right,transparent,var(--surface) 75%);pointer-events:none;z-index:2}
 
     /* NOTIF DOT */
     .notif-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-left:4px;vertical-align:middle}
@@ -352,13 +362,17 @@
     </div>
 
     <!-- TABS -->
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="overview" data-action="switchTab">📊 Visão Geral</button>
-      <button class="tab-btn" data-tab="referrals" data-action="switchTab">👥 Referidos</button>
-      <button class="tab-btn" data-tab="ranking" data-action="switchTab">🏆 Ranking</button>
-      <button class="tab-btn" data-tab="commissions" data-action="switchTab">💰 Comissões</button>
-      <button class="tab-btn" data-tab="withdraw" data-action="switchTab">💸 Levantamentos</button>
-      <button class="tab-btn" data-tab="marketing" data-action="switchTab">🎨 Marketing</button>
+    <div class="tabs-wrap" id="afTabsWrap">
+      <div class="tabs" id="afTabs">
+        <button class="tab-btn active" data-tab="overview" data-action="switchTab">📊 Visão Geral</button>
+        <button class="tab-btn" data-tab="referrals" data-action="switchTab">👥 Referidos</button>
+        <button class="tab-btn" data-tab="ranking" data-action="switchTab">🏆 Ranking</button>
+        <button class="tab-btn" data-tab="marketing" data-action="switchTab">🎨 Marketing</button>
+        <button class="tab-btn" data-tab="commissions" data-action="switchTab">💰 Comissões</button>
+        <button class="tab-btn" data-tab="withdraw" data-action="switchTab">💸 Levantamentos</button>
+      </div>
+      <button class="tabs-scroll-arrow tabs-scroll-right" id="afTabsScrollRight" aria-label="Ver mais separadores">›</button>
+      <button class="tabs-scroll-arrow tabs-scroll-left" id="afTabsScrollLeft" aria-label="Ver separadores anteriores" style="opacity:0;pointer-events:none">‹</button>
     </div>
 
     <!-- TAB: VISÃO GERAL -->
@@ -938,6 +952,11 @@ window.switchTab = function(tab, btn) {
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.classList.add('active');
   if (btn) btn.classList.add('active');
+  // Garante que o separador escolhido fica visível mesmo que esteja
+  // fora da área visível da barra (ex.: tocado via teclado/leitor de ecrã).
+  if (btn && btn.scrollIntoView) {
+    btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }
   // v41: só carrega os materiais de marketing (podem ser imagens grandes)
   // quando o afiliado abre esta aba pela primeira vez, não no arranque.
   if (tab === 'marketing' && !window._materialsLoaded) {
@@ -945,6 +964,35 @@ window.switchTab = function(tab, btn) {
     loadMarketingMaterials();
   }
 };
+
+// ── Setas de scroll da barra de separadores (mesmo padrão dos filtros de
+//    categoria da homepage) ─────────────────────────────────────────────────
+(function initTabsScroll() {
+  const tabsEl   = document.getElementById('afTabs');
+  const leftArrow  = document.getElementById('afTabsScrollLeft');
+  const rightArrow = document.getElementById('afTabsScrollRight');
+  if (!tabsEl) return;
+
+  function updateTabArrows() {
+    const atStart = tabsEl.scrollLeft < 4;
+    const atEnd   = tabsEl.scrollLeft >= tabsEl.scrollWidth - tabsEl.clientWidth - 4;
+    if (leftArrow) {
+      leftArrow.style.opacity = atStart ? '0' : '1';
+      leftArrow.style.pointerEvents = atStart ? 'none' : 'auto';
+    }
+    if (rightArrow) {
+      rightArrow.style.opacity = atEnd ? '0' : '1';
+      rightArrow.style.pointerEvents = atEnd ? 'none' : 'auto';
+    }
+  }
+
+  tabsEl.addEventListener('scroll', updateTabArrows, { passive: true });
+  window.addEventListener('resize', updateTabArrows);
+  setTimeout(updateTabArrows, 150);
+
+  leftArrow?.addEventListener('click', () => tabsEl.scrollBy({ left: -120, behavior: 'smooth' }));
+  rightArrow?.addEventListener('click', () => tabsEl.scrollBy({ left: 120, behavior: 'smooth' }));
+})();
 
 // ── SEGMENTO ─────────────────────────────────────────────────────────────────
 window.selectSeg = function(el) {
