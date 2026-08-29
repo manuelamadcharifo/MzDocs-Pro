@@ -66,7 +66,7 @@ export class AuthUI {
                 <div id="authRegister" class="auth-view" style="display:none;">
                     <div class="auth-header">
                         <h2>📝 Criar Conta</h2>
-                        <p>Registe-se e receba 1 crédito grátis</p>
+                        <p>Registe-se e o seu primeiro documento é grátis</p>
                     </div>
                     <div class="auth-form">
                         <div class="form-group">
@@ -146,7 +146,7 @@ export class AuthUI {
                         <p>Pode fazer login agora com o seu número ou e-mail</p>
                     </div>
                     <div class="auth-info">
-                        <p>🎁 1 crédito grátis foi atribuído à sua conta (válido 1 mês). Bem-vindo ao MzDocs Pro!</p>
+                        <p>🎁 O seu primeiro documento é grátis — sem custo, sem data de validade. Bem-vindo ao MzDocs Pro!</p>
                         <p style="margin-top:.75rem;font-size:.85rem;color:#6b7280;">
                             💡 Verifique o seu e-mail — pode ter recebido uma mensagem de confirmação do Supabase.
                         </p>
