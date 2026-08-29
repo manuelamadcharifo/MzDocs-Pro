@@ -22,8 +22,9 @@
 
 const { rpc } = require('./supabaseAdmin');
 const { PROVIDERS, resolveUrl, isProviderConfigured } = require('./aiProviderRegistry');
-const { isModelDisabled, recordModelResult } = require('./modelHealth');
+const { isModelDisabled, recordModelResult, recordProviderSuccess, recordProviderExhaustion } = require('./modelHealth');
 const { getAvailableModels } = require('./modelDiscovery');
+const { notifyProviderIssue } = require('./notifyOps');
 
 // Constrói o mapa { providerId: apiKey } a partir do registo central —
 // qualquer provider com a env var correspondente configurada na Vercel
@@ -188,6 +189,7 @@ async function tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, 
                 ? await tryGeminiModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt, temperature)
                 : await tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt, temperature);
             recordModelResult(providerCfg.id, model, true, null); // fire-and-forget
+            recordProviderSuccess(providerCfg.id); // fire-and-forget — reinicia o contador de esgotamentos (ver modelHealth.js)
             return result;
         } catch (err) {
             if (err.name === 'AbortError') throw err;
@@ -197,7 +199,18 @@ async function tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, 
             lastErr = err;
         }
     }
-    throw lastErr || new Error(`${providerCfg.name}: nenhum modelo disponível (todos desactivados ou catálogo vazio)`);
+    const finalErr = lastErr || new Error(`${providerCfg.name}: nenhum modelo disponível (todos desactivados ou catálogo vazio)`);
+    // NOVO (Ago/2026) — este provider acabou de esgotar TODOS os modelos da
+    // sua cadeia numa única tentativa. Fire-and-forget: nunca deve atrasar
+    // nem fazer falhar o `throw` abaixo. Só dispara mesmo um alerta por
+    // Telegram/WhatsApp ao fim de EXHAUSTION_ALERT_THRESHOLD esgotamentos
+    // seguidos (protecção contra spam — ver recordProviderExhaustion).
+    recordProviderExhaustion(providerCfg.id)
+        .then(shouldAlert => {
+            if (shouldAlert) notifyProviderIssue(providerCfg, finalErr.message).catch(() => {});
+        })
+        .catch(() => {});
+    throw finalErr;
 }
 
 // ─── Chamada genérica a um modelo OpenAI-compatible (Groq, Cerebras,

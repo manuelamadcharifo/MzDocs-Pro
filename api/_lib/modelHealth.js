@@ -167,6 +167,60 @@ async function _redisDel(k) {
     }
 }
 
+// ─── NOVO (Ago/2026) — vigilância a nível de PROVIDER (não só de modelo) ──
+// isModelDisabled/recordModelResult acima protegem cada combinação
+// provider+modelo individualmente. As duas funções abaixo respondem a uma
+// pergunta diferente: "este provider, no CONJUNTO de todos os seus
+// modelos, está estruturalmente morto?" — é essa a pergunta cuja resposta
+// dispara um alerta por Telegram/WhatsApp (ver notifyOps.js e aiRace.js).
+//
+// EXHAUSTION_ALERT_THRESHOLD falhas TOTAIS seguidas (todos os modelos de um
+// provider esgotados na mesma tentativa) disparam UM alerta; depois disso,
+// ALERT_COOLDOWN_SEC evita repetir o mesmo aviso enquanto o problema
+// persistir — não faz sentido receber uma notificação a cada pedido de
+// documento enquanto o Manuel não tiver oportunidade de reagir. Qualquer
+// sucesso, mesmo que só de um modelo, reinicia o contador — um provider só
+// deve ser considerado "morto" se falhar de forma consistente, não numa
+// falha isolada.
+const EXHAUSTION_ALERT_THRESHOLD = 5;              // nº de esgotamentos completos seguidos antes de alertar
+const ALERT_COOLDOWN_SEC         = 12 * 60 * 60;   // não repetir o mesmo alerta antes de 12h
+
+function exhaustionKey(provider)      { return `mh:exhaust:${provider}`; }
+function exhaustionAlertKey(provider) { return `mh:exhaust-alert:${provider}`; }
+
+/** Chamado sempre que QUALQUER modelo de um provider tem sucesso — reinicia o contador de esgotamentos. */
+async function recordProviderSuccess(provider) {
+    try {
+        await _set(exhaustionKey(provider), 0, 3600 * 24);
+    } catch {
+        // nunca deve interromper o caminho de sucesso
+    }
+}
+
+/**
+ * Chamado quando um provider esgota TODOS os modelos da sua cadeia de
+ * fallback numa única tentativa (tryProviderChain lançou o erro final).
+ * Devolve `true` exactamente uma vez por janela de problema — ou seja,
+ * quando o chamador deve efectivamente disparar o alerta.
+ */
+async function recordProviderExhaustion(provider) {
+    try {
+        const prev  = (await _get(exhaustionKey(provider))) || 0;
+        const count = (typeof prev === 'number' ? prev : 0) + 1;
+        await _set(exhaustionKey(provider), count, 3600 * 24);
+
+        if (count < EXHAUSTION_ALERT_THRESHOLD) return false;
+
+        const alreadyAlerted = await _get(exhaustionAlertKey(provider));
+        if (alreadyAlerted) return false;
+
+        await _set(exhaustionAlertKey(provider), true, ALERT_COOLDOWN_SEC);
+        return true;
+    } catch {
+        return false; // um problema no próprio disjuntor nunca deve gerar alertas falsos
+    }
+}
+
 // NOVO — Reinicia MANUALMENTE o disjuntor de uma lista de modelos de um
 // provider. Usado pelo botão "🔄 Reactivar" no painel admin (IA Providers):
 // depois de resolver a causa real de uma falha (nova chave, créditos
@@ -178,6 +232,11 @@ async function _redisDel(k) {
 async function resetProviderHealth(providerId, models) {
     const list = Array.isArray(models) ? models : [];
     const keys = list.map(m => healthKey(providerId, m));
+    // Limpa também os contadores de esgotamento/alerta a nível de provider
+    // (ver secção "vigilância a nível de PROVIDER" acima) — depois de um
+    // "Reactivar" manual no painel admin, o Manuel espera começar do zero,
+    // incluindo não receber um alerta antigo prestes a repetir-se.
+    keys.push(exhaustionKey(providerId), exhaustionAlertKey(providerId));
     for (const k of keys) {
         if (redisUrl && redisToken) await _redisDel(k);
         else _localHealth.delete(k);
@@ -185,4 +244,10 @@ async function resetProviderHealth(providerId, models) {
     return keys.length;
 }
 
-module.exports = { isModelDisabled, recordModelResult, resetProviderHealth };
+module.exports = {
+    isModelDisabled,
+    recordModelResult,
+    resetProviderHealth,
+    recordProviderSuccess,
+    recordProviderExhaustion,
+};
