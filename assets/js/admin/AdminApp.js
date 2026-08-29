@@ -123,6 +123,8 @@ class AdminApp {
         printPeriodReport:         ()  => this._printPeriodReport(),
         // Secção IA/Notificações (CSP Fase 1, parte 4)
         toggleAiReserve:        (d) => this._toggleAiReserve(d.id),
+        resetAiProviderHealth:      (d) => this._resetAiProviderHealth(d.id),
+        resetAllAiProvidersHealth:  ()  => this._resetAllAiProvidersHealth(),
         sendPush:               ()  => this._sendPush(),
         // ── admin.html: shell estático (CSP Fase 1, parte 5) ────────────────
         // Ao contrário dos blocos acima (gerados dinamicamente por template
@@ -5400,6 +5402,12 @@ USING (EXISTS (
             <div style="font-size:11px;color:#94a3b8;margin-bottom:8px">${p.usagePct}% do limite estimado</div>
         ` : '<div style="height:12px"></div>';
 
+        // NOVO — só faz sentido reactivar manualmente um provider que esteja
+        // realmente degradado/offline (ou cuja última mensagem indique que
+        // "todos os modelos estão desactivados" pelo disjuntor — isso pode
+        // acontecer mesmo com status 'online' se a falha foi recente).
+        const showReset = p.configured && (p.status === 'offline' || p.status === 'degradado');
+
         return `
             <div class="settings-card" style="margin:0;border-left:3px solid ${st.color}">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
@@ -5420,6 +5428,10 @@ USING (EXISTS (
                         ? '<span style="color:#16a34a">🔑 Chave configurada</span>'
                         : `<a href="${p.signupUrl}" target="_blank" rel="noopener" style="color:#dc2626">🔑 Sem chave — obter em ${p.signupUrl.replace('https://', '')}</a>`}
                 </div>
+                ${showReset ? `
+                <button data-action="resetAiProviderHealth" data-id="${escapeHtml(p.id)}" title="Limpa o registo de falhas e permite ao motor voltar a tentar este provider já, sem esperar o cooldown automático" style="margin-top:10px;width:100%;font-size:12px;padding:6px 10px;border-radius:8px;border:1.5px solid #f59e0b;background:#fffbeb;color:#b45309;font-weight:700;cursor:pointer">
+                    🔄 Reactivar (limpar falhas)
+                </button>` : ''}
             </div>
         `;
     }
@@ -5484,6 +5496,32 @@ USING (EXISTS (
         } catch (err) {
             this._toast('Erro ao actualizar provider de reserva: ' + err.message, 'error');
         }
+    }
+
+    // NOVO — botão "🔄 Reactivar" de cada card + "Reactivar todos" no topo
+    // do painel. Limpa o disjuntor (modelHealth.js) para o(s) provider(s)
+    // indicado(s), sem esperar o cooldown automático (10min→2h, ou 7 dias
+    // em erro permanente) — útil depois de o Manuel resolver a causa real
+    // (nova chave, créditos repostos na conta do provider, etc.).
+    async _resetAiProviderHealth(id) {
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch('/api/admin/ai-providers', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ resetCircuitBreaker: id }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'reset ' + res.status);
+            this._toast(`Reactivado (${d.totalReset || 0} modelo(s) desbloqueado(s)) — pode tentar gerar de novo.`, 'success');
+            this._loadAiProviders();
+        } catch (err) {
+            this._toast('Erro ao reactivar provider: ' + err.message, 'error');
+        }
+    }
+
+    async _resetAllAiProvidersHealth() {
+        await this._resetAiProviderHealth('all');
     }
 
     // ── PUSH NOTIFICATIONS (admin) ─────────────────────────────────────────
