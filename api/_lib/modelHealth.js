@@ -81,11 +81,31 @@ async function _set(k, value, ttlSec) {
 // em caso de dúvida (Redis em baixo, etc.) assume-se que o modelo está
 // disponível: falha aberta (tenta na mesma), nunca falha fechada (bloqueia
 // tudo por causa de um problema no próprio disjuntor).
-async function isModelDisabled(provider, model) {
+//
+// NOVO (Ago/2026) — `opts.discoveredLive`: quando o chamador (aiRace.js)
+// acabou de confirmar, via GET /models do PRÓPRIO provider, que este modelo
+// existe agora, um disjuntor PERMANENTE antigo (7 dias, disparado por uma
+// mensagem tipo "model not found"/"decommissioned") deixa de fazer sentido
+// — a fonte mais actual e mais autorizada (o provider, agora mesmo) diz o
+// contrário. Isto corrige o cenário visto no painel admin com a Cerebras:
+// um modelo era marcado como permanentemente indisponível numa troca de
+// catálogo, e mesmo depois da Cerebras o repor (ou de a lista curada ser
+// corrigida), o motor continuava a ignorá-lo até o disjuntor expirar
+// sozinho — agora a descoberta ao vivo tem sempre a palavra final sobre
+// disponibilidade REAL, o disjuntor permanente só continua a proteger
+// contra o caso em que a descoberta falhou ou não confirma o modelo.
+// Falhas TRANSITÓRIAS (rate limit, 5xx, timeout) continuam a respeitar o
+// cooldown normal mesmo com descoberta positiva — a existência do modelo
+// não é a mesma coisa que estar disponível AGORA para mais um pedido.
+async function isModelDisabled(provider, model, opts = {}) {
     try {
         const state = await _get(healthKey(provider, model));
         if (!state || !state.disabledUntil) return false;
-        return Date.now() < state.disabledUntil;
+        const stillDisabled = Date.now() < state.disabledUntil;
+        if (stillDisabled && state.permanent && opts.discoveredLive) {
+            return false;
+        }
+        return stillDisabled;
     } catch {
         return false;
     }
@@ -109,7 +129,7 @@ async function recordModelResult(provider, model, success, err) {
         if (PERMANENT_ERROR_RE.test(msg)) {
             await _set(
                 k,
-                { failures: 99, disabledUntil: Date.now() + PERMANENT_DISABLE_MS, reason: msg.slice(0, 200) },
+                { failures: 99, disabledUntil: Date.now() + PERMANENT_DISABLE_MS, reason: msg.slice(0, 200), permanent: true },
                 Math.ceil(PERMANENT_DISABLE_MS / 1000),
             );
             console.warn(`[modelHealth] ${provider}/${model} desactivado por 7 dias (erro permanente): ${msg.slice(0, 150)}`);
