@@ -7,21 +7,24 @@ pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 
 > 📌 **Nota sobre este README:** actualizado em Agosto/2026 a partir de uma leitura directa do
 > código-fonte no export mais recente (consolidação de Serverless Functions — 12→9, ver secção 10
-> — migrações até `v65`, confirmação de pagamento atómica, operações de crédito idempotentes,
+> — migrações até `v66`, confirmação de pagamento atómica, operações de crédito idempotentes,
 > observabilidade estruturada, correcções ao Marketplace de Templates, ao motor de pagamentos, e à
 > fiabilidade do OCR multi-página do serviço "Digitalizar Documento" — secções 5, 12 e 15). A
-> versão anterior deste ficheiro cobria só até à `v64` — faltava documentar a `v65` (pacotes de
-> créditos exclusivos por categoria de parceiro/afiliado, validados sempre no servidor; ponte
-> bidireccional entre o painel de afiliado e o Portal da Parceira) — ver secções 9 e 15. A versão
-> anterior a essa cobria só até à `v61` — faltavam documentar a `v62` (campo WhatsApp em
-> `profiles` + consentimento de marketing), a `v63` (agendamento real com parceiros, tabela
-> `bookings`), a `v64` (compra permanente de templates pagos, tabela `template_purchases`) e a
-> unificação de larguras `.container`/`.sheet`/`.a4-page` no CSS (secção 15). A versão anterior a
-> essa tinha ficado desactualizada em relação às migrações `v57`–`v60`,
-> aos scripts de manutenção em `scripts/`, ao CI/lint (`.github/workflows/test.yml`,
-> `eslint.config.mjs`) e à observabilidade estruturada (`api/_lib/observability.js`,
-> `docs/observability.md`). Este documento reflecte o estado do código tal como está — não o
-> histórico ronda-a-ronda, que passa a viver apenas na secção "Histórico de Versões" no fim.
+> versão anterior deste ficheiro cobria só até à `v65` — faltava documentar a `v66` (o primeiro
+> documento de uma conta é sempre grátis, não um saldo inicial de 1 crédito; 2 para quem se
+> regista via link de afiliado; nunca se aplica a templates pagos) — ver secções 9 e 15. A versão
+> anterior a essa cobria só até à `v64` — faltava documentar a `v65` (pacotes de créditos
+> exclusivos por categoria de parceiro/afiliado, validados sempre no servidor; ponte bidireccional
+> entre o painel de afiliado e o Portal da Parceira) — ver secções 9 e 15. A versão anterior a essa
+> cobria só até à `v61` — faltavam documentar a `v62` (campo WhatsApp em `profiles` + consentimento
+> de marketing), a `v63` (agendamento real com parceiros, tabela `bookings`), a `v64` (compra
+> permanente de templates pagos, tabela `template_purchases`) e a unificação de larguras
+> `.container`/`.sheet`/`.a4-page` no CSS (secção 15). A versão anterior a essa tinha ficado
+> desactualizada em relação às migrações `v57`–`v60`, aos scripts de manutenção em `scripts/`, ao
+> CI/lint (`.github/workflows/test.yml`, `eslint.config.mjs`) e à observabilidade estruturada
+> (`api/_lib/observability.js`, `docs/observability.md`). Este documento reflecte o estado do
+> código tal como está — não o histórico ronda-a-ronda, que passa a viver apenas na secção
+> "Histórico de Versões" no fim.
 >
 > ⚠️ **Nota de nomenclatura que confunde ao ler o histórico:** existem duas coisas diferentes
 > chamadas "v57" no projecto — a migração `migration_v57_atomic_payment_confirmation.sql` (base de
@@ -87,6 +90,7 @@ pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 | **Histórico Offline** | IndexedDB, sincronizado quando online | ✅ |
 | **Compra permanente de templates pagos (NOVO — v64)** | Um template pago (créditos) só é cobrado da primeira vez; a partir daí fica desbloqueado por tempo indefinido para quem pagou (`template_purchases`) | ✅ Corrige um bug de fuga de receita confirmado — ver secção 15 |
 | **Pacotes exclusivos por categoria + ponte afiliado ↔ parceiro (NOVO — v65)** | Pacotes de créditos com preço/créditos diferentes por categoria (papelaria, cyber, universidade, explicação, digitador, advogado), validados sempre no servidor; convite bidireccional para quem é afiliado de negócio físico se candidatar também à Rede de Parceiros, e vice-versa | ✅ Ver secção 9 |
+| **Primeiro documento sempre grátis (NOVO — v66)** | O primeiro documento de uma conta nova é gratuito independentemente do custo real dele (1-10 créditos) — não um saldo inicial de 1 crédito como antes; contas registadas por link de afiliado têm direito a 2. Nunca se aplica à compra de templates pagos do marketplace | ✅ Ver secção 9 |
 | **Agendamento com parceiros — foto/impressão (NOVO — v63)** | Pedido de "Foto para Documentos" ou impressão passa a ficar registado (tabela `bookings`), com estado pendente/agendado/em_andamento/concluído/cancelado geridos pela papelaria/gráfica no Portal da Parceira | ✅ `parceiro-portal.html` |
 | **WhatsApp como lead + via de recuperação de conta (NOVO — v62)** | Campo opcional `profiles.whatsapp` no registo; recuperação de password aceita e-mail ou WhatsApp (o e-mail associado é resolvido a partir de qualquer um dos dois) | ✅ `api/auth/index.js` |
 | **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola, mKesh — upload de comprovativo com verificação automática por IA de visão (aprovação se confiança ≥ 0.85) e fallback WhatsApp | ✅ |
@@ -717,7 +721,8 @@ confirmado (v43).
 - **Níveis:** 🥉 bronze → 🥈 prata (5+ conversões) → 🥇 ouro (20+) → 💎 diamante (50+); diamante
   reduz o mínimo de levantamento para metade.
 - **Bónus de comissão por tier:** Bronze +0% · Prata +2% · Ouro +5% · Diamante +8%.
-- **Crédito de boas-vindas** para quem se regista via link de afiliado.
+- **Primeiro(s) documento(s) grátis** para quem se regista — ver detalhe completo logo abaixo
+  (v66); quem se regista via link de afiliado tem direito a 2 em vez de 1.
 - **Anti-fraude:** tabela dedicada com eventos (`self_referral`, `ip_burst`, `fake_clicks`,
   `suspicious_conversion`) e severidade.
 - **Kit de Marketing dinâmico:** o admin marca zonas de QR code/texto sobre uma imagem; cada
@@ -725,6 +730,22 @@ confirmado (v43).
   cópia por afiliado fica gravada na base de dados.
 - **Rede de Parceiros:** papelarias, cyber cafés **e advogados** (v47), com código de acesso
   próprio (v46) e protecção anti-abuso nas avaliações (v45).
+- **Primeiro documento sempre grátis, não 1 crédito (NOVO — v66):** o primeiro documento gerado
+  por uma conta nova é gratuito **independentemente do custo real dele** (os custos vão de 1 a 10
+  créditos, `VALID_COSTS` em `api/_services/account.js`) — diferente do mecanismo antigo, que
+  concedia 1 crédito de saldo inicial e por isso só cobria um documento se este custasse
+  exactamente 1. Uma conta registada através de um link de afiliado (`profiles.referred_by`
+  definido) tem direito a **2** documentos grátis, substituindo o antigo bónus de +1 crédito por
+  registo via afiliado. Implementado como um contador próprio
+  (`profiles.free_documents_used`, `migration_v66_first_document_free.sql`), nunca como saldo de
+  créditos: `grant_free_document()` (RPC atómica, idempotente por `operation_id`) é chamada em
+  `handleDeductCredit` **antes** de qualquer dedução paga, e só depois de confirmar que
+  `documentType` não começa por `"template_"` — **modelos pagos do marketplace nunca são
+  gratuitos**, mesmo para o primeiro documento de uma conta nova, por pedido explícito do cliente.
+  Contas já existentes à data desta migração não recebem o benefício retroactivamente. Os
+  mecanismos antigos (`free_credits_normal`, `aff_bonus_signup` em `system_settings`) foram
+  desligados por configuração, não removidos do código — continuam a existir caso seja preciso
+  reverter.
 - **Ponte bidireccional afiliado ↔ parceiro (NOVO — v65):** quem se regista como afiliado no
   segmento `papelaria`, `cyber` ou `universidade` vê um convite no seu painel
   (`afiliado.html#partnerBridgeBanner`) para candidatar o mesmo negócio à Rede de Parceiros
@@ -1021,6 +1042,7 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | v64 (Ago/2026) — `migration_v64_template_purchases.sql` | Dois bugs reais confirmados por captura de ecrã, corrigidos juntos: **(1)** fuga de receita — o SELECT do modal de detalhe de um template (`tplList` em `api/_services/templates.js`) não incluía `credit_cost` (só o cartão da grelha, via `v_templates_gallery`, mostrava o preço correcto); um template pago aparecia no modal como "✓ Gratuito" e o botão "Usar este Template" nunca debitava créditos. **(2)** não existia registo de "este utilizador já pagou por este template" — cada reutilização cobrava créditos e pagava royalties ao autor outra vez pela mesma compra. Nova tabela `template_purchases` (UNIQUE por `template_id`+`user_id`, RLS só leitura própria, inserção apenas via service_role) é a memória permanente de posse; `tplList` devolve `already_purchased` quando há sessão válida, e `tplUse` só chama `process_template_sale`/regista a compra quando `!alreadyOwned` — desbloqueio, uma vez pago, por tempo indefinido. Wiring confirmado em `TemplatePicker.js` (`serverTpl?.already_purchased`) |
 | Correcções de código (Ago/2026, mesma ronda da v64) | O selector "Escolher Modelo" dentro do resultado do documento (`assets/js/marketplace/TemplatePicker.js`) carrega templates directamente do Supabase (chave pública), um caminho **separado** de `templates.html` — tinha o mesmo bug de fuga de receita da v64 (badge "💰 N créd." correcto, mas "Usar este Modelo" aplicava sem cobrar), corrigido em separado com o mesmo padrão (confirmação de preço/posse no servidor antes de debitar, via `/api/deduct-credit` + `/api/templates?action=use`). Aproveitado para dar suporte real a fotos de perfil nos templates: qualquer template (próprio ou da Galeria) que declare um placeholder `{{FOTO}}` no `htmlTemplate` passa a mostrar uma opção de carregar foto no selector — recorte quadrado + compressão no browser antes de guardar, com fallback automático para o monograma de iniciais quando não há foto; `cv-executivo` (`templates/cv.js`) é o primeiro a usar isto. Também corrigidos, na mesma ronda: `_fillTemplate()` deixou de exigir correspondência exacta de maiúsculas/acentos entre o nome do placeholder no HTML e a chave de dados (`{{nome_completo}}`, `{{Telefone}}`, etc. de templates de terceiros ficavam sempre em branco/visíveis em bruto); secções duplicadas no preview de um template com layout HTML próprio (o preview mostrava a secção "Experiência" duas vezes quando o documento tinha mais texto do que uma página); e um bug de paginação do editor (WYSIWYG) em que sair e voltar ao modo "Preview" sem qualquer edição real já reconvertia e corrompia o conteúdo, unindo páginas que deviam continuar separadas |
 | v65 (Ago/2026) — `migration_v65_partner_category_packages.sql` | **(1)** Pacotes de créditos exclusivos por categoria de parceiro/afiliado — nova coluna `credit_packages.partner_segment`; a categoria de cada utilizador é sempre resolvida no servidor (`resolveUserPricingSegment()`, novo em `api/_lib/packages.js`), nunca aceite do cliente, com validação real (401/403) em `api/process-payment.js` no momento da compra — não só no que é mostrado no ecrã. Novo endpoint autenticado `GET /api/account?_op=my-packages` expõe os pacotes exclusivos de cada um, à parte de `/api/config` (que nunca os pode incluir — é uma resposta pública em cache partilhado na CDN). **(2)** Ponte bidireccional entre o painel de afiliado e o Portal da Parceira: quem se regista como afiliado `papelaria`/`cyber`/`universidade` vê um convite para candidatar o mesmo negócio à Rede de Parceiros (já existia, agora com pré-preenchimento também no sentido inverso); um parceiro `papelaria` já aprovado vê, pela primeira vez, o convite equivalente para se tornar também afiliado (`parceiro-portal.html`), com nome/telefone pré-preenchidos em `afiliado.html` — só `papelaria` tem esta direcção, `advogado` não é um segmento de afiliado válido. **(3)** Corrigido de caminho, na mesma ronda: `resolveUserPricingSegment()` (função nova desta versão) tinha sido escrita a consultar uma tabela `affiliates` com coluna `user_id` que nunca existiu no projecto — os dados de afiliado vivem em colunas de `profiles` (`aff_segment`, `is_affiliate`, desde a `migration_v14`); o ramo de segmento de afiliado da função nunca teria funcionado sem esta correcção, só o ramo de parceiro (`partners.linked_user_id`) |
+| v66 (Ago/2026) — `migration_v66_first_document_free.sql` | Substituído o mecanismo de "1 crédito grátis no registo" por "o primeiro documento é sempre grátis", por pedido explícito do cliente — diferença real, não só de nome: 1 crédito de saldo inicial só cobre um documento que custe exactamente 1 crédito, mas os custos vão de 1 a 10 (`VALID_COSTS`); o novo mecanismo cobre sempre o custo real do primeiro documento, através de um contador dedicado (`profiles.free_documents_used`) que nunca toca em `profiles.credits`. Uma conta registada via link de afiliado tem direito a 2 documentos grátis em vez de 1 (substitui o antigo bónus de +1 crédito por referência). Nova RPC atómica e idempotente `grant_free_document()`, chamada em `handleDeductCredit` (`api/_services/account.js`) antes de qualquer dedução paga, e sempre que `documentType` **não** comece por `"template_"` — modelos pagos do marketplace permanecem sempre pagos, nunca beneficiam disto, mesmo no primeiro documento de uma conta nova. Os dois mecanismos antigos (`free_credits_normal`, `aff_bonus_signup` em `system_settings`) foram desligados por configuração (posto a `'0'`), sem tocar nas funções/triggers que os liam — reversível sem deploy, se preciso. Corrigido de caminho um efeito colateral real: o reembolso automático em `api/generate-document.js` (dispara quando a geração falha depois de créditos terem sido debitados) enviaria um crédito nunca gasto para uma conta cujo documento tinha sido concedido gratuitamente; `Services.js` deixou de enviar o custo real ao gerar quando o documento foi grátis, para esse reembolso nunca disparar por engano. Todas as mensagens de interface que mencionavam "1 crédito grátis" (`AuthUI.js`, `homeController.js`, `afiliado.html`, `index.html`) foram actualizadas para reflectir o novo mecanismo |
 | Ago/2026 (mesma ronda, sem migração — CSS/layout) | Alerta "⚠️ Créditos insuficientes" e notificações semelhantes escapavam do ecrã em telas estreitas — `.notif` em `styles.css` tinha `white-space:nowrap` sem largura máxima; corrigido para `white-space:normal`+`word-break`+`max-width:100%` dentro de `.notif-stack`. Nova classe reutilizável `.container{max-width:1024px;margin:0 auto;padding:0 16px}` substitui, por composição (classe extra no HTML, ex. `class="hdr-inner container"`), as várias classes `.wrap`/`.hero-inner`/`.section` com larguras inconsistentes (480–760px) espalhadas por `index.html`, `templates.html`, `parceiros.html`, `perfil.html`, `admin-parceiros.html` e `parceiro-portal.html` (páginas que carregam `assets/css/styles.css`; as páginas 100% standalone — `/pages/*`, `legal.html`, `blog.html`, `afiliado.html`, `admin.html` — foram deliberadamente deixadas de fora para não introduzir regressão fora do âmbito pedido). Consequência em cadeia detectada e corrigida na mesma ronda: `.sheet` (modal/bottom-sheet partilhado por todos os formulários) subiu de 560px para 720px para acompanhar a nova largura — mas `.a4-page` (folha branca do preview A4, `A4Renderer.js`, usado por `Views.js`/`DocumentEditor.js`) continuou com 560px hardcoded, fazendo `scalePage()` escalar o iframe do preview maior do que a caixa que devia contê-lo, transbordando texto para fora da folha no preview não-maximizado; corrigido para 720px em `A4Renderer.js` e no modal equivalente de `HistoryController.js`. **Nota para manutenção futura:** `.sheet` (`styles.css`) e `.a4-page` (`A4Renderer.js`) têm sempre de ser alterados juntos. Inconsistência pré-existente sinalizada mas não corrigida (fora do âmbito pedido): `TemplatePicker.js` tem o seu próprio `#tplPickerSheet` a 700px com um `.a4-page` local ainda a 560px |
 
 | Componente | Versão |
