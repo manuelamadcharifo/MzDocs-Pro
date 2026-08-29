@@ -289,6 +289,47 @@ async function handleDeductCredit(req, res) {
     console.warn('[deduct-credit] Falha ao verificar perfil:', e.message);
   }
 
+  // ── NOVO (v66): documento(s) inicial(is) totalmente grátis ────────────────
+  // "quero que o primeiro documento seja grátis não 1 crédito como antes...
+  // os créditos e preço que aparecer para eles têm de ser diferentes..." —
+  // pedido explícito do cliente. Diferença face ao antigo "1 crédito grátis
+  // no registo": aquele só cobria um documento se custasse exactamente 1
+  // crédito (alguns custam mais — VALID_COSTS vai até 10); isto cobre
+  // sempre o custo REAL do primeiro documento, sem tocar em profiles.credits.
+  //
+  // NUNCA se aplica à compra de templates pagos do marketplace — "os
+  // modelos pagos têm que permanecer pagos" — reconhecidos pelo mesmo
+  // prefixo já usado em TemplatePicker.js/templates.html
+  // ("template_<serviceKey>", ver migration_v64/v65).
+  const isTemplatePurchase = typeof documentType === 'string' && documentType.startsWith('template_');
+  if (!isTemplatePurchase) {
+    try {
+      const granted = await rpc('grant_free_document', {
+        p_user_id:       userId,
+        p_operation_id:  operationId,
+        p_document_type: documentType,
+      });
+      if (granted === true) {
+        let remainingCredits = 0;
+        try {
+          const p = await selectOne('profiles', 'id', userId, 'credits');
+          remainingCredits = p?.credits || 0;
+        } catch (e) { /* saldo só é informativo aqui — não bloqueia a resposta */ }
+        return res.status(200).json({
+          success:     true,
+          credits:     remainingCredits,
+          free:        true,
+          creditSource: 'free_first_document',
+        });
+      }
+    } catch (e) {
+      // grant_free_document indisponível (migração ainda não corrida) ou
+      // falhou por outro motivo — nunca bloquear o utilizador por causa
+      // desta funcionalidade extra, segue para a dedução paga normal.
+      console.warn('[deduct-credit] grant_free_document falhou/indisponível:', e.message);
+    }
+  }
+
   // ── Dedução atómica via RPC ───────────────────────────────────────────────
   try {
     let remaining = null;
