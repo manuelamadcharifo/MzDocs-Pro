@@ -33,7 +33,15 @@ function mockReqRes(body, headers = {}) {
 }
 
 describe('POST /api/generate-document', () => {
-  const ENV_KEYS = ['GROQ_API_KEY', 'CEREBRAS_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'NVIDIA_API_KEY'];
+  // NOTA (Ago/2026): NVIDIA_API_KEY foi substituída por SAMBANOVA_API_KEY
+  // como exemplo de provider de reserva (tier "reserva_ativa") nestes
+  // testes — a NVIDIA NIM foi removida da lista real de providers (ver
+  // api/_lib/aiProviderRegistry.js, secção "AUDITORIA Ago/2026": bloqueio
+  // de conta do lado da NVIDIA, sem solução por código). Qualquer provider
+  // do tier reserva_ativa serve igualmente bem para testar a lógica de
+  // fallback em si — o que importa aqui é o COMPORTAMENTO (grupo primário
+  // primeiro, reserva só se tudo falhar), não QUAL provider especificamente.
+  const ENV_KEYS = ['GROQ_API_KEY', 'CEREBRAS_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'SAMBANOVA_API_KEY'];
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -58,7 +66,7 @@ describe('POST /api/generate-document', () => {
   test('grupo primário (generoso+médio) responde: formato da resposta mantém-se e nenhum provider de reserva é chamado', async () => {
     process.env.GROQ_API_KEY   = 'fake-groq';
     process.env.GEMINI_API_KEY = 'fake-gemini';
-    process.env.NVIDIA_API_KEY = 'fake-nvidia'; // reserva_ativa — não deve ser tocado
+    process.env.SAMBANOVA_API_KEY = 'fake-sambanova'; // reserva_ativa — não deve ser tocado
 
     const calledUrls = [];
     global.fetch = jest.fn(async (url) => {
@@ -103,17 +111,17 @@ describe('POST /api/generate-document', () => {
     }));
     expect(res._json.document).toContain('Documento gerado com sucesso.');
 
-    // Nenhum pedido foi feito à NVIDIA (reserva_ativa) — o grupo primário
+    // Nenhum pedido foi feito à SambaNova (reserva_ativa) — o grupo primário
     // já tinha um vencedor, o fallback nunca deveria ser accionado.
-    const nvidiaCalled = calledUrls.some(u => u.includes('integrate.api.nvidia.com'));
-    expect(nvidiaCalled).toBe(false);
+    const reserveCalled = calledUrls.some(u => u.includes('api.sambanova.ai'));
+    expect(reserveCalled).toBe(false);
   });
 
   test('fallback: se generoso+médio falharem por completo, usa reserva_ativa (e reporta o provider correcto)', async () => {
     process.env.GROQ_API_KEY   = 'fake-groq';
     process.env.CEREBRAS_API_KEY = 'fake-cerebras';
     process.env.GEMINI_API_KEY = 'fake-gemini';
-    process.env.NVIDIA_API_KEY = 'fake-nvidia';
+    process.env.SAMBANOVA_API_KEY = 'fake-sambanova';
 
     const calledUrls = [];
     global.fetch = jest.fn(async (url) => {
@@ -122,11 +130,11 @@ describe('POST /api/generate-document', () => {
       if (!isChatCall && String(url).endsWith('/models')) {
         return { ok: false, status: 404, json: async () => ({}) };
       }
-      if (String(url).includes('integrate.api.nvidia.com')) {
+      if (String(url).includes('api.sambanova.ai')) {
         return {
           ok: true, status: 200,
           json: async () => ({
-            model: 'meta/llama-3.3-70b-instruct',
+            model: 'Meta-Llama-3.3-70B-Instruct',
             choices: [{ message: { content: 'Recibo gerado pela reserva.' } }],
             usage: { prompt_tokens: 5, completion_tokens: 15 },
           }),
@@ -145,7 +153,7 @@ describe('POST /api/generate-document', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(res._json.model).toContain('NVIDIA');
+    expect(res._json.model).toContain('SambaNova');
     expect(res._json.document).toContain('Recibo gerado pela reserva.');
 
     // Confirma que o grupo primário FOI tentado antes do fallback (não se
