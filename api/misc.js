@@ -60,6 +60,11 @@ const { handleAffiliate }                             = require('./_services/aff
 // tudo dentro de /api/misc — não cria uma nova Serverless Function (ver
 // nota no topo deste ficheiro sobre o limite do plano Vercel Hobby).
 const { handleSmsMpesaWebhook }                       = require('./_services/smsConfirm');
+// NOVO (Ago/2026): cron diário de vigilância dos providers de IA — avisa
+// por Telegram/WhatsApp (ver api/_lib/notifyOps.js) quando um provider
+// precisa de atenção, sem o Manuel ter de abrir o painel admin todos os
+// dias. Mesmo padrão dos outros crons: dentro de /api/misc, sem function nova.
+const { handleAiProvidersCron }                       = require('./_lib/aiProviderWatchdog');
 
 // ── Main router ─────────────────────────────────────────────────────────
 module.exports = async function handler(req, res) {
@@ -98,6 +103,8 @@ module.exports = async function handler(req, res) {
   if (action === 'document-usage')                       return handleDocumentUsage(req, res);
   // NOVO (monetização — Tarefa 3): webhook de SMS M-Pesa reencaminhado.
   if (action === 'sms-mpesa')                            return handleSmsMpesaWebhook(req, res);
+  // NOVO (Ago/2026): cron diário de vigilância dos providers de IA.
+  if (action === 'ai-providers-cron')                    return handleAiProvidersCron(req, res);
 
   return res.status(404).json({ error: `Rota desconhecida: "${action}".` });
 };
