@@ -17,6 +17,8 @@
 // atrasa nem bloqueia a geração de um documento.
 // ──────────────────────────────────────────────────────────────────────────
 
+const { resolveUrl } = require('./aiProviderRegistry');
+
 const redisUrl   = process.env.UPSTASH_REDIS_REST_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -87,13 +89,14 @@ async function getAvailableModels(providerCfg, apiKey) {
     if (cached) return cached;
 
     try {
+        const modelsUrl = resolveUrl(providerCfg.modelsUrl);
         let res, ids;
         if (providerCfg.kind === 'gemini') {
-            res = await _fetchWithTimeout(`${providerCfg.modelsUrl}?key=${apiKey}`, {});
+            res = await _fetchWithTimeout(`${modelsUrl}?key=${apiKey}`, {});
             if (!res.ok) return null;
             ids = _parseGeminiModelsResponse(await res.json());
         } else {
-            res = await _fetchWithTimeout(providerCfg.modelsUrl, {
+            res = await _fetchWithTimeout(modelsUrl, {
                 headers: providerCfg.authHeader(apiKey),
             });
             if (!res.ok) return null;
