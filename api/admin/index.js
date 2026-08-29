@@ -11,6 +11,17 @@
 
 const QRCode = require('qrcode');
 const { ACTIVE_PROVIDERS, RESERVE_PROVIDERS, TIER_LABELS } = require('../_lib/aiProvidersCatalog');
+// NOVO (Ago/2026 — botão "🔄 Reactivar" no painel IA Providers): PROVIDERS
+// dá acesso à lista curada de modelos + apiKeys reais por provider (mesma
+// fonte usada em generate-document.js), getAvailableModels replica a MESMA
+// resolução de candidatos (curados ∩ descoberta ao vivo, ou os primeiros da
+// descoberta se nenhum curado existir mais) usada por aiRace.js — para que
+// o reset limpe EXACTAMENTE os modelos que o motor de corrida está de facto
+// a saltar, e não só a lista curada estática (que muitas vezes já não é a
+// que está a falhar — ver nota do OpenRouter no aiProviderRegistry.js).
+const { PROVIDERS: AI_PROVIDERS } = require('../_lib/aiProviderRegistry');
+const { getAvailableModels } = require('../_lib/modelDiscovery');
+const { resetProviderHealth } = require('../_lib/modelHealth');
 const { sendPushToSubscriptions } = require('../_lib/webpush');
 const {
   restRequest,
@@ -3146,6 +3157,53 @@ async function handleAiProviders(req, res) {
 
     if (req.method === 'POST' || req.method === 'PUT') {
       const body = parseBody(req);
+
+      // NOVO — reset manual do disjuntor (ver nota no require() no topo do
+      // ficheiro). body.resetCircuitBreaker pode ser o id de um provider
+      // (ex.: 'openrouter') ou a string 'all' para reactivar todos de uma
+      // vez. Não mexe em nada além do estado de falhas registado — não
+      // acrescenta créditos nem chaves API, só permite ao motor voltar a
+      // TENTAR os modelos imediatamente em vez de esperar o cooldown.
+      if (body?.resetCircuitBreaker) {
+        const target = body.resetCircuitBreaker;
+        const targets = target === 'all'
+          ? AI_PROVIDERS.filter(p => !!process.env[p.envVar])
+          : AI_PROVIDERS.filter(p => p.id === target);
+
+        if (targets.length === 0) {
+          return res.status(400).json({ error: 'Provider desconhecido ou sem chave configurada: ' + target });
+        }
+
+        let totalReset = 0;
+        const resetPerProvider = {};
+        for (const providerCfg of targets) {
+          const apiKey = process.env[providerCfg.envVar];
+          // Mesma resolução de candidatos que aiRace.js usa na corrida real
+          // (best-effort — se a descoberta falhar aqui, cai para a lista
+          // curada, exactamente como no motor principal).
+          let discovered = null;
+          try { discovered = await getAvailableModels(providerCfg, apiKey); } catch { /* best-effort */ }
+          const candidates = discovered && discovered.length > 0
+            ? Array.from(new Set([...providerCfg.models, ...discovered]))
+            : providerCfg.models;
+
+          const n = await resetProviderHealth(providerCfg.id, candidates);
+          totalReset += n;
+          resetPerProvider[providerCfg.id] = n;
+        }
+
+        await insert('admin_logs', {
+          admin_id:    auth.user.id,
+          action:      'reset_ai_provider_circuit_breaker',
+          target_type: 'ai_provider',
+          target_id:   target,
+          details:     { resetPerProvider, totalReset },
+          created_at:  new Date().toISOString(),
+        });
+
+        return res.status(200).json({ success: true, resetPerProvider, totalReset });
+      }
+
       const toggleId = body?.toggleReserve;
       if (!toggleId) return res.status(400).json({ error: 'toggleReserve é obrigatório' });
 
