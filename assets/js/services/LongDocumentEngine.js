@@ -119,8 +119,21 @@ export class LongDocumentEngine {
     try {
       sections = await this._planDocument(serviceType, formData, chainHeaders);
     } catch (e) {
-      console.warn('[LongDocEngine] Planeamento falhou:', e.message);
-      throw new Error('Não foi possível planear o documento. Verifique a ligação e tente novamente.');
+      console.warn('[LongDocEngine] Planeamento falhou (1ª tentativa):', e.message);
+      // CORRIGIDO (Ago/2026 — bug "Não foi possível planear o documento"):
+      // antes, qualquer falha de planeamento (incluindo um JSON mal formado
+      // devolvido pela IA, o caso mais comum) ia direto para o erro final ao
+      // utilizador, sem tentar de novo. Como nenhum crédito foi debitado
+      // ainda nesta fase, uma 2ª tentativa é segura e resolve a maioria dos
+      // casos — é normalmente um deslize de formatação pontual do modelo.
+      try {
+        this._emit({ phase: 'plan', step: 0, text: '📋 A tentar planear novamente…' });
+        await this._sleep(1500);
+        sections = await this._planDocument(serviceType, formData, chainHeaders);
+      } catch (e2) {
+        console.warn('[LongDocEngine] Planeamento falhou (2ª tentativa):', e2.message);
+        throw new Error('Não foi possível planear o documento. Verifique a ligação e tente novamente.');
+      }
     }
 
     if (this._aborted) throw new Error('Abortado pelo utilizador');
@@ -370,16 +383,92 @@ export class LongDocumentEngine {
     const data = await res.json();
     const raw  = (data.document || data.content || '').trim();
 
-    // Extrai o JSON da resposta (pode ter texto antes/depois)
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Resposta de planeamento sem JSON');
-
-    const plan = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(plan.sections) || plan.sections.length === 0) {
+    // CORRIGIDO (Ago/2026 — bug "Não foi possível planear o documento"):
+    // um JSON.parse directo falhava sempre que a IA devolvia JSON quase-
+    // válido (aspas por escapar num título, vírgula a mais, ou a resposta
+    // cortada a meio por atingir o limite de tokens). Isso lançava a
+    // SyntaxError bruta do V8 ("Expected ',' or ']' after array element…"),
+    // via console.warn no chamador, sem qualquer tentativa de recuperação.
+    // _parseSectionsJson tenta o parse directo e, se falhar, tenta reparar
+    // (aspas tipográficas, vírgulas a mais, objectos consecutivos sem
+    // vírgula) e, por fim, "salva" as secções já bem formadas antes do
+    // ponto onde a resposta se corrompeu/cortou, em vez de rejeitar tudo.
+    const plan = this._parseSectionsJson(raw);
+    if (!plan || !Array.isArray(plan.sections) || plan.sections.length === 0) {
       throw new Error('Plano sem secções');
     }
 
     return plan.sections;
+  }
+
+  // ── Parser tolerante do JSON de planeamento ─────────────────────
+  // Tenta, por ordem: (1) parse directo; (2) reparos comuns de formatação;
+  // (3) salvar apenas as secções completas e bem formadas antes do ponto
+  // de corrupção/corte, fechando a estrutura correctamente. Só falha (null)
+  // se nenhuma secção válida puder ser recuperada — nesse caso quem chama
+  // decide se tenta pedir o plano de novo.
+  _parseSectionsJson(raw) {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    const jsonStr = jsonMatch[0];
+
+    const tryParse = (s) => { try { return JSON.parse(s); } catch (_) { return null; } };
+
+    // 1) Parse directo
+    let plan = tryParse(jsonStr);
+    if (plan) return plan;
+
+    // 2) Reparos comuns: aspas tipográficas, vírgulas a mais antes de ]/},
+    //    objectos consecutivos "}{"  sem vírgula entre eles.
+    const fixed = jsonStr
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/,(\s*[\]}])/g, '$1')
+      .replace(/}(\s*){/g, '},$1{');
+
+    plan = tryParse(fixed);
+    if (plan) return plan;
+
+    // 3) Salvar as secções completas antes do ponto de corrupção/corte
+    return this._salvagePartialSections(jsonStr) || this._salvagePartialSections(fixed);
+  }
+
+  // Percorre "sections":[ ... ] carácter a carácter (respeitando strings e
+  // escapes, para não contar chavetas dentro de texto) e devolve só os
+  // objectos de secção que fecharam correctamente antes de a estrutura se
+  // corromper ou a resposta ser cortada a meio.
+  _salvagePartialSections(jsonStr) {
+    const keyIdx = jsonStr.indexOf('"sections"');
+    if (keyIdx === -1) return null;
+    const bracketIdx = jsonStr.indexOf('[', keyIdx);
+    if (bracketIdx === -1) return null;
+
+    let depth = 0, inStr = false, esc = false, lastGoodEnd = -1;
+    for (let i = bracketIdx + 1; i < jsonStr.length; i++) {
+      const ch = jsonStr[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') { depth++; }
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) lastGoodEnd = i; // fim de uma secção completa
+      } else if (ch === ']' && depth === 0) {
+        break; // fim normal do array
+      }
+    }
+
+    if (lastGoodEnd === -1) return null;
+    const sectionsStr = jsonStr.slice(bracketIdx + 1, lastGoodEnd + 1);
+    const rebuilt = `{"sections":[${sectionsStr}]}`;
+    try {
+      const parsed = JSON.parse(rebuilt);
+      // Exige pelo menos 2 secções salvas — um plano com 1 secção só
+      // (ex.: cortou logo a seguir à introdução) não vale a pena aceitar,
+      // é melhor voltar a tentar do zero do que gerar um documento minúsculo.
+      if (Array.isArray(parsed.sections) && parsed.sections.length >= 2) return parsed;
+    } catch (_) { /* não recuperável */ }
+    return null;
   }
 
   // ── FASE 2: GERAR UMA SECÇÃO ───────────────────────────────────
