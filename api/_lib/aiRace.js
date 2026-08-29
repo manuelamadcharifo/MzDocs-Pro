@@ -21,18 +21,23 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 const { rpc } = require('./supabaseAdmin');
-const { PROVIDERS } = require('./aiProviderRegistry');
+const { PROVIDERS, resolveUrl, isProviderConfigured } = require('./aiProviderRegistry');
 const { isModelDisabled, recordModelResult } = require('./modelHealth');
 const { getAvailableModels } = require('./modelDiscovery');
 
 // Constrói o mapa { providerId: apiKey } a partir do registo central —
 // qualquer provider com a env var correspondente configurada na Vercel
 // entra automaticamente. Usado por generate-document.js e por blog.js.
+//
+// NOVO (Ago/2026): usa isProviderConfigured() em vez de checar só
+// `process.env[p.envVar]` — providers com env vars adicionais obrigatórias
+// (ex: Cloudflare Workers AI precisa de CLOUDFLARE_ACCOUNT_ID além do
+// token) só entram na corrida quando TODAS as variáveis existirem, evitando
+// chamadas garantidas a falhar contra uma URL mal formada.
 function buildApiKeysFromEnv() {
     const apiKeys = {};
     for (const p of PROVIDERS) {
-        const val = process.env[p.envVar];
-        if (val) apiKeys[p.id] = val;
+        if (isProviderConfigured(p)) apiKeys[p.id] = process.env[p.envVar];
     }
     return apiKeys;
 }
@@ -167,7 +172,14 @@ async function tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, 
     for (const model of candidates) {
         if (signal.aborted) throw new DOMException('', 'AbortError');
 
-        if (await isModelDisabled(providerCfg.id, model)) {
+        // discoveredLive: confirmámos AGORA MESMO, via /models do próprio
+        // provider, que este modelo existe — permite ao disjuntor (ver
+        // modelHealth.js) ignorar um bloqueio PERMANENTE antigo que já não
+        // reflecte a realidade (ex: Cerebras reactivou um modelo que tinha
+        // sido descontinuado). Falhas transitórias continuam a respeitar o
+        // cooldown mesmo assim.
+        const discoveredLive = !!(discovered && discovered.includes(model));
+        if (await isModelDisabled(providerCfg.id, model, { discoveredLive })) {
             continue; // desactivado pelo disjuntor — salta sem gastar um pedido
         }
 
@@ -189,9 +201,10 @@ async function tryProviderChain(providerCfg, apiKey, prompt, signal, maxTokens, 
 }
 
 // ─── Chamada genérica a um modelo OpenAI-compatible (Groq, Cerebras,
-//     OpenRouter, NVIDIA, Mistral, SambaNova, Together, Fireworks...) ──────
+//     OpenRouter, Mistral, SambaNova, GitHub Models, Cloudflare Workers AI,
+//     Hugging Face, Cohere...) ─────────────────────────────────────────────
 async function tryOpenAIModel(providerCfg, model, apiKey, prompt, signal, maxTokens, systemPrompt, temperature) {
-    const res = await fetch(providerCfg.chatUrl, {
+    const res = await fetch(resolveUrl(providerCfg.chatUrl), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...providerCfg.authHeader(apiKey) },
         signal,
