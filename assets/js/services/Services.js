@@ -227,7 +227,7 @@ export class OpenRouterService {
       throw new Error(d.error || 'Erro ao verificar créditos. Tente novamente.');
     }
 
-    const { credits: creditsAfterDeduct } = await deductRes.json();
+    const { credits: creditsAfterDeduct, free: wasFree } = await deductRes.json();
 
     // ── PASSO 2: Gerar documento ─────────────────────────────────────────
     const res = await fetch(this.endpoint, {
@@ -238,7 +238,14 @@ export class OpenRouterService {
         prompt,
         userId,
         creditsRemaining: creditsAfterDeduct, // enviado de volta para o cliente via resposta
-        cost, // permite ao servidor reembolsar automaticamente este custo se a geração falhar
+        // NOVO (v66): quando o documento foi concedido pelo mecanismo de
+        // "documento(s) grátis" (ver handleDeductCredit), NADA foi
+        // deduzido de profiles.credits — enviar "cost" aqui faria
+        // generate-document.js tentar REEMBOLSAR esse valor se a geração
+        // falhasse, concedendo um crédito que o utilizador nunca gastou.
+        // cost:0 faz o bloco de reembolso (deductedCost === 1 || 2) nunca
+        // disparar para este pedido.
+        cost: wasFree ? 0 : cost, // permite ao servidor reembolsar automaticamente este custo se a geração falhar
         _operationId: operationId, // P1-08: liga um eventual reembolso à mesma dedução acima
       }),
     });
