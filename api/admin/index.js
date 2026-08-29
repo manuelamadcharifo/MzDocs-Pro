@@ -19,7 +19,7 @@ const { ACTIVE_PROVIDERS, RESERVE_PROVIDERS, TIER_LABELS } = require('../_lib/ai
 // o reset limpe EXACTAMENTE os modelos que o motor de corrida está de facto
 // a saltar, e não só a lista curada estática (que muitas vezes já não é a
 // que está a falhar — ver nota do OpenRouter no aiProviderRegistry.js).
-const { PROVIDERS: AI_PROVIDERS } = require('../_lib/aiProviderRegistry');
+const { PROVIDERS: AI_PROVIDERS, isProviderConfigured } = require('../_lib/aiProviderRegistry');
 const { getAvailableModels } = require('../_lib/modelDiscovery');
 const { resetProviderHealth } = require('../_lib/modelHealth');
 const { sendPushToSubscriptions } = require('../_lib/webpush');
@@ -960,7 +960,7 @@ async function handleFinance(req, res) {
           },
           ai_providers: {
             monthly_usd: aiMonthlyUsd, monthly_mzn: round2(aiMonthlyMzn),
-            note: 'Os 5 providers de IA activos (Groq, Cerebras, Gemini, OpenRouter, NVIDIA) usam apenas planos grátis — este valor só é > 0 se configurar aqui um orçamento para uma chave paga.',
+            note: 'Os providers de IA ligados (ver aba "IA Providers") usam apenas planos grátis — este valor só é > 0 se configurar aqui um orçamento para uma chave paga.',
           },
           other: { monthly_mzn: otherMonthlyMzn },
           total_monthly_mzn: round2(totalMonthlyCostMzn),
@@ -3167,7 +3167,7 @@ async function handleAiProviders(req, res) {
       if (body?.resetCircuitBreaker) {
         const target = body.resetCircuitBreaker;
         const targets = target === 'all'
-          ? AI_PROVIDERS.filter(p => !!process.env[p.envVar])
+          ? AI_PROVIDERS.filter(p => isProviderConfigured(p))
           : AI_PROVIDERS.filter(p => p.id === target);
 
         if (targets.length === 0) {
@@ -3269,7 +3269,12 @@ async function handleAiProviders(req, res) {
       const tokensToday   = todayRow ? (Number(todayRow.tokens_prompt) + Number(todayRow.tokens_completion)) : 0;
       const requestsToday = todayRow ? (todayRow.requests_ok + todayRow.requests_fail) : 0;
       const tokens7d      = history7d.reduce((s, r) => s + Number(r.tokens_prompt) + Number(r.tokens_completion), 0);
-      const configured    = !!process.env[meta.envVar];
+      // NOVO (Ago/2026): usa isProviderConfigured() (verifica envVar +
+      // quaisquer extraEnvVars, ex: CLOUDFLARE_ACCOUNT_ID) em vez de checar
+      // só a env var principal — evita mostrar "chave configurada" para um
+      // provider que na realidade ainda não tem tudo o que precisa.
+      const providerRaw   = AI_PROVIDERS.find(p => p.id === meta.id);
+      const configured    = isProviderConfigured(providerRaw);
 
       let status;
       if (!configured) {
