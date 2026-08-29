@@ -101,7 +101,7 @@ async function _checkWelcomeBonus(userId) {
 }
 
 function _showWelcomeToast() {
-  const msg = '🎉 Bem-vindo! Recebeu 1 crédito grátis para criar o seu primeiro documento.';
+  const msg = '🎉 Bem-vindo! O seu primeiro documento é grátis.';
   if (typeof window.showToast === 'function') {
     window.showToast(msg, 5000);
     return;
