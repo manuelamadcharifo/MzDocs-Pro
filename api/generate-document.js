@@ -70,6 +70,23 @@ Gere documentos COMPLETOS e prontos para uso em português (variante moçambican
 Use Markdown. Nunca use meta-comentários como "Aqui está o documento...".
 Nunca invente dados pessoais — use [PREENCHER]. Nunca corte o documento no meio.`;
 
+// CORRIGIDO (Ago/2026 — bug "Não foi possível planear o documento"):
+// _planMode usava o MESMO SYSTEM_PROMPT do documento completo ("Gere
+// documentos COMPLETOS...", "Nunca corte o documento no meio"). Isto é
+// contraditório com o que o planeamento precisa (só um JSON compacto) e
+// deixava o modelo mais propenso a escrever preâmbulo/comentários antes do
+// JSON, ou aspas por escapar dentro dos títulos — ambos produzem
+// `JSON.parse` inválido no cliente (LongDocumentEngine.js). Prompt dedicado,
+// mais estrito, para este modo.
+const PLAN_SYSTEM_PROMPT = `Você é um motor de planeamento de estrutura de documentos.
+Responda SEMPRE e APENAS com um único objecto JSON válido — nada de texto antes ou depois, nada de blocos de código (sem \`\`\`), nada de comentários ou explicações.
+Regras estritas de formatação JSON:
+- Use JSON compacto (sem indentação nem quebras de linha supérfluas dentro dos valores).
+- NUNCA use aspas duplas (") dentro de um valor de texto — se precisar de citar algo dentro de um título, use aspas simples (').
+- NUNCA deixe vírgulas a mais antes de "]" ou "}".
+- Todas as strings devem estar correctamente fechadas antes da vírgula ou do fecho seguinte.
+Se o JSON pedido tiver muitas secções, prefira títulos mais curtos a arriscar cortar o JSON antes de fechar todos os parênteses/chavetas — o JSON tem de ficar sempre 100% válido e completo.`;
+
 const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
 // ─── RATE LIMIT (Upstash Redis — persiste entre instâncias Vercel) ──────────
@@ -262,12 +279,29 @@ module.exports = async function handler(req, res) {
         ? null
         : (typeof preDeductedCredits === 'number' ? preDeductedCredits : null);
 
+    // CORRIGIDO (Ago/2026 — bug "Não foi possível planear o documento"):
+    // 1024 tokens era demasiado apertado para o planeamento de um "trabalho"
+    // com muitas páginas — o formulário permite até 30 páginas
+    // (ServiceDefinitions.js), o que gera até ~21 secções no JSON pedido
+    // (1 intro + até 18 capítulos + conclusão + referências). Com títulos
+    // reais em português, 21 secções facilmente ultrapassam 1024 tokens,
+    // cortando a resposta a meio de uma string/objecto — exactamente o que
+    // o erro "Expected ',' or ']' after array element" no console denuncia.
+    // max_tokens é só um TECTO (não obriga a gastar tokens a mais quando a
+    // resposta natural é curta), por isso subir isto não tem custo extra
+    // para planos pequenos — só dá margem para os grandes não cortarem.
     const maxTokens = isPreview
         ? PREVIEW_MAX_TOKENS
-        : (_sectionMode ? 8192 : (_planMode ? 1024 : 8192));
+        : (_sectionMode ? 8192 : (_planMode ? 4096 : 8192));
+
+    // Planeamento usa um system prompt dedicado (JSON estrito) e uma
+    // temperatura mais baixa, para reduzir a chance de o modelo desviar-se
+    // do formato JSON pedido (menos criatividade = formatação mais fiável).
+    const systemPromptToUse = _planMode ? PLAN_SYSTEM_PROMPT : SYSTEM_PROMPT;
+    const temperatureToUse  = _planMode ? 0.3 : undefined;
 
     try {
-        const result = await raceAllProviders(finalPrompt, apiKeys, _preferProvider, maxTokens, SYSTEM_PROMPT);
+        const result = await raceAllProviders(finalPrompt, apiKeys, _preferProvider, maxTokens, systemPromptToUse, temperatureToUse);
 
         if (!isChainCall) {
             console.log(JSON.stringify({
