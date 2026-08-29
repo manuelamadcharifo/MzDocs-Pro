@@ -155,7 +155,7 @@
 
 <!-- BANNER VISITANTE — aparece só para não autenticados -->
 <div class="free-bar" id="guestBar" style="display:none;">
-  👋 <strong>Bem-vindo!</strong> Crie uma conta gratuita e ganhe 1 crédito grátis — ou <button id="btnGuestBuy" style="background:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.5);color:inherit;border-radius:6px;padding:2px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-left:4px;">Comprar acesso avulso · 50 MZN</button>
+  👋 <strong>Bem-vindo!</strong> Crie uma conta gratuita — o seu primeiro documento é grátis — ou <button id="btnGuestBuy" style="background:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.5);color:inherit;border-radius:6px;padding:2px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-left:4px;">Comprar acesso avulso · 50 MZN</button>
   <button data-action="hideParent" style="margin-left:8px;background:none;border:none;cursor:pointer;font-size:16px;color:inherit;">✕</button>
 </div>
 
@@ -201,7 +201,7 @@
     <div class="guest-teaser">
       <div class="gt-icon">🔓</div>
       <div class="gt-title">Aceda a 15+ documentos profissionais</div>
-      <div class="gt-desc">Crie conta gratuita em 30 segundos e receba 1 crédito grátis para o seu primeiro documento.</div>
+      <div class="gt-desc">Crie conta gratuita em 30 segundos — o seu primeiro documento é sempre grátis.</div>
       <div class="gt-services-preview" aria-hidden="true">
         <div class="gt-sp-card"><div class="gt-sp-ico">📋</div><div class="gt-sp-name">Currículo (CV)</div></div>
         <div class="gt-sp-card"><div class="gt-sp-ico">📚</div><div class="gt-sp-name">Trabalho Escolar</div></div>
@@ -695,7 +695,7 @@ document.addEventListener('click', (e) => {
         if (!d.valid) return;
         var bar = document.createElement('div');
         bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#009A44;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.8rem;font-weight:600';
-        bar.innerHTML = '🎁 Convidado por <strong>' + escapeHtml(d.name || 'um parceiro') + '</strong> · Registe-se e ganhe 1 crédito grátis! <button data-action="removeParent" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:.5rem;font-size:14px">✕</button>';
+        bar.innerHTML = '🎁 Convidado por <strong>' + escapeHtml(d.name || 'um parceiro') + '</strong> · Registe-se e ganhe 2 documentos grátis! <button data-action="removeParent" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:.5rem;font-size:14px">✕</button>';
         document.body.prepend(bar);
         setTimeout(function() { if (bar.parentElement) bar.remove(); }, 8000);
       }).catch(function() {});
