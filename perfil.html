@@ -71,6 +71,7 @@
   .badge-gold{background:rgba(245,158,11,.25);border:1px solid rgba(245,158,11,.45);color:#FCD34D}
   .badge-green{background:rgba(16,185,129,.22);border:1px solid rgba(16,185,129,.4);color:#6EE7B7}
   .badge-purple{background:rgba(124,58,237,.25);border:1px solid rgba(124,58,237,.45);color:#C4B5FD}
+  .badge-teal{background:rgba(8,145,178,.25);border:1px solid rgba(8,145,178,.45);color:#67E8F9}
 
   /* KPI GRID — painel de controlo */
   .kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
@@ -440,7 +441,25 @@ async function loadConfig() {
   } catch (_) {}
 }
 
-function renderIdentity(user, profile) {
+// NOVO: detecta se o telemóvel da conta corresponde a um parceiro
+// aprovado e activo (papelaria/cyber ou advogado). Os dois sistemas de
+// login são independentes — o portal de parceiro usa telefone+código de
+// acesso, sem ligação por user_id às contas normais (Supabase Auth) — por
+// isso esta é sempre uma correspondência por número de telefone, não uma
+// ligação garantida. Falha em silêncio (devolve null) se a rede/endpoint
+// falhar, para nunca bloquear o resto do perfil.
+async function detectPartnerType(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  try {
+    const r = await fetch(`/api/partners?action=check&phone=${encodeURIComponent(digits)}`).then(r => r.json());
+    return r?.exists && r?.type ? r.type : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function renderIdentity(user, profile) {
   const name  = profile?.full_name || user.user_metadata?.full_name || (user.phone ? `···${user.phone.slice(-4)}` : 'Utilizador');
   const email = user.email || profile?.email || '';
   const phone = user.phone || profile?.phone || '';
@@ -461,18 +480,35 @@ function renderIdentity(user, profile) {
     avatarEl.textContent = initials(name);
   }
 
+  // NOVO: "Tipo de conta" segue ordem de prioridade única — Administrador
+  // > Parceiro (com segmento) > Afiliado > Normal/Avulso — em vez de
+  // mostrar sempre "Normal" independentemente dos outros papéis da conta.
+  const isAdmin = authManager.isAdmin();
+  const isAffiliate = !!profile?.is_affiliate;
+  const partnerType = await detectPartnerType(phone); // 'papelaria' | 'advogado' | null
+  const partnerLabel = partnerType === 'advogado' ? 'Parceiro (Advogado)' : 'Parceiro (Papelaria/Cyber)';
+
   const badges = [];
-  if (authManager.isAdmin()) badges.push('<span class="badge badge-purple">🛡️ Administrador</span>');
-  if (profile?.is_affiliate) badges.push('<span class="badge badge-gold">🤝 Afiliado</span>');
-  badges.push(profile?.account_type === 'avulso'
-    ? '<span class="badge badge-blue">⏳ Acesso Avulso</span>'
-    : '<span class="badge badge-green">✅ Conta Normal</span>');
+  if (isAdmin) badges.push('<span class="badge badge-purple">🛡️ Administrador</span>');
+  if (partnerType) badges.push(`<span class="badge badge-teal">${partnerType === 'advogado' ? '⚖️' : '🏪'} ${partnerLabel}</span>`);
+  if (isAffiliate) badges.push('<span class="badge badge-gold">🤝 Afiliado</span>');
+  if (!isAdmin && !partnerType && !isAffiliate) {
+    badges.push(profile?.account_type === 'avulso'
+      ? '<span class="badge badge-blue">⏳ Acesso Avulso</span>'
+      : '<span class="badge badge-green">✅ Conta Normal</span>');
+  }
   document.getElementById('idBadges').innerHTML = badges.join('');
+
+  let tipoConta;
+  if (isAdmin) tipoConta = 'Administrador';
+  else if (partnerType) tipoConta = partnerLabel;
+  else if (isAffiliate) tipoConta = 'Afiliado';
+  else tipoConta = profile?.account_type === 'avulso' ? 'Avulso' : 'Normal';
 
   // KPIs
   document.getElementById('kpiCredits').textContent = profile?.credits ?? '—';
   document.getElementById('kpiDocs').textContent     = profile?.total_documents ?? 0;
-  document.getElementById('kpiPlan').textContent     = profile?.account_type === 'avulso' ? 'Avulso' : 'Normal';
+  document.getElementById('kpiPlan').textContent     = tipoConta;
   document.getElementById('kpiSince').textContent     = profile?.created_at ? fmtDate(profile.created_at) : '—';
 
   // Formulário de dados pessoais
@@ -486,7 +522,7 @@ function renderIdentity(user, profile) {
     const exp = profile?.credits_expires_at ? fmtDate(profile.credits_expires_at) : 'brevemente';
     planDesc.textContent = `Tem um acesso avulso com ${profile?.credits ?? 0} crédito(s), válido até ${exp}. Crie uma conta normal para créditos que não expiram tão rápido.`;
   } else {
-    planDesc.textContent = `Conta normal com ${profile?.credits ?? 0} crédito(s) disponíveis. Cada documento gerado consome 1 crédito.`;
+    planDesc.textContent = `Conta normal com ${profile?.credits ?? 0} crédito(s) disponíveis. Cada documento consome entre 1 e 3 créditos, consoante o tipo de documento.`;
   }
 
   // Afiliados
@@ -592,7 +628,7 @@ function bindForms() {
     try {
       await authManager.updateProfile({ full_name, phone });
       showMsg('profileMsg', '✅ Dados actualizados com sucesso!', true);
-      renderIdentity(authManager.user, authManager.profile);
+      await renderIdentity(authManager.user, authManager.profile);
     } catch (err) {
       showMsg('profileMsg', '❌ ' + (err.message || 'Erro ao guardar.'), false);
     } finally {
@@ -688,7 +724,7 @@ async function init() {
   }
 
   document.getElementById('panel').style.display = 'block';
-  renderIdentity(user, authManager.profile);
+  await renderIdentity(user, authManager.profile);
   bindForms();
 
   // ── Créditos e Arquivo funcionam directamente aqui em /perfil.html —
@@ -711,7 +747,7 @@ async function init() {
   // Se o perfil ainda não tiver chegado (corrida com _loadProfile), refrescar.
   if (!authManager.profile) {
     await authManager.refreshProfile();
-    renderIdentity(authManager.user, authManager.profile);
+    await renderIdentity(authManager.user, authManager.profile);
   }
 
   // Deep-link (#dados, #seguranca, #documentos, …) — scroll suave à secção
