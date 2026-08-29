@@ -136,4 +136,33 @@ async function recordModelResult(provider, model, success, err) {
     }
 }
 
-module.exports = { isModelDisabled, recordModelResult };
+async function _redisDel(k) {
+    try {
+        await fetch(`${redisUrl}/del/${encodeURIComponent(k)}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${redisToken}` },
+        });
+    } catch {
+        // best-effort — nunca deve fazer o reset falhar de forma ruidosa
+    }
+}
+
+// NOVO — Reinicia MANUALMENTE o disjuntor de uma lista de modelos de um
+// provider. Usado pelo botão "🔄 Reactivar" no painel admin (IA Providers):
+// depois de resolver a causa real de uma falha (nova chave, créditos
+// repostos, catálogo do provider normalizado), o Manuel já não precisa de
+// esperar o cooldown automático (10min→30min→2h, ou 7 dias no caso de erro
+// permanente) para o motor voltar a tentar esses modelos — isto limpa o
+// estado de falhas registado (Redis ou memória local, conforme o que
+// estiver configurado) imediatamente.
+async function resetProviderHealth(providerId, models) {
+    const list = Array.isArray(models) ? models : [];
+    const keys = list.map(m => healthKey(providerId, m));
+    for (const k of keys) {
+        if (redisUrl && redisToken) await _redisDel(k);
+        else _localHealth.delete(k);
+    }
+    return keys.length;
+}
+
+module.exports = { isModelDisabled, recordModelResult, resetProviderHealth };
