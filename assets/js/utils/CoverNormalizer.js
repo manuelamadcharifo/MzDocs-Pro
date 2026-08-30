@@ -46,6 +46,25 @@ export function normalizeTrabalhoCover(markdown, data) {
   return [...before, ...middle, ...after].join('\n');
 }
 
+// CORRIGIDO (capa "desorganizada"/pouco cuidada): esta função gerava uma
+// lista solta de linhas "**Label:** valor" separadas por "---" — sem
+// nenhuma estrutura visual, ficava com aspecto de rascunho em vez de capa
+// académica. O renderer partilhado (A4Renderer.js → markdownToHtml) ESCAPA
+// qualquer HTML bruto que se tente inserir aqui (não há forma de usar
+// <div align="center"> ou CSS inline directamente na capa), por isso a
+// melhoria tem de vir de sintaxe Markdown que o parser já trata de forma
+// visualmente distinta:
+//  - o título (# tema) já sai centrado e grande (H1) — inalterado;
+//  - o nome da instituição passa a cabeçalho H2 (maior e com mais respiro
+//    vertical do que texto normal em negrito);
+//  - os dados de identificação passam a uma tabela GFM real de 2 colunas
+//    ("Campo | Detalhe"), que o CSS partilhado já estiliza como uma caixa
+//    limpa com cabeçalho azul-marinho e linhas alternadas (mesmo estilo
+//    usado em qualquer tabela do documento) — em vez de uma lista solta;
+//  - cidade/ano fecham a capa a negrito, como assinatura final.
+// Todas as peças usam apenas Markdown suportado pelo parser partilhado
+// (h1-h6, hr, tabela GFM, negrito) — sem qualquer HTML cru, para não correr
+// o risco de aparecer escapado ("&lt;div&gt;") no documento final.
 function _buildCapaBlock(data = {}) {
   const instituicao = (data.instituicao || '').trim();
   const idFields = [
@@ -61,22 +80,23 @@ function _buildCapaBlock(data = {}) {
   // não inserir bloco nenhum do que inventar "[PREENCHER]" como a IA fazia.
   if (!instituicao && !idFields.length) return '';
 
-  const parts = [];
+  const cidade = (data.local || data.cidade || 'Maputo').trim();
+  const ano    = new Date().getFullYear();
+
+  const parts = ['---', ''];
   if (instituicao) {
-    parts.push('---');
-    parts.push('');
-    parts.push(`**${instituicao.toUpperCase()}**`);
+    parts.push(`## ${instituicao.toUpperCase()}`);
     parts.push('');
   }
   if (idFields.length) {
-    parts.push('---');
-    parts.push('');
-    parts.push(idFields.map(([label, val]) => `**${label}:** ${val}`).join('\n'));
+    parts.push('| Campo | Detalhe |');
+    parts.push('|---|---|');
+    idFields.forEach(([label, val]) => parts.push(`| ${label} | ${val} |`));
     parts.push('');
   }
-  const cidade = (data.local || data.cidade || 'Maputo').trim();
-  const ano    = new Date().getFullYear();
-  parts.push(`${cidade}, ${ano}`);
+  parts.push('---');
+  parts.push('');
+  parts.push(`**${cidade}, ${ano}**`);
 
   return parts.join('\n');
 }
