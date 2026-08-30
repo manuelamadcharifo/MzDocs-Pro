@@ -569,17 +569,44 @@ export class LongDocumentEngine {
       .join('\n');
 
     if (serviceType === 'trabalho') {
+      // CORRIGIDO: esta tabela estava CODIFICADA aqui com placeholders fixos
+      // ("[Nome da Instituição de Ensino]", "[Nome Completo do Aluno]",
+      // "[Nome do Professor]") em vez dos dados reais que o aluno já tinha
+      // preenchido no formulário (formData.instituicao/aluno/docente/turma
+      // — os mesmos campos que DocumentController._buildExportMetadata já
+      // usa para os exportadores). Como PAGE_THRESHOLD = 6, qualquer
+      // trabalho de 6+ páginas passava por aqui e a capa saía sempre errada
+      // — não era a IA a ignorar o formato pedido, era este método a nunca
+      // ter recebido os dados reais. Substituído por um bloco sem tabela
+      // (mais fácil de exportar bem em PDF/Word) e sempre com os dados
+      // reais; campos não preenchidos (todos são opcionais) são omitidos em
+      // vez de aparecerem como placeholder. Mantido consistente com
+      // CoverNormalizer.js (usado no caminho normal — <6 páginas — como
+      // rede de segurança adicional caso a IA ainda assim reescreva algo
+      // por cima deste bloco).
+      const idFields = [
+        formData.disciplina && ['Disciplina', formData.disciplina],
+        formData.nivel        && ['Nível', formData.nivel],
+        (formData.aluno || formData.nome) && ['Estudante', formData.aluno || formData.nome],
+        formData.turma        && ['Turma/Classe', formData.turma],
+        formData.docente      && ['Docente', formData.docente],
+      ].filter(Boolean);
+      const instituicao = (formData.instituicao || '').trim();
+      const cidade = (formData.local || formData.cidade || 'Maputo').trim();
+
+      const capaLines = [];
+      if (instituicao) {
+        capaLines.push('---', '', `**${instituicao.toUpperCase()}**`, '');
+      }
+      if (idFields.length) {
+        capaLines.push('---', '', idFields.map(([l, v]) => `**${l}:** ${v}`).join('\n'), '');
+      }
+      capaLines.push(`${cidade}, ${ano}`);
+
       return `---PAGE_BREAK---
 # ${formData.tema}
 
-| | |
-|---|---|
-| **Instituição:** | [Nome da Instituição de Ensino] |
-| **Curso / Disciplina:** | ${formData.disciplina} |
-| **Nível:** | ${formData.nivel} |
-| **Autor(a):** | [Nome Completo do Aluno] |
-| **Docente:** | [Nome do Professor] |
-| **Cidade e Ano:** | Maputo, ${ano} |
+${capaLines.join('\n')}
 
 ---PAGE_BREAK---
 
