@@ -142,8 +142,33 @@ function _capaDocumento(data) {
 function _buildAcademicPrompt(data, ocrBlock, profile) {
   const pags    = parseInt(data.paginas) || 5;
   const devPags = Math.max(2, pags - 3);
-  const numCaps = Math.max(2, Math.round(devPags / 1.5));
+  // CORRIGIDO (bug: trabalho pedido com N páginas saía sistematicamente
+  // 50-60% maior — ex.: 10 páginas pedidas geravam ~16 no PDF final): a
+  // fórmula antiga (devPags/1.5) gerava capítulos a mais para o mesmo
+  // espaço disponível, e CADA capítulo exigia um mínimo FIXO de 4+3+2=9
+  // parágrafos de 6-8 linhas cada — independentemente de quantas páginas
+  // o pedido realmente tinha disponíveis por capítulo. Para pags=10
+  // (Licenciatura): devPags=7 → numCaps antigo=round(7/1.5)=5 capítulos ×
+  // 9 parágrafos + 5 (introdução) + 4 (conclusão) = 54 parágrafos MÍNIMOS
+  // — muito mais do que cabe em 10 folhas A4, por mais que o "MÍNIMO X
+  // palavras" abaixo dissesse um valor mais baixo (a estrutura obrigatória
+  // sobrepunha-se sempre a esse número-alvo). Correcção com duas partes:
+  // (1) menos capítulos por página disponível (~2.2 páginas por capítulo
+  // em vez de ~1.5); (2) os mínimos de parágrafo por subsecção passam a
+  // ESCALAR com o tamanho do pedido em vez de serem sempre "4/3/2" — só
+  // trabalhos genuinamente extensos (>16 páginas pedidas) mantêm a
+  // exigência mais rica que já existia. Trabalhos maiores (Mestrado/
+  // Doutoramento tipicamente pedem mais páginas) continuam com a mesma
+  // riqueza de conteúdo de antes; só o caso comum (5-16 páginas) deixa de
+  // ser estruturalmente forçado a ultrapassar o pedido.
+  const numCaps = Math.max(2, Math.round(devPags / 2.2));
   const palavras = pags * profile.palavrasPorPagina;
+
+  const parasA = pags <= 8 ? 2 : (pags <= 16 ? 3 : 4);
+  const parasB = pags <= 8 ? 1 : (pags <= 16 ? 2 : 3);
+  const parasIntro = pags <= 8 ? 3 : (pags <= 16 ? 4 : 5);
+  const parasConcl = pags <= 8 ? 2 : (pags <= 16 ? 3 : 4);
+  const plural = (n) => (n > 1 ? 's' : '');
 
   const capsEstrutura = Array.from({ length: numCaps }, (_, i) => {
     const capNum = i + 2;
@@ -153,13 +178,13 @@ function _buildAcademicPrompt(data, ocrBlock, profile) {
       `## ${capNum}. [Título do Capítulo ${i + 1} — específico ao tema "${data.tema}"]`,
       '',
       `### ${capNum}.1 [Subtítulo A — aspecto principal]`,
-      `[ESCREVA AGORA: mínimo 4 parágrafos completos de ${profile.paragrafoLinhas} linhas cada. Conteúdo académico real com dados, datas, nomes, exemplos concretos do contexto moçambicano/africano. PROIBIDO usar marcadores de lugar.]`,
+      `[ESCREVA AGORA: ${parasA} parágrafo${plural(parasA)} completo${plural(parasA)} de ${profile.paragrafoLinhas} linhas cada — não escreva mais do que isso. Conteúdo académico real com dados, datas, nomes, exemplos concretos do contexto moçambicano/africano. PROIBIDO usar marcadores de lugar.]`,
       '',
       `### ${capNum}.2 [Subtítulo B — aspecto complementar]`,
-      `[ESCREVA AGORA: mínimo 3 parágrafos completos de ${profile.paragrafoLinhas} linhas cada. Análise crítica, comparações, implicações práticas para Moçambique.]`,
+      `[ESCREVA AGORA: ${parasB} parágrafo${plural(parasB)} completo${plural(parasB)} de ${profile.paragrafoLinhas} linhas cada — não escreva mais do que isso. Análise crítica, comparações, implicações práticas para Moçambique.]`,
       '',
       `### ${capNum}.3 [Subtítulo C — síntese do capítulo]`,
-      `[ESCREVA AGORA: mínimo 2 parágrafos de 5-6 linhas resumindo os pontos-chave do capítulo e ligando ao próximo.]`,
+      `[ESCREVA AGORA: 1 parágrafo de 4-5 linhas resumindo os pontos-chave do capítulo e ligando ao próximo — não escreva mais do que isso.]`,
     ].join('\n');
   }).join('\n');
 
@@ -197,7 +222,7 @@ DADOS DO TRABALHO:
 - Tema: "${data.tema}"
 - Disciplina: ${data.disciplina}
 - Nível: ${data.nivel}
-- Extensão: ${pags} folhas A4 = MÍNIMO ${palavras} palavras de conteúdo real
+- Extensão: o(a) estudante pediu ${pags} folhas A4 (aproximadamente ${palavras} palavras) — RESPEITE este valor: não é um mínimo a ultrapassar à vontade, é o tamanho pedido. Tolerância aceitável: 1-2 folhas a mais no máximo. Se, ao seguir a estrutura abaixo, sentir que o texto já respondeu bem a cada secção, FECHE a secção — não estique parágrafos nem acrescente subsecções extra só para preencher espaço.
 - Requisitos do docente: ${data.requisitos || 'seguir normas académicas padrão APA'}${_capaContextoPrompt(data)}${ocrBlock || ''}
 
 REGISTO DE LINGUAGEM OBRIGATÓRIO PARA ESTE NÍVEL:
@@ -211,6 +236,7 @@ REGRAS ABSOLUTAS DE CONTEÚDO:
 5. Corrija ortografia e acentuação em português europeu/moçambicano
 6. Títulos e subtítulos em **negrito** e bem hierarquizados
 7. ORDEM OBRIGATÓRIA em cada secção: ---PAGE_BREAK--- → título (## ou ###) → parágrafos. NUNCA coloque um parágrafo antes do título após uma quebra de página
+8. RESPEITE o número de parágrafos indicado em cada secção abaixo — são o número CERTO a escrever, não um piso mínimo para ultrapassar. O trabalho final tem de ficar próximo das ${pags} folhas pedidas.
 
 REGRAS DE QUALIDADE (violações tornam o documento inaceitável):
 - NUNCA repita o mesmo parágrafo ou ideia em secções diferentes — cada secção deve trazer conteúdo NOVO
@@ -236,21 +262,17 @@ ${indice}
 ---PAGE_BREAK---
 ## 1. Introdução
 
-[ESCREVA AGORA um texto introdutório com MÍNIMO 5 parágrafos de ${profile.paragrafoLinhas} linhas cada:
+[ESCREVA AGORA um texto introdutório com ${parasIntro} parágrafos de ${profile.paragrafoLinhas} linhas cada — não escreva mais do que isso:
 Parágrafo 1 — Contextualização: apresente o tema com dados históricos, geográficos ou sociais reais que enquadrem o leitor. Cite datas, locais e factos verificáveis.
 Parágrafo 2 — Relevância: explique por que este tema é importante para Moçambique, para África e para o mundo actual. Use argumentos sólidos.
-Parágrafo 3 — Objectivos: defina claramente o objectivo geral e pelo menos 3 objectivos específicos do trabalho usando verbos de acção (analisar, descrever, comparar, avaliar...).
-Parágrafo 4 — Metodologia: descreva o tipo de pesquisa (bibliográfica, qualitativa, descritiva), as fontes consultadas e os critérios de selecção.
-Parágrafo 5 — Estrutura do trabalho: apresente brevemente o que o leitor encontrará em cada capítulo.]
+Parágrafo 3 — Objectivos: defina claramente o objectivo geral e pelo menos 3 objectivos específicos do trabalho usando verbos de acção (analisar, descrever, comparar, avaliar...).${parasIntro >= 4 ? '\nParágrafo 4 — Metodologia: descreva o tipo de pesquisa (bibliográfica, qualitativa, descritiva), as fontes consultadas e os critérios de selecção.' : ''}${parasIntro >= 5 ? '\nParágrafo 5 — Estrutura do trabalho: apresente brevemente o que o leitor encontrará em cada capítulo.' : ''}]
 ${capsEstrutura}
 ---PAGE_BREAK---
 ## ${numCaps + 2}. Conclusão
 
-[ESCREVA AGORA uma conclusão com MÍNIMO 4 parágrafos de ${profile.paragrafoLinhas} linhas cada:
+[ESCREVA AGORA uma conclusão com ${parasConcl} parágrafos de ${profile.paragrafoLinhas} linhas cada — não escreva mais do que isso:
 Parágrafo 1 — Síntese geral: retome os principais achados de cada capítulo de forma integrada, mostrando como se relacionam.
-Parágrafo 2 — Resposta aos objectivos: avalie explicitamente se os objectivos propostos na introdução foram atingidos e como.
-Parágrafo 3 — Contribuições e limitações: indique o contributo deste trabalho para o conhecimento na área e reconheça as limitações encontradas.
-Parágrafo 4 — Recomendações: proponha acções concretas para gestores, políticos, educadores ou investigadores, e indique linhas futuras de pesquisa.]${refSection}
+Parágrafo 2 — Resposta aos objectivos: avalie explicitamente se os objectivos propostos na introdução foram atingidos e como.${parasConcl >= 3 ? '\nParágrafo 3 — Contribuições e limitações: indique o contributo deste trabalho para o conhecimento na área e reconheça as limitações encontradas.' : ''}${parasConcl >= 4 ? '\nParágrafo 4 — Recomendações: proponha acções concretas para gestores, políticos, educadores ou investigadores, e indique linhas futuras de pesquisa.' : ''}]${refSection}
 `;
 }
 
