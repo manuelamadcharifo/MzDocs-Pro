@@ -116,6 +116,11 @@ function parsePadding(val, containerDxa = 11906) {
 // template escolhido, e termina com um parágrafo vazio de espaçamento.
 function _buildMetaParagraphs(meta, Paragraph, TextRun, BorderStyle) {
   if (!meta) return [];
+  // CORRIGIDO: mesma razão da supressão em HTMLPDFExporter.js — para
+  // "Trabalho Escolar" a capa já vem embutida no próprio markdown/HTML do
+  // documento (ver CoverNormalizer.js), pelo que esta barra extra ficava
+  // duplicada com a mesma informação.
+  if (meta.docType === 'trabalho') return [];
   const rows = [
     meta.disciplina  && ['Disciplina', meta.disciplina],
     meta.nivel        && ['Nível', meta.nivel],
