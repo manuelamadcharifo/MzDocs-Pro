@@ -169,7 +169,7 @@ export class HTMLPDFExporter {
    * @param {string} [options.title]
    */
   export(markdownContent, filename, options = {}) {
-    const { templateCss = null, title = 'MzDocs Pro', meta = null } = options;
+    const { templateCss = null, title = 'MzDocs Pro', meta = null, pageNumbers = false } = options;
 
     // ── Detecção automática de HTML vs Markdown ────────────────────────────
     // Quando o documento foi gerado como HTML estruturado (templates com htmlTemplate),
@@ -186,6 +186,22 @@ export class HTMLPDFExporter {
     // também em HTMLToDocxExporter.js, para os dois caminhos coincidirem.
     const metaBlockHTML = _buildMetaBlockHTML(meta);
     const pageMargin = _extractPageMargin(css);
+    // NOVO: numeração de página real, impressa pelo próprio motor de
+    // impressão do browser em CADA folha (não é texto escrito no
+    // documento — é uma "margin box" do CSS de impressão, por isso nunca
+    // desalinha nem duplica mesmo que o conteúdo mude de página). Só
+    // activa quando pageNumbers:true é pedido explicitamente pelo
+    // chamador (DocumentController.js/DocumentEditor.js activam isto só
+    // para documentos sem template de marketplace — DEFAULT_PAGE_CSS —
+    // para não sobrepor rodapés já desenhados de propósito em templates
+    // reais como CVs com layout de sidebar).
+    const pageNumberRule = pageNumbers ? `
+    @bottom-center {
+      content: counter(page);
+      font-family: 'Times New Roman', Georgia, serif;
+      font-size: 10pt;
+      color: #555;
+    }` : '';
 
     const html = `<!DOCTYPE html>
 <html lang="pt">
@@ -207,7 +223,7 @@ export class HTMLPDFExporter {
 @media print {
   @page {
     size: A4 portrait;
-    margin: ${pageMargin};
+    margin: ${pageMargin};${pageNumberRule}
   }
   html, body {
     width: 210mm;
