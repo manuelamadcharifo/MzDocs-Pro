@@ -80,6 +80,31 @@ const DEFAULT_CSS = `
   hr { border: none; border-top: 1px solid #888; margin: 10pt 0; }
 `;
 
+// ── Margem física da página impressa ─────────────────────────────────────
+// CORRIGIDO (bug: texto a começar colado ao topo da folha a partir da 2ª
+// página no PDF descarregado, apesar do preview mostrar margem certa em
+// TODAS as páginas): o preview usa 1 <iframe> por página (ver
+// A4Renderer.js/renderA4Pages), cada um com o seu próprio <body> — por
+// isso "body{padding:30mm ...}" do CSS aplica-se correctamente a CADA
+// folha. Mas esta janela de impressão renderiza o documento inteiro num
+// único <body> corrido, com quebras "page-break-after:always" a meio — e a
+// especificação CSS de paginação só aplica o padding-top de um elemento ao
+// PRIMEIRO fragmento (a 1ª folha impressa) e o padding-bottom ao ÚLTIMO;
+// todas as folhas do meio ficam sem qualquer margem (@page também estava
+// fixo em "margin:0", por isso não compensava). Resultado: só a 1ª página
+// tinha margem no topo, as seguintes começavam mesmo na ponta da folha.
+// Correcção: usar antes "@page { margin: ... }" — essa é a única
+// propriedade CSS pensada para se repetir em CADA folha física impressa,
+// exactamente o comportamento que faltava. O valor é extraído do próprio
+// "body{padding:...}" do CSS do template (para não mudar visualmente as
+// margens de nenhum documento já existente) e, no CSS de impressão, o
+// padding do body passa a 0 (a margem física já vem do @page — manter os
+// dois ao mesmo tempo duplicava o espaço em branco no topo).
+function _extractPageMargin(css) {
+  const m = css && css.match(/body\s*{[^}]*padding\s*:\s*([^;}]+)[;}]/i);
+  return (m && m[1].trim()) || '20mm 25mm 20mm 25mm';
+}
+
 // ── Exportador ─────────────────────────────────────────────────────────
 // CORRIGIDO (auditoria): bloco de identificação (Disciplina/Nível/Estudante/
 // Turma/Docente) reutilizável entre HTMLPDFExporter e HTMLToDocxExporter —
@@ -89,6 +114,15 @@ const DEFAULT_CSS = `
 // conflituar visualmente com o design do template escolhido.
 function _buildMetaBlockHTML(meta) {
   if (!meta) return '';
+  // CORRIGIDO: para "Trabalho Escolar" (docType 'trabalho'), a capa de
+  // identificação já vem embutida no próprio markdown do documento — ver
+  // CoverNormalizer.js/LongDocumentEngine.js._buildCoverPage, que agora
+  // constroem sempre esse bloco com os dados reais. Esta barra fina extra
+  // (pensada para documentos SEM capa própria, tipo CV/carta) ficava
+  // duplicada por cima da capa real — a mesma informação a aparecer duas
+  // vezes na 1ª página. Suprimida apenas para 'trabalho'; os restantes
+  // tipos continuam a mostrá-la como antes.
+  if (meta.docType === 'trabalho') return '';
   const rows = [
     meta.disciplina  && ['Disciplina', meta.disciplina],
     meta.nivel        && ['Nível', meta.nivel],
@@ -131,6 +165,7 @@ export class HTMLPDFExporter {
     // recebia nem usava esses dados. Mesma lógica de _buildMetaBlock usada
     // também em HTMLToDocxExporter.js, para os dois caminhos coincidirem.
     const metaBlockHTML = _buildMetaBlockHTML(meta);
+    const pageMargin = _extractPageMargin(css);
 
     const html = `<!DOCTYPE html>
 <html lang="pt">
@@ -152,13 +187,18 @@ export class HTMLPDFExporter {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 0;
+    margin: ${pageMargin};
   }
   html, body {
     width: 210mm;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+  /* A margem física agora vem do @page acima (repete-se em TODAS as
+     páginas impressas); o padding do body — necessário no ecrã para
+     simular a folha antes de imprimir — duplicaria esse espaço em
+     branco no topo/lados se continuasse activo também na impressão. */
+  body { padding: 0 !important; }
   .no-print { display: none !important; }
 }
 
