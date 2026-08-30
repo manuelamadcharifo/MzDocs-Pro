@@ -1152,6 +1152,7 @@ export class DocumentEditor {
         new HTMLPDFExporter().export(joined, filename, {
           templateCss: DEFAULT_PAGE_CSS,
           title: filename,
+          pageNumbers: true, // NOVO: ver nota em DocumentController.js — só neste caminho sem template de marketplace
         });
         return;
       } catch (err) {
