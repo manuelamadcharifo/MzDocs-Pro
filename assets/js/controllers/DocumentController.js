@@ -548,7 +548,16 @@ export class DocumentController {
  // no cliente para não tentar cobrar um valor que o servidor vai rejeitar.
  let cost = svc.cost || 1;
  if (svc.dynamicCostPerPage) {
-   const pages = this.docModel.ocrPageCount || 0;
+   // CORRIGIDO: "transcricao" cobra por página FOTOGRAFADA (OCR), lida de
+   // docModel.ocrPageCount — mas "trabalho" (Trabalho Escolar) não tem
+   // páginas fotografadas nenhuma, tem sim um campo de formulário
+   // "Páginas pretendidas" preenchido pelo aluno. dynamicCostSource:
+   // 'paginas' (ver ServiceDefinitions.js) diz a este bloco para ler o
+   // número de páginas do FORMULÁRIO em vez do OCR — sem isto, "trabalho"
+   // cobrava sempre 1 crédito fixo, mesmo para um trabalho de 30 páginas.
+   const pages = svc.dynamicCostSource === 'paginas'
+     ? (parseInt(data.paginas) || 0)
+     : (this.docModel.ocrPageCount || 0);
    cost = pages > 0 ? Math.min(10, Math.max(1, Math.ceil(pages / svc.dynamicCostPerPage))) : 1;
  }
  if (!this.creditModel.canConsume(cost)) {
@@ -1416,7 +1425,13 @@ export class DocumentController {
      // via this._buildExportMetadata(svc), mais abaixo.
      new HTMLPDFExporter().export(activeHtml, filename, {
        templateCss: activeCss,
-       title: svc?.title || 'Documento MzDocs Pro',
+       // CORRIGIDO: usar 'filename' (nome completo já construído por
+       // _buildFilename — "MzDocs Pro - <Tipo> - <Título/Tema> - MZDOCS
+       // PRO") em vez de svc.title. O diálogo "Guardar como PDF" do
+       // browser sugere o <title> da janela de impressão como nome do
+       // ficheiro — com svc.title, sugeria sempre só o nome genérico do
+       // serviço (ex.: "Trabalho Escolar"), nunca o tema/título real.
+       title: filename,
        meta: this._buildExportMetadata(svc),
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
@@ -1426,7 +1441,7 @@ export class DocumentController {
      const { HTMLPDFExporter } = await import('../components/HTMLPDFExporter.js');
      new HTMLPDFExporter().export(content, filename, {
        templateCss: activeCss,
-       title: svc?.title || 'Documento MzDocs Pro',
+       title: filename, // CORRIGIDO: ver nota acima (nome completo, não svc.title)
        meta: this._buildExportMetadata(svc),
      });
      NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
@@ -1452,7 +1467,7 @@ export class DocumentController {
        const { DEFAULT_PAGE_CSS } = await import('../utils/A4Renderer.js');
        new HTMLPDFExporter().export(content, filename, {
          templateCss: DEFAULT_PAGE_CSS,
-         title: svc?.title || 'Documento MzDocs Pro',
+         title: filename, // CORRIGIDO: ver nota acima (nome completo, não svc.title)
          meta: this._buildExportMetadata(svc),
        });
        NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
