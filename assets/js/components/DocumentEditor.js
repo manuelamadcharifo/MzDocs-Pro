@@ -1070,13 +1070,33 @@ export class DocumentEditor {
     finally { btn.disabled = false; btn.textContent = orig; }
   }
 
+  // CORRIGIDO: mesmo nome de ficheiro "mzdocs-<tipo>-<timestamp>" usado no
+  // resto da app antes da correcção — ver DocumentController._buildFilename
+  // para a explicação completa. Aqui reutilizamos essa MESMA função (via o
+  // controller principal, quando acessível) para o nome sair sempre igual
+  // nos dois sítios de download (ecrã principal e editor): "MzDocs Pro -
+  // <Tipo de Documento> - <Título> - MZDOCS PRO". Sem extensão — cada
+  // chamador acrescenta a sua (.pdf/.docx/.xls).
+  async _editorFilename() {
+    const ctrl = this._docController || window.docController;
+    if (ctrl && typeof ctrl._buildFilename === 'function') {
+      try {
+        const svc = ctrl.docModel?.service
+          ? (await import('../services/ServiceDefinitions.js')).SERVICES[ctrl.docModel.service]
+          : null;
+        return ctrl._buildFilename(svc);
+      } catch (_) { /* cai para o fallback abaixo */ }
+    }
+    return `MzDocs Pro - ${this.serviceType || 'Documento'} - MZDOCS PRO`;
+  }
+
   async _downloadPDF() {
     // Se há HTML estruturado do template, usar sempre HTMLPDFExporter para preservar
     // o layout exacto (2 colunas, sidebar, cores, etc.) — igual ao preview.
     if (this._templateHtml && this._templateCss) {
       try {
         const { HTMLPDFExporter } = await import('./HTMLPDFExporter.js');
-        new HTMLPDFExporter().export(this._templateHtml, `mzdocs-${this.serviceType}-${Date.now()}`, {
+        new HTMLPDFExporter().export(this._templateHtml, `${await this._editorFilename()}`, {
           templateCss: this._templateCss,
           title: this.serviceType || 'Documento MzDocs',
         });
@@ -1094,7 +1114,7 @@ export class DocumentEditor {
       try {
         const { HTMLPDFExporter } = await import('./HTMLPDFExporter.js');
         const exportContent = await this._getExportContent();
-        new HTMLPDFExporter().export(exportContent, `mzdocs-${this.serviceType}-${Date.now()}`, {
+        new HTMLPDFExporter().export(exportContent, `${await this._editorFilename()}`, {
           templateCss: templateCss || null,
           title: this.serviceType || 'Documento MzDocs',
         });
@@ -1119,7 +1139,7 @@ export class DocumentEditor {
         const joined = this._richHTMLPages
           .map(html => String(html || ''))
           .join('<div style="page-break-after:always"></div>');
-        new HTMLPDFExporter().export(joined, `mzdocs-${this.serviceType}-${Date.now()}`, {
+        new HTMLPDFExporter().export(joined, `${await this._editorFilename()}`, {
           templateCss: DEFAULT_PAGE_CSS,
           title: this.serviceType || 'Documento MzDocs',
         });
@@ -1150,7 +1170,7 @@ export class DocumentEditor {
       const exportContent = await this._getExportContent();
       await new PDFExporter().export(
         exportContent,
-        `mzdocs-${this.serviceType}-${Date.now()}.pdf`,
+        `${await this._editorFilename()}.pdf`,
         metadata
       );
     } catch (err) {
@@ -1178,7 +1198,7 @@ export class DocumentEditor {
         await new HTMLToDocxExporter().export(
           this._templateHtml,
           this._templateCss,
-          `mzdocs-${this.serviceType}-${Date.now()}`,
+          `${await this._editorFilename()}`,
           this.serviceType || 'Documento MzDocs'
         );
         return;
@@ -1204,7 +1224,7 @@ export class DocumentEditor {
         const metadata = ctrl && svc ? ctrl._buildExportMetadata(svc) : {};
         await new GenericHtmlToDocxExporter().export(
           this._richHTMLPages,
-          `mzdocs-${this.serviceType}-${Date.now()}`,
+          `${await this._editorFilename()}`,
           metadata
         );
         return;
@@ -1231,7 +1251,7 @@ export class DocumentEditor {
       const exportContent = await this._getExportContent();
       await new WordExporter().export(
         exportContent,
-        `mzdocs-${this.serviceType}-${Date.now()}.docx`,
+        `${await this._editorFilename()}.docx`,
         metadata
       );
     } catch (err) {
@@ -1251,7 +1271,7 @@ export class DocumentEditor {
         <body>${richContent}</body></html>`;
       const blob = new Blob(['\uFEFF', html], { type:'application/msword' });
       const url  = URL.createObjectURL(blob);
-      const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.doc` });
+      const a    = Object.assign(document.createElement('a'), { href:url, download:`${await this._editorFilename()}.doc` });
       a.click(); URL.revokeObjectURL(url);
     }
   }
@@ -1264,7 +1284,7 @@ export class DocumentEditor {
     const html = `<html><head><meta charset="UTF-8"></head><body>${a4MarkdownToHtml(this.content)}</body></html>`;
     const blob = new Blob(['\ufeff', html], { type:'application/vnd.ms-excel' });
     const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), { href:url, download:`mzdocs-${this.serviceType}-${Date.now()}.xls` });
+    const a    = Object.assign(document.createElement('a'), { href:url, download:`${await this._editorFilename()}.xls` });
     a.click(); URL.revokeObjectURL(url);
   }
 
