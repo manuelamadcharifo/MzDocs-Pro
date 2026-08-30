@@ -1091,14 +1091,24 @@ export class DocumentEditor {
   }
 
   async _downloadPDF() {
+    // CORRIGIDO: o nome sugerido pelo diálogo "Guardar como PDF" do browser
+    // vem do <title> da janela de impressão (options.title), não do nome de
+    // ficheiro passado como 2º argumento — este código já calculava o nome
+    // completo certo ("MzDocs Pro - <Tipo> - <Título/Tema> - MZDOCS PRO")
+    // via _editorFilename(), mas só o usava para o 2º argumento; o campo
+    // "title" continuava a usar this.serviceType (ex.: "trabalho"), por
+    // isso o browser sugeria sempre um nome genérico ao guardar. Calculado
+    // uma única vez aqui e reutilizado nos três caminhos abaixo.
+    const filename = await this._editorFilename();
+
     // Se há HTML estruturado do template, usar sempre HTMLPDFExporter para preservar
     // o layout exacto (2 colunas, sidebar, cores, etc.) — igual ao preview.
     if (this._templateHtml && this._templateCss) {
       try {
         const { HTMLPDFExporter } = await import('./HTMLPDFExporter.js');
-        new HTMLPDFExporter().export(this._templateHtml, `${await this._editorFilename()}`, {
+        new HTMLPDFExporter().export(this._templateHtml, filename, {
           templateCss: this._templateCss,
-          title: this.serviceType || 'Documento MzDocs',
+          title: filename,
         });
         return;
       } catch (err) {
@@ -1114,9 +1124,9 @@ export class DocumentEditor {
       try {
         const { HTMLPDFExporter } = await import('./HTMLPDFExporter.js');
         const exportContent = await this._getExportContent();
-        new HTMLPDFExporter().export(exportContent, `${await this._editorFilename()}`, {
+        new HTMLPDFExporter().export(exportContent, filename, {
           templateCss: templateCss || null,
-          title: this.serviceType || 'Documento MzDocs',
+          title: filename,
         });
         return;
       } catch (err) {
@@ -1139,9 +1149,9 @@ export class DocumentEditor {
         const joined = this._richHTMLPages
           .map(html => String(html || ''))
           .join('<div style="page-break-after:always"></div>');
-        new HTMLPDFExporter().export(joined, `${await this._editorFilename()}`, {
+        new HTMLPDFExporter().export(joined, filename, {
           templateCss: DEFAULT_PAGE_CSS,
-          title: this.serviceType || 'Documento MzDocs',
+          title: filename,
         });
         return;
       } catch (err) {
@@ -1170,7 +1180,7 @@ export class DocumentEditor {
       const exportContent = await this._getExportContent();
       await new PDFExporter().export(
         exportContent,
-        `${await this._editorFilename()}.pdf`,
+        `${filename}.pdf`,
         metadata
       );
     } catch (err) {
