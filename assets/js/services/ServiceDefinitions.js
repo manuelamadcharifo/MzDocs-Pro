@@ -49,6 +49,18 @@ export const SERVICES = {
     icon:'📚', bg:'#EFF6FF', title:'Trabalho Escolar',
     sub:'Texto académico completo com estrutura profissional', hasAI:true,
     category:'academico', popularity:2,
+    // NOVO: custo dinâmico por página pretendida (o campo "paginas" do
+    // formulário abaixo) — mesmo mecanismo já usado por "transcricao"
+    // (dynamicCostPerPage), mas lendo o valor de um campo do formulário em
+    // vez de docModel.ocrPageCount (ver dynamicCostSource:'paginas' em
+    // DocumentController.generate()). Regra pedida: 1 crédito a cada 5
+    // páginas (arredondado para cima) — 1-5 pág = 1 crédito, 6-10 = 2
+    // créditos, 11-15 = 3, etc., até ao tecto de 10 créditos já imposto no
+    // servidor (api/deduct-credit.js VALID_COSTS). Antes, "trabalho" não
+    // tinha 'cost' nenhum (caía sempre no default fixo de 1 crédito,
+    // independentemente de o trabalho ter 5 ou 30 páginas pedidas).
+    dynamicCostPerPage: 5,
+    dynamicCostSource: 'paginas',
     fields:[
       { id:'tema',       label:'Tema / Título', type:'text', required:true, ph:'Ex: O Papel da Mulher na Independência de Moçambique' },
       { id:'nivel',      label:'Nível de Ensino', type:'select', required:true,
