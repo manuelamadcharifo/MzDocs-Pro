@@ -598,13 +598,29 @@ class AdminApp {
         try {
             // Tentar com is_blocked; se coluna não existir (erro 42703), tentar sem ela
             let data, error;
-            // Tentativa 1: select completo
+
+            // Tentativa 1: select completo + free_documents_used/referred_by
+            // (NOVO — v66: "primeiro documento grátis". Tentativa separada da
+            // antiga "completa" porque migration_v66 pode ainda não ter
+            // corrido nalgum ambiente — nesse caso caímos para a tentativa 2,
+            // que tem tudo o resto mas sem estas duas colunas nem quebrar o
+            // resto do painel de utilizadores por causa disso.)
             ({ data, error } = await this.supabase
                 .from('profiles')
-                .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, is_temp, account_type, credits_expires_at, temp_ref, created_at')
+                .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, is_temp, account_type, credits_expires_at, temp_ref, free_documents_used, referred_by, created_at')
                 .order('created_at', { ascending: false }));
 
-            // Tentativa 2: sem is_blocked (BD não migrada)
+            // Tentativa 2: select completo (sem free_documents_used/referred_by —
+            // migration_v66 ainda não corrida neste ambiente)
+            if (error?.code === '42703') {
+                this._freeDocColumnsMissing = true;
+                ({ data, error } = await this.supabase
+                    .from('profiles')
+                    .select('id, full_name, phone, email, credits, total_documents, is_admin, is_blocked, is_temp, account_type, credits_expires_at, temp_ref, created_at')
+                    .order('created_at', { ascending: false }));
+            }
+
+            // Tentativa 3: sem is_blocked (BD não migrada)
             if (error?.code === '42703') {
                 this._isBlockedMissing = true;
                 ({ data, error } = await this.supabase
@@ -613,7 +629,7 @@ class AdminApp {
                     .order('created_at', { ascending: false }));
             }
 
-            // Tentativa 3: schema mínimo
+            // Tentativa 4: schema mínimo
             if (error?.code === '42703') {
                 ({ data, error } = await this.supabase
                     .from('profiles')
@@ -628,6 +644,11 @@ class AdminApp {
                 is_blocked:   u.is_blocked   ?? false,
                 is_temp:      u.is_temp       ?? (u.account_type === 'avulso'),
                 account_type: u.account_type  ?? 'normal',
+                // NOVO — v66: null distingue "coluna indisponível" (não
+                // mostrar nada) de "0 documentos grátis usados ainda" (que é
+                // um valor real e válido, não pode virar 0 por omissão aqui).
+                free_documents_used: u.free_documents_used ?? null,
+                referred_by:         u.referred_by ?? null,
             }));
             this._renderUsers(this._users);
 
@@ -651,7 +672,36 @@ class AdminApp {
         if (type === 'blocked') filtered = filtered.filter(u => u.is_blocked);
         if (type === 'avulso')  filtered = filtered.filter(u => u.account_type === 'avulso' || u.is_temp);
         if (type === 'normal')  filtered = filtered.filter(u => (u.account_type === 'normal' || !u.account_type) && !u.is_temp);
+        // NOVO — v66: filtrar por estado do(s) documento(s) grátis inicial(is).
+        if (type === 'free_pending') filtered = filtered.filter(u => this._freeDocState(u)?.pending);
+        if (type === 'free_used')    filtered = filtered.filter(u => this._freeDocState(u) && !this._freeDocState(u).pending);
         this._renderUsers(filtered);
+    }
+
+    // NOVO — v66: "primeiro documento grátis" (substituiu o antigo "1 crédito
+    // grátis no registo" — ver migration_v66_first_document_free.sql). Como
+    // este mecanismo NÃO mexe em profiles.credits, um utilizador com 0
+    // créditos pode continuar com direito a gerar documentos — daí a
+    // necessidade de mostrar isto explicitamente no painel, para o Manuel
+    // saber se um "0 cr" é alguém que ainda tem o benefício por usar ou
+    // alguém que já o usou e teria mesmo de comprar créditos.
+    // Devolve null se a coluna ainda não existe nesta base de dados
+    // (migration_v66 por correr) — nesse caso não mostramos nenhum badge,
+    // em vez de arriscar mostrar um estado errado.
+    _freeDocState(u) {
+        if (u.free_documents_used === null || u.free_documents_used === undefined) return null;
+        const allowance = u.referred_by ? 2 : 1;
+        const used = u.free_documents_used;
+        return { used, allowance, pending: used < allowance };
+    }
+
+    // Badge HTML reutilizado pela vista mobile (cards) e desktop (tabela).
+    _freeDocBadge(u) {
+        const st = this._freeDocState(u);
+        if (!st) return '';
+        return st.pending
+            ? `<span class="badge badge-green" title="Ainda não gerou o(s) documento(s) grátis inicial(is)">🎁 Grátis por usar (${st.used}/${st.allowance})</span>`
+            : `<span class="badge badge-gray" title="Já usou o(s) documento(s) grátis inicial(is) — próximos documentos consomem créditos normalmente">🎁 Grátis usado (${st.used}/${st.allowance})</span>`;
     }
 
     _renderUsers(users) {
@@ -700,6 +750,7 @@ class AdminApp {
                             ${u.is_admin ? '<span class="badge badge-purple">⭐ Admin</span>' : ''}
                             ${u.is_blocked ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
                             ${u.credits_expires_at && new Date(u.credits_expires_at) < new Date() ? '<span class="badge badge-red" style="font-size:10px;">⌛ Expirado</span>' : ''}
+                            ${this._freeDocBadge(u)}
                         </td>
                         <td style="font-size:.8rem">${new Date(u.created_at).toLocaleDateString('pt-MZ')}</td>
                         <td>
@@ -746,6 +797,7 @@ class AdminApp {
                 ${(u.account_type === 'avulso' || u.is_temp) ? '<span class="badge badge-orange">⏳ Avulso</span>' : '<span class="badge badge-blue" style="font-size:10px;">👤 Normal</span>'}
                 ${u.is_admin    ? '<span class="badge badge-purple">⭐ Admin</span>' : ''}
                 ${u.is_blocked  ? '<span class="badge badge-red">🚫 Bloqueado</span>' : '<span class="badge badge-green">✅ Activo</span>'}
+                ${this._freeDocBadge(u)}
             </div>
             <div class="user-card-actions">
                 <button class="btn-ghost" data-action="openUserTimeline" data-id="${escapeHtml(u.id)}" data-label="${safeLabel}">🕒 Timeline</button>
@@ -4380,6 +4432,16 @@ USING (EXISTS (
                 body.innerHTML = `<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400E;margin-bottom:10px">⚠️ Esta conta foi criada antes da ligação visitante→perfil existir — só mostra actividade pós-registo.</div>`;
             } else {
                 body.innerHTML = '';
+            }
+
+            // NOVO — v66: estado do(s) documento(s) grátis inicial(is) —
+            // ver _freeDocState/_freeDocBadge (mesma lógica usada na lista de
+            // utilizadores). Mostrado aqui porque é a pergunta directa que o
+            // Manuel faz quando vê "0 cr" num utilizador novo: "já usou o
+            // documento grátis ou ainda não?"
+            const st = this._freeDocState(d.profile);
+            if (st) {
+                body.innerHTML += `<div style="background:${st.pending ? '#F0FDF4' : '#F8FAFC'};border:1px solid ${st.pending ? '#BBF7D0' : '#E2E8F0'};border-radius:8px;padding:8px 12px;font-size:12px;color:${st.pending ? '#15803D' : '#475569'};margin-bottom:10px">🎁 Documento(s) grátis: ${st.used}/${st.allowance} usado(s)${st.pending ? ' — ainda tem direito a gerar sem gastar créditos' : ' — próximos documentos consomem créditos normalmente'}</div>`;
             }
 
             if (!d.timeline.length) {
