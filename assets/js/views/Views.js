@@ -77,7 +77,17 @@ export const DocumentView = {
     // formulário (ex.: "Itens / Serviços" do Recibo/Factura).
     this.bindItemTables(formBodyEl, svc.fields);
     if (svc.hasAI) {
-      const cost = svc.cost || 1;
+      // NOVO: para serviços com custo dinâmico por página do FORMULÁRIO
+      // (ex.: "trabalho"/Trabalho Escolar — dynamicCostSource:'paginas'),
+      // o custo mostrado no botão já parte do nº de páginas pretendidas
+      // preenchido, em vez do custo fixo de 1 crédito — evita mostrar "1
+      // crédito" quando o pedido de 10+ páginas vai custar mais.
+      const initialPages = svc.dynamicCostSource === 'paginas'
+        ? (parseInt(svc.fields.find(f => f.id === 'paginas')?.val) || 0)
+        : 0;
+      const cost = svc.dynamicCostPerPage && svc.dynamicCostSource === 'paginas'
+        ? this._computeDynamicCost(svc, initialPages)
+        : (svc.cost || 1);
       const costLabel = cost === 1 ? '1 crédito' : `${cost} créditos`;
       // NOVO v2.1: botão "Ver amostra grátis" — chama /api/generate-document em
       // _previewMode (sem dedução de crédito) para o utilizador avaliar a
@@ -92,6 +102,19 @@ export const DocumentView = {
           <small>${costLabel}</small>
         </button>
       `;
+      // NOVO: liga o campo "Páginas pretendidas" (ou equivalente) a uma
+      // actualização em directo do rótulo de custo — o utilizador vê logo
+      // que subir de 5 para 6 páginas passa a custar 2 créditos, antes de
+      // carregar em "Gerar com IA", em vez de só descobrir depois.
+      if (svc.dynamicCostPerPage && svc.dynamicCostSource === 'paginas') {
+        const pagesInput = formBodyEl.querySelector('[name="paginas"], #paginas');
+        if (pagesInput) {
+          pagesInput.addEventListener('input', () => {
+            const pages = parseInt(pagesInput.value) || 0;
+            this.updateGenCostLabel(this._computeDynamicCost(svc, pages));
+          });
+        }
+      }
     } else {
       // NOVO: o botão nasce desactivado — só é activado quando o utilizador
       // selecciona uma papelaria na lista "Parceiras próximas" (ver
@@ -116,6 +139,18 @@ export const DocumentView = {
   updateGenCostLabel(cost) {
     const label = document.querySelector('#btnGen small');
     if (label) label.textContent = cost === 1 ? '1 crédito' : `${cost} créditos`;
+  },
+
+  // NOVO: cálculo do custo dinâmico partilhado entre o render inicial do
+  // botão (renderForm) e a actualização em directo enquanto o utilizador
+  // escreve no campo de páginas (listener 'input' registado em renderForm).
+  // Mesma fórmula usada em DocumentController.generate() — 1 crédito a
+  // cada 'dynamicCostPerPage' páginas, arredondado para cima, mínimo 1,
+  // tecto de 10 (VALID_COSTS em api/_services/account.js).
+  _computeDynamicCost(svc, pages) {
+    if (!svc.dynamicCostPerPage) return svc.cost || 1;
+    const n = parseInt(pages) || 0;
+    return n > 0 ? Math.min(10, Math.max(1, Math.ceil(n / svc.dynamicCostPerPage))) : 1;
   },
 
   _buildFieldsHTML(fields) {
