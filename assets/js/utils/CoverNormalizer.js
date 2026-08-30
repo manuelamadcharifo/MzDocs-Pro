@@ -22,6 +22,16 @@
 // isso o resultado fica gravado no documento e beneficia automaticamente o
 // preview, o download em PDF e o download em Word — sem ser preciso repetir
 // a lógica em cada exportador.
+//
+// NOVO: para níveis universitários (Pré-Universitário, Licenciatura,
+// Mestrado/Doutoramento) insere-se também uma FOLHA DE ROSTO como página
+// própria, a seguir à capa — parte obrigatória da estrutura académica
+// convencional (capa "limpa" com só título/instituição/autor, seguida de
+// uma folha de rosto que repete os dados e acrescenta a frase formal de
+// enquadramento do trabalho). Tal como a capa, é construída no código com
+// os dados reais — nunca pedida à IA — pelas mesmas razões de fiabilidade.
+const ACADEMIC_LEVELS = new Set(['Pré-Universitário', 'Licenciatura', 'Mestrado/Doutoramento']);
+
 export function normalizeTrabalhoCover(markdown, data) {
   if (!markdown || typeof markdown !== 'string') return markdown;
 
@@ -39,46 +49,54 @@ export function normalizeTrabalhoCover(markdown, data) {
   }
 
   const capaBlock = _buildCapaBlock(data);
+  const isAcademico = ACADEMIC_LEVELS.has(data.nivel);
+  const folhaRostoBlock = isAcademico ? _buildFolhaRostoBlock(data) : '';
+
   const before = lines.slice(0, h1Idx + 1);
   const after  = lines.slice(end);
-  const middle = capaBlock ? ['', capaBlock, ''] : [''];
+  const middle = [
+    ...(capaBlock ? ['', capaBlock, ''] : ['']),
+    ...(folhaRostoBlock ? ['---PAGE_BREAK---', '', folhaRostoBlock, ''] : []),
+  ];
 
   return [...before, ...middle, ...after].join('\n');
 }
 
-// CORRIGIDO (capa "desorganizada"/pouco cuidada): esta função gerava uma
-// lista solta de linhas "**Label:** valor" separadas por "---" — sem
-// nenhuma estrutura visual, ficava com aspecto de rascunho em vez de capa
-// académica. O renderer partilhado (A4Renderer.js → markdownToHtml) ESCAPA
-// qualquer HTML bruto que se tente inserir aqui (não há forma de usar
-// <div align="center"> ou CSS inline directamente na capa), por isso a
-// melhoria tem de vir de sintaxe Markdown que o parser já trata de forma
-// visualmente distinta:
-//  - o título (# tema) já sai centrado e grande (H1) — inalterado;
-//  - o nome da instituição passa a cabeçalho H2 (maior e com mais respiro
-//    vertical do que texto normal em negrito);
-//  - os dados de identificação passam a uma tabela GFM real de 2 colunas
-//    ("Campo | Detalhe"), que o CSS partilhado já estiliza como uma caixa
-//    limpa com cabeçalho azul-marinho e linhas alternadas (mesmo estilo
-//    usado em qualquer tabela do documento) — em vez de uma lista solta;
-//  - cidade/ano fecham a capa a negrito, como assinatura final.
-// Todas as peças usam apenas Markdown suportado pelo parser partilhado
-// (h1-h6, hr, tabela GFM, negrito) — sem qualquer HTML cru, para não correr
-// o risco de aparecer escapado ("&lt;div&gt;") no documento final.
+// CORRIGIDO (2ª ronda — "a capa não pode ter tabelas, tem de ser bonita e
+// profissional como a de um designer, simples e organizada"): a versão
+// anterior já não usava uma lista solta, mas passou a usar uma TABELA GFM
+// (Campo | Detalhe) — visualmente uma grelha de formulário, não uma capa.
+// Removida a tabela por completo. O renderer partilhado (A4Renderer.js →
+// markdownToHtml) ESCAPA qualquer HTML/CSS bruto que se tente inserir aqui
+// (não há forma de usar <div align="center"> directamente na capa), por
+// isso o resultado tem de vir só de Markdown simples, usado com
+// intenção tipográfica:
+//  - o título (# tema) já sai centrado e grande (H1) — inalterado, é o
+//    elemento dominante da capa;
+//  - hr's (---) delimitam três blocos verticais claros: título /
+//    instituição+disciplina / identificação do autor+data — o mesmo
+//    princípio de "blocos separados por regra fina" usado em capas reais;
+//  - a instituição vai em H2 (maior, com respiro vertical próprio);
+//  - disciplina/nível ficam em itálico, uma única linha subtil por baixo
+//    da instituição — não competem visualmente com ela;
+//  - o nome do(a) estudante fica em negrito, sozinho na sua própria linha
+//    (maior peso visual do que o resto dos dados de identificação);
+//  - turma e docente ficam em texto simples, uma linha cada;
+//  - cidade+ano fecham a capa a negrito, como assinatura final.
+// Tudo dentro do que o parser Markdown partilhado já suporta (h1-h6, hr,
+// negrito, itálico) — sem tabela, sem HTML cru.
 function _buildCapaBlock(data = {}) {
   const instituicao = (data.instituicao || '').trim();
-  const idFields = [
-    data.disciplina && ['Disciplina', data.disciplina],
-    data.nivel        && ['Nível', data.nivel],
-    (data.aluno || data.nome) && ['Estudante', data.aluno || data.nome],
-    data.turma        && ['Turma/Classe', data.turma],
-    data.docente      && ['Docente', data.docente],
+  const estudante = (data.aluno || data.nome || '').trim();
+  const detalhes = [
+    data.turma   && `Turma/Classe: ${data.turma}`,
+    data.docente && `Docente: ${data.docente}`,
   ].filter(Boolean);
 
   // Sem NENHUM dado de identificação preenchido (todos os campos são
   // opcionais no formulário) — não há nada de real para mostrar; mais vale
   // não inserir bloco nenhum do que inventar "[PREENCHER]" como a IA fazia.
-  if (!instituicao && !idFields.length) return '';
+  if (!instituicao && !estudante && !detalhes.length) return '';
 
   const cidade = (data.local || data.cidade || 'Maputo').trim();
   const ano    = new Date().getFullYear();
@@ -87,15 +105,56 @@ function _buildCapaBlock(data = {}) {
   if (instituicao) {
     parts.push(`## ${instituicao.toUpperCase()}`);
     parts.push('');
-  }
-  if (idFields.length) {
-    parts.push('| Campo | Detalhe |');
-    parts.push('|---|---|');
-    idFields.forEach(([label, val]) => parts.push(`| ${label} | ${val} |`));
-    parts.push('');
+    if (data.disciplina || data.nivel) {
+      parts.push(`*${[data.disciplina, data.nivel].filter(Boolean).join(' — ')}*`);
+      parts.push('');
+    }
   }
   parts.push('---');
   parts.push('');
+  if (estudante) {
+    parts.push(`**${estudante}**`);
+    parts.push('');
+  }
+  detalhes.forEach(l => { parts.push(l); parts.push(''); });
+  parts.push('---');
+  parts.push('');
+  parts.push(`**${cidade}, ${ano}**`);
+
+  return parts.join('\n');
+}
+
+// NOVO — Folha de Rosto: página própria, a seguir à capa, com os mesmos
+// dados mas acrescentando a frase formal de enquadramento do trabalho
+// (padrão convencional em universidades moçambicanas/portuguesas: "Trabalho
+// apresentado à disciplina de X, do curso de Y, como requisito parcial de
+// avaliação"). Tal como a capa, sem tabela — título centrado (H1, herdado
+// do CSS partilhado) seguido de texto corrido justificado, mais próximo de
+// uma folha de rosto real do que a capa (que é deliberadamente mais
+// minimalista).
+function _buildFolhaRostoBlock(data = {}) {
+  const instituicao = (data.instituicao || '').trim();
+  const estudante = (data.aluno || data.nome || '').trim();
+  if (!instituicao && !estudante) return ''; // sem dados suficientes — não vale a pena duplicar a capa vazia
+
+  const disciplina = (data.disciplina || '').trim();
+  const docente = (data.docente || '').trim();
+  const cidade = (data.local || data.cidade || 'Maputo').trim();
+  const ano = new Date().getFullYear();
+
+  const parts = [];
+  if (instituicao) parts.push(`# ${instituicao.toUpperCase()}`, '');
+  if (estudante) parts.push(`## ${estudante}`, '');
+  parts.push(`## ${data.tema || ''}`, '');
+
+  const enquadramento = [
+    'Trabalho académico',
+    disciplina ? `apresentado na disciplina de ${disciplina}` : null,
+    'como parte dos requisitos de avaliação',
+    docente ? `sob orientação de ${docente}` : null,
+  ].filter(Boolean).join(', ') + '.';
+  parts.push(enquadramento, '');
+  parts.push('---', '');
   parts.push(`**${cidade}, ${ano}**`);
 
   return parts.join('\n');
