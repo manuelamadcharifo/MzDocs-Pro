@@ -6,11 +6,19 @@ PWA instalável (Android/iOS), construída para o Vercel Hobby (limite: 12 Serve
 pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 
 > 📌 **Nota sobre este README:** actualizado em Agosto/2026 a partir de uma leitura directa do
-> código-fonte no export mais recente (consolidação de Serverless Functions — 12→9, ver secção 10
-> — migrações até `v66`, confirmação de pagamento atómica, operações de crédito idempotentes,
-> observabilidade estruturada, correcções ao Marketplace de Templates, ao motor de pagamentos, e à
-> fiabilidade do OCR multi-página do serviço "Digitalizar Documento" — secções 5, 12 e 15). A
-> versão anterior deste ficheiro cobria só até à `v65` — faltava documentar a `v66` (o primeiro
+> código-fonte no export mais recente. A versão anterior deste ficheiro não cobria: **(1)** a
+> correcção do bug real "Não foi possível planear o documento" (JSON de planeamento cortado a meio
+> por falta de tokens, sem qualquer reparo/retry — ver secção 3.3); **(2)** a auditoria completa
+> de Agosto/2026 aos providers de IA — NVIDIA NIM, Together AI e Fireworks AI removidos (deixaram
+> de ter tier grátis viável), 4 providers novos ligados (GitHub Models, Cloudflare Workers AI,
+> Hugging Face Inference, Cohere), disjuntor corrigido para aceitar descoberta ao vivo, e um novo
+> sistema de alertas operacionais por Telegram+WhatsApp com cron diário de vigilância — ver secção
+> 3; **(3)** o botão "🔄 Reactivar" no painel admin (IA Providers), que limpa manualmente o
+> disjuntor de um provider sem esperar o cooldown automático — ver secção 3.3; **(4)** a
+> visibilidade, no painel admin (lista de Utilizadores + Timeline/CRM), do estado do "primeiro
+> documento grátis" de cada conta (v66) — antes inexistente, o que tornava impossível saber se uma
+> conta com 0 créditos ainda tinha direito a gerar ou já tinha usado o benefício — ver secção 8. A
+> versão anterior a essa cobria só até à `v65` — faltava documentar a `v66` (o primeiro
 > documento de uma conta é sempre grátis, não um saldo inicial de 1 crédito; 2 para quem se
 > regista via link de afiliado; nunca se aplica a templates pagos) — ver secções 9 e 15. A versão
 > anterior a essa cobria só até à `v64` — faltava documentar a `v65` (pacotes de créditos
@@ -73,9 +81,10 @@ pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 
 | Funcionalidade | Descrição | Estado verificado |
 |---|---|---|
-| **Geração com IA — 9 providers com adaptador funcional** (+ 4 catalogados sem adaptador, apenas referência) | Corrida por tiers com fallback automático e controlo de custo; ver secção 3 | ✅ Código confirmado — muito além dos "5 providers" descritos em versões antigas deste README |
-| **Descoberta de modelos ao vivo** | Antes de confiar numa lista fixa de modelos, o sistema consulta `GET /models` do próprio provider e usa o catálogo real | ✅ `api/_lib/modelDiscovery.js` |
-| **Disjuntor (circuit breaker) por modelo** | Desliga automaticamente um modelo específico que esteja a falhar — 7 dias se for descontinuação permanente, com backoff crescente (10min→30min→2h) se for falha transitória | ✅ `api/_lib/modelHealth.js` |
+| **Geração com IA — 10 providers com adaptador funcional** (0 catalogados sem adaptador — auditoria Ago/2026) | Corrida por tiers com fallback automático e controlo de custo; ver secção 3 | ✅ Código confirmado — muito além dos "5 providers" descritos em versões antigas deste README |
+| **Descoberta de modelos ao vivo** | Antes de confiar numa lista fixa de modelos, o sistema consulta `GET /models` do próprio provider e usa o catálogo real; desde Ago/2026 também pode desbloquear um disjuntor permanente se confirmar, agora mesmo, que o modelo voltou a existir | ✅ `api/_lib/modelDiscovery.js` |
+| **Disjuntor (circuit breaker) por modelo e por provider + reactivação manual (NOVO — Ago/2026)** | Desliga automaticamente um modelo específico que esteja a falhar — 7 dias se for descontinuação permanente, com backoff crescente (10min→30min→2h) se for falha transitória; também vigia o provider como um todo (5 esgotamentos totais seguidos dispara alerta); botão "🔄 Reactivar" no admin limpa o disjuntor manualmente, sem esperar o cooldown | ✅ `api/_lib/modelHealth.js`, `POST /api/admin/ai-providers` |
+| **Alertas operacionais de IA — Telegram + WhatsApp (NOVO — Ago/2026)** | Alerta em tempo real quando um provider esgota todos os modelos 5× seguidas (cooldown 12h); cron diário (07:00 Maputo) reporta providers offline-hoje ou cronicamente degradados (< 20% sucesso em 3 dias) — só avisa se houver de facto um problema | ✅ `api/_lib/notifyOps.js`, `api/_lib/aiProviderWatchdog.js` |
 | **Amostra Grátis + Custo Progressivo** | `_previewMode: true` gera um extracto curto sem debitar créditos; documentos longos (6+ páginas) têm custo progressivo via `LongDocumentEngine` | ✅ |
 | **18 serviços** (16 com geração por IA, 2 encaminhados por WhatsApp) | Ver secção 4 — número real supera os "17 serviços / 14 com IA" de versões anteriores deste documento | ✅ `ServiceDefinitions.js` |
 | **70+ Templates Visuais** | 5 templates por serviço nos 14 serviços "clássicos", com CSS próprio | ✅ |
@@ -90,7 +99,7 @@ pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 | **Histórico Offline** | IndexedDB, sincronizado quando online | ✅ |
 | **Compra permanente de templates pagos (NOVO — v64)** | Um template pago (créditos) só é cobrado da primeira vez; a partir daí fica desbloqueado por tempo indefinido para quem pagou (`template_purchases`) | ✅ Corrige um bug de fuga de receita confirmado — ver secção 15 |
 | **Pacotes exclusivos por categoria + ponte afiliado ↔ parceiro (NOVO — v65)** | Pacotes de créditos com preço/créditos diferentes por categoria (papelaria, cyber, universidade, explicação, digitador, advogado), validados sempre no servidor; convite bidireccional para quem é afiliado de negócio físico se candidatar também à Rede de Parceiros, e vice-versa | ✅ Ver secção 9 |
-| **Primeiro documento sempre grátis (NOVO — v66)** | O primeiro documento de uma conta nova é gratuito independentemente do custo real dele (1-10 créditos) — não um saldo inicial de 1 crédito como antes; contas registadas por link de afiliado têm direito a 2. Nunca se aplica à compra de templates pagos do marketplace | ✅ Ver secção 9 |
+| **Primeiro documento sempre grátis (NOVO — v66)** | O primeiro documento de uma conta nova é gratuito independentemente do custo real dele (1-10 créditos) — não um saldo inicial de 1 crédito como antes; contas registadas por link de afiliado têm direito a 2. Nunca se aplica à compra de templates pagos do marketplace. Estado (usado/por usar) visível no painel admin — lista de Utilizadores e Timeline/CRM (NOVO — Ago/2026) | ✅ Ver secção 8 |
 | **Agendamento com parceiros — foto/impressão (NOVO — v63)** | Pedido de "Foto para Documentos" ou impressão passa a ficar registado (tabela `bookings`), com estado pendente/agendado/em_andamento/concluído/cancelado geridos pela papelaria/gráfica no Portal da Parceira | ✅ `parceiro-portal.html` |
 | **WhatsApp como lead + via de recuperação de conta (NOVO — v62)** | Campo opcional `profiles.whatsapp` no registo; recuperação de password aceita e-mail ou WhatsApp (o e-mail associado é resolvido a partir de qualquer um dos dois) | ✅ `api/auth/index.js` |
 | **Pagamento Manual Multi-Carteira** | M-Pesa, e-Mola, mKesh — upload de comprovativo com verificação automática por IA de visão (aprovação se confiança ≥ 0.85) e fallback WhatsApp | ✅ |
@@ -141,60 +150,64 @@ pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 
 ## 3. Motor de IA — geração multi-provider com auto-cura
 
-Este é o subsistema mais sofisticado do projecto e o que mais mudou desde as descrições
-anteriores deste README ("5 providers em corrida paralela"). O estado real, confirmado em
-`api/_lib/aiProviderRegistry.js`, é:
+Este é o subsistema mais sofisticado do projecto. O estado real, confirmado em
+`api/_lib/aiProviderRegistry.js` (v2.0, auditoria de Agosto/2026), é:
 
-### 3.1. 9 providers com adaptador (competem de facto) + 4 catalogados sem adaptador
+### 3.1. 10 providers com adaptador (competem de facto) — 0 catalogados sem adaptador
 
-`aiProviderRegistry.js` é a fonte única de verdade, mas divide-se em dois grupos bem distintos —
-**13 no total, mas só 9 alguma vez chamam um modelo**:
+`aiProviderRegistry.js` é a fonte única de verdade. A auditoria de Ago/2026 confirmou, provider a
+provider, quais realmente respondiam em produção — três foram removidos por deixarem de ter tier
+grátis viável, quatro novos foram ligados para os substituir:
 
-| Provider | Tier | Activação |
-|---|---|---|
-| Groq | Generoso (grátis) | `GROQ_API_KEY` |
-| Cerebras | Generoso (grátis) | `CEREBRAS_API_KEY` |
-| Google Gemini | Médio | `GEMINI_API_KEY` |
-| OpenRouter | Médio | `OPENROUTER_API_KEY` |
-| NVIDIA NIM | Reserva activa (fallback) | `NVIDIA_API_KEY` |
-| Mistral | Reserva activa (fallback) | `MISTRAL_API_KEY` |
-| SambaNova Cloud | Reserva activa (fallback) | `SAMBANOVA_API_KEY` |
-| Together AI | Reserva activa (fallback) | `TOGETHER_API_KEY` |
-| Fireworks AI | Reserva activa (fallback) | `FIREWORKS_API_KEY` |
+| Provider | Tier | Activação | Nota |
+|---|---|---|---|
+| Groq | Generoso (grátis) | `GROQ_API_KEY` | ≈100k tokens/dia |
+| Cerebras | Generoso (grátis) | `CEREBRAS_API_KEY` | ≈1M tokens/dia, catálogo instável |
+| Google Gemini | Médio | `GEMINI_API_KEY` | ≈250 pedidos/dia (Flash) |
+| OpenRouter | Médio | `OPENROUTER_API_KEY` | ≈50 pedidos/dia grátis (1000/dia após $10 em créditos) |
+| Mistral (La Plateforme) | Reserva activa | `MISTRAL_API_KEY` | timeouts ocasionais no tier grátis |
+| SambaNova Cloud | Reserva activa | `SAMBANOVA_API_KEY` | 20 pedidos/dia **por modelo** × 5 modelos |
+| GitHub Models | Reserva activa | `GITHUB_MODELS_TOKEN` | Personal Access Token com scope `models:read` |
+| Cloudflare Workers AI | Reserva activa | `CLOUDFLARE_AI_TOKEN` **+** `CLOUDFLARE_ACCOUNT_ID` | única com 2 env vars obrigatórias |
+| Hugging Face Inference | Reserva activa | `HUGGINGFACE_API_KEY` | via router `hf-inference` |
+| Cohere | Reserva activa | `COHERE_API_KEY` | via API de compatibilidade OpenAI da própria Cohere |
 
-Os 4 seguintes estão só em `UNWIRED_RESERVE`, catalogados para planeamento e para o painel admin,
-**mas sem adaptador de chamada** (a API deles não fala o formato OpenAI `chat/completions` que
-`tryOpenAIModel()` sabe chamar) — definir a env var sugerida **não** os liga à corrida:
+**Removidos nesta auditoria** (causa raiz confirmada, não é bug de código):
+- **NVIDIA NIM** — contas NGC pessoais/gratuitas devolvem sempre `404 Function not found` em
+  `POST /v1/chat/completions` (falta a permissão "Public API Endpoints", só a NVIDIA activa
+  manualmente, sem previsão). `GET /v1/models` funciona, o que mascarava o problema.
+- **Together AI** — deixou de dar crédito de registo, exige depósito mínimo de $5 antes de
+  qualquer chamada funcionar.
+- **Fireworks AI** — apenas $1 de crédito único de avaliação, sem tecto diário contínuo, esgota
+  em minutos de uso normal.
 
-| Provider | Estado |
-|---|---|
-| Cloudflare Workers AI | Sem adaptador — precisa de mapeamento dedicado antes de poder competir |
-| GitHub Models | Sem adaptador |
-| Hugging Face Inference | Sem adaptador |
-| Cohere | Sem adaptador |
+`UNWIRED_RESERVE` está vazio desde esta ronda — os 4 providers que lá estavam (Cloudflare, GitHub
+Models, Hugging Face, Cohere) passaram a ter adaptador completo. Mantido como array vazio (não
+removido) para o painel admin continuar a funcionar sem alterações caso volte a ter entradas.
 
-**Princípio de desenho (dos 9 com adaptador):** assim que a variável de ambiente correspondente
-existir na Vercel, esse provider entra automaticamente no registo — não é preciso editar
-`generate-document.js` para "ligar" uma chave nova. Mas **desde a v2.4 (correcção de custo,
-Agosto/2026) nem todos correm sempre**: por omissão, `raceAllProviders()` só corre em paralelo o
-grupo **generoso + médio** (Groq, Cerebras, Gemini, OpenRouter — até 4 chamadas, tipicamente 2-3
-com chave configurada). O grupo **reserva activa** (NVIDIA, Mistral, SambaNova, Together,
-Fireworks) só entra como **fallback**, e só se o grupo primário falhar por completo. Cada provider
-tem também um tecto de 9s — se não responder a tempo, é descartado e a corrida continua com os
-restantes. Antes da v2.4, o motor corria os 9 em paralelo em todo o pedido, o que esgotava a
-quota grátis 3-4,5× mais depressa e inflacionava o custo por documento; isto já não acontece.
+**Princípio de desenho:** assim que a(s) variável(is) de ambiente correspondente(s) existir(em) na
+Vercel, esse provider entra automaticamente no registo — não é preciso editar
+`generate-document.js`. `isProviderConfigured()` (novo) verifica **todas** as env vars
+obrigatórias de um provider (a principal `envVar` + qualquer `extraEnvVars`, ex.: o Cloudflare
+precisa de duas) antes de o considerar activo — evita tentar chamadas garantidas a falhar contra
+uma URL mal formada. `resolveUrl()` (novo) permite que `chatUrl`/`modelsUrl` sejam uma função
+`(env) => string` em vez de uma string fixa, usado só pelo Cloudflare (o URL inclui o ID da conta).
+
+`raceAllProviders()` só corre em paralelo o grupo **generoso + médio** (Groq, Cerebras, Gemini,
+OpenRouter) por omissão; o grupo **reserva activa** (os 6 restantes) só entra como **fallback**,
+se o grupo primário falhar por completo. Tecto de 9s por provider — se não responder a tempo, é
+descartado e a corrida continua com os restantes.
 
 ### 3.2. Descoberta de modelos ao vivo (`modelDiscovery.js`)
 
 Em vez de confiar cegamente numa lista curada e estática de modelos por provider, o sistema
 consulta o endpoint `GET /models` de cada provider e cruza com a lista curada. Se um modelo
-curado já não existir no catálogo real (ex.: a Cerebras já reduziu o seu catálogo público a
-apenas 2 modelos de um dia para o outro, sem aviso, várias vezes em 2026), é saltado
-automaticamente. Falha de forma totalmente silenciosa — qualquer problema (timeout, chave
-inválida, provider sem suporte a `/models`) devolve `null` e o sistema usa a lista curada tal
-como estava.
+curado já não existir no catálogo real, é saltado automaticamente. Falha de forma totalmente
+silenciosa — qualquer problema (timeout, chave inválida, provider sem suporte a `/models`, como o
+GitHub Models — ver nota no registo) devolve `null` e o sistema usa a lista curada tal como
+estava.
 
-### 3.3. Disjuntor por modelo (`modelHealth.js`)
+### 3.3. Disjuntor por modelo e por provider (`modelHealth.js`) + reactivação manual
 
 Memoriza falhas recentes de cada combinação `provider + modelo` e diz ao motor de corrida quais
 saltar, sem intervenção manual:
@@ -202,10 +215,50 @@ saltar, sem intervenção manual:
 - **Falha permanente** (mensagens como "decommissioned", "model not found", "no endpoints
   found") → modelo desactivado por 7 dias.
 - **Falha transitória** (timeouts, erros 5xx, respostas vazias) → só desactiva depois de 3
-  falhas **seguidas**, com backoff crescente (10 min → 30 min → 2 h), para não penalizar um
-  modelo por um azar pontual.
+  falhas **seguidas**, com backoff crescente (10 min → 30 min → 2 h).
 
-### 3.4. Protecção de dados pessoais antes de qualquer IA externa (duas camadas)
+**Correcção de Ago/2026 — descoberta ao vivo pode desbloquear um disjuntor permanente:** antes,
+um modelo marcado como permanentemente indisponível (7 dias) ficava bloqueado mesmo que a
+descoberta ao vivo confirmasse, horas depois, que voltou a existir no catálogo do provider — era
+isto que produzia "Cerebras: nenhum modelo disponível (todos desactivados ou catálogo vazio)" no
+painel admin com o catálogo real a conter modelos válidos. Agora, se `getAvailableModels()`
+confirma **agora mesmo** que o modelo existe (`discoveredLive: true`), o disjuntor permanente é
+ignorado — falhas transitórias continuam a respeitar o cooldown normal mesmo assim.
+
+**Vigilância a nível de provider (não só de modelo):** `recordProviderSuccess()` /
+`recordProviderExhaustion()` respondem a "este provider, no conjunto de todos os seus modelos,
+está estruturalmente morto?" — 5 esgotamentos totais seguidos (todos os modelos falharam na mesma
+tentativa) disparam **um** alerta por Telegram+WhatsApp (`api/_lib/notifyOps.js`), com cooldown de
+12h para não repetir o mesmo aviso a cada pedido de documento. Um cron diário
+(`api/_lib/aiProviderWatchdog.js`, 07:00 hora de Moçambique, via
+`/api/misc?action=ai-providers-cron`) complementa isto: apanha um provider "silenciosamente" sem
+sucesso nenhum (pouco tráfego) ou cronicamente degradado (< 20% de sucesso em 3 dias) — só envia
+mensagem se houver de facto um problema, propositadamente sem "está tudo bem" diário.
+
+**Botão "🔄 Reactivar" (painel admin → IA Providers):** limpa manualmente o disjuntor de um
+provider (`POST /api/admin/ai-providers { resetCircuitBreaker: <id> | 'all' }`) — útil depois de
+resolver a causa real de uma falha (nova chave, créditos repostos), sem esperar o cooldown
+automático (até 2h, ou 7 dias em erro permanente). Resolve exactamente os modelos que o motor de
+corrida está de facto a saltar (curados **e** descobertos ao vivo, não só a lista curada estática).
+
+### 3.4. Bug corrigido — planeamento de documentos longos cortado a meio (JSON inválido)
+
+Documentos multi-secção ("Trabalho" académico, até 30 páginas / ~21 secções) pedem primeiro à IA
+um JSON com a estrutura de capítulos. Bug real reportado e corrigido: o tecto de tokens do
+planeamento (`api/generate-document.js`) estava fixo em 1024 — insuficiente para o número real de
+secções em documentos grandes, cortando a resposta a meio de uma string/objecto e produzindo
+`SyntaxError` directo no cliente ("Não foi possível planear o documento"). Corrigido com três
+mudanças: **(1)** `PLAN_SYSTEM_PROMPT` dedicado (JSON estrito, proíbe aspas por escapar dentro de
+títulos, pede formato compacto) usado só em `_planMode`, com temperatura 0.3 (mais determinístico);
+**(2)** tecto subiu para 4096 (é só um tecto máximo, não gasta mais em planos pequenos); **(3)**
+`LongDocumentEngine.js` deixou de fazer `JSON.parse()` directo — `_parseSectionsJson()` tenta parse
+directo → reparos comuns (aspas tipográficas, vírgulas a mais, objectos colados) →
+`_salvagePartialSections()` (percorre a resposta char-a-char respeitando strings/escapes e salva as
+secções já bem formadas antes do ponto de corrupção/corte, em vez de rejeitar o plano inteiro), mais
+1 retry automático da fase de planeamento se tudo falhar (seguro — nenhum crédito é debitado antes
+do plano ter sucesso).
+
+### 3.5. Protecção de dados pessoais antes de qualquer IA externa (duas camadas)
 
 1. **`api/_lib/piiRedaction.js`** (servidor) — actua sobre o texto já montado, por **padrão**
    (regex): apanha BI/NUIT/telefone/e-mail mesmo dentro de texto livre.
@@ -279,10 +332,11 @@ MzDocs-Pro/
 ├── api/                                # 9 Serverless Functions (Vercel Hobby, limite 12 — 3 de margem)
 │   ├── _lib/                           # Helpers partilhados (prefixo "_" — não contam para o limite)
 │   │   ├── supabaseAdmin.js            # Cliente Supabase via fetch puro (REST + Auth API)
-│   │   ├── aiProviderRegistry.js       # Fonte única de verdade: 9 providers com adaptador + 4 catalogados sem adaptador
+│   │   ├── aiProviderRegistry.js       # Fonte única de verdade: 10 providers com adaptador (auditoria Ago/2026)
 │   │   ├── aiProvidersCatalog.js       # Alimenta o painel "IA Providers" do admin (mesma fonte)
 │   │   ├── modelDiscovery.js           # Descoberta ao vivo de modelos disponíveis por provider
-│   │   ├── modelHealth.js              # Disjuntor por modelo (falhas permanentes/transitórias)
+│   │   ├── modelHealth.js              # Disjuntor por modelo/provider + reset manual (resetProviderHealth)
+│   │   ├── aiProviderWatchdog.js       # NOVO: cron diário (07:00 Maputo) — reporta providers offline/degradados
 │   │   ├── visionAI.js                 # IA de visão (Gemini → OpenRouter fallback)
 │   │   ├── legalSearch.js              # Busca vectorial pgvector para o Motor Jurídico RAG
 │   │   ├── packages.js                 # Única fonte de verdade dos pacotes de créditos
@@ -290,6 +344,7 @@ MzDocs-Pro/
 │   │   ├── contentModeration.js        # Filtro de conteúdo abusivo em avaliações públicas
 │   │   ├── rateLimit.js                # Rate-limit via Upstash Redis (fallback Map local degradado — secção 7)
 │   │   ├── notifyTelegram.js           # Alertas Telegram (pagamento em revisão, rate limit degradado)
+│   │   ├── notifyOps.js                # NOVO: alertas operacionais Telegram+WhatsApp (provider de IA esgotado)
 │   │   ├── observability.js            # logEvent() estruturado — pagamento/OCR/geração/ledger (secção 12.3)
 │   │   └── webpush.js                  # Notificações push via VAPID
 │   ├── _services/                      # Lógica de negócio por domínio (prefixo "_" — não conta para o limite)
@@ -409,9 +464,9 @@ MzDocs-Pro/
 - Projecto Supabase com extensão `pgvector` activada (Dashboard → Extensions) — necessária para
   o Motor Jurídico RAG.
 - Pelo menos **uma** chave de IA (quantas mais, maior a disponibilidade e mais resiliente o
-  disjuntor de modelos): Groq, Google AI Studio (Gemini), OpenRouter, Cerebras, NVIDIA NIM,
-  Mistral, SambaNova, Together AI, Fireworks AI, Cloudflare Workers AI, GitHub Models, Hugging
-  Face, Cohere.
+  disjuntor de modelos): Groq, Google AI Studio (Gemini), OpenRouter, Cerebras, Mistral,
+  SambaNova, GitHub Models, Cloudflare Workers AI (precisa de 2 variáveis — token + ID da conta),
+  Hugging Face, Cohere.
 - **Não é necessária** conta M-Pesa API — os pagamentos são confirmados por upload de
   comprovativo (IA ou manual). `MPESA_API_KEY`/`MPESA_SERVICE_CODE` são opcionais, apenas
   alteram a etiqueta "sandbox"/"produção" na interface.
@@ -426,14 +481,19 @@ SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-# IA — pelo menos 1 obrigatória; até 13 possíveis (ver secção 3.1)
+# IA — pelo menos 1 obrigatória; até 10 possíveis (ver secção 3.1)
 GROQ_API_KEY=gsk_...
 GEMINI_API_KEY=AIza...
 OPENROUTER_API_KEY=sk-or-...
 CEREBRAS_API_KEY=csk-...
-NVIDIA_API_KEY=nvapi-...
-# + Mistral / SambaNova / Together / Fireworks / Cloudflare / GitHub Models / Hugging Face / Cohere
-#   (ver nomes exactos das env vars em api/_lib/aiProviderRegistry.js)
+MISTRAL_API_KEY=...
+SAMBANOVA_API_KEY=...
+GITHUB_MODELS_TOKEN=github_pat_...       # scope models:read
+CLOUDFLARE_AI_TOKEN=...                  # + CLOUDFLARE_ACCOUNT_ID (as DUAS são obrigatórias)
+CLOUDFLARE_ACCOUNT_ID=...
+HUGGINGFACE_API_KEY=hf_...
+COHERE_API_KEY=...
+#   (nomes exactos confirmados em api/_lib/aiProviderRegistry.js)
 
 SITE_URL=https://mzdocs.co.mz
 
@@ -443,12 +503,16 @@ MPESA_SERVICE_CODE=...              # ⚠️ nome real no código (não "MPESA_S
 WA_SUPPORT_NUMBER=258858695506
 CLOUDCONVERT_API_KEY=...
 LIBREOFFICE=false                   # true apenas em VPS com LibreOffice
-CRON_SECRET=...                     # protege /api/cleanup-temp-accounts
+CRON_SECRET=...                     # protege todos os crons: cleanup-temp-accounts, blog, ai-providers-cron
 UPSTASH_REDIS_REST_URL=...
 UPSTASH_REDIS_REST_TOKEN=...
 GITHUB_OWNER=...
 GITHUB_REPO=...
 GITHUB_TOKEN=...                    # PAT com escrita no repositório — tratar como Service Role Key
+TELEGRAM_BOT_TOKEN=...              # alertas de pagamento em revisão + providers de IA offline
+TELEGRAM_CHAT_ID=...
+WHATSAPP_ALERT_PHONE=258...         # NOVO — 2.º canal de alerta operacional (só providers de IA)
+WHATSAPP_CALLMEBOT_APIKEY=...       # via CallMeBot, grátis, sem aprovação da Meta
 ```
 
 > ⚠️ **Variáveis sem efeito (não usar):** `ADMIN_EMAILS` e `MPESA_PUBLIC_KEY` não são lidas em
@@ -685,7 +749,36 @@ no admin (`bonus_credits_expiry_days`, 30 dias de fallback). Testado em `tests/c
 
 Se a geração de IA falhar completamente (todos os providers indisponíveis), o crédito é devolvido
 automaticamente via RPC `refund_credit`, tanto em `generate-document.js` como no
-`LongDocumentEngine` para documentos longos.
+`LongDocumentEngine` para documentos longos. Desde a v66, `Services.js` não envia o custo real ao
+gerar quando o documento foi concedido gratuitamente (ver subsecção seguinte) — para este
+reembolso nunca disparar por engano, devolvendo um crédito nunca gasto.
+
+### Primeiro documento grátis (v66) — e a sua visibilidade no painel admin
+
+Substitui o antigo mecanismo de "1 crédito grátis no registo": 1 crédito de saldo inicial só
+cobria um documento que custasse exactamente 1 crédito, mas os custos reais vão de 1 a 10
+(`VALID_COSTS`). Desde a `migration_v66_first_document_free.sql`, o **primeiro documento de uma
+conta nova é sempre grátis, seja qual for o custo real** — através de um contador dedicado
+(`profiles.free_documents_used`) que **nunca toca em `profiles.credits`**. Uma conta registada via
+link de afiliado tem direito a **2** documentos grátis em vez de 1. Nunca se aplica a templates
+pagos do marketplace (`documentType` a começar por `"template_"`). RPC atómica e idempotente:
+`grant_free_document()`, chamada em `handleDeductCredit` (`api/_services/account.js`) antes de
+qualquer dedução paga.
+
+**Consequência directa para quem lê o saldo de créditos:** uma conta nova com `credits = 0` **não
+significa** que já não pode gerar — pode muito bem ainda ter o documento grátis por usar, já que
+este mecanismo não mexe nesse saldo. Por isso o painel admin (lista de Utilizadores + Timeline/CRM
+de cada conta) mostra explicitamente um badge com o estado real:
+
+- **🎁 Grátis por usar (0/1)** — ainda tem direito, não gastou créditos ao gerar.
+- **🎁 Grátis usado (1/1)** (ou `2/2` se referida) — já usou, os próximos documentos consomem
+  créditos normalmente.
+
+Calculado a partir de `free_documents_used` + `referred_by` (`_freeDocState()`/`_freeDocBadge()`
+em `AdminApp.js`), com fallback seguro caso a `migration_v66` ainda não tenha corrido nalgum
+ambiente (coluna ausente → nenhum badge mostrado, em vez de um estado errado). Filtro dedicado no
+dropdown "Utilizadores" ("Doc. grátis por usar" / "Doc. grátis já usado") para listar rapidamente
+quem ainda não converteu o benefício.
 
 ### Limites de uso por documento (por download/edição, não por qualidade)
 
@@ -1044,22 +1137,27 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | v65 (Ago/2026) — `migration_v65_partner_category_packages.sql` | **(1)** Pacotes de créditos exclusivos por categoria de parceiro/afiliado — nova coluna `credit_packages.partner_segment`; a categoria de cada utilizador é sempre resolvida no servidor (`resolveUserPricingSegment()`, novo em `api/_lib/packages.js`), nunca aceite do cliente, com validação real (401/403) em `api/process-payment.js` no momento da compra — não só no que é mostrado no ecrã. Novo endpoint autenticado `GET /api/account?_op=my-packages` expõe os pacotes exclusivos de cada um, à parte de `/api/config` (que nunca os pode incluir — é uma resposta pública em cache partilhado na CDN). **(2)** Ponte bidireccional entre o painel de afiliado e o Portal da Parceira: quem se regista como afiliado `papelaria`/`cyber`/`universidade` vê um convite para candidatar o mesmo negócio à Rede de Parceiros (já existia, agora com pré-preenchimento também no sentido inverso); um parceiro `papelaria` já aprovado vê, pela primeira vez, o convite equivalente para se tornar também afiliado (`parceiro-portal.html`), com nome/telefone pré-preenchidos em `afiliado.html` — só `papelaria` tem esta direcção, `advogado` não é um segmento de afiliado válido. **(3)** Corrigido de caminho, na mesma ronda: `resolveUserPricingSegment()` (função nova desta versão) tinha sido escrita a consultar uma tabela `affiliates` com coluna `user_id` que nunca existiu no projecto — os dados de afiliado vivem em colunas de `profiles` (`aff_segment`, `is_affiliate`, desde a `migration_v14`); o ramo de segmento de afiliado da função nunca teria funcionado sem esta correcção, só o ramo de parceiro (`partners.linked_user_id`) |
 | v66 (Ago/2026) — `migration_v66_first_document_free.sql` | Substituído o mecanismo de "1 crédito grátis no registo" por "o primeiro documento é sempre grátis", por pedido explícito do cliente — diferença real, não só de nome: 1 crédito de saldo inicial só cobre um documento que custe exactamente 1 crédito, mas os custos vão de 1 a 10 (`VALID_COSTS`); o novo mecanismo cobre sempre o custo real do primeiro documento, através de um contador dedicado (`profiles.free_documents_used`) que nunca toca em `profiles.credits`. Uma conta registada via link de afiliado tem direito a 2 documentos grátis em vez de 1 (substitui o antigo bónus de +1 crédito por referência). Nova RPC atómica e idempotente `grant_free_document()`, chamada em `handleDeductCredit` (`api/_services/account.js`) antes de qualquer dedução paga, e sempre que `documentType` **não** comece por `"template_"` — modelos pagos do marketplace permanecem sempre pagos, nunca beneficiam disto, mesmo no primeiro documento de uma conta nova. Os dois mecanismos antigos (`free_credits_normal`, `aff_bonus_signup` em `system_settings`) foram desligados por configuração (posto a `'0'`), sem tocar nas funções/triggers que os liam — reversível sem deploy, se preciso. Corrigido de caminho um efeito colateral real: o reembolso automático em `api/generate-document.js` (dispara quando a geração falha depois de créditos terem sido debitados) enviaria um crédito nunca gasto para uma conta cujo documento tinha sido concedido gratuitamente; `Services.js` deixou de enviar o custo real ao gerar quando o documento foi grátis, para esse reembolso nunca disparar por engano. Todas as mensagens de interface que mencionavam "1 crédito grátis" (`AuthUI.js`, `homeController.js`, `afiliado.html`, `index.html`) foram actualizadas para reflectir o novo mecanismo |
 | Ago/2026 (mesma ronda, sem migração — CSS/layout) | Alerta "⚠️ Créditos insuficientes" e notificações semelhantes escapavam do ecrã em telas estreitas — `.notif` em `styles.css` tinha `white-space:nowrap` sem largura máxima; corrigido para `white-space:normal`+`word-break`+`max-width:100%` dentro de `.notif-stack`. Nova classe reutilizável `.container{max-width:1024px;margin:0 auto;padding:0 16px}` substitui, por composição (classe extra no HTML, ex. `class="hdr-inner container"`), as várias classes `.wrap`/`.hero-inner`/`.section` com larguras inconsistentes (480–760px) espalhadas por `index.html`, `templates.html`, `parceiros.html`, `perfil.html`, `admin-parceiros.html` e `parceiro-portal.html` (páginas que carregam `assets/css/styles.css`; as páginas 100% standalone — `/pages/*`, `legal.html`, `blog.html`, `afiliado.html`, `admin.html` — foram deliberadamente deixadas de fora para não introduzir regressão fora do âmbito pedido). Consequência em cadeia detectada e corrigida na mesma ronda: `.sheet` (modal/bottom-sheet partilhado por todos os formulários) subiu de 560px para 720px para acompanhar a nova largura — mas `.a4-page` (folha branca do preview A4, `A4Renderer.js`, usado por `Views.js`/`DocumentEditor.js`) continuou com 560px hardcoded, fazendo `scalePage()` escalar o iframe do preview maior do que a caixa que devia contê-lo, transbordando texto para fora da folha no preview não-maximizado; corrigido para 720px em `A4Renderer.js` e no modal equivalente de `HistoryController.js`. **Nota para manutenção futura:** `.sheet` (`styles.css`) e `.a4-page` (`A4Renderer.js`) têm sempre de ser alterados juntos. Inconsistência pré-existente sinalizada mas não corrigida (fora do âmbito pedido): `TemplatePicker.js` tem o seu próprio `#tplPickerSheet` a 700px com um `.a4-page` local ainda a 560px |
+| Ago/2026 (ronda seguinte) — bug real "Não foi possível planear o documento" | Geração de "Trabalho" (documentos multi-secção) falhava sempre com este erro em documentos com várias páginas. Causa raiz confirmada por leitura do código: `_planMode` em `api/generate-document.js` tinha o tecto de tokens fixo em 1024 — insuficiente para o número real de secções em documentos grandes (até ~21 secções em 30 páginas), cortando a resposta da IA a meio de uma string/objecto; o cliente (`LongDocumentEngine.js`) fazia `JSON.parse()` directo sobre essa resposta truncada, sem qualquer reparo nem nova tentativa. Corrigido com três mudanças, sem regressões (`diff` confirmado linha a linha antes de entregar): **(1)** `PLAN_SYSTEM_PROMPT` dedicado (JSON estrito, proíbe aspas por escapar dentro de títulos, formato compacto), usado só em `_planMode`, com temperatura 0.3; **(2)** tecto subiu de 1024 para 4096 (é só um tecto máximo — não gasta mais em planos pequenos); **(3)** `_parseSectionsJson()`/`_salvagePartialSections()` (novos em `LongDocumentEngine.js`) tentam parse directo → reparos comuns (aspas tipográficas, vírgulas a mais, objectos colados sem vírgula) → salvamento das secções já bem formadas antes do ponto de corte/corrupção (percorrendo a resposta char-a-char, respeitando strings/escapes), em vez de rejeitar o plano inteiro por um único carácter fora do sítio; mais 1 retry automático da fase de planeamento se tudo o resto falhar (seguro — nenhum crédito é debitado antes do plano ter sucesso) |
+| Ago/2026 (mesma ronda) — auditoria completa aos providers de IA + sistema de alertas operacionais | Investigação dos logs reais da Vercel + painel admin (IA Providers) depois da correcção acima revelou que múltiplos providers estavam simultaneamente degradados/offline por razões todas diferentes, confirmadas uma a uma: **NVIDIA NIM removida** (contas NGC pessoais devolvem sempre `404 Function not found` em `/v1/chat/completions` — restrição do lado da conta NVIDIA, sem solução por código, `GET /v1/models` funcionava e mascarava o problema); **Together AI e Fireworks AI removidas** (deixaram de ter tier grátis contínuo — exigem depósito mínimo ou esgotam em minutos); **Cerebras corrigida** (llama-3.3-70b/qwen-3-32b descontinuados a 16/Fev/2026, lista reordenada); **Google Gemini corrigida** (gemini-1.5-flash e gemini-2.0-flash ambos desligados pela Google, trocado para os aliases `-latest`); **SambaNova corrigida** (tier real é 20 pedidos/dia **por modelo**, não 20/minuto — lista expandida para 5 modelos grátis reais, quintuplicando o tecto efectivo). **4 providers novos ligados** para substituir os removidos: GitHub Models, Cloudflare Workers AI (única com 2 env vars obrigatórias — `extraEnvVars`/`isProviderConfigured()`/`resolveUrl()` novos em `aiProviderRegistry.js`), Hugging Face Inference, Cohere — `UNWIRED_RESERVE` fica vazio pela primeira vez. **Disjuntor corrigido**: um bloqueio permanente (7 dias) antigo deixa de ser respeitado quando a descoberta ao vivo confirma, agora mesmo, que o modelo voltou a existir (`discoveredLive`, ver `modelHealth.js`/`aiRace.js`) — antes disto, um modelo continuava bloqueado mesmo depois do provider repor o catálogo. **Botão "🔄 Reactivar"** (por provider e "Reactivar todos") no painel admin → IA Providers, que limpa manualmente o disjuntor sem esperar o cooldown automático — `resetProviderHealth()` (`modelHealth.js`) + `POST /api/admin/ai-providers { resetCircuitBreaker }` (`api/admin/index.js`). **Novo sistema de alertas operacionais**: `api/_lib/notifyOps.js` acrescenta um segundo canal (WhatsApp via CallMeBot, gratuito, sem processo de aprovação da Meta) ao Telegram já existente; alerta em tempo real quando um provider esgota todos os modelos 5 vezes seguidas (cooldown de 12h contra spam, `recordProviderSuccess()`/`recordProviderExhaustion()` novos em `modelHealth.js`); cron diário novo (`api/_lib/aiProviderWatchdog.js`, 07:00 hora de Moçambique, via `/api/misc?action=ai-providers-cron`, sem consumir uma Serverless Function nova) que reporta providers offline-hoje ou cronicamente degradados (< 20% sucesso em 3 dias) — só envia mensagem se houver de facto um problema |
+| Ago/2026 (mesma ronda) — visibilidade do "documento grátis" (v66) no painel admin | Bug de visibilidade real, sem código para diagnosticar: o admin via contas novas com `0 créditos` sem forma de saber se ainda tinham direito ao documento grátis da v66 (que não mexe em `profiles.credits`) ou se já o tinham usado. Corrigido em `AdminApp.js`/`admin.html`/`api/admin/index.js`, sem regressões: badge "🎁 Grátis por usar (n/allowance)" ou "🎁 Grátis usado" na lista de Utilizadores (mobile e desktop), calculado a partir de `free_documents_used`+`referred_by` (allowance 1, ou 2 se referida) via `_freeDocState()`/`_freeDocBadge()`; novo filtro no dropdown de tipo de utilizador ("Doc. grátis por usar"/"Doc. grátis já usado"); mesma informação exposta no topo do modal Timeline/CRM de cada conta. Selecção com fallback de 4 níveis no Supabase client (`_loadUsers()`) e try/catch no backend (`handleUserTimeline`) para nunca quebrar o painel caso a `migration_v66` ainda não tenha corrido nalgum ambiente — nesse caso simplesmente não mostra o badge, em vez de arriscar um estado errado |
 
 | Componente | Versão |
 |---|---|
 | `package.json` | `11.0.0` |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy (`v<sha-git-7-chars>-<YYYYMMDD>`) |
-| Migrações Supabase | até `migration_v64_template_purchases.sql` (gap real em `v58`), mais ficheiros avulsos não numerados |
+| Migrações Supabase | até `migration_v66_first_document_free.sql` (gaps reais em `v18`/`v19` e `v58`), mais ficheiros avulsos não numerados |
 | Serviços | 18 (16 com IA + 2 via WhatsApp) |
 | Templates visuais integrados | 70 (14 serviços × 5) |
-| Providers de IA — com adaptador (competem) / catalogados sem adaptador | 9 / 4 (13 no total) |
+| Providers de IA — com adaptador (competem) / catalogados sem adaptador | 10 / 0 (10 no total) — auditoria Ago/2026 |
+| Alertas operacionais | Telegram + WhatsApp (CallMeBot) — tempo real (provider esgota tudo 5× seguidas) + resumo diário 07:00 (Maputo) |
 | Preço máximo de um template no Marketplace | 10 créditos (`migration_v56`) |
 | Compra de template pago | desbloqueio permanente desde a v64 (`template_purchases`) — paga-se uma vez, usa-se para sempre |
+| Primeiro documento grátis | desde a v66 (`free_documents_used`) — 1 conta normal / 2 via afiliado, nunca em `profiles.credits`, visível no painel admin |
 | Agendamento com parceiros (foto/impressão) | desde a v63 (`bookings`) — pendente/agendado/em_andamento/concluído/cancelado, gerido no Portal da Parceira |
 | Testes (Jest, CI) | 10 suites, ≈ 1.458 linhas |
 | Scripts de manutenção (fora do CI) | 4 (`inject-version`, `legal-ingest`, `ocr-golden-eval`, `test-credit-concurrency`) |
 | Observabilidade | `metrics_events` + 3 views SQL (`migration_v59`), retenção de 90 dias |
-| Serverless Functions (Vercel Hobby) | 9 de 12 — 3 de margem (era 12/12 até Ago/2026) |
+| Serverless Functions (Vercel Hobby) | 9 de 12 — 3 de margem (era 12/12 até Ago/2026); cron diário de vigilância de providers reaproveita `/api/misc`, sem consumir função nova |
 | Pacotes de créditos | dinâmicos desde a v61 (`credit_packages`) — 5 pré-migrados (avulso/starter/basico/pro/empresa), sem limite de quantos o admin pode criar |
 
 ---
