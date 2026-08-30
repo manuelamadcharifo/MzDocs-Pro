@@ -290,9 +290,24 @@ module.exports = async function handler(req, res) {
     // max_tokens é só um TECTO (não obriga a gastar tokens a mais quando a
     // resposta natural é curta), por isso subir isto não tem custo extra
     // para planos pequenos — só dá margem para os grandes não cortarem.
+    //
+    // NOVO — para "trabalho" (Trabalho Escolar), o cliente já calcula e
+    // envia _maxTokensHint: um tecto CALCULADO a partir do nº real de
+    // páginas de desenvolvimento pedido (ver Services.js._buildPrompt →
+    // prompts/trabalho.js:estimateWordBudget), em vez de usar sempre o
+    // valor fixo de 8192 — evita um tecto desnecessariamente alto para um
+    // pedido pequeno (3 páginas) e dá mais margem a um pedido grande (30
+    // páginas) do que os 8192 fixos davam. O valor vindo do cliente NUNCA
+    // é usado sem validar: tem de ser um número finito dentro de
+    // [1024, 16000], senão cai no comportamento fixo anterior — o
+    // servidor não confia em nada que o browser envie sem o confirmar.
+    const _hint = Number(req.body._maxTokensHint);
+    const hintedTokens = Number.isFinite(_hint) && _hint >= 1024 && _hint <= 16000
+        ? Math.round(_hint)
+        : null;
     const maxTokens = isPreview
         ? PREVIEW_MAX_TOKENS
-        : (_sectionMode ? 8192 : (_planMode ? 4096 : 8192));
+        : (_sectionMode ? 8192 : (_planMode ? 4096 : (hintedTokens || 8192)));
 
     // Planeamento usa um system prompt dedicado (JSON estrito) e uma
     // temperatura mais baixa, para reduzir a chance de o modelo desviar-se
