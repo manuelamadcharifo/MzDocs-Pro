@@ -101,6 +101,32 @@ function _getProfile(nivel) {
   return NIVEL_PROFILES[nivel] || NIVEL_PROFILES['Licenciatura'];
 }
 
+// NOVO — estimativa MATEMÁTICA (não um tecto fixo igual para qualquer
+// pedido) de quantas palavras o documento completo vai precisar, usada por
+// Services.js para calcular um tecto de tokens (max_tokens) à medida do
+// nº de páginas de desenvolvimento pedido, em vez de um valor fixo de
+// 8192 tokens igual para um pedido de 3 páginas ou de 30 — evita
+// desperdiçar tokens/tempo de resposta em pedidos pequenos. Reutiliza a
+// mesma densidade de palavras/página já calibrada por nível
+// (profile.palavrasPorPagina) e a mesma composição de secções fixas
+// (capa/folha de rosto/resumo/índice/introdução/conclusão/referências)
+// usada em _buildAcademicPrompt — não é um valor inventado à parte.
+export function estimateWordBudget(data) {
+  const profile = _getProfile(data.nivel);
+  const isAcademico = profile.grupo === 'academico';
+  const pags = parseInt(data.paginas) || (profile.grupo === 'basico' ? 3 : 5);
+  const extrasSel = data.extras || 'Nenhuma';
+  const extraCount = [/dedicat[oó]ria/i, /agradecimento/i, /ep[ií]grafe/i]
+    .reduce((n, re) => n + (isAcademico && re.test(extrasSel) ? 1 : 0), 0);
+  // Páginas fora do desenvolvimento que também consomem texto/tokens:
+  // introdução + conclusão + referências (sempre) + folha de rosto/resumo
+  // (só níveis académicos) + secções extra escolhidas.
+  const backMatterPages = 3 /* introdução + conclusão + referências */
+    + (isAcademico ? 2 : 0) /* folha de rosto + resumo e palavras-chave */
+    + extraCount;
+  return Math.round((pags + backMatterPages) * profile.palavrasPorPagina);
+}
+
 // CORRIGIDO: o formulário agora coleta nome do aluno, turma/classe, docente
 // e instituição (ServiceDefinitions.js → trabalho.fields) — dados que a
 // capa do documento (PDFExporter.js "Estudante:"/"Docente:" e o template
@@ -140,35 +166,115 @@ function _capaDocumento(data) {
 // persona/linguagem/exigência de criticidade passam a vir do perfil em vez
 // de estarem fixas para todos os níveis.
 function _buildAcademicPrompt(data, ocrBlock, profile) {
-  const pags    = parseInt(data.paginas) || 5;
-  const devPags = Math.max(2, pags - 3);
+  // NOVO: 'paginas' passou a referir-se só às páginas de DESENVOLVIMENTO
+  // (os capítulos) — ver ServiceDefinitions.js (hint do campo) e o pedido
+  // explícito do utilizador: capa, folha de rosto, resumo, índice,
+  // introdução, conclusão e referências são SEMPRE acrescentadas a este
+  // valor, nunca descontadas dele (antes, "devPags = pags - 3" fazia o
+  // oposto — um pedido de 10 páginas gerava só 7 de desenvolvimento reais).
+  const pags = parseInt(data.paginas) || 5;
   // CORRIGIDO (bug: trabalho pedido com N páginas saía sistematicamente
   // 50-60% maior — ex.: 10 páginas pedidas geravam ~16 no PDF final): a
   // fórmula antiga (devPags/1.5) gerava capítulos a mais para o mesmo
   // espaço disponível, e CADA capítulo exigia um mínimo FIXO de 4+3+2=9
   // parágrafos de 6-8 linhas cada — independentemente de quantas páginas
-  // o pedido realmente tinha disponíveis por capítulo. Para pags=10
-  // (Licenciatura): devPags=7 → numCaps antigo=round(7/1.5)=5 capítulos ×
-  // 9 parágrafos + 5 (introdução) + 4 (conclusão) = 54 parágrafos MÍNIMOS
-  // — muito mais do que cabe em 10 folhas A4, por mais que o "MÍNIMO X
-  // palavras" abaixo dissesse um valor mais baixo (a estrutura obrigatória
-  // sobrepunha-se sempre a esse número-alvo). Correcção com duas partes:
-  // (1) menos capítulos por página disponível (~2.2 páginas por capítulo
-  // em vez de ~1.5); (2) os mínimos de parágrafo por subsecção passam a
-  // ESCALAR com o tamanho do pedido em vez de serem sempre "4/3/2" — só
-  // trabalhos genuinamente extensos (>16 páginas pedidas) mantêm a
-  // exigência mais rica que já existia. Trabalhos maiores (Mestrado/
-  // Doutoramento tipicamente pedem mais páginas) continuam com a mesma
-  // riqueza de conteúdo de antes; só o caso comum (5-16 páginas) deixa de
-  // ser estruturalmente forçado a ultrapassar o pedido.
-  const numCaps = Math.max(2, Math.round(devPags / 2.2));
-  const palavras = pags * profile.palavrasPorPagina;
+  // o pedido realmente tinha disponíveis por capítulo. Correcção com duas
+  // partes: (1) menos capítulos por página disponível (~2.2 páginas por
+  // capítulo em vez de ~1.5); (2) os mínimos de parágrafo por subsecção
+  // passam a ESCALAR com o tamanho do pedido em vez de serem sempre
+  // "4/3/2" — só trabalhos genuinamente extensos (>16 páginas pedidas)
+  // mantêm a exigência mais rica que já existia.
+  const numCaps = Math.max(2, Math.round(pags / 2.2));
+  const palavras = pags * profile.palavrasPorPagina; // só desenvolvimento — ver nota acima
 
   const parasA = pags <= 8 ? 2 : (pags <= 16 ? 3 : 4);
   const parasB = pags <= 8 ? 1 : (pags <= 16 ? 2 : 3);
   const parasIntro = pags <= 8 ? 3 : (pags <= 16 ? 4 : 5);
   const parasConcl = pags <= 8 ? 2 : (pags <= 16 ? 3 : 4);
   const plural = (n) => (n > 1 ? 's' : '');
+
+  // NOVO — cálculo MATEMÁTICO (não um "+1 página por capítulo" adivinhado)
+  // de quantas páginas físicas cada secção deve ocupar, para dar ao Índice
+  // números realistas e para saber onde a Introdução/Conclusão/Referências
+  // realmente começam. Fórmula: nº de parágrafos × linhas por parágrafo
+  // (ponto médio do intervalo do perfil, ex. "6-8" → 7) × palavras por
+  // linha (13, uma média razoável para texto académico justificado em
+  // português a 12pt numa página A4 com as margens usadas no exportador),
+  // a dividir pela densidade de palavras/página já calibrada por nível
+  // (profile.palavrasPorPagina). Continua a ser uma ESTIMATIVA — a IA pode
+  // sempre escrever um pouco mais ou menos do que o pedido — mas deixa de
+  // ser um número inventado: é a mesma matemática usada para o tecto de
+  // tokens (ver estimateWordBudget, mais abaixo).
+  const WORDS_PER_LINE = 13;
+  const _midLines = (range) => {
+    const parts = String(range).split('-').map(Number);
+    return parts.length === 2 && parts[1] ? (parts[0] + parts[1]) / 2 : (parts[0] || 6);
+  };
+  const avgLines = _midLines(profile.paragrafoLinhas);
+  const _pagesFor = (nParas) => Math.max(1, Math.ceil((nParas * avgLines * WORDS_PER_LINE) / profile.palavrasPorPagina));
+  const introPagesEst = _pagesFor(parasIntro);
+  const chapPagesEst  = _pagesFor(parasA + parasB + 1);
+  const conclPagesEst = _pagesFor(parasConcl);
+
+  // NOVO — estrutura académica completa (capa → folha de rosto → secções
+  // pré-textuais opcionais → resumo → índice → desenvolvimento), pedida
+  // explicitamente para trabalhos de nível universitário (Pré-
+  // Universitário, Licenciatura, Mestrado/Doutoramento — profile.grupo
+  // === 'academico'). Os níveis abaixo (Secundário 2º Ciclo, etc.) mantêm
+  // a estrutura mais simples que já tinham (sem folha de rosto/resumo).
+  const isAcademico = profile.grupo === 'academico';
+  const extrasSel = data.extras || 'Nenhuma';
+  const wantDedicatoria    = isAcademico && /dedicat[oó]ria/i.test(extrasSel);
+  const wantAgradecimentos = isAcademico && /agradecimento/i.test(extrasSel);
+  const wantEpigrafe       = isAcademico && /ep[ií]grafe/i.test(extrasSel);
+
+  // Páginas físicas ANTES do Índice — SEMPRE presentes, independentemente
+  // do que a IA escreve: Capa(1, inserida pelo sistema — ver
+  // CoverNormalizer.js) + Folha de Rosto(1, idem, só níveis académicos) +
+  // Dedicatória/Agradecimentos/Epígrafe opcionais (1 pág. cada, escritas
+  // pela IA abaixo) + Resumo e Palavras-chave(1, só níveis académicos) +
+  // a própria página do Índice.
+  let frontPages = 1; // capa
+  if (isAcademico) frontPages += 1; // folha de rosto
+  if (wantDedicatoria) frontPages += 1;
+  if (wantAgradecimentos) frontPages += 1;
+  if (wantEpigrafe) frontPages += 1;
+  if (isAcademico) frontPages += 1; // resumo e palavras-chave
+  frontPages += 1; // índice
+
+  const introPage = frontPages + 1;
+  const capPageStarts = [];
+  let _cursor = introPage + introPagesEst;
+  for (let i = 0; i < numCaps; i++) { capPageStarts.push(_cursor); _cursor += chapPagesEst; }
+  const conclPage = _cursor;
+  const refPage   = conclPage + conclPagesEst;
+
+  const extraSecoes = [
+    wantDedicatoria && [
+      '---PAGE_BREAK---',
+      '## Dedicatória',
+      '',
+      '[ESCREVA AGORA um texto curto de dedicatória (3-5 linhas), sincero e sóbrio, dirigido a familiares/pessoas próximas do(a) estudante. NÃO invente nomes próprios de pessoas — use formas genéricas (ex.: "Aos meus pais", "À minha família") a não ser que já existam nomes reais fornecidos.]',
+    ].join('\n'),
+    wantAgradecimentos && [
+      '---PAGE_BREAK---',
+      '## Agradecimentos',
+      '',
+      `[ESCREVA AGORA um texto de agradecimentos (4-6 linhas) dirigido à instituição${data.instituicao ? ` (${data.instituicao})` : ''}${data.docente ? `, ao(à) docente ${data.docente}` : ''}, a colegas e família — tom formal mas caloroso. NÃO invente nomes próprios além dos já fornecidos.]`,
+    ].join('\n'),
+    wantEpigrafe && [
+      '---PAGE_BREAK---',
+      '## Epígrafe',
+      '',
+      `[ESCREVA AGORA uma epígrafe: 1 citação curta relacionada com o tema "${data.tema}", seguida do nome do autor ou da origem (autor real e verificável, provérbio moçambicano/africano ou ditado popular). Se não tiver a certeza absoluta de uma citação real, use um provérbio moçambicano genérico em vez de inventar uma citação atribuída a alguém.]`,
+    ].join('\n'),
+    isAcademico && [
+      '---PAGE_BREAK---',
+      '## Resumo e Palavras-chave',
+      '',
+      `[ESCREVA AGORA um resumo académico de 1 parágrafo (8-12 linhas) sintetizando objectivo, metodologia e principais conclusões do trabalho sobre "${data.tema}". Depois do resumo, numa linha nova, escreva "**Palavras-chave:** " seguido de 4 a 6 palavras-chave separadas por vírgula.]`,
+    ].join('\n'),
+  ].filter(Boolean).join('\n');
 
   const capsEstrutura = Array.from({ length: numCaps }, (_, i) => {
     const capNum = i + 2;
@@ -189,7 +295,7 @@ function _buildAcademicPrompt(data, ocrBlock, profile) {
   }).join('\n');
 
   const indice = Array.from({ length: numCaps }, (_, i) =>
-    `   ${i + 2}. [Capítulo ${i + 1}] .................................................. ${i + 4}`
+    `   ${i + 2}. [Capítulo ${i + 1}] .................................................. ${capPageStarts[i]}`
   ).join('\n');
 
   // CORRIGIDO: a instrução antiga exigia "no mínimo 1 livro real + 1
@@ -222,7 +328,7 @@ DADOS DO TRABALHO:
 - Tema: "${data.tema}"
 - Disciplina: ${data.disciplina}
 - Nível: ${data.nivel}
-- Extensão: o(a) estudante pediu ${pags} folhas A4 (aproximadamente ${palavras} palavras) — RESPEITE este valor: não é um mínimo a ultrapassar à vontade, é o tamanho pedido. Tolerância aceitável: 1-2 folhas a mais no máximo. Se, ao seguir a estrutura abaixo, sentir que o texto já respondeu bem a cada secção, FECHE a secção — não estique parágrafos nem acrescente subsecções extra só para preencher espaço.
+- Extensão do DESENVOLVIMENTO (capítulos, sem contar capa/folha de rosto/resumo/índice/introdução/conclusão/referências): ${pags} folhas A4 (aproximadamente ${palavras} palavras) — RESPEITE este valor: não é um mínimo a ultrapassar à vontade, é o tamanho pedido. Tolerância aceitável: 1-2 folhas a mais no máximo. Se, ao seguir a estrutura abaixo, sentir que o texto já respondeu bem a cada secção, FECHE a secção — não estique parágrafos nem acrescente subsecções extra só para preencher espaço.
 - Requisitos do docente: ${data.requisitos || 'seguir normas académicas padrão APA'}${_capaContextoPrompt(data)}${ocrBlock || ''}
 
 REGISTO DE LINGUAGEM OBRIGATÓRIO PARA ESTE NÍVEL:
@@ -250,14 +356,15 @@ ESTRUTURA OBRIGATÓRIA (copie exactamente incluindo ---PAGE_BREAK---):
 ---PAGE_BREAK---
 # ${data.tema}
 
-[NÃO escreva mais NADA nesta página — nem tabela, nem "Instituição:", nem nome do aluno, nem docente, nem data. O sistema insere automaticamente, a seguir ao título, um bloco de identificação já formatado com os dados reais do formulário. Qualquer texto que escrever aqui é substituído e descartado — não desperdice espaço a tentar reproduzi-lo.]
+[NÃO escreva mais NADA nesta página — nem tabela, nem "Instituição:", nem nome do aluno, nem docente, nem data. O sistema insere automaticamente, a seguir ao título, a capa formatada com os dados reais do formulário e, para níveis universitários, também a Folha de Rosto. Qualquer texto que escrever aqui é substituído e descartado — não desperdice espaço a tentar reproduzi-lo.]
+${extraSecoes}
 ---PAGE_BREAK---
 ## Índice
 
-   1. Introdução .................................................. 3
+   1. Introdução .................................................. ${introPage}
 ${indice}
-   ${numCaps + 2}. Conclusão .................................................. ${numCaps + 4}
-   ${numCaps + 3}. Referências Bibliográficas ................................ ${numCaps + 5}
+   ${numCaps + 2}. Conclusão .................................................. ${conclPage}
+   ${numCaps + 3}. Referências Bibliográficas ................................ ${refPage}
 
 ---PAGE_BREAK---
 ## 1. Introdução
