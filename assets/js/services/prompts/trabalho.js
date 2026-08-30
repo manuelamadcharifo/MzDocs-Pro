@@ -126,6 +126,9 @@ function _capaContextoPrompt(data) {
   return '\n' + linhas.map(([label, val]) => `- ${label}: ${val}`).join('\n');
 }
 
+// NOTA: já não é chamada nas ESTRUTURA OBRIGATÓRIA dos builders abaixo — o
+// bloco de identificação da capa deixou de ser pedido à IA (ver
+// CoverNormalizer.js). Mantida apenas para eventual reutilização futura.
 function _capaDocumento(data) {
   const linhas = _capaLinhas(data);
   if (!linhas.length) return '';
@@ -164,9 +167,29 @@ function _buildAcademicPrompt(data, ocrBlock, profile) {
     `   ${i + 2}. [Capítulo ${i + 1}] .................................................. ${i + 4}`
   ).join('\n');
 
+  // CORRIGIDO: a instrução antiga exigia "no mínimo 1 livro real + 1
+  // relatório de organismo oficial (ONU, Banco Mundial, INE Moçambique,
+  // SADC)" — na prática isto EMPURRAVA o modelo a inventar entradas com
+  // aparência credível quando não tinha nenhuma fonte real (é exactamente
+  // o padrão de referências fabricadas que apareciam sempre: "Banco
+  // Mundial (2022)", "INE (2021)", autores genéricos como "Kabeer, N.
+  // (2013)" — nomes e anos plausíveis mas inventados). A exigência de um
+  // mínimo é incompatível com "só cite o que é real": ou há fonte real
+  // (então cite-a), ou não há (então NÃO deve haver entrada nenhuma —
+  // apenas a nota a pedir ao aluno para completar). Removida a pressão de
+  // quantidade mínima; reforçada a proibição de inventar autores/editoras/
+  // anos só para parecer uma referência académica credível. Também passa a
+  // instruir explicitamente que, quando existir rascunho/livro fotografado
+  // pelo aluno (ocrBlock), a informação retirada dele deve ser atribuída a
+  // essa fonte na bibliografia — não disfarçada de referência académica
+  // externa inventada.
+  const fonteOcr = ocrBlock
+    ? `\n- O(a) estudante forneceu um rascunho/excerto fotografado (ver "Rascunho OCR" acima). Se usou alguma informação de lá, inclua uma entrada assim: "Material fornecido pelo(a) estudante (rascunho/apontamentos fotografados)." — NÃO transforme esse rascunho numa referência académica inventada (não invente título de livro, editora ou ano para ele).`
+    : '';
+
   const refSection = profile.usaAPA === true
-    ? `\n\n---PAGE_BREAK---\n## ${numCaps + 3}. Referências Bibliográficas\n\nINSTRUÇÃO CRÍTICA PARA AS REFERÊNCIAS:\n- Lista apenas referências que EXISTEM REALMENTE e são verificáveis\n- Formato APA 7ª edição obrigatório\n- Se não tens certeza de uma referência, NÃO a incluas\n- No mínimo: 1 livro académico real + 1 relatório de organismo oficial (ONU, Banco Mundial, INE Moçambique, SADC)\n- Após a lista de referências reais, adiciona SEMPRE esta nota: "[O autor deve completar com referências específicas consultadas durante a pesquisa]"\n- NUNCA adiciona aviso de que as referências são fictícias — em vez disso, só lista referências reais ou deixa a nota acima`
-    : `\n\n---PAGE_BREAK---\n## ${numCaps + 3}. Referências Bibliográficas\n\nINSTRUÇÃO PARA AS REFERÊNCIAS (nível ${data.nivel}, formato simplificado — sem exigência de APA 7 completo):\n- Lista 2 a 3 fontes simples e plausíveis para este nível (manual escolar da disciplina, livro de apoio, ou sítio educativo oficial)\n- Formato simples: Nome do livro/manual, autor ou editora se conhecido, ano\n- Se não tiver certeza de uma fonte real, escreve apenas o nome do manual/disciplina sem inventar autor ou ano`;
+    ? `\n\n---PAGE_BREAK---\n## ${numCaps + 3}. Referências Bibliográficas\n\nINSTRUÇÃO CRÍTICA PARA AS REFERÊNCIAS — LEIA COM ATENÇÃO:\n- SÓ liste uma referência se tiver a certeza de que ela existe realmente (autor, título, editora e ano correctos e verificáveis). Não há número mínimo de referências exigido.\n- É TERMINANTEMENTE PROIBIDO inventar autor, título, editora ou ano só para a entrada parecer credível — isso inclui "referências genéricas plausíveis" como relatórios do Banco Mundial, INE, ONU, SADC, etc. que não tem a certeza de terem sido publicados exactamente com esse título/ano.\n- Formato APA 7ª edição para as referências que incluir.${fonteOcr}\n- No final da lista (mesmo que vazia), adiciona SEMPRE esta nota: "[O autor deve completar/confirmar estas referências com as fontes efectivamente consultadas durante a pesquisa]"\n- Se não tiver NENHUMA referência de que tenha a certeza, deixe a lista vazia e escreva apenas essa nota — isso é preferível a inventar referências.`
+    : `\n\n---PAGE_BREAK---\n## ${numCaps + 3}. Referências Bibliográficas\n\nINSTRUÇÃO PARA AS REFERÊNCIAS (nível ${data.nivel}, formato simplificado — sem exigência de APA 7 completo):\n- Só mencione uma fonte (manual escolar, livro de apoio, sítio educativo) se tiver a certeza de que existe realmente — não invente autor, editora ou ano.${fonteOcr}\n- Se não tiver certeza de nenhuma fonte real, escreva apenas o nome geral do manual/disciplina usado nas aulas, sem inventar detalhes.`;
 
   return `${profile.persona} Redija um TRABALHO ACADÉMICO COMPLETO, EXTENSO E DETALHADO seguindo exactamente a estrutura abaixo.
 
@@ -192,7 +215,7 @@ REGRAS ABSOLUTAS DE CONTEÚDO:
 REGRAS DE QUALIDADE (violações tornam o documento inaceitável):
 - NUNCA repita o mesmo parágrafo ou ideia em secções diferentes — cada secção deve trazer conteúdo NOVO
 - NUNCA use linguagem genérica: "crescimento sustentável", "uma das principais", "de extrema importância" são proibidas
-- NUNCA inclua referências bibliográficas fictícias — se não tens referências reais, usa a fórmula indicada no fim
+- NUNCA inclua referências bibliográficas fictícias — se não tens referências reais de que tenhas a certeza, NÃO invente nenhuma; usa apenas a fórmula/nota indicada na secção de referências
 - SEMPRE escreve texto académico denso, com dados, datas, nomes e exemplos concretos (respeitando o registo de linguagem do nível)
 - Cada parágrafo tem EXACTAMENTE 1 ideia principal desenvolvida em ${profile.paragrafoLinhas} linhas
 
@@ -200,7 +223,8 @@ ESTRUTURA OBRIGATÓRIA (copie exactamente incluindo ---PAGE_BREAK---):
 
 ---PAGE_BREAK---
 # ${data.tema}
-${_capaDocumento(data)}
+
+[NÃO escreva mais NADA nesta página — nem tabela, nem "Instituição:", nem nome do aluno, nem docente, nem data. O sistema insere automaticamente, a seguir ao título, um bloco de identificação já formatado com os dados reais do formulário. Qualquer texto que escrever aqui é substituído e descartado — não desperdice espaço a tentar reproduzi-lo.]
 ---PAGE_BREAK---
 ## Índice
 
@@ -287,7 +311,8 @@ ESTRUTURA OBRIGATÓRIA (siga exactamente esta ordem de secções):
 
 ---PAGE_BREAK---
 # ${data.tema}
-${_capaDocumento(data)}
+
+[NÃO escreva mais nada nesta página — nem tabela, nem nome da escola, nem nome do(a) aluno(a). O sistema já insere automaticamente essa informação a seguir ao título, com os dados reais preenchidos no formulário.]
 ${indiceBlock}${corpoSeccoes}
 `;
 }
