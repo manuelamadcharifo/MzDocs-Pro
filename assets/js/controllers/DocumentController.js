@@ -37,6 +37,7 @@ import { getTemplates } from '../marketplace/TemplateLibrary.js';
 import { authManager } from '../auth/AuthManager.js';
 import { Analytics } from '../analytics/Analytics.js';
 import { showUsageLimitModal } from '../components/UsageLimitModal.js';
+import { normalizeTrabalhoCover } from '../utils/CoverNormalizer.js';
 
 // ─── documentState: single source of truth for generated content ─────────────
 export const documentState = {
@@ -137,7 +138,7 @@ export class DocumentController {
      if (!templates.length) {
        if (!content) { _notifyInline('Gere um documento primeiro.'); return; }
        import('../components/PDFExporter.js')
-         .then(({ pdfExporter }) => pdfExporter.export(content, `mzdocs-${key || 'doc'}-${Date.now()}.pdf`, {}))
+         .then(({ pdfExporter }) => pdfExporter.export(content, `${this._buildFilename(svc)}.pdf`, {}))
          .catch(err => console.error('[btnTemplate] PDF export:', err));
        return;
      }
@@ -607,6 +608,15 @@ export class DocumentController {
   throw new Error('A IA devolveu uma resposta vazia. Tente novamente.');
  }
 
+ // CORRIGIDO: a capa de "Trabalho Escolar" depende de a IA reproduzir bem
+ // um bloco de identificação — modelos gratuitos por vezes ignoram o
+ // formato pedido e geram uma tabela feia com placeholders em vez dos
+ // dados reais já preenchidos no formulário. Substitui-se aqui sempre por
+ // um bloco construído a partir dos dados reais — ver CoverNormalizer.js.
+ if (key === 'trabalho') {
+  result.document = normalizeTrabalhoCover(result.document, data);
+ }
+
  // CORRIGIDO v2.5: consume() era chamado DEPOIS de applyServerDeduction().
  // Quando o ultimo credito era usado, applyServerDeduction(0) punha credits=0,
  // e entao consume() chamava canConsume() → 0 >= 1 → false → INSUFFICIENT_CREDITS.
@@ -758,6 +768,12 @@ export class DocumentController {
 
   if (!result?.document) {
    throw new Error('A geração não devolveu conteúdo. Tente novamente.');
+  }
+
+  // Mesma correcção da capa aplicada em _generateNormal — ver
+  // CoverNormalizer.js e o comentário equivalente mais acima neste ficheiro.
+  if (key === 'trabalho') {
+   result.document = normalizeTrabalhoCover(result.document, data);
   }
 
   if (typeof result.creditsRemaining === 'number') {
@@ -1219,6 +1235,40 @@ export class DocumentController {
  return { ...base, ...(extra[this.docModel.service] || {}) };
  }
 
+ // CORRIGIDO: o nome do ficheiro descarregado era sempre
+ // "mzdocs-<serviço>-<timestamp>" (ex.: "mzdocs-trabalho-1735599999123")
+ // — nada identificável para o utilizador reencontrar o ficheiro depois,
+ // e sem qualquer branding. Agora usa o padrão pedido:
+ //   "MzDocs Pro - <Tipo de Documento> - <Título/Tema> - MZDOCS PRO"
+ // (ex.: "MzDocs Pro - Trabalho Escolar - A Importância dos Direitos
+ // Fundamentais no Estado de Direito - MZDOCS PRO"). Quando não há
+ // título/tema disponível (documentos sem esse campo), o nome fica só
+ // "MzDocs Pro - <Tipo de Documento> - MZDOCS PRO".
+ _buildFilename(svc) {
+ const meta = this._buildExportMetadata(svc);
+ const data = this.docModel.formData || {};
+ const tipoDoc = meta.title || svc?.title || 'Documento';
+ const titulo = meta.subtitulo || meta.nomeNegocio || data.tema || data.nome || '';
+
+ const parts = ['MzDocs Pro', tipoDoc];
+ if (titulo) parts.push(titulo);
+ parts.push('MZDOCS PRO');
+
+ return this._sanitizeFilename(parts.join(' - '));
+ }
+
+ // Remove caracteres inválidos em nomes de ficheiro (Windows/macOS/Linux:
+ // / \ : * ? " < > |), colapsa espaços repetidos e limita o comprimento
+ // total para evitar erros de "nome de ficheiro demasiado longo" em
+ // trabalhos com títulos muito extensos.
+ _sanitizeFilename(name) {
+ const cleaned = String(name)
+  .replace(/[\/\\:*?"<>|]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+ return cleaned.length > 150 ? cleaned.slice(0, 150).trim() : cleaned;
+ }
+
  _removeExportMenu() {
  document.getElementById('exportMenu')?.remove();
  if (this._menuOutside) {
@@ -1353,7 +1403,7 @@ export class DocumentController {
  NotificationView.info('⏳ A preparar PDF…');
  try {
    const svc      = SERVICES[this.docModel.service];
-   const filename = `mzdocs-${this.docModel.service}-${Date.now()}`;
+   const filename = this._buildFilename(svc);
    const activeHtml = this._activeTemplateHtml || null;
    const activeCss  = this._activeTemplate?.css || null;
 
@@ -1423,7 +1473,7 @@ export class DocumentController {
  NotificationView.info('⏳ A gerar Word…');
  try {
  const svc      = SERVICES[this.docModel.service];
- const filename = `mzdocs-${this.docModel.service}-${Date.now()}`;
+ const filename = this._buildFilename(svc);
  const tpl      = this._activeTemplate;
 
  if (tpl?.htmlTemplate || tpl?.css) {
@@ -1462,7 +1512,7 @@ export class DocumentController {
  const svc = SERVICES[this.docModel.service];
  await new ExcelExporter().export(
   this.docModel.content,
-  `mzdocs-${this.docModel.service}-${Date.now()}.xlsx`,
+  `${this._buildFilename(svc)}.xlsx`,
   { title: svc?.title || 'Documento' }
  );
  NotificationView.success('✅ Excel descarregado!');
