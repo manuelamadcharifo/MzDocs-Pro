@@ -1731,8 +1731,19 @@ async function handleUserTimeline(req, res) {
       return res.status(400).json({ error: 'userId inválido' });
     }
 
-    const profile = await selectOne('profiles', 'id', userId,
-      'id,full_name,phone,email,created_at,visitor_id,credits,account_type,is_admin,is_blocked,referred_by,total_documents');
+    // NOVO — v66: free_documents_used opcional na selecção — se a migração
+    // v66 ainda não tiver corrido neste ambiente, a coluna não existe e o
+    // PostgREST devolve erro; nesse caso repetimos sem ela em vez de deixar
+    // a timeline inteira em erro por causa de um campo extra.
+    let profile;
+    try {
+      profile = await selectOne('profiles', 'id', userId,
+        'id,full_name,phone,email,created_at,visitor_id,credits,account_type,is_admin,is_blocked,referred_by,total_documents,free_documents_used');
+    } catch (e) {
+      console.warn('[admin/user-timeline] free_documents_used indisponível (migration_v66?):', e.message);
+      profile = await selectOne('profiles', 'id', userId,
+        'id,full_name,phone,email,created_at,visitor_id,credits,account_type,is_admin,is_blocked,referred_by,total_documents');
+    }
 
     if (!profile) {
       return res.status(404).json({ error: 'Utilizador não encontrado' });
@@ -1775,6 +1786,10 @@ async function handleUserTimeline(req, res) {
         credits: profile.credits, account_type: profile.account_type,
         is_admin: profile.is_admin, is_blocked: profile.is_blocked,
         has_visitor_link: !!profile.visitor_id,
+        // NOVO — v66: null se a coluna não existir nesta BD (ver fallback
+        // acima) — o frontend só mostra o badge quando não é null/undefined.
+        free_documents_used: profile.free_documents_used ?? null,
+        referred_by: profile.referred_by ?? null,
       },
       timeline,
     });
