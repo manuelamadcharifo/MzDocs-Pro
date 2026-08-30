@@ -101,8 +101,28 @@ const DEFAULT_CSS = `
 // padding do body passa a 0 (a margem física já vem do @page — manter os
 // dois ao mesmo tempo duplicava o espaço em branco no topo).
 function _extractPageMargin(css) {
-  const m = css && css.match(/body\s*{[^}]*padding\s*:\s*([^;}]+)[;}]/i);
-  return (m && m[1].trim()) || '20mm 25mm 20mm 25mm';
+  // CORRIGIDO (bug: PDF descarregado sai SEM margem nenhuma — texto colado
+  // ao topo e à esquerda da folha em TODAS as páginas, mesmo com o preview
+  // a mostrar margem certa): a regex antiga só procurava a PRIMEIRA
+  // ocorrência de "body{...padding...}" na CSS. DEFAULT_PAGE_CSS
+  // (A4Renderer.js) tem DUAS declarações que batem com esse padrão —
+  // "html,body{margin:0;padding:0;height:100%;}" (adicionada depois, para
+  // um fix de sidebar) APARECE PRIMEIRO e já contém "padding:0", por isso
+  // era essa a capturada — nunca a regra real mais abaixo,
+  // "body{...padding:30mm 25mm 25mm 30mm;}". O resultado: @page margin
+  // ficava "0", zerando a margem física do PDF em todas as folhas.
+  // Corrigido para percorrer TODAS as ocorrências de "body{...}" e ficar
+  // com a ÚLTIMA que definir padding — replica a cascata real do CSS (a
+  // declaração mais tardia é a que o browser aplica quando a especificidade
+  // é igual), pelo que passa a apanhar sempre a margem real do template.
+  if (!css) return '20mm 25mm 20mm 25mm';
+  const blocks = css.match(/body\s*{[^}]*}/gi) || [];
+  let margin = null;
+  for (const block of blocks) {
+    const m = block.match(/padding\s*:\s*([^;}]+)[;}]/i);
+    if (m) margin = m[1].trim();
+  }
+  return margin || '20mm 25mm 20mm 25mm';
 }
 
 // ── Exportador ─────────────────────────────────────────────────────────
