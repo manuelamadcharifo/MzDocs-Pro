@@ -1469,6 +1469,13 @@ export class DocumentController {
          templateCss: DEFAULT_PAGE_CSS,
          title: filename, // CORRIGIDO: ver nota acima (nome completo, não svc.title)
          meta: this._buildExportMetadata(svc),
+         // NOVO: numeração de página real em cada folha — pedida
+         // explicitamente para "Trabalho Escolar". Activada só neste
+         // caminho (documentos sem template de marketplace), não nos
+         // outros dois export() acima, para não sobrepor rodapés já
+         // desenhados de propósito em templates reais (CVs, cartas
+         // timbradas, etc.).
+         pageNumbers: true,
        });
        NotificationView.success('✅ Abre a janela de impressão e escolhe "Guardar como PDF"!');
        this._maybeShowRatingPrompt();
