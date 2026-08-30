@@ -30,8 +30,8 @@ export class OpenRouterService {
   }
 
   async generate(serviceType, formData, ocrText = null, credits = null, cost = 1, templateData = null, pickerTemplate = null) {
-    const { prompt, tokenMap } = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
-    const result = await this._callBackend(serviceType, prompt, credits, cost);
+    const { prompt, tokenMap, maxTokensHint } = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
+    const result = await this._callBackend(serviceType, prompt, credits, cost, maxTokensHint);
     return this._unmaskResult(result, tokenMap);
   }
 
@@ -176,7 +176,7 @@ export class OpenRouterService {
     return await res.json();
   }
 
-  async _callBackend(serviceType, prompt, credits = null, cost = 1) {
+  async _callBackend(serviceType, prompt, credits = null, cost = 1, maxTokensHint = null) {
     const userId = localStorage.getItem('mz_uid') || 'anon';
 
     // Obter token JWT para autenticação no servidor
@@ -247,6 +247,12 @@ export class OpenRouterService {
         // disparar para este pedido.
         cost: wasFree ? 0 : cost, // permite ao servidor reembolsar automaticamente este custo se a geração falhar
         _operationId: operationId, // P1-08: liga um eventual reembolso à mesma dedução acima
+        // NOVO: tecto de tokens sugerido, calculado a partir do nº de
+        // páginas pedido (só "trabalho" o preenche — ver _buildPrompt
+        // acima). O servidor NUNCA confia cegamente neste valor (é só uma
+        // sugestão vinda do browser) — valida-o e usa sempre um tecto fixo
+        // se estiver ausente, fora dos limites ou não for um número.
+        _maxTokensHint: maxTokensHint,
       }),
     });
 
@@ -431,7 +437,29 @@ INSTRUCAO CRITICA: Preencha o modelo acima com os dados reais. NAO gere um docum
     const basePrompt = builder(data, ocrBlock, legalContext);
     // Injectar bloco de template no início do prompt (antes das instruções)
     const finalPrompt = templateBlock ? templateBlock + '\n\n' + basePrompt : basePrompt;
-    return { prompt: finalPrompt, tokenMap };
+
+    // NOVO — tecto de tokens calculado MATEMATICAMENTE a partir do nº de
+    // páginas de desenvolvimento pedido (só "Trabalho Escolar", o único
+    // serviço cujo tamanho varia livremente por escolha do utilizador —
+    // 2 a 30 páginas). Antes, o servidor usava sempre um tecto fixo de
+    // 8192 tokens, igual para um pedido de 3 páginas ou de 30 — nunca
+    // "desperdiçava" tokens por si só (max_tokens é só um tecto, não uma
+    // obrigação de gastar), mas também não dava ao servidor nenhuma pista
+    // sobre quão grande a resposta deveria realmente ser. Ver
+    // trabalho.js:estimateWordBudget() para a fórmula (páginas pedidas +
+    // capa/folha de rosto/resumo/índice/introdução/conclusão/referências,
+    // à mesma densidade de palavras/página calibrada por nível) e
+    // api/generate-document.js para a conversão palavras→tokens e os
+    // limites de segurança aplicados no servidor.
+    let maxTokensHint = null;
+    if (type === 'trabalho') {
+      try {
+        const { estimateWordBudget } = await import('./prompts/trabalho.js');
+        maxTokensHint = estimateWordBudget(data);
+      } catch (_) { /* falha a estimar — servidor usa o tecto fixo de sempre */ }
+    }
+
+    return { prompt: finalPrompt, tokenMap, maxTokensHint };
   }
 
   // ── Dados específicos por tipo de documento para prompt HTML ─────────────
