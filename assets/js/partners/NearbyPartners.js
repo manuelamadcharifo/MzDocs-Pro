@@ -60,10 +60,20 @@ function selectPartner(el) {
   // em /api/partners?action=create-booking antes de abrir o WhatsApp.
   window._mzSelectedPartnerId   = el.dataset.id || null;
 
-  const btnWa = document.getElementById('btnWaDirect');
-  if (btnWa) btnWa.disabled = false;
-  const hint = document.getElementById('mzWaHint');
-  if (hint) hint.textContent = `✓ Pronto a enviar para ${window._mzSelectedPartnerName || 'a papelaria seleccionada'}`;
+  // CORRIGIDO: passou a existir um SEGUNDO botão "Enviar pelo WhatsApp"
+  // (#btnWaDirectResult, no ecrã de resultado — ver
+  // injectPartnerToggleIntoModal abaixo), além do já existente no
+  // formulário pré-geração (#btnWaDirect). Antes, isto só activava
+  // #btnWaDirect por id — no ecrã de resultado esse id nem existe, por
+  // isso seleccionar uma papelaria aí mostrava "✅ Papelaria seleccionada"
+  // no cartão mas não havia NENHUM botão para realmente enviar o pedido.
+  // Ambos os botões partilham a classe .btn-wa-direct (e as dicas a
+  // classe .mz-wa-hint), por isso activa/actualiza-se sempre os dois,
+  // exista um só ou os dois em simultâneo no DOM.
+  document.querySelectorAll('.btn-wa-direct').forEach(btnWa => { btnWa.disabled = false; });
+  document.querySelectorAll('.mz-wa-hint').forEach(hint => {
+    hint.textContent = `✓ Pronto a enviar para ${window._mzSelectedPartnerName || 'a papelaria seleccionada'}`;
+  });
 }
 
 // ── Reset da selecção (NOVO) ──────────────────────────────────────────────
@@ -74,10 +84,12 @@ function resetPartnerSelection() {
   window._mzSelectedPartnerWA   = null;
   window._mzSelectedPartnerName = null;
   window._mzSelectedPartnerId   = null;
-  const btnWa = document.getElementById('btnWaDirect');
-  if (btnWa) btnWa.disabled = true;
-  const hint = document.getElementById('mzWaHint');
-  if (hint) hint.textContent = '📍 Escolha uma papelaria abaixo para activar o envio';
+  // CORRIGIDO: ver nota em selectPartner() — repor os dois botões/dicas
+  // possíveis (form pré-geração + ecrã de resultado), não só um por id.
+  document.querySelectorAll('.btn-wa-direct').forEach(btnWa => { btnWa.disabled = true; });
+  document.querySelectorAll('.mz-wa-hint').forEach(hint => {
+    hint.textContent = '📍 Escolha uma papelaria abaixo para activar o envio';
+  });
 }
 
 // Rótulos dos serviços de papelaria — usados na mensagem "há papelarias
@@ -356,11 +368,24 @@ export function injectPartnerToggleIntoModal(containerSelector, { printService =
       <button class="cat-btn" type="button" data-np-tab="advogado">⚖️ Advogados</button>
     </div>
     <div id="npTogglePanel"></div>
+    <div id="npSendBlock" style="margin-top:10px;">
+      <div id="mzWaHintResult" class="mz-wa-hint">📍 Escolha uma papelaria abaixo para activar o envio</div>
+      <button id="btnWaDirectResult" class="btn-wa btn-wa-direct" type="button" disabled>
+        <span>📱 Enviar pedido pelo WhatsApp</span>
+        <small>Grátis</small>
+      </button>
+    </div>
   `;
 
   const tabs = container.querySelectorAll('[data-np-tab]');
+  const sendBlock = container.querySelector('#npSendBlock');
   const showTab = (tab) => {
     tabs.forEach(b => b.classList.toggle('active', b.dataset.npTab === tab));
+    // NOVO: o botão de envio directo só faz sentido para papelarias — um
+    // advogado não recebe "pedidos" da mesma forma (é um contacto/
+    // referência, não uma encomenda de impressão) — por isso esconde-se
+    // na aba Advogados em vez de ficar ali desactivado sem explicação.
+    if (sendBlock) sendBlock.style.display = tab === 'papelaria' ? '' : 'none';
     if (tab === 'papelaria') {
       injectPartnersIntoModal(printService, '#npTogglePanel');
     } else {
