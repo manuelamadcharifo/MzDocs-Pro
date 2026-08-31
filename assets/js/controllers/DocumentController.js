@@ -1006,16 +1006,18 @@ export class DocumentController {
    }
  }
 
- // NOVO (v2.1 — área jurídica; Ago/2026 — alternador papelaria/advogado):
- // oferece papelarias (para imprimir o documento gerado — parceiro
- // PRINCIPAL por omissão) e advogados (revisão jurídica) para tipos de
- // documento onde isso faz sentido (ver LEGAL_DOC_TYPES). Mesmo padrão de
- // injecção usado no formulário para papelarias — cria um contentor e
- // delega em NearbyPartners.js para geolocalizar e buscar.
+ // NOVO (v2.1 — área jurídica; Ago/2026 — alternador papelaria/advogado;
+ // depois estendido a TODOS os documentos gerados, a pedido): mostra
+ // sempre o alternador Papelarias/Advogados no ecrã de resultado —
+ // Papelarias como parceiro PRINCIPAL por omissão (imprimir o que acabou
+ // de gerar é útil para qualquer documento, não só os jurídicos), com
+ // Advogados sempre disponível a um toque. Antes, este bloco inteiro só
+ // aparecia para os tipos de documento em LEGAL_DOC_TYPES (procuração,
+ // arrendamento, etc.) — passa a aparecer sempre; LEGAL_DOC_TYPES
+ // continua a decidir apenas a ESPECIALIDADE do filtro de advogados
+ // (ex.: "civil" para procuração), não se o bloco aparece ou não.
  _showLawyerReferral(key) {
    try {
-     if (!(key in LEGAL_DOC_TYPES)) return;
-
      document.getElementById('mzLawyerBlock')?.remove();
      const resActions = document.getElementById('resActions');
      if (!resActions) return;
@@ -1036,7 +1038,7 @@ export class DocumentController {
      // mesmo havendo papelarias próximas que imprimem perfeitamente.
      injectPartnerToggleIntoModal('#mzLawyerBlock', {
        printService: 'impressao',
-       specialty: LEGAL_DOC_TYPES[key],
+       specialty: LEGAL_DOC_TYPES[key] || '', // '' = advogados de qualquer área (documentos fora de LEGAL_DOC_TYPES)
      });
    } catch (err) {
      console.warn('[DocumentController] _showLawyerReferral:', err.message);
