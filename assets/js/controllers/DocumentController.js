@@ -1618,13 +1618,30 @@ export class DocumentController {
  // o link wa.me só consegue pré-preencher TEXTO — nunca anexa o PDF
  // automaticamente (o WhatsApp não expõe essa possibilidade a sites), por
  // isso o aviso abaixo lembra a pessoa de anexar o ficheiro à mão.
+ //
+ // CORRIGIDO (2ª ronda): a mensagem ainda despejava os primeiros 1000
+ // caracteres do CONTEÚDO do documento como texto solto — além de sair
+ // com a formatação Markdown meio partida (títulos a virarem "*" a meio
+ // de palavras, "---PAGE_BREAK---" à mistura), não fazia sentido nenhum
+ // mandar um "resumo em texto" de um documento que a pessoa vai enviar a
+ // seguir em PDF — é informação a mais, feia, e nada preparada para quem
+ // recebe. A mensagem passa a: (1) avisar claramente que o FICHEIRO vem a
+ // seguir (nunca finge que o texto É o documento); (2) ser uma cópia
+ // curta pensada para CONVERTER quem recebe — se quem lê ainda não é
+ // utilizador do MzDocs Pro, fica a saber o que é e como experimentar
+ // grátis. Inclui o link de afiliado da própria pessoa quando tem sessão
+ // iniciada (mesmo link/formato de _showReferralCTA, mais abaixo) — quem
+ // se registar a partir daqui também conta para os créditos de afiliado.
  sendWA() {
  if (!this.docModel.content) return;
  const svc = SERVICES[this.docModel.service];
- const preview = this.docModel.content.slice(0, 1000).replace(/#{1,3} /g, '*').replace(/---PAGE_BREAK---\n?/g, '');
- const msg = `📄 *${svc?.title || 'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`;
+ const user = window.authManager?.user;
+ const refLink = (user && !user.is_anonymous)
+   ? `https://mzdocs.co.mz?ref=${(user.id || '').slice(0, 8).toUpperCase()}`
+   : 'https://mzdocs.co.mz';
+ const msg = `📄 Acabei de criar um(a) *${svc?.title || 'documento'}* em minutos com o *MzDocs Pro* — vou enviar o PDF a seguir nesta conversa.\n\n✨ Documentos profissionais com IA, prontos em menos de 2 minutos, sem sair de casa. O primeiro é GRÁTIS!\n👉 ${refLink}`;
  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
- NotificationView.info('📎 Não esqueça de anexar o PDF descarregado à conversa — o WhatsApp não permite a sites anexarem ficheiros automaticamente.');
+ NotificationView.info('📎 Descarregue o PDF (botão Download) e anexe-o a esta conversa — o WhatsApp não permite a sites anexarem ficheiros automaticamente.');
  }
 
  // NOVO: envio de um PEDIDO DE IMPRESSÃO a uma papelaria já seleccionada,
