@@ -443,6 +443,15 @@ export class HistoryController {
       if (model) model.textContent = doc.model_used || '';
 
       ctrl?._bindEditBtn?.();
+      // NOVO: o alternador Papelarias/Advogados (ver
+      // DocumentController.js:_showLawyerReferral) só aparecia logo a
+      // seguir a GERAR um documento — abrir o mesmo documento mais tarde
+      // a partir do Arquivo (este caminho) nunca o mostrava, mesmo sendo
+      // exactamente o mesmo ecrã de resultado. doc.service_type é o
+      // mesmo id de serviço usado na geração original (ex.: 'trabalho',
+      // 'procuracao'), por isso a especialidade de advogado certa
+      // continua a ser escolhida correctamente também aqui.
+      ctrl?._showLawyerReferral?.(doc.service_type);
     });
   }
 
