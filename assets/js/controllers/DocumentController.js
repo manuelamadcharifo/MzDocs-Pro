@@ -9,7 +9,7 @@ import { DocumentModel, QueueModel } from '../models/Models.js';
 import { DocumentView, ModalView, NotificationView } from '../views/Views.js';
 import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
-import { injectPartnersIntoModal, injectLawyersIntoModal } from '../partners/NearbyPartners.js';
+import { injectPartnersIntoModal, injectPartnerToggleIntoModal } from '../partners/NearbyPartners.js';
 import { buildConverterHTML, initConverter } from '../convert/FileConverter.js';
 import { LongDocumentEngine } from '../services/LongDocumentEngine.js';
 import { Validator } from '../utils/Formatter.js';
@@ -1006,10 +1006,12 @@ export class DocumentController {
    }
  }
 
- // NOVO (v2.1 — área jurídica): oferece revisão de um advogado parceiro
- // para tipos de documento onde isso faz sentido (ver LEGAL_DOC_TYPES).
- // Mesmo padrão de injecção usado no formulário para papelarias — cria um
- // contentor e delega em NearbyPartners.js para geolocalizar e buscar.
+ // NOVO (v2.1 — área jurídica; Ago/2026 — alternador papelaria/advogado):
+ // oferece papelarias (para imprimir o documento gerado — parceiro
+ // PRINCIPAL por omissão) e advogados (revisão jurídica) para tipos de
+ // documento onde isso faz sentido (ver LEGAL_DOC_TYPES). Mesmo padrão de
+ // injecção usado no formulário para papelarias — cria um contentor e
+ // delega em NearbyPartners.js para geolocalizar e buscar.
  _showLawyerReferral(key) {
    try {
      if (!(key in LEGAL_DOC_TYPES)) return;
@@ -1024,7 +1026,18 @@ export class DocumentController {
      block.style.cssText = 'margin:12px 16px 4px;';
      resActions.parentNode.insertBefore(block, resActions);
 
-     injectLawyersIntoModal('#mzLawyerBlock', LEGAL_DOC_TYPES[key]);
+     // CORRIGIDO: a aba "Papelarias" tem de filtrar pelo serviço real de
+     // papelaria ('impressao' — Impressão), NUNCA pelo id do tipo de
+     // documento (`key`, ex.: 'trabalho', 'procuracao') — esses ids não
+     // existem na lista de serviços que uma papelaria oferece
+     // (SERVICE_LABEL em NearbyPartners.js é impressao/foto/
+     // plastificacao/encadernacao), por isso passar `key` directamente
+     // faria a busca achar sempre "nenhuma papelaria faz este serviço",
+     // mesmo havendo papelarias próximas que imprimem perfeitamente.
+     injectPartnerToggleIntoModal('#mzLawyerBlock', {
+       printService: 'impressao',
+       specialty: LEGAL_DOC_TYPES[key],
+     });
    } catch (err) {
      console.warn('[DocumentController] _showLawyerReferral:', err.message);
    }
