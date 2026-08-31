@@ -1,4 +1,5 @@
 // tests/ocrSchemaAlignment.test.js
+// tests/ocrSchemaAlignment.test.js
 //
 // Formaliza, como teste automatizado, a verificação manual feita ao
 // corrigir o bug em que a IA de OCR extraía 95% de confiança de uma
@@ -93,6 +94,15 @@ describe('Alinhamento entre formulário real e schema de extracção OCR', () =>
   const KNOWN_OCR_GAPS = {
     recibo: ['itens'],
     transcricao: ['tipo', 'organizacao'],
+    // 'trabalho' (Trabalho Escolar): 'extras' é a escolha do PRÓPRIO
+    // UTILIZADOR de quais secções pré-textuais opcionais incluir
+    // (Dedicatória/Agradecimentos/Epígrafe — ver ServiceDefinitions.js e
+    // services/prompts/trabalho.js) — não é informação que exista no
+    // material fotografado (um rascunho/enunciado do trabalho), é uma
+    // preferência sobre a ESTRUTURA do documento final. Mesmo raciocínio
+    // já documentado acima para 'organizacao' em 'transcricao': pedir à IA
+    // de OCR para adivinhar isto a partir de fotos não faz sentido.
+    trabalho: ['extras'],
   };
 
   test('todos os serviços com schema OCR existem em ServiceDefinitions.js', () => {
