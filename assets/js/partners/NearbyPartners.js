@@ -333,6 +333,44 @@ export function buildLawyersHTML(lawyers) {
 }
 
 // ── Bloco de loading ──────────────────────────────────────────────────────
+// ── Alternador Papelaria/Advogado no ecrã de resultado (NOVO) ─────────────
+// Pedido explícito: na mesma zona onde antes só aparecia o bloco de
+// advogados (para documentos em LEGAL_DOC_TYPES), a pessoa que acabou de
+// gerar o documento também pode querer simplesmente imprimi-lo — por isso
+// passa a haver um alternador entre "Papelarias" e "Advogados", com
+// Papelarias marcado como parceiro PRINCIPAL por omissão (é o caso mais
+// comum logo a seguir a gerar um documento) e Advogados como opção à
+// distância de um toque — mesmo princípio visual dos filtros de categoria
+// da homepage (.cat-filters/.cat-btn, index.html), reaproveitados aqui tal
+// e qual para a pessoa reconhecer o mesmo padrão de interacção.
+// Não reimplementa a busca: delega sempre em injectPartnersIntoModal() /
+// injectLawyersIntoModal(), já existentes e já testados — só troca qual
+// delas escreve no painel interno consoante a aba activa.
+export function injectPartnerToggleIntoModal(containerSelector, { printService = 'impressao', specialty = '' } = {}) {
+  const container = document.querySelector(containerSelector);
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="cat-filters np-toggle-tabs" style="padding-bottom:0;margin-bottom:10px;overflow-x:visible">
+      <button class="cat-btn active" type="button" data-np-tab="papelaria">🖨️ Papelarias</button>
+      <button class="cat-btn" type="button" data-np-tab="advogado">⚖️ Advogados</button>
+    </div>
+    <div id="npTogglePanel"></div>
+  `;
+
+  const tabs = container.querySelectorAll('[data-np-tab]');
+  const showTab = (tab) => {
+    tabs.forEach(b => b.classList.toggle('active', b.dataset.npTab === tab));
+    if (tab === 'papelaria') {
+      injectPartnersIntoModal(printService, '#npTogglePanel');
+    } else {
+      injectLawyersIntoModal('#npTogglePanel', specialty);
+    }
+  };
+  tabs.forEach(btn => btn.addEventListener('click', () => showTab(btn.dataset.npTab)));
+  showTab('papelaria'); // papelaria fica marcada como parceiro principal por omissão — ver nota acima
+}
+
 export function buildLoadingHTML(label = 'A procurar parceiras próximas…') {
   return `<div class="np-loading">
     <div class="np-spin"></div>
