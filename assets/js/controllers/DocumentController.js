@@ -55,22 +55,16 @@ export const documentState = {
 };
 if (typeof window !== 'undefined') window.documentState = documentState;
 
-
-// CORRIGIDO (Junho/2026): hard-coded, desligado de whatsapp_support em
-// system_settings. WA_NUMBER() é uma função (não uma constante) para
-// poder ler window._mzConfig em cada chamada, já actualizado por app.js
-// a partir de /api/config — evita depender da ordem de carregamento dos
-// módulos (este ficheiro pode executar antes ou depois de app.js definir
-// window._mzConfig, dependendo de quando o utilizador interage).
-function WA_NUMBER() {
-  const raw = window._mzConfig?.whatsappSupport;
-  if (raw) {
-    const digits = String(raw).replace(/\D/g, '');
-    if (digits.length === 9) return `258${digits}`;
-    if (digits.length >= 11) return digits;
-  }
-  return '258858695506'; // fallback — antes da config carregar ou se ausente
-}
+// CORRIGIDO (Ago/2026 — "envia sempre para o número da plataforma em vez
+// de deixar escolher"): esta função existia para dar a sendWA() (botão
+// genérico "WhatsApp" do ecrã de resultado) o número de suporte da
+// própria plataforma — mas sendWA() nunca devia ter usado o número da
+// plataforma para começo (ver nota em sendWA(), mais abaixo), por isso
+// deixou de ser chamada em qualquer lado deste ficheiro. Removida por
+// estar morta — se algum dia for preciso contactar o suporte a partir
+// daqui, PaymentService.js já mantém a sua própria WA_NUMBER (correcta
+// nesse contexto: confirmações de pagamento devem mesmo ir para o
+// suporte, ao contrário de partilhar um documento gerado).
 
 export class DocumentController {
  constructor(creditModel) {
@@ -128,6 +122,19 @@ export class DocumentController {
   if (e.target.closest('#btnGen'))      { e.preventDefault(); this.generate(); }
   else if (e.target.closest('#btnWaDirect')) { e.preventDefault(); this.sendDirect(); }
   else if (e.target.closest('#btnPreview'))  { e.preventDefault(); this.previewDocument(); }
+ });
+
+ // NOVO: botão "Enviar pedido pelo WhatsApp" do alternador Papelarias/
+ // Advogados no ECRÃ DE RESULTADO (#btnWaDirectResult, dentro de
+ // #mzLawyerBlock — ver _showLawyerReferral/NearbyPartners.js). Este
+ // bloco é recriado a cada documento gerado (.remove() + recriação — ver
+ // _showLawyerReferral), por isso, tal como o comentário acima explica
+ // para #btnGen/#btnWaDirect/#btnPreview, um listener ligado directamente
+ // ao botão ficaria "preso" ao nó antigo já removido. Delegado em
+ // `document` (mesmo padrão já usado em NearbyPartners.js para os
+ // data-action) para sobreviver a qualquer nº de recriações do bloco.
+ document.addEventListener('click', e => {
+  if (e.target.closest('#btnWaDirectResult')) { e.preventDefault(); this.sendDirectForGeneratedDoc(); }
  });
 
    document.getElementById('btnTemplate')?.addEventListener('click', () => {
@@ -1600,12 +1607,87 @@ export class DocumentController {
    window.documentEditor._docController = this;
  }
 
+ // CORRIGIDO: este botão genérico "WhatsApp" (barra de acções do
+ // resultado — Download/Copiar/WhatsApp) abria uma conversa com
+ // WA_NUMBER() — o número de SUPORTE DA PRÓPRIA PLATAFORMA — em vez de
+ // deixar a pessoa escolher para quem enviar. `https://wa.me/?text=...`
+ // SEM número (em vez de `https://wa.me/${WA_NUMBER()}?text=...`) abre o
+ // selector de contactos do WhatsApp, exactamente como o botão de
+ // convite/referral já fazia correctamente mais abaixo neste mesmo
+ // ficheiro (_showReferralCTA). Mantém-se a limitação técnica de sempre:
+ // o link wa.me só consegue pré-preencher TEXTO — nunca anexa o PDF
+ // automaticamente (o WhatsApp não expõe essa possibilidade a sites), por
+ // isso o aviso abaixo lembra a pessoa de anexar o ficheiro à mão.
  sendWA() {
  if (!this.docModel.content) return;
  const svc = SERVICES[this.docModel.service];
- const preview = this.docModel.content.slice(0, 1000).replace(/#{1,3} /g, '*');
+ const preview = this.docModel.content.slice(0, 1000).replace(/#{1,3} /g, '*').replace(/---PAGE_BREAK---\n?/g, '');
  const msg = `📄 *${svc?.title || 'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`;
- window.open(`https://wa.me/${WA_NUMBER()}?text=${encodeURIComponent(msg)}`, '_blank');
+ window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+ NotificationView.info('📎 Não esqueça de anexar o PDF descarregado à conversa — o WhatsApp não permite a sites anexarem ficheiros automaticamente.');
+ }
+
+ // NOVO: envio de um PEDIDO DE IMPRESSÃO a uma papelaria já seleccionada,
+ // a partir do ecrã de RESULTADO (documento já gerado) — distinto de
+ // sendDirect(), que serve o fluxo ANTES de gerar (serviços sem IA como
+ // "Foto para Documentos", onde ainda se está a preencher o formulário).
+ // sendDirect() não dava para reaproveitar aqui: lê os dados de um
+ // formulário que já está fechado neste ponto (DocumentView.collectData
+ // sobre campos que já não existem no DOM), por isso a mensagem sairia
+ // vazia ou com dados antigos. Aqui a mensagem parte antes do
+ // this.docModel (o documento já gerado), não de um formulário.
+ sendDirectForGeneratedDoc() {
+  if (!window._mzSelectedPartnerWA) {
+   NotificationView.warn('⚠️ Selecione uma papelaria da lista antes de enviar.');
+   return;
+  }
+  if (!this.docModel.content) return;
+
+  const svc = SERVICES[this.docModel.service];
+  const filename = this._buildFilename(svc);
+  const msg = `📋 *Pedido de impressão — MzDocs Pro*\n\n📄 Documento: ${svc?.title || 'Documento'}\n"${filename}"\n\nOlá! Gerei este documento no MzDocs Pro e gostava de o imprimir aí. Vou enviar o PDF a seguir nesta conversa.\n\n_Via MzDocs Pro_`;
+
+  const targetWA = window._mzSelectedPartnerWA;
+  const targetPartnerId = window._mzSelectedPartnerId;
+  const serviceKey = this.docModel.service;
+  window.open(`https://wa.me/${targetWA}?text=${encodeURIComponent(msg)}`, '_blank');
+  NotificationView.info('📎 Descarregue o PDF (botão Download) e anexe-o a esta conversa — o WhatsApp não permite a sites anexarem ficheiros automaticamente.');
+
+  // Mesmo registo de marcação/booking já usado por sendDirect() — ver
+  // nota equivalente aí sobre não bloquear o envio se isto falhar. Campos
+  // no mesmo esquema real da API (snake_case) que sendDirect() já usa —
+  // 'details' leva os dados do documento em vez de dados de formulário,
+  // já que aqui não há nenhum formulário aberto.
+  if (targetPartnerId) {
+   fetch('/api/partners?action=create-booking', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+     partner_id: targetPartnerId,
+     type: 'documento',
+     service: serviceKey,
+     client_name: window.authManager?.profile?.name || 'Cliente',
+     client_phone: '',
+     details: { titulo: svc?.title || '', ficheiro: filename },
+     preferred_date: null,
+     preferred_time: null,
+    }),
+   })
+    .then(r => r.json())
+    .then(resp => {
+     if (resp && resp.ok) {
+      NotificationView.success('✅ Pedido enviado! A papelaria vai confirmar o horário no Portal.');
+     }
+    })
+    .catch(() => { /* silencioso — o WhatsApp já foi enviado; isto é só o registo extra da marcação */ });
+  }
+
+  // Reset: mesma lógica de sendDirect() — ver nota lá.
+  window._mzSelectedPartnerWA = null;
+  window._mzSelectedPartnerName = null;
+  window._mzSelectedPartnerId = null;
+  document.querySelectorAll('.btn-wa-direct').forEach(btnWa => { btnWa.disabled = true; });
+  document.querySelectorAll('.np-card.np-selected').forEach(c => c.classList.remove('np-selected'));
  }
 
  sendDirect() {
@@ -1673,8 +1755,10 @@ export class DocumentController {
  window._mzSelectedPartnerWA = null;
  window._mzSelectedPartnerName = null;
  window._mzSelectedPartnerId = null;
- const btnWa = document.getElementById('btnWaDirect');
- if (btnWa) btnWa.disabled = true;
+ // CORRIGIDO: passou a poder existir um segundo botão (#btnWaDirectResult,
+ // no ecrã de resultado) — reset por classe .btn-wa-direct para apanhar
+ // sempre o botão certo, tal como já corrigido em NearbyPartners.js.
+ document.querySelectorAll('.btn-wa-direct').forEach(btnWa => { btnWa.disabled = true; });
  document.querySelectorAll('.np-card.np-selected').forEach(c => c.classList.remove('np-selected'));
  }
 
