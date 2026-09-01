@@ -318,6 +318,27 @@
   flex-shrink: 0;
 }
 
+/* NOVO: banner de estado do "documento grátis" (v66) — ver
+   DocumentEditor.js:_renderFreeDocBanner(). Duas variantes de cor: ainda
+   tem direito (verde, tom convidativo) ou já usou (azul neutro,
+   informativo, sem soar a "falta de créditos" alarmante). */
+.ed-freedoc-banner {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+.ed-freedoc-banner--ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+.ed-freedoc-banner--used {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .ed-title {
   margin: 0;
   font-size: 16px;
