@@ -87,6 +87,11 @@ export class CreditModel {
     constructor() {
         this.userId = Storage.getUserId();
         this.credits = 0;
+        // NOVO: estado do "documento grátis" (v66) — undefined até à 1ª
+        // sincronização com o servidor (_syncFromServer), nunca um valor
+        // adivinhado; ver DocumentEditor.js._renderFreeDocBanner().
+        this.freeDocsRemaining = undefined;
+        this.freeDocsAllowance = undefined;
         this.supabase = new SupabaseService();
         this._syncTimer = null;
     }
@@ -161,6 +166,14 @@ export class CreditModel {
                     Storage.set('credits', this.credits);
                     this._emit();
                 }
+            }
+            // NOVO: guarda o estado real do "documento grátis" (v66) — usado
+            // pelo banner do editor (DocumentEditor.js). Sem valor por
+            // omissão agressivo (undefined, não 0) para o banner conseguir
+            // distinguir "ainda não sincronizado" de "0 restantes reais".
+            if (data && typeof data.freeDocsRemaining === 'number') {
+                this.freeDocsRemaining = data.freeDocsRemaining;
+                this.freeDocsAllowance = data.freeDocsAllowance;
             }
         } finally {
             this._syncing = false;
