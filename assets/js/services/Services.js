@@ -604,7 +604,13 @@ export class SupabaseService {
     try {
       const { data, error } = await this._client
         .from('profiles')
-        .select('credits, plan, plan_expires_at, monthly_renewal_at')
+        // NOVO: free_documents_used/referred_by acrescentados ao select já
+        // existente (mesma linha, mesma política RLS — só se acrescentam
+        // colunas ao pedido, não se muda o que é permitido ler) para o
+        // banner do editor (DocumentEditor.js) poder mostrar quantos
+        // documentos grátis (v66 — migration_v66_first_document_free.sql)
+        // ainda restam nesta conta, sem inventar um endpoint novo.
+        .select('credits, plan, plan_expires_at, monthly_renewal_at, free_documents_used, referred_by')
         .eq('id', userId)
         .single();
 
@@ -613,6 +619,13 @@ export class SupabaseService {
         return null;
       }
       if (error) throw error;
+
+      // NOVO: mesma regra de negócio de grant_free_document() (v66) — 1
+      // documento grátis para contas normais, 2 para quem se registou via
+      // link de afiliado (referred_by preenchido).
+      const freeDocsAllowance = data.referred_by ? 2 : 1;
+      const freeDocsUsed      = data.free_documents_used || 0;
+      const freeDocsRemaining = Math.max(0, freeDocsAllowance - freeDocsUsed);
 
       // Verificar e atribuir créditos mensais se aplicável
       const plan = data.plan || 'free';
@@ -632,7 +645,7 @@ export class SupabaseService {
             const { data: newCredits } = await this._client
               .rpc('grant_monthly_credits', { target_user_id: userId });
             if (typeof newCredits === 'number') {
-              return { credits: newCredits, plan };
+              return { credits: newCredits, plan, freeDocsRemaining, freeDocsAllowance };
             }
           } catch (e) {
             console.warn('[Supabase] grant_monthly_credits falhou:', e);
@@ -640,7 +653,7 @@ export class SupabaseService {
         }
       }
 
-      return { credits: data.credits, plan };
+      return { credits: data.credits, plan, freeDocsRemaining, freeDocsAllowance };
     } catch (e) {
       console.warn('[Supabase] syncUser falhou:', e);
       return null;
