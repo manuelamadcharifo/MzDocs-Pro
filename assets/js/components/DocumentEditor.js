@@ -42,6 +42,11 @@ export class DocumentEditor {
           <button id="editorClose" class="ed-close" title="Fechar">✕</button>
         </div>
 
+        <!-- NOVO: estado real do "documento grátis" (v66) — só aparece
+             quando há mesmo algo a dizer (sessão iniciada e dado já
+             sincronizado); ver _renderFreeDocBanner(). -->
+        <div id="edFreeDocBanner" class="ed-freedoc-banner" style="display:none;"></div>
+
         <!-- SUB-TOOLBAR (preview formats) -->
         <div class="ed-subtoolbar" id="edSubtoolbar">
           <div class="ed-fmt-group">
@@ -1525,6 +1530,45 @@ export class DocumentEditor {
     if (el) el.textContent = `${words} palavras | ${this.content.length} chars`;
   }
 
+  // NOVO — banner de estado real do "documento grátis" (v66). Pedido do
+  // cliente era um banner de "urgência" com um texto inventado ("restam 2
+  // edições para salvar") que não corresponde a NENHUMA lógica real do
+  // código — o mecanismo real (migration_v66_first_document_free.sql,
+  // grant_free_document()) é: 1 documento grátis por conta normal, 2 para
+  // quem se registou por link de afiliado (referred_by), contado à parte
+  // dos créditos (free_documents_used em profiles), nunca aplicável a
+  // templates pagos. Em vez de inventar um número, este banner mostra
+  // sempre o valor REAL vindo do servidor (CreditModel.freeDocsRemaining,
+  // sincronizado por Services.js:syncUser() → Models.js:_syncFromServer())
+  // — nunca aparece nada até isso estar confirmado, para nunca arriscar
+  // mostrar um número errado ou desactualizado.
+  _renderFreeDocBanner() {
+    const el = this.modal?.querySelector('#edFreeDocBanner');
+    if (!el) return;
+
+    const ctrl = this._docController || window.docController;
+    const cm = ctrl?.creditModel;
+    const remaining = cm?.freeDocsRemaining;
+    const allowance = cm?.freeDocsAllowance;
+
+    // Sem sessão iniciada, ou dado ainda não sincronizado (undefined,
+    // distinto de 0) — não mostra nada em vez de arriscar um valor errado.
+    if (typeof remaining !== 'number' || typeof allowance !== 'number') {
+      el.style.display = 'none';
+      return;
+    }
+
+    if (remaining > 0) {
+      const plural = remaining > 1 ? 's' : '';
+      el.textContent = `🎁 Ainda tens ${remaining} documento${plural} grátis${allowance > 1 ? ` (de ${allowance})` : ''} nesta conta.`;
+      el.className = 'ed-freedoc-banner ed-freedoc-banner--ok';
+    } else {
+      el.textContent = '✨ Já usaste o teu documento grátis — os próximos consomem créditos.';
+      el.className = 'ed-freedoc-banner ed-freedoc-banner--used';
+    }
+    el.style.display = 'block';
+  }
+
   // ── API pública ────────────────────────────────────────────────
   loadDocument(content, serviceType, templateCss, templateHtml) {
     // DEBUG: log incoming content
@@ -1570,6 +1614,7 @@ export class DocumentEditor {
                    || null;
 
     this._updateStats();
+    this._renderFreeDocBanner();
     this.open();
 
     // setTimeout(0) garante que o DOM do modal está pintado E que
