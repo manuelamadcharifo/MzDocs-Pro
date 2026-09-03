@@ -276,6 +276,12 @@ export class OpenRouterService {
     if (typeof result.creditsRemaining !== 'number') {
       result.creditsRemaining = creditsAfterDeduct;
     }
+    // NOVO (v66): propaga se este documento foi coberto pelo mecanismo de
+    // "documento grátis" (vem de /api/deduct-credit, ver handleDeductCredit)
+    // — permite ao DocumentController decrementar CreditModel.freeDocsRemaining
+    // localmente (consumeFreeDocument()) assim que a geração terminar, sem
+    // esperar pela próxima sincronização periódica.
+    result.freeDocument = wasFree === true;
     return result;
   }
 
