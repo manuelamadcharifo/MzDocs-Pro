@@ -89,6 +89,14 @@ describe('verifyReceiptInternal — contrato de idempotência sob concorrência 
     parseVisionJSON.mockReturnValue({
       confidence: 0.95, amount: 50, status: 'SUCESSO',
       reference: 'REF-999', transaction_date: new Date().toISOString(),
+      // v67 (P0.2, Master Audit Set/2026): payments.js passou a validar o
+      // destinatário do comprovativo (recipient_phone) contra a conta real
+      // do MzDocs — sem este campo no mock, allChecksPass falha sempre e
+      // os dois testes abaixo deixam de reflectir o cenário que testam
+      // (idempotência da confirmação), caindo sempre no caminho de
+      // "revisão manual" em vez de "confirmado". Número igual ao valor por
+      // omissão de MZDOCS_RECEIVING_PHONES em payments.js.
+      recipient_phone: '258858695506',
     });
     // Sem hash duplicado, sem referência já confirmada.
     supabaseAdmin.restRequest.mockResolvedValue([]);
