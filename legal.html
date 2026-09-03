@@ -148,7 +148,7 @@ document.getElementById('siteLogo').addEventListener('error', function(){
   <div class="hero-eyebrow">⚖️ Documentação Legal</div>
   <h1>Termos, Privacidade & Políticas</h1>
   <p>Transparência total sobre como operamos, como protegemos os seus dados e quais os seus direitos como utilizador.</p>
-  <div class="hero-updated">Última actualização: Agosto de 2026 · Versão 1.2</div>
+  <div class="hero-updated">Última actualização: Setembro de 2026 · Versão 1.3</div>
 </div>
 
 <!-- NAV PILLS -->
@@ -195,10 +195,10 @@ document.getElementById('siteLogo').addEventListener('error', function(){
       <h3>4. Sistema de Créditos</h3>
       <ul>
         <li>Os créditos são adquiridos mediante pagamento e utilizados para gerar documentos.</li>
-        <li>Novos utilizadores registados recebem <strong>1 crédito de boas-vindas</strong>, válido por 30 dias.</li>
+        <li>Novos utilizadores têm direito ao <strong>primeiro documento gratuito</strong> (dois, se a conta for criada através de um link de afiliado), sem qualquer custo em créditos. Modelos/templates pagos do marketplace não estão incluídos neste benefício.</li>
         <li>Créditos mensais são atribuídos automaticamente conforme o plano activo (Starter: 1/mês · Básico: 3/mês · Pro: 8/mês).</li>
         <li>Créditos não são transferíveis entre contas nem convertíveis em dinheiro.</li>
-        <li>Créditos não utilizados expiram 90 dias após a última actividade na conta.</li>
+        <li>Cada lote de créditos (grátis, comprado, de referência ou reembolsado) expira 30 dias após a respectiva atribuição.</li>
       </ul>
 
       <h3>5. Responsabilidade pelo Conteúdo</h3>
@@ -260,7 +260,7 @@ document.getElementById('siteLogo').addEventListener('error', function(){
       <ul>
         <li><strong>Supabase</strong> — infraestrutura de base de dados e autenticação (servidores na UE).</li>
         <li><strong>Vercel</strong> — alojamento e funções serverless (servidores na UE/EUA).</li>
-        <li><strong>Fornecedores de IA</strong> — processamos as suas prompts junto de vários fornecedores de inferência de IA, consoante o serviço pedido: Groq, Google Gemini, OpenRouter, Cerebras, NVIDIA NIM, Mistral AI, SambaNova, Together AI, Fireworks AI e Cohere. As políticas de retenção e de utilização de dados para treino variam entre estes fornecedores e consoante o nível de acesso contratado com cada um — nalguns casos (ex: nível gratuito de certos fornecedores) o próprio fornecedor pode reter ou usar as prompts para melhorar os seus modelos, salvo quando configurámos explicitamente a opção de retenção zero/sem treino disponibilizada por esse fornecedor. Estamos a rever e a ajustar essas configurações fornecedor a fornecedor para minimizar este risco. Adicionalmente, antes de qualquer texto ser enviado a um destes fornecedores, o nosso sistema mascara automaticamente números de bilhete de identidade e de NUIT, telefones e e-mails identificados nesse texto, substituindo-os por marcadores técnicos — os valores reais só são repostos no documento final, já do lado do nosso servidor, depois de o fornecedor de IA responder. O fornecedor nunca chega a receber esses números em texto simples. Esta mascaragem é uma camada de reforço (best-effort) e não substitui o cuidado geral de minimização de dados nos próprios formulários; dados bancários e outros campos especialmente sensíveis continuam, sempre que o desenho do formulário o permita, a ser tratados fora do texto enviado ao modelo.</li>
+        <li><strong>Fornecedores de infra-estrutura de Inteligência Artificial</strong> — processamos as suas prompts junto de fornecedores externos de inferência de IA (empresas especializadas em processamento de linguagem natural, com servidores fora de Moçambique), consoante o serviço pedido. As políticas de retenção e de utilização de dados para treino variam entre fornecedores — activamos sempre a opção de retenção zero/sem treino quando o fornecedor a disponibiliza. Antes de qualquer TEXTO ser enviado a um destes fornecedores, o nosso sistema mascara automaticamente números de bilhete de identidade e de NUIT, telefones e e-mails identificados nesse texto, substituindo-os por marcadores técnicos — os valores reais só são repostos no documento final, do lado do nosso servidor. Esta mascaragem aplica-se ao texto processado pela plataforma; para o serviço opcional de leitura automática de documentos por foto (OCR), a imagem enviada pode conter dados visíveis no próprio documento fotografado — evite fotografar e enviar documentos com dados que prefira não partilhar, sempre que o formulário permitir preenchimento manual em alternativa.</li>
         <li><strong>Autoridades competentes</strong> — quando exigido por lei ou ordem judicial moçambicana.</li>
       </ul>
 
@@ -413,7 +413,7 @@ document.getElementById('siteLogo').addEventListener('error', function(){
     </div>
     <div class="info-card" style="margin-bottom:10px">
       <h4>🔐 Cookies de Autenticação (Supabase)</h4>
-      <p>Cookies de sessão segura (httpOnly, SameSite=Strict) para manter a sessão autenticada. Expiram ao fechar o browser ou após 7 dias de inactividade.</p>
+      <p>A sua sessão autenticada é mantida através do armazenamento local seguro do browser (gerido pelo Supabase Auth), não por cookies tradicionais. Mantém-se activa até terminar sessão manualmente ou limpar os dados do browser.</p>
     </div>
     <div class="info-card" style="margin-bottom:10px">
       <h4>📊 IndexedDB — Histórico Offline</h4>
@@ -502,13 +502,7 @@ document.getElementById('siteLogo').addEventListener('error', function(){
 
     <div class="prose" style="margin-top:20px">
       <p style="font-size:13px;color:var(--muted)">
-        ⚠️ <strong>Nota:</strong> O MzDocs Pro encontra-se em fase de arranque. O processo de registo comercial formal e obtenção de NUIT está em curso. Actualizaremos esta página assim que o registo for concluído. Para efeitos legais imediatos, o operador pode ser contactado pelos canais indicados acima.
-      </p>
-      <p style="font-size:13px;color:var(--muted)">
-        ⚠️ <strong>Nota fiscal:</strong> Desde 1 de Janeiro de 2026 (Lei n.º 9/2025, de 29 de Dezembro), o ISPC deixou de ter uma taxa única de 3% e passou a ter taxas progressivas (3%–20%, variando com o volume de negócios e o tipo de actividade), permanência máxima de 5 anos no regime, e isenção quando o imposto apurado for inferior a 500 MT. O enquadramento exacto (regime, taxa e CAE aplicáveis a esta plataforma) está a ser confirmado junto de um contabilista/da Autoridade Tributária antes do início formal de actividade — os valores acima não devem ser tratados como definitivos até essa confirmação.
-      </p>
-      <p style="font-size:13px;color:var(--muted)">
-        ⚠️ <strong>Nota regulatória (INTIC):</strong> desde Dezembro de 2025 existe um regime de registo/licenciamento obrigatório do INTIC para determinados prestadores intermediários de serviços electrónicos e operadores de plataformas digitais dirigidos ao mercado moçambicano (Decreto n.º 59/2023 e Decreto n.º 44/2025). Estamos a confirmar junto do INTIC se o MzDocs Pro — que gera documentos e opera marketplace, afiliados e rede de parceiros — se enquadra nessa categoria e quais os requisitos de registo aplicáveis, antes de assumir qualquer custo ou obrigação regulatória como definitivos.
+        ⚠️ <strong>Nota:</strong> O MzDocs Pro encontra-se em fase de formalização comercial (NUIT e enquadramento fiscal/regulatório em curso de confirmação). Esta página será actualizada assim que o processo for concluído. Para qualquer efeito legal imediato, o operador pode ser contactado pelos canais indicados acima.
       </p>
     </div>
   </section>
