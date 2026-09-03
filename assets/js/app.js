@@ -103,36 +103,60 @@ async function bootstrap() {
   });
 
   // ── Credit badge colorido ─────────────────────────────────────────────
-  window.addEventListener('creditsChanged', e => {
-    const val  = e.detail;
-    const el   = document.getElementById('creditVal');
-    const chip = document.getElementById('creditPill');
+  // NOVO (v66): actualiza o badge de créditos, mostrando "Grátis" em vez
+  // do número de créditos (que pode legitimamente ser 0) enquanto o
+  // utilizador ainda tiver direito a um documento inicial grátis — ver
+  // CreditModel.hasFreeDocument/freeDocsRemaining. Chamada tanto quando os
+  // créditos mudam como quando o estado do documento grátis muda (ex.:
+  // acabou de ser consumido), para nunca ficar dessincronizado.
+  function _updateCreditBadge() {
+    const val   = creditModel.credits;
+    const chip  = document.getElementById('creditPill');
+    const el    = document.getElementById('creditVal');
+    const icon  = chip?.querySelector('.cp-icon');
+    const lbl   = chip?.querySelector('.cp-lbl');
+    if (!chip) return;
 
-    if (el) el.textContent = val;
-
-    if (chip) {
-      // Cor e borda dinâmica conforme nível de créditos
-      if (val === 0) {
-        chip.style.borderColor  = '#EF4444';
-        chip.style.color        = '#EF4444';
-        chip.title              = 'Sem créditos — Recarregue!';
-      } else if (val === 1) {
-        chip.style.borderColor  = '#F59E0B';
-        chip.style.color        = '#F59E0B';
-        chip.title              = 'Só tem 1 crédito restante';
-      } else if (val === 2) {
-        chip.style.borderColor  = '#F59E0B';
-        chip.style.color        = '#D97706';
-        chip.title              = `Tem ${val} créditos`;
-      } else {
-        chip.style.borderColor  = '';
-        chip.style.color        = '';
-        chip.title              = `Créditos disponíveis: ${val}`;
-      }
+    if (creditModel.hasFreeDocument) {
+      const remaining = creditModel.freeDocsRemaining;
+      if (icon) icon.textContent = '🎁';
+      if (el)   el.textContent   = 'Grátis';
+      if (lbl)  lbl.textContent  = '';
+      chip.style.borderColor = '#10B981';
+      chip.style.color       = '#10B981';
+      chip.title = remaining === 1
+        ? 'Tem 1 documento grátis por usar'
+        : `Tem ${remaining} documentos grátis por usar`;
+      return;
     }
-  });
 
-  window.dispatchEvent(new CustomEvent('creditsChanged', { detail: creditModel.value }));
+    if (icon) icon.textContent = '⚡';
+    if (lbl)  lbl.textContent  = 'cr';
+    if (el)   el.textContent   = val;
+
+    // Cor e borda dinâmica conforme nível de créditos
+    if (val === 0) {
+      chip.style.borderColor  = '#EF4444';
+      chip.style.color        = '#EF4444';
+      chip.title              = 'Sem créditos — Recarregue!';
+    } else if (val === 1) {
+      chip.style.borderColor  = '#F59E0B';
+      chip.style.color        = '#F59E0B';
+      chip.title              = 'Só tem 1 crédito restante';
+    } else if (val === 2) {
+      chip.style.borderColor  = '#F59E0B';
+      chip.style.color        = '#D97706';
+      chip.title              = `Tem ${val} créditos`;
+    } else {
+      chip.style.borderColor  = '';
+      chip.style.color        = '';
+      chip.title              = `Créditos disponíveis: ${val}`;
+    }
+  }
+
+  window.addEventListener('creditsChanged', _updateCreditBadge);
+  window.addEventListener('freeDocsChanged', _updateCreditBadge);
+  _updateCreditBadge();
 
   const { UserModel } = await import('./models/Models.js');
   const userModel = new UserModel();
