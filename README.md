@@ -5,9 +5,23 @@ PWA instalável (Android/iOS), construída para o Vercel Hobby (limite: 12 Serve
 **9 em uso, 3 de margem** desde a consolidação de Ago/2026, ver secção 10), Supabase (PostgreSQL +
 pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 
-> 📌 **Nota sobre este README:** actualizado em Agosto/2026 a partir de uma leitura directa do
+> 📌 **Nota sobre este README:** actualizado em Setembro/2026 a partir de uma leitura directa do
 > código-fonte no export mais recente. A versão anterior deste ficheiro não cobria a ronda de
-> correcções mais recente (mesmo mês, depois de tudo o que já está descrito abaixo): **(a)** bug
+> correcção de segurança mais recente, feita a partir de uma auditoria externa completa ("Master
+> Audit", Set/2026): **(a)** bloqueio de ~30 funções `SECURITY DEFINER` que nunca tinham tido
+> `REVOKE EXECUTE FROM PUBLIC` (`migration_v67_security_hardening_rpc.sql`) — incluindo um achado
+> mais grave do que qualquer um assinalado na própria auditoria externa: `promote_to_admin()` não
+> tinha nenhuma restrição, permitindo auto-promoção a administrador total; **(b)** validação do
+> destinatário em comprovativos de pagamento, antes ausente (`api/_services/payments.js`);
+> **(c)** exclusão da Cohere da corrida de IA em produção, por a sua chave gratuita ser
+> contratualmente não-comercial (`commercialAllowed:false`); **(d)** `legal.html` sanitizado
+> (removida informação interna/instável — lista exacta de fornecedores de IA, análise fiscal
+> detalhada — e corrigida uma contradição real com o modelo de "primeiro documento grátis" da
+> v66); **(e)** `package-lock.json` com `engines.node` desalinhado do `package.json`/CI — ver
+> secções 7 e 15 para o detalhe completo de cada um.
+>
+> A versão anterior a essa não cobria a ronda de correcções de "Trabalho Escolar" e do ecrã de
+> resultado, agora já descrita abaixo: **(a)** bug
 > real de margem zero no PDF descarregado de "Trabalho Escolar" (`_extractPageMargin()` em
 > `HTMLPDFExporter.js` apanhava sempre a primeira regra `body{...padding...}` da CSS partilhada,
 > que por acaso é `padding:0` — nunca a regra real de margem mais abaixo); **(b)** nome de
@@ -185,11 +199,14 @@ pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 Este é o subsistema mais sofisticado do projecto. O estado real, confirmado em
 `api/_lib/aiProviderRegistry.js` (v2.0, auditoria de Agosto/2026), é:
 
-### 3.1. 10 providers com adaptador (competem de facto) — 0 catalogados sem adaptador
+### 3.1. 10 providers com adaptador — 9 comercialmente elegíveis, 0 catalogados sem adaptador
 
 `aiProviderRegistry.js` é a fonte única de verdade. A auditoria de Ago/2026 confirmou, provider a
 provider, quais realmente respondiam em produção — três foram removidos por deixarem de ter tier
-grátis viável, quatro novos foram ligados para os substituir:
+grátis viável, quatro novos foram ligados para os substituir. Uma correcção de segurança de
+Set/2026 (v67, ver secção 7) excluiu adicionalmente a Cohere da corrida em produção — tem
+adaptador funcional, mas a sua chave "Trial" grátis é uso não-comercial pelos termos do próprio
+fornecedor, por isso não deve competir por pedidos reais de utilizadores pagantes:
 
 | Provider | Tier | Activação | Nota |
 |---|---|---|---|
@@ -202,7 +219,7 @@ grátis viável, quatro novos foram ligados para os substituir:
 | GitHub Models | Reserva activa | `GITHUB_MODELS_TOKEN` | Personal Access Token com scope `models:read` |
 | Cloudflare Workers AI | Reserva activa | `CLOUDFLARE_AI_TOKEN` **+** `CLOUDFLARE_ACCOUNT_ID` | única com 2 env vars obrigatórias |
 | Hugging Face Inference | Reserva activa | `HUGGINGFACE_API_KEY` | via router `hf-inference` |
-| Cohere | Reserva activa | `COHERE_API_KEY` | via API de compatibilidade OpenAI da própria Cohere |
+| Cohere | Reserva activa — **excluída da corrida comercial (v67)** | `COHERE_API_KEY` | chave "Trial" da Cohere é uso não-comercial por termos do próprio fornecedor; `commercialAllowed:false` em `aiProviderRegistry.js` faz `aiRace.js` ignorá-la mesmo com a chave configurada — só volta a competir se a chave for trocada por um plano pago da Cohere e a flag for revertida |
 
 **Removidos nesta auditoria** (causa raiz confirmada, não é bug de código):
 - **NVIDIA NIM** — contas NGC pessoais/gratuitas devolvem sempre `404 Function not found` em
@@ -551,7 +568,7 @@ WHATSAPP_CALLMEBOT_APIKEY=...       # via CallMeBot, grátis, sem aprovação da
 > nenhum ficheiro de código. O estado de administrador é controlado pela coluna
 > `profiles.is_admin` — ver `supabase/EXECUTAR_promote_admin.sql`.
 
-### 6.3. Migrações Supabase — lista completa e actualizada (v8 → v60)
+### 6.3. Migrações Supabase — lista completa e actualizada (v8 → v67)
 
 Execute por ordem no SQL Editor do Supabase:
 
@@ -666,6 +683,35 @@ migration_v60_idempotent_credit_operations.sql        -- deduct_credits_idempote
                                                        --   duplicado em retries de rede; 100% aditivo,
                                                        --   não altera as funções antigas (fallback
                                                        --   automático quando operation_id é NULL)
+
+-- Pacotes dinâmicos, WhatsApp/consentimento, agendamento, templates, segmentos, 1º doc grátis (v61–v66)
+migration_v61_dynamic_packages_and_bonus_schedule.sql -- credit_packages como fonte de verdade +
+                                                       --   janela agendada de promoção de bónus
+migration_v62_whatsapp_leads_and_marketing_consent.sql -- profiles.whatsapp + consentimento de
+                                                       --   marketing (consent_logs)
+migration_v63_partner_bookings.sql                    -- tabela bookings — agendamento real com
+                                                       --   papelaria/gráfica parceira
+migration_v64_template_purchases.sql                  -- desbloqueio permanente de templates pagos
+                                                       --   (corrige fuga de receita confirmada)
+migration_v65_partner_category_packages.sql           -- pacotes exclusivos por categoria de
+                                                       --   parceiro/afiliado, validados no servidor
+migration_v66_first_document_free.sql                 -- primeiro documento sempre grátis (não 1
+                                                       --   crédito de saldo inicial) — ver secção 8
+
+-- Segurança — bloqueio de RPCs financeiras/admin expostas (v67 — Set/2026, mais recente)
+migration_v67_security_hardening_rpc.sql              -- REVOKE EXECUTE FROM PUBLIC/anon/authenticated
+                                                       --   em ~30 funções SECURITY DEFINER (créditos,
+                                                       --   pagamentos, templates, afiliados, contas,
+                                                       --   admin); reescreve add_credits/deduct_credit/
+                                                       --   grant_monthly_credits com verificação
+                                                       --   auth.uid()/is_admin interna; corrige
+                                                       --   promote_to_admin (sem NENHUMA restrição
+                                                       --   antes desta migração); remove a coluna
+                                                       --   "credits" da lista protegida pelo trigger
+                                                       --   da v50 (contradiria deduct_credit do
+                                                       --   próprio utilizador) e acrescenta
+                                                       --   is_affiliate/aff_segment a essa lista — ver
+                                                       --   secção 7 para o detalhe completo
 ```
 
 > ⚠️ Existem ainda vários ficheiros avulsos em `supabase/` (`EMERGENCIA_*`, `EXECUTAR_AGORA_*`,
@@ -684,8 +730,50 @@ deploy.
 
 ## 7. Segurança
 
+> 🔐 **Correcção crítica — Set/2026 (`migration_v67_security_hardening_rpc.sql`):** uma auditoria
+> externa ("Master Audit") assinalou que várias RPCs financeiras/admin (`add_credits`,
+> `deduct_credits`, `refund_credit`, etc.) não tinham `REVOKE EXECUTE FROM PUBLIC` — confirmado
+> por leitura directa de todas as migrações: nenhuma função `SECURITY DEFINER` do projecto tinha
+> alguma vez tido esse `REVOKE`. Uma verificação mais funda (por `grep` a todo `assets/js/` e
+> `api/`) encontrou um problema **mais grave** do que o assinalado na auditoria:
+> `promote_to_admin(user_id)` não tinha **nenhuma** restrição nem verificação de quem chamava —
+> qualquer utilizador autenticado podia, em teoria, chamar-se a si próprio e tornar-se
+> administrador total da plataforma. Outras funções legadas (`confirm_payment_and_set_plan`,
+> `complete_transaction`) continuavam na base de dados, sem uso no código actual mas ainda
+> RPC-chamáveis, permitindo confirmar transacções de outra pessoa e ficar com os créditos. A
+> `migration_v67` fecha tudo isto: por `grep`, confirmou-se que só 3 RPCs (`add_credits`,
+> `deduct_credit`, `grant_monthly_credits`) são chamadas pelo browser — essas foram reescritas com
+> verificação interna (`auth.uid()`/`is_admin`); todas as restantes (~30 funções, incluindo as
+> acima) passaram a `service_role`-only, sem qualquer alteração de comportamento visível (o
+> servidor já usava sempre a service_role key). Corrigida também uma contradição real entre a
+> `migration_v50` (o seu trigger bloquearia `deduct_credit` do próprio utilizador se alguma vez
+> fosse accionado sobre a coluna `credits`) e acrescentadas `is_affiliate`/`aff_segment` à lista de
+> colunas protegidas desse mesmo trigger (P1.3 da auditoria — um utilizador normal podia alterar
+> estes dois campos na própria linha via `profiles_update_own`).
+>
+> 🧾 **Correcção — validação de destinatário em comprovativos de pagamento
+> (`api/_services/payments.js`):** a verificação automática por IA visão confirmava valor + data +
+> estado, mas nunca confirmava que o dinheiro tinha ido efectivamente **para a conta do MzDocs** —
+> um comprovativo real de outra transferência, com o mesmo valor de um pacote, passava em todos os
+> outros checks. `recipient_phone` já era extraído pela IA mas nunca comparado a nada. Corrigido:
+> normalização + comparação contra o número receptor oficial (`MZDOCS_RECEIVING_PHONES`,
+> configurável por env var), incluída em `allChecksPass` — nunca aprova automaticamente se o
+> destinatário não for confirmado com confiança.
+>
+> 🤖 **Correcção — Cohere e uso comercial (`api/_lib/aiProviderRegistry.js` /
+> `api/_lib/aiRace.js`):** a Cohere estava listada no próprio registo como "uso não-comercial
+> apenas" (chave Trial), mas nada impedia que entrasse na corrida de produção assim que
+> `COHERE_API_KEY` existisse. Novo campo `commercialAllowed` por provider (`false` só na Cohere,
+> `true` por omissão nos restantes); `aiRace.js` ignora-a ao construir a lista de providers
+> disponíveis, mesmo com a chave configurada.
+
 - RLS activo em todas as tabelas Supabase, incluindo `credit_packages` (corrigido em v24) e
   colunas sensíveis de `profiles` (BI, NUIT, morada — reforçado em v50).
+- **Todas as funções `SECURITY DEFINER` do schema `public` têm agora `EXECUTE` restrito** — só
+  `service_role`, excepto as 3 chamadas legitimamente pelo browser (auto-serviço/admin, com
+  verificação `auth.uid()`/`is_admin` interna) — ver nota v67 acima. `ALTER DEFAULT PRIVILEGES`
+  aplicado para que qualquer função nova criada a partir de agora já nasça sem `EXECUTE` para
+  `PUBLIC` por omissão.
 - Tokens JWT validados em todos os endpoints privados via `api/_lib/supabaseAdmin.js`.
 - IPs hasheados (SHA-256) para tracking de cliques — sem dados pessoais em claro.
 - `Sanitizer.js` com lista explícita de tags HTML5 permitidas.
@@ -1125,10 +1213,14 @@ Conselho de Ministros em Março/2026, pendente de votação final na Assembleia 
 Entretanto, adopta boas práticas alinhadas com essa proposta e com a Convenção de Malabo
 (ratificada por Moçambique).
 
-Nota fiscal (`legal.html`): desde 1 de Janeiro de 2026 (Lei n.º 9/2025, de 29 de Dezembro), o
-ISPC deixou de ter taxa única de 3% — passou a taxas progressivas (3–20%), com permanência
-máxima de 5 anos no regime e isenção quando o imposto apurado for inferior a 500 MT. O
-enquadramento fiscal exacto desta plataforma ainda está a ser confirmado com um contabilista.
+Nota fiscal (registo interno — já não está detalhado em `legal.html` desde a sanitização de
+Set/2026, ver abaixo): desde 1 de Janeiro de 2026 (Lei n.º 9/2025, de 29 de Dezembro), o ISPC
+deixou de ter taxa única de 3% — passou a taxas progressivas (3–20%), com permanência máxima de 5
+anos no regime e isenção quando o imposto apurado for inferior a 500 MT. O enquadramento fiscal
+exacto desta plataforma ainda está a ser confirmado com um contabilista; `legal.html` mostra
+apenas uma nota curta e honesta de "em formalização", sem entrar em detalhe de taxas/decretos —
+essa informação de trabalho interno não tem valor para o utilizador final e ficava desactualizada
+a cada alteração legislativa.
 
 **Assinatura digital em canvas** não tem validade jurídica plena sem certificação nos termos da
 Lei n.º 3/2017 — recomenda-se tornar isto explícito no momento em que o utilizador assina, não
@@ -1188,15 +1280,16 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | Ago/2026 (mesma ronda) — estrutura académica completa + numeração de página real | Pedido explícito, com referência a um guia externo de normas académicas: capa deixou de ter tabela (`| Campo | Detalhe |`, criticada por parecer uma grelha de formulário) e passou a hierarquia tipográfica pura (instituição em H2, blocos separados por `---`, nome do estudante em negrito isolado) — `CoverNormalizer.js`. Nova **Folha de Rosto** como página própria a seguir à capa, só para níveis universitários (Pré-Universitário/Licenciatura/Mestrado-Doutoramento), com a frase formal de enquadramento do trabalho, construída no código (nunca pedida à IA, pelo mesmo raciocínio de fiabilidade já aplicado à capa desde a ronda anterior). Estrutura académica completa em `trabalho.js`: **Resumo e Palavras-chave** (sempre, para níveis universitários) e **Dedicatória/Agradecimentos/Epígrafe** (opcionais, novo campo "Secções extra" em `ServiceDefinitions.js`) inseridos entre a capa e o Índice. "Páginas pretendidas" redefinido para significar só páginas de **desenvolvimento** — capa/folha de rosto/resumo/índice/introdução/conclusão/referências somam-se a esse valor, nunca o descontam (antes, `devPags = pags - 3` fazia o oposto). Números do Índice deixaram de ser adivinhados (`i + 4`) e passaram a calculados matematicamente: nº de parágrafos × linhas por parágrafo (ponto médio do intervalo do perfil) × palavras por linha (13, estimativa para texto académico justificado em português) ÷ densidade de palavras/página calibrada por nível — mesma matemática reutilizada em `estimateWordBudget()`. Numeração de página real (`1, 2, 3...`) impressa pelo motor de impressão do browser em cada folha via `@page { @bottom-center { content: counter(page) } }` (`HTMLPDFExporter.js`, novo parâmetro `pageNumbers`), activada só no caminho sem template de marketplace para não sobrepor rodapés de templates reais. Corrigido em conjunto: `tests/ocrSchemaAlignment.test.js` falhava no CI porque o novo campo `extras` não estava na lista de lacunas conhecidas do schema OCR (`KNOWN_OCR_GAPS.trabalho`) — não é informação extraível de uma foto, é uma escolha de estrutura do documento final. **Limite assumido, não resolvido:** os números do Índice continuam a ser uma estimativa matemática, não uma medição real — só um segundo passo depois da paginação real (gerar → paginar → medir → reescrever o índice → repaginar) garantiria exactidão a 100%, e isso é uma mudança de arquitectura maior, deliberadamente não feita nesta ronda |
 | Ago/2026 (mesma ronda) — alternador Papelarias/Advogados no ecrã de resultado | Pedido explícito: no bloco onde antes só apareciam advogados (e só para tipos de documento jurídicos), passou a haver um alternador de duas abas — Papelarias (parceiro principal por omissão) e Advogados — mesmo padrão visual dos filtros de categoria da homepage (`.cat-filters`/`.cat-btn`). Nova `injectPartnerToggleIntoModal()` (`NearbyPartners.js`), que delega sempre nas funções já existentes (`injectPartnersIntoModal`/`injectLawyersIntoModal`) em vez de reimplementar a busca; ligada em `DocumentController._showLawyerReferral()`, com a aba Papelarias a filtrar sempre pelo serviço real `impressao` (nunca pelo id do tipo de documento — esses ids não existem na lista de serviços de uma papelaria, o que faria a busca achar sempre "nenhuma papelaria faz este serviço"). Estendido, a pedido, de 6 tipos de documento jurídicos para **qualquer** documento gerado (`LEGAL_DOC_TYPES` passou a decidir só a especialidade do filtro de advogados, não se o bloco aparece); e ligado também à reabertura de um documento "Do Arquivo" (`HistoryController._viewDoc()`), que usa um caminho de código diferente do da geração e nunca tinha chamado esta função — **limite assumido:** o visualizador leve `_viewDocLite` (páginas sem o editor completo, ex. `/perfil.html`) não tem acesso ao `docController` de onde isto é injectado, por isso continua sem o alternador. Corrigido em conjunto um bug real: seleccionar uma papelaria no ecrã de resultado mostrava "✅ Papelaria seleccionada" mas não activava nenhum botão de envio — o botão real (`#btnWaDirect`) só existia no formulário de ANTES de gerar; novo botão próprio (`#btnWaDirectResult`) e nova `sendDirectForGeneratedDoc()` (constrói a mensagem a partir do documento já gerado, não de um formulário fechado); `selectPartner()`/`resetPartnerSelection()` (`NearbyPartners.js`) passaram de `getElementById` por id único para `querySelectorAll('.btn-wa-direct')`/`.mz-wa-hint` por classe, para activar os dois botões possíveis (form + resultado) consoante o que existir no DOM |
 | Ago/2026 (mesma ronda) — botão "WhatsApp" genérico do ecrã de resultado | Reportado com duas capturas de ecrã: o botão verde "WhatsApp" (barra Download/Copiar/WhatsApp) abria sempre uma conversa com `WA_NUMBER()` — o número de **suporte da própria plataforma** — em vez de deixar a pessoa escolher o destinatário; e despejava os primeiros 1000 caracteres do conteúdo do documento como texto solto, com a formatação Markdown mal traduzida (títulos a virar `*` a meio de palavras) e o literal `---PAGE_BREAK---` à mistura. Corrigido em duas partes: `https://wa.me/?text=...` sem número (em vez de `wa.me/${WA_NUMBER()}`) abre o selector de contactos do WhatsApp, mesmo padrão já usado correctamente em `_showReferralCTA()`; `WA_NUMBER()` removida de `DocumentController.js` por ter ficado morta (`PaymentService.js` mantém a sua própria, correcta nesse contexto — confirmações de pagamento devem mesmo ir para o suporte). A mensagem deixou de tentar reproduzir o conteúdo do documento — passou a avisar claramente que o PDF vem a seguir (nunca finge que o texto É o documento) e a ser uma cópia curta pensada para **conversão**: quem recebe fica a saber o que é o MzDocs Pro e como experimentar grátis, com o link de afiliado da pessoa quando tem sessão iniciada (mesmo formato de link de `_showReferralCTA`) — quem se registar a partir daí também conta para os créditos de afiliado de quem enviou. **Limite técnico assumido, não contornável por código:** um link `wa.me` só consegue pré-preencher texto — nunca anexa um ficheiro automaticamente (o WhatsApp não expõe essa possibilidade a sites); a pessoa é agora avisada por notificação a lembrar de descarregar e anexar o PDF manualmente |
+| **v67 (Set/2026) — `migration_v67_security_hardening_rpc.sql` — auditoria externa "Master Audit"** | Ronda de correcção de segurança a partir de uma auditoria externa completa (nota de prontidão comercial ~4,5/10, foco em achados P0/P1). Confirmado por leitura directa do código, não só da auditoria: **(1)** nenhuma função `SECURITY DEFINER` do projecto tinha alguma vez recebido `REVOKE EXECUTE FROM PUBLIC` — Postgres concede `EXECUTE` a `PUBLIC` por omissão, e o Supabase expõe qualquer função do schema `public` como RPC. Por `grep` a todo `assets/js/` e `api/`, confirmou-se que só 3 RPCs são chamadas pelo browser (`add_credits`, `deduct_credit`, `grant_monthly_credits`) — reescritas com verificação `auth.uid()`/`is_admin` interna; as restantes ~30 (crédito, pagamentos, templates, afiliados, contas, admin) passaram a `service_role`-only, sem qualquer alteração de comportamento visível. **(2)** Achado mais grave do que o assinalado na auditoria externa: `promote_to_admin(user_id)` não tinha **nenhuma** restrição — qualquer utilizador autenticado podia auto-promover-se a administrador total. **(3)** Funções legadas mortas mas ainda RPC-chamáveis (`confirm_payment_and_set_plan`, `complete_transaction`) permitiam confirmar transacções de outra pessoa e ficar com créditos/plano de graça — trancadas. **(4)** Contradição real identificada e corrigida na `migration_v50`: o seu trigger, se algum dia accionado sobre a coluna `credits`, bloquearia `deduct_credit` do próprio utilizador (auto-serviço, não-admin) — coluna removida da lista protegida, já que a autorização passou para dentro da própria RPC; `is_affiliate`/`aff_segment` acrescentadas a essa lista (P1.3 da auditoria — auto-promoção a afiliado/segmento sem validação). **(5) P0.2 (`api/_services/payments.js`):** a verificação automática de comprovativos por IA visão nunca comparava o destinatário (`recipient_phone`, já extraído mas nunca usado) com a conta real do MzDocs — corrigido, incluído em `allChecksPass`. **(6) P0.4 (`aiProviderRegistry.js`/`aiRace.js`):** Cohere, marcada no próprio registo como "uso não-comercial", passou a ser explicitamente excluída da corrida em produção (`commercialAllowed:false`). **(7) P1.5:** `legal.html` ainda descrevia o modelo antigo ("1 crédito de boas-vindas") apesar do código já ter mudado para "primeiro documento grátis" desde a v66 — corrigido. **(8)** `legal.html` sanitizado a pedido — removida a lista exacta de fornecedores de IA (informação interna, instável) e o parágrafo de análise fiscal/INTIC detalhada (leitura de auditoria interna, não copy para o público), substituídos por descrições genéricas e uma nota curta e honesta; corrigida a descrição do mecanismo de sessão (armazenamento local via Supabase Auth, não cookie httpOnly). **(9) P1.12:** `package-lock.json` tinha `engines.node: "20.x"` na raiz, desalinhado do `24.x` em `package.json`/CI/Vercel — corrigido. Não implementado nesta ronda (fora do âmbito de uma correcção de código): P0.3 (confirmar o plano Vercel real — ver aviso no topo deste README, já assinalado em rondas anteriores) e a reformulação mais profunda do fluxo de pagamento em 4 níveis sugerida pela auditoria (permanece o modelo actual: comprovativo + IA visão + `allChecksPass`, agora com o destinatário incluído) |
 
 | Componente | Versão |
 |---|---|
-| `package.json` | `11.0.0` |
+| `package.json` | `11.1.0` |
 | `sw.js` (CACHE_VERSION) | auto-gerado a cada deploy (`v<sha-git-7-chars>-<YYYYMMDD>`) |
-| Migrações Supabase | até `migration_v66_first_document_free.sql` (gaps reais em `v18`/`v19` e `v58`), mais ficheiros avulsos não numerados |
+| Migrações Supabase | até `migration_v67_security_hardening_rpc.sql` (gaps reais em `v18`/`v19` e `v58`), mais ficheiros avulsos não numerados |
 | Serviços | 18 (16 com IA + 2 via WhatsApp) |
 | Templates visuais integrados | 70 (14 serviços × 5) |
-| Providers de IA — com adaptador (competem) / catalogados sem adaptador | 10 / 0 (10 no total) — auditoria Ago/2026 |
+| Providers de IA — com adaptador / comercialmente elegíveis / catalogados sem adaptador | 10 / 9 / 0 (10 no total) — Cohere excluída da corrida comercial desde a v67 |
 | Alertas operacionais | Telegram + WhatsApp (CallMeBot) — tempo real (provider esgota tudo 5× seguidas) + resumo diário 07:00 (Maputo) |
 | Preço máximo de um template no Marketplace | 10 créditos (`migration_v56`) |
 | Compra de template pago | desbloqueio permanente desde a v64 (`template_purchases`) — paga-se uma vez, usa-se para sempre |
@@ -1207,6 +1300,7 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | Observabilidade | `metrics_events` + 3 views SQL (`migration_v59`), retenção de 90 dias |
 | Serverless Functions (Vercel Hobby) | 9 de 12 — 3 de margem (era 12/12 até Ago/2026); cron diário de vigilância de providers reaproveita `/api/misc`, sem consumir função nova |
 | Pacotes de créditos | dinâmicos desde a v61 (`credit_packages`) — 5 pré-migrados (avulso/starter/basico/pro/empresa), sem limite de quantos o admin pode criar |
+| Funções `SECURITY DEFINER` com `EXECUTE` público (RPC exposto sem restrição) | 0, desde a v67 — todas trancadas a `service_role`, excepto 3 chamadas legitimamente pelo browser (com verificação `auth.uid()`/`is_admin` interna) |
 
 ---
 
