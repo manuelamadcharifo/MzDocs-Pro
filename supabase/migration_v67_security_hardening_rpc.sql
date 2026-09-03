@@ -1,7 +1,20 @@
--- supabase/migration_v67_security_hardening_rpc.sql
+-- supabase/migration_v67_security_hardening_rpc.sql (v2 — corrigida)
 -- ──────────────────────────────────────────────────────────────────────────
 -- P0.1 (Master Audit, Set/2026) + achados adicionais desta correcção —
 -- BLOQUEIO DE RPCs FINANCEIRAS/ADMIN EXPOSTAS.
+--
+-- ⚠️ NOTA DESTA VERSÃO (v2): a primeira versão desta migração assumia que
+-- todas as funções abaixo já existiam na tua base de dados. Ao correr,
+-- descobriu-se que `create_temp_account_for_avulso` (definida em
+-- `migration_temp_accounts.sql`, um dos ficheiros "avulsos" fora da cadeia
+-- numerada — ver aviso na secção 6.3 do README) nunca tinha sido aplicada
+-- na tua BD real — e como o SQL Editor corre o script colado como UMA ÚNICA
+-- transacção implícita, esse erro fez rollback a TUDO, incluindo as partes
+-- que já tinham corrido bem. Esta versão corrige isso: cada REVOKE/GRANT
+-- de uma função que já deveria existir passa a verificar primeiro, com
+-- `to_regprocedure()`, se essa função existe mesmo com essa assinatura
+-- exacta — se não existir, é ignorada com um `NOTICE`, em vez de abortar o
+-- resto do script. É seguro correr este ficheiro várias vezes.
 --
 -- PROBLEMA CONFIRMADO (por leitura directa do código actual, não só da
 -- auditoria): dezenas de funções SECURITY DEFINER (que correm com
@@ -20,11 +33,9 @@
 --   • grant_monthly_credits — renovação mensal do plano do próprio utilizador
 -- Todas as restantes só são chamadas pelo servidor (api/_services/*.js,
 -- api/admin/index.js, etc.) através da service_role key — nunca pelo
--- browser. Isto significa que podemos bloquear TODAS as outras sem
--- qualquer risco de regressão de funcionalidade, e blindar as 3 acima com
--- uma verificação de autorização dentro da própria função (o que a
--- auditoria pede explicitamente: "a função deve validar auth.uid()
--- internamente").
+-- browser. Por isso podemos bloquear TODAS as outras sem qualquer risco de
+-- regressão de funcionalidade, e blindar as 3 acima com uma verificação de
+-- autorização dentro da própria função.
 --
 -- ACHADOS ADICIONAIS (mais graves do que os que a auditoria externa
 -- encontrou, pela mesma causa raiz):
@@ -33,14 +44,13 @@
 --     chamar promote_to_admin(<o_seu_próprio_id>) e tornar-se administrador
 --     total da plataforma. É o achado mais crítico desta auditoria.
 --   • confirm_payment_and_set_plan(p_transaction_id, p_admin_id) — função
---     legada (pré-Ago/2026), já não é chamada por nenhum código actual, mas
---     continua na base de dados e continua exposta: permitia a qualquer
---     utilizador confirmar QUALQUER transacção pendente de QUALQUER pessoa
---     e ficar com os créditos + plano pago, de graça.
---   • complete_transaction(p_transaction_id, p_mpesa_receipt) — função
---     legada de transactions.sql, mesmo problema: confirmava qualquer
---     transacção pendente e creditava a conta associada, sem verificar
---     quem chamou.
+--     legada (ficheiro avulso `migration_monthly_credits.sql`, fora da
+--     cadeia numerada), permitia a qualquer utilizador confirmar QUALQUER
+--     transacção pendente de QUALQUER pessoa e ficar com os créditos +
+--     plano pago, de graça — SE esse ficheiro tiver sido aplicado; esta
+--     migração tranca-a condicionalmente, sem erro se não existir.
+--   • complete_transaction(p_transaction_id, p_mpesa_receipt) — mesma
+--     situação, ficheiro avulso `transactions.sql`.
 --   • admin_approve_template / admin_reject_template / admin_feature_template
 --     / admin_change_template_type / process_template_sale — todas
 --     SECURITY DEFINER, todas recebem p_admin_id como PARÂMETRO (nunca
@@ -54,44 +64,66 @@
 --
 -- O QUE ESTA MIGRAÇÃO FAZ:
 --   1. Fecha por omissão: revoga EXECUTE de PUBLIC/anon/authenticated em
---      todas as funções acima e concede apenas a service_role (o backend
---      Vercel, via SUPABASE_SERVICE_ROLE_KEY, continua a funcionar
---      exactamente como antes — nada muda do lado do servidor).
+--      todas as funções acima QUE EXISTIREM na tua base de dados, e
+--      concede apenas a service_role (o backend Vercel, via
+--      SUPABASE_SERVICE_ROLE_KEY, continua a funcionar exactamente como
+--      antes — nada muda do lado do servidor).
 --   2. Reescreve as 3 funções chamadas pelo browser (add_credits,
 --      deduct_credit, grant_monthly_credits) com uma verificação de
 --      autorização INTERNA — a lógica de negócio de cada uma mantém-se
---      100% igual, só foi acrescentada a guarda no topo. Continuam
---      GRANTed a "authenticated" (é preciso, o browser continua a chamá-las
---      tal como antes) mas já não a "anon" nem a PUBLIC.
+--      100% igual, só foi acrescentada a guarda no topo.
 --   3. Define ALTER DEFAULT PRIVILEGES para que qualquer função nova criada
 --      no schema public a partir de agora já nasça sem EXECUTE para
---      PUBLIC — quem escrever a próxima migração tem de conceder acesso
---      explicitamente, em vez de ter de se lembrar de revogar.
+--      PUBLIC.
+--   4. Corrige uma contradição real na migration_v50 e garante que o
+--      trigger de protecção de colunas sensíveis existe (recria-o mesmo
+--      que a v50 nunca tenha corrido).
 --
--- NÃO ALTERA NENHUM COMPORTAMENTO VISÍVEL PARA UTILIZADORES LEGÍTIMOS.
--- Todas as chamadas legítimas (server-to-server com service_role, admin
--- autenticado a atribuir créditos, utilizador a descontar o seu próprio
--- crédito, utilizador a renovar o seu próprio plano) continuam a funcionar
--- sem qualquer alteração no código JavaScript (as assinaturas das funções
--- — nomes e parâmetros — não mudaram).
---
--- Executar UMA VEZ no SQL Editor do Supabase. Idempotente (pode ser
--- corrido de novo sem efeitos colaterais — REVOKE/GRANT são sempre
--- absolutos, CREATE OR REPLACE substitui a função inteira).
+-- Executar UMA VEZ no SQL Editor do Supabase. Idempotente — pode ser
+-- corrido de novo sem efeitos colaterais.
 -- ──────────────────────────────────────────────────────────────────────────
 
 
 -- ════════════════════════════════════════════════════════════════════════
+-- PARTE 0 — Função auxiliar temporária (removida no fim deste script)
+-- ════════════════════════════════════════════════════════════════════════
+-- Tranca uma função existente (REVOKE de PUBLIC/anon/authenticated + GRANT
+-- só a service_role) SE ela existir com exactamente esta assinatura nesta
+-- base de dados. Se não existir (ficheiro de origem nunca aplicado, ou
+-- assinatura diferente), regista um NOTICE e continua sem erro.
+CREATE OR REPLACE FUNCTION public._v67_lock_if_exists(p_signature TEXT)
+RETURNS VOID AS $$
+DECLARE
+  fn_oid regprocedure;
+BEGIN
+  BEGIN
+    fn_oid := to_regprocedure(p_signature);
+  EXCEPTION WHEN OTHERS THEN
+    fn_oid := NULL;
+  END;
+
+  IF fn_oid IS NULL THEN
+    RAISE NOTICE 'v67: função % não existe nesta base de dados — ignorada.', p_signature;
+    RETURN;
+  END IF;
+
+  EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated', fn_oid);
+  EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', fn_oid);
+  RAISE NOTICE 'v67: função % trancada a service_role.', p_signature;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ════════════════════════════════════════════════════════════════════════
 -- PARTE 1 — Funções reescritas com verificação de autorização interna
---           (continuam acessíveis a "authenticated", agora com guarda)
+--           (continuam acessíveis a "authenticated", agora com guarda).
+--           Estas três SÃO recriadas de raiz (CREATE OR REPLACE), por isso
+--           não precisam do helper condicional acima — passam a existir
+--           com esta assinatura de qualquer forma.
 -- ════════════════════════════════════════════════════════════════════════
 
 -- ── add_credits — só service_role OU um admin autenticado pode creditar
---    QUALQUER conta. Um utilizador normal só pode chamar isto para... na
---    prática, nunca — não há nenhum caso de uso legítimo de um utilizador
---    normal creditar-se a si próprio via esta função (créditos vêm sempre
---    de pagamento confirmado no servidor, ou de acção de admin). Por isso
---    a guarda exige explicitamente is_admin = true, sem excepção de "self".
+--    QUALQUER conta.
 CREATE OR REPLACE FUNCTION add_credits(user_id UUID, amount INTEGER)
 RETURNS INTEGER AS $$
 DECLARE
@@ -217,153 +249,91 @@ GRANT  EXECUTE ON FUNCTION grant_monthly_credits(UUID) TO authenticated, service
 
 -- ════════════════════════════════════════════════════════════════════════
 -- PARTE 2 — Funções SÓ SERVIDOR (nunca chamadas do browser) — trancadas
---           a service_role. Nenhuma alteração de lógica interna, só GRANT.
+--           a service_role, SE existirem (ver Parte 0). Nenhuma alteração
+--           de lógica interna, só GRANT.
 -- ════════════════════════════════════════════════════════════════════════
 
-REVOKE EXECUTE ON FUNCTION deduct_credits(UUID, INTEGER)                                        FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION refund_credit(UUID, INTEGER)                                          FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION deduct_credits_idempotent(UUID, INTEGER, UUID, TEXT, TEXT)            FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION refund_credit_idempotent(UUID, INTEGER, UUID, TEXT, TEXT)             FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION confirm_payment_and_credit(UUID, TEXT, TEXT, NUMERIC, INTEGER, UUID, TEXT) FROM PUBLIC, anon, authenticated;
-
-GRANT EXECUTE ON FUNCTION deduct_credits(UUID, INTEGER)                                        TO service_role;
-GRANT EXECUTE ON FUNCTION refund_credit(UUID, INTEGER)                                          TO service_role;
-GRANT EXECUTE ON FUNCTION deduct_credits_idempotent(UUID, INTEGER, UUID, TEXT, TEXT)            TO service_role;
-GRANT EXECUTE ON FUNCTION refund_credit_idempotent(UUID, INTEGER, UUID, TEXT, TEXT)             TO service_role;
-GRANT EXECUTE ON FUNCTION confirm_payment_and_credit(UUID, TEXT, TEXT, NUMERIC, INTEGER, UUID, TEXT) TO service_role;
+SELECT public._v67_lock_if_exists('deduct_credits(uuid, integer)');
+SELECT public._v67_lock_if_exists('refund_credit(uuid, integer)');
+SELECT public._v67_lock_if_exists('deduct_credits_idempotent(uuid, integer, uuid, text, text)');
+SELECT public._v67_lock_if_exists('refund_credit_idempotent(uuid, integer, uuid, text, text)');
+SELECT public._v67_lock_if_exists('confirm_payment_and_credit(uuid, text, text, numeric, integer, uuid, text)');
 
 -- ── Achado crítico: promote_to_admin (concessão de administrador total) ──
-REVOKE EXECUTE ON FUNCTION promote_to_admin(UUID, VARCHAR) FROM PUBLIC, anon, authenticated;
-GRANT  EXECUTE ON FUNCTION promote_to_admin(UUID, VARCHAR) TO service_role;
-COMMENT ON FUNCTION promote_to_admin(UUID, VARCHAR) IS
-  'v67 (Set/2026): ferramenta de bootstrap manual (correr no SQL Editor). NUNCA deve ser chamável via RPC público — antes desta migração não tinha NENHUMA restrição, permitindo auto-promoção a admin por qualquer utilizador autenticado.';
+SELECT public._v67_lock_if_exists('promote_to_admin(uuid, varchar)');
 
--- ── Funções legadas mortas mas ainda perigosas (nunca chamadas pelo
---    código actual, mas continuam a existir na base de dados e continuam
---    RPC-callable até serem trancadas) ──
-REVOKE EXECUTE ON FUNCTION confirm_payment_and_set_plan(UUID, UUID) FROM PUBLIC, anon, authenticated;
-GRANT  EXECUTE ON FUNCTION confirm_payment_and_set_plan(UUID, UUID) TO service_role;
-
-REVOKE EXECUTE ON FUNCTION complete_transaction(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT  EXECUTE ON FUNCTION complete_transaction(TEXT, TEXT) TO service_role;
+-- ── Funções legadas mortas mas ainda perigosas (ficheiros avulsos fora da
+--    cadeia numerada — podem não existir, daí o helper condicional) ──
+SELECT public._v67_lock_if_exists('confirm_payment_and_set_plan(uuid, uuid)');
+SELECT public._v67_lock_if_exists('complete_transaction(text, text)');
 
 -- ── Criação de contas com créditos grátis ──
-REVOKE EXECUTE ON FUNCTION create_temp_account(TEXT, TEXT)                              FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION create_normal_account(UUID, TEXT, TEXT, TEXT)                FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION create_temp_account_for_avulso(TEXT, TEXT, INTEGER, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT  EXECUTE ON FUNCTION create_temp_account(TEXT, TEXT)                              TO service_role;
-GRANT  EXECUTE ON FUNCTION create_normal_account(UUID, TEXT, TEXT, TEXT)                TO service_role;
-GRANT  EXECUTE ON FUNCTION create_temp_account_for_avulso(TEXT, TEXT, INTEGER, TEXT, TEXT) TO service_role;
+SELECT public._v67_lock_if_exists('create_temp_account(text, text)');
+SELECT public._v67_lock_if_exists('create_normal_account(uuid, text, text, text)');
+SELECT public._v67_lock_if_exists('create_temp_account_for_avulso(text, text, integer, text, text)');
 
--- ── Templates: aprovação/rejeição/destaque/tipo/venda — todas admin ou
---    dinheiro, todas com p_admin_id/p_buyer_id como parâmetro NUNCA
---    verificado contra o chamador real ──
-REVOKE EXECUTE ON FUNCTION admin_approve_template(UUID, UUID, TEXT, BOOLEAN)      FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION admin_reject_template(UUID, UUID, TEXT)                FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION admin_feature_template(UUID, UUID, BOOLEAN, INT)       FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION admin_change_template_type(UUID, UUID, TEXT, INT, TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION process_template_sale(UUID, UUID, INT, NUMERIC)        FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION approve_template(UUID)                                 FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION reject_template(UUID, TEXT)                            FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION submit_community_template(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT[], TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION use_template(UUID, UUID, TEXT, TEXT)                   FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION toggle_save_template(UUID, UUID)                       FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION rate_template(UUID, UUID, INT, TEXT)                   FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION regenerate_share_token(UUID, UUID)                     FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION increment_template_downloads(UUID)                     FROM PUBLIC, anon, authenticated;
-
-GRANT EXECUTE ON FUNCTION admin_approve_template(UUID, UUID, TEXT, BOOLEAN)      TO service_role;
-GRANT EXECUTE ON FUNCTION admin_reject_template(UUID, UUID, TEXT)                TO service_role;
-GRANT EXECUTE ON FUNCTION admin_feature_template(UUID, UUID, BOOLEAN, INT)       TO service_role;
-GRANT EXECUTE ON FUNCTION admin_change_template_type(UUID, UUID, TEXT, INT, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION process_template_sale(UUID, UUID, INT, NUMERIC)        TO service_role;
-GRANT EXECUTE ON FUNCTION approve_template(UUID)                                 TO service_role;
-GRANT EXECUTE ON FUNCTION reject_template(UUID, TEXT)                            TO service_role;
-GRANT EXECUTE ON FUNCTION submit_community_template(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT[], TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION use_template(UUID, UUID, TEXT, TEXT)                   TO service_role;
-GRANT EXECUTE ON FUNCTION toggle_save_template(UUID, UUID)                       TO service_role;
-GRANT EXECUTE ON FUNCTION rate_template(UUID, UUID, INT, TEXT)                   TO service_role;
-GRANT EXECUTE ON FUNCTION regenerate_share_token(UUID, UUID)                     TO service_role;
-GRANT EXECUTE ON FUNCTION increment_template_downloads(UUID)                     TO service_role;
+-- ── Templates: aprovação/rejeição/destaque/tipo/venda ──
+SELECT public._v67_lock_if_exists('admin_approve_template(uuid, uuid, text, boolean)');
+SELECT public._v67_lock_if_exists('admin_reject_template(uuid, uuid, text)');
+SELECT public._v67_lock_if_exists('admin_feature_template(uuid, uuid, boolean, int)');
+SELECT public._v67_lock_if_exists('admin_change_template_type(uuid, uuid, text, int, text)');
+SELECT public._v67_lock_if_exists('process_template_sale(uuid, uuid, int, numeric)');
+SELECT public._v67_lock_if_exists('approve_template(uuid)');
+SELECT public._v67_lock_if_exists('reject_template(uuid, text)');
+SELECT public._v67_lock_if_exists('submit_community_template(uuid, text, text, text, text, text, text, text, text, text[], text)');
+SELECT public._v67_lock_if_exists('use_template(uuid, uuid, text, text)');
+SELECT public._v67_lock_if_exists('toggle_save_template(uuid, uuid)');
+SELECT public._v67_lock_if_exists('rate_template(uuid, uuid, int, text)');
+SELECT public._v67_lock_if_exists('regenerate_share_token(uuid, uuid)');
+SELECT public._v67_lock_if_exists('increment_template_downloads(uuid)');
 
 -- ── Afiliados: comissões, tiers, fraude, ranking, bónus de referência ──
-REVOKE EXECUTE ON FUNCTION process_affiliate_commission(UUID, UUID, TEXT, INTEGER)    FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION process_affiliate_commission_v2(UUID, UUID, TEXT, INTEGER) FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION update_affiliate_tier(UUID)                                FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION check_affiliate_fraud(UUID, TEXT)                          FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION generate_monthly_ranking(TEXT)                             FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION grant_referral_signup_bonus(UUID)                          FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION register_affiliate_click(TEXT, TEXT, TEXT)                 FROM PUBLIC, anon, authenticated;
-
-GRANT EXECUTE ON FUNCTION process_affiliate_commission(UUID, UUID, TEXT, INTEGER)    TO service_role;
-GRANT EXECUTE ON FUNCTION process_affiliate_commission_v2(UUID, UUID, TEXT, INTEGER) TO service_role;
-GRANT EXECUTE ON FUNCTION update_affiliate_tier(UUID)                                TO service_role;
-GRANT EXECUTE ON FUNCTION check_affiliate_fraud(UUID, TEXT)                          TO service_role;
-GRANT EXECUTE ON FUNCTION generate_monthly_ranking(TEXT)                             TO service_role;
-GRANT EXECUTE ON FUNCTION grant_referral_signup_bonus(UUID)                          TO service_role;
-GRANT EXECUTE ON FUNCTION register_affiliate_click(TEXT, TEXT, TEXT)                 TO service_role;
+SELECT public._v67_lock_if_exists('process_affiliate_commission(uuid, uuid, text, integer)');
+SELECT public._v67_lock_if_exists('process_affiliate_commission_v2(uuid, uuid, text, integer)');
+SELECT public._v67_lock_if_exists('update_affiliate_tier(uuid)');
+SELECT public._v67_lock_if_exists('check_affiliate_fraud(uuid, text)');
+SELECT public._v67_lock_if_exists('generate_monthly_ranking(text)');
+SELECT public._v67_lock_if_exists('grant_referral_signup_bonus(uuid)');
+SELECT public._v67_lock_if_exists('register_affiliate_click(text, text, text)');
 
 -- ── Documentos: consumo de downloads/edições extra e 1º documento grátis ──
-REVOKE EXECUTE ON FUNCTION consume_document_download(UUID, UUID)     FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION consume_document_edit(UUID, UUID)         FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION unlock_document_extra(UUID, UUID, TEXT)   FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION grant_free_document(UUID, UUID, TEXT)     FROM PUBLIC, anon, authenticated;
+SELECT public._v67_lock_if_exists('consume_document_download(uuid, uuid)');
+SELECT public._v67_lock_if_exists('consume_document_edit(uuid, uuid)');
+SELECT public._v67_lock_if_exists('unlock_document_extra(uuid, uuid, text)');
+SELECT public._v67_lock_if_exists('grant_free_document(uuid, uuid, text)');
 
-GRANT EXECUTE ON FUNCTION consume_document_download(UUID, UUID)     TO service_role;
-GRANT EXECUTE ON FUNCTION consume_document_edit(UUID, UUID)         TO service_role;
-GRANT EXECUTE ON FUNCTION unlock_document_extra(UUID, UUID, TEXT)   TO service_role;
-GRANT EXECUTE ON FUNCTION grant_free_document(UUID, UUID, TEXT)     TO service_role;
+-- ── Analytics/observabilidade server-side ──
+SELECT public._v67_lock_if_exists('record_ai_provider_usage(text, boolean, text, integer, integer, text)');
+SELECT public._v67_lock_if_exists('increment_page_view(text, date)');
+SELECT public._v67_lock_if_exists('increment_page_views(text)');
 
--- ── Analytics/observabilidade server-side (baixo risco financeiro directo,
---    mas sem razão nenhuma para ficar acessível ao público) ──
-REVOKE EXECUTE ON FUNCTION record_ai_provider_usage(TEXT, BOOLEAN, TEXT, INTEGER, INTEGER, TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION increment_page_view(TEXT, DATE)  FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION increment_page_views(TEXT)       FROM PUBLIC, anon, authenticated;
-
-GRANT EXECUTE ON FUNCTION record_ai_provider_usage(TEXT, BOOLEAN, TEXT, INTEGER, INTEGER, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION increment_page_view(TEXT, DATE)  TO service_role;
-GRANT EXECUTE ON FUNCTION increment_page_views(TEXT)       TO service_role;
+-- Função auxiliar já não é precisa — removida (não fica lixo na BD).
+DROP FUNCTION IF EXISTS public._v67_lock_if_exists(TEXT);
 
 
 -- ════════════════════════════════════════════════════════════════════════
 -- PARTE 3 — Segurança por omissão para o futuro
 -- ════════════════════════════════════════════════════════════════════════
 
--- Qualquer função nova criada por um utilizador com privilégios normais no
--- schema "public" a partir de agora já nasce SEM EXECUTE para PUBLIC — tem
--- de ser concedido explicitamente na própria migração que a cria. Isto não
--- afecta nenhuma função já existente (essas foram tratadas explicitamente
--- acima); só se aplica a CREATE FUNCTION futuros.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
 
 -- ════════════════════════════════════════════════════════════════════════
--- PARTE 4 — Correcção de contradição real na migration_v50
+-- PARTE 4 — Trigger de protecção de colunas sensíveis em "profiles"
 -- ════════════════════════════════════════════════════════════════════════
--- migration_v50_protect_sensitive_profile_columns.sql protege a coluna
--- "credits" com um trigger BEFORE UPDATE que bloqueia a alteração dessa
--- coluna para qualquer chamador que não seja service_role nem admin. Isso
--- entra em CONTRADIÇÃO directa com o funcionamento normal de deduct_credit()
--- chamada pelo PRÓPRIO utilizador (Services.js, geração de documentos): o
--- UPDATE profiles SET credits=... feito DENTRO dessa função, mesmo sendo
--- SECURITY DEFINER, é avaliado pelo trigger com base em quem fez o PEDIDO
--- original (auth.uid()/auth.role() reflectem sempre o JWT do pedido, não o
--- dono da função) — ou seja, SE esse trigger estiver activo, uma geração de
--- documento normal (desconto do próprio crédito) seria REJEITADA para
--- qualquer utilizador que não seja admin.
+-- migration_v50_protect_sensitive_profile_columns.sql protegia a coluna
+-- "credits" com um trigger BEFORE UPDATE que bloquearia essa alteração
+-- para qualquer chamador que não fosse service_role nem admin — o que
+-- entraria em CONTRADIÇÃO com deduct_credit() chamada pelo PRÓPRIO
+-- utilizador (auto-serviço, não-admin), já que auth.uid()/auth.role()
+-- reflectem sempre quem fez o pedido original, mesmo dentro de uma função
+-- SECURITY DEFINER. Como esta migração (v67) já garante essa autorização
+-- ao nível da própria RPC, "credits" foi removida desta lista. Adicionadas
+-- "is_affiliate"/"aff_segment" (P1.3 da auditoria externa — um utilizador
+-- normal podia alterar estes dois campos na própria linha sem validação).
 --
--- Como esta migração (v67) já garante, ao nível da própria função, que só
--- service_role ou o próprio utilizador (deduct_credit) / só service_role ou
--- admin (add_credits) conseguem sequer chamar estas RPCs, a protecção
--- adicional do trigger sobre a coluna "credits" deixou de ser necessária
--- E estava a causar (ou estaria, assim que activada) uma contradição.
--- Removida da lista de colunas protegidas pelo trigger — as restantes
--- colunas sensíveis continuam totalmente protegidas.
---
--- Adicionadas ao mesmo trigger, por completude (achado adicional — auditoria
--- externa, P1.3): is_affiliate e aff_segment, que um utilizador normal podia
--- alterar directamente na própria linha via "profiles_update_own" para se
--- auto-promover a afiliado/segmento especial sem qualquer validação.
+-- Esta secção RECRIA o trigger do zero (DROP + CREATE), tal como a v50 já
+-- fazia — funciona quer a v50 tenha corrido antes, quer não.
 
 CREATE OR REPLACE FUNCTION public.protect_sensitive_profile_columns()
 RETURNS TRIGGER AS $$
@@ -394,19 +364,18 @@ BEGIN
     RAISE EXCEPTION 'Não autorizado a alterar estes campos directamente.';
   END IF;
 
-  -- "credits" retirada desta lista (v67): a autorização de quem pode alterar
-  -- créditos é agora garantida ao nível das próprias RPCs
-  -- (add_credits/deduct_credit/etc., ver PARTE 1/2 acima), evitando a
-  -- contradição descrita no comentário desta migração.
+  -- "credits" retirada desta lista (v67): a autorização de quem pode
+  -- alterar créditos passou a ser garantida ao nível das próprias RPCs
+  -- (add_credits/deduct_credit/etc., ver PARTE 1 acima).
 
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Nota: se "is_affiliate" ou "aff_segment" não existirem como colunas em
--- profiles no teu schema actual, remove essas duas linhas do IF acima antes
--- de correr esta migração (o CREATE OR REPLACE falha em bloco se alguma
--- coluna referida não existir).
+DROP TRIGGER IF EXISTS trg_protect_sensitive_profile_columns ON profiles;
+CREATE TRIGGER trg_protect_sensitive_profile_columns
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION public.protect_sensitive_profile_columns();
 
 COMMENT ON FUNCTION public.protect_sensitive_profile_columns() IS
-  'v67 (Set/2026): "credits" removida da lista (autorização agora ao nível da RPC); is_affiliate/aff_segment adicionadas (P1.3 auditoria externa).';
+  'v67 (Set/2026): "credits" removida da lista (autorização agora ao nível da RPC); is_affiliate/aff_segment adicionadas (P1.3 auditoria externa). Recriada nesta migração independentemente de a v50 ter corrido.';
