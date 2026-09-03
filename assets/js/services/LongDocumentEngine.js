@@ -147,6 +147,7 @@ export class LongDocumentEngine {
     this._emit({ phase: 'plan', step: 0, text: '💳 A verificar créditos…' });
 
     let creditsAfterDeduct = null;
+    let wasFreeDocument = false;
     try {
       const deductRes = await fetch('/api/deduct-credit', {
         method: 'POST',
@@ -166,6 +167,10 @@ export class LongDocumentEngine {
       }
       const deductData = await deductRes.json();
       creditsAfterDeduct = deductData.credits;
+      // NOVO (v66): este documento longo foi coberto pelo mecanismo de
+      // "documento grátis" — ver comentário equivalente em Services.js
+      // (_callBackend) e CreditModel.consumeFreeDocument().
+      wasFreeDocument = deductData.free === true;
     } catch (e) {
       throw e; // propaga erro de crédito/auth sem crédito perdido
     }
@@ -291,6 +296,10 @@ export class LongDocumentEngine {
       model:               'Cadeia de Geração · multi-provider',
       sections:            generatedSections.length,
       creditsRemaining:    creditsAfterDeduct, // valor real do servidor
+      // NOVO (v66): só o débito INICIAL pode ser coberto pelo documento
+      // grátis — créditos extra por tamanho (custo progressivo, acima)
+      // usam sempre o saldo pago normal, nunca o mecanismo grátis.
+      freeDocument:        wasFreeDocument,
       extraCreditsCharged,                     // quantos créditos extra foram cobrados pelo tamanho
       totalCreditsCharged: cost + extraCreditsCharged,
       truncatedByCredits:  wasTruncatedByCredits, // true se o documento ficou incompleto por falta de saldo
