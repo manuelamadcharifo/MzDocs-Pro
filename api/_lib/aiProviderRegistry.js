@@ -99,6 +99,18 @@
 
 const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
 
+// P0.4 (Master Audit, Set/2026): CORRIGIDO — a Cohere estava marcada no seu
+// próprio `limitLabel` como "uso não-comercial apenas", mas nada no motor
+// de corrida (aiRace.js) impedia que entrasse automaticamente na produção
+// comercial assim que COHERE_API_KEY existisse. `commercialAllowed` é a
+// fonte única de verdade que aiRace.js agora consulta antes de considerar
+// qualquer provider elegível — por omissão `true` (todos os outros
+// providers desta lista usam tiers gratuitos que os próprios termos
+// permitem em produção); só é preciso marcar `false` explicitamente nos
+// que, como a Cohere Trial, o próprio fornecedor restringe a uso não
+// comercial. Antes de reactivar a Cohere para uso comercial, seria preciso
+// mudar para uma chave/plano pago da Cohere e então marcar
+// commercialAllowed: true aqui.
 const PROVIDERS = [
     // ── TIER 1 · Grátis generoso ────────────────────────────────────────
     {
@@ -328,6 +340,7 @@ const PROVIDERS = [
         name: 'Cohere',
         kind: 'openai',
         tier: 'reserva_ativa',
+        commercialAllowed: false, // v67: chave "Trial" da Cohere é só para uso não-comercial (ver limitLabel) — nunca deve entrar na corrida em produção
         envVar: 'COHERE_API_KEY',
         signupUrl: 'https://dashboard.cohere.com/api-keys',
         chatUrl: 'https://api.cohere.ai/compatibility/v1/chat/completions',
