@@ -37,6 +37,32 @@ async function checkReceiptRateLimit(ip) {
   return checkRateLimit('receipt', ip, { limit: 3, windowSec: 60 });
 }
 
+// ── P0.2 (Master Audit, Set/2026): validação do DESTINATÁRIO do comprovativo ──
+// CORRIGIDO: a verificação automática validava valor + data + status, mas
+// nunca confirmava que o dinheiro do comprovativo tinha ido PARA a conta do
+// MzDocs — só que o valor "batia certo". Um comprovativo real de outra
+// transferência (para outra pessoa, com o mesmo valor de um pacote) passava
+// nos restantes checks e era auto-aprovado. Esta função normaliza qualquer
+// formato de número moçambicano (com/sem +258, com/sem espaços) para 9
+// dígitos, o mesmo formato usado em todo o resto do projecto (ver
+// normalizePhone em api/process-payment.js).
+function normalizePhone(raw) {
+  let num = String(raw || '').replace(/\D/g, '');
+  if (num.startsWith('258')) num = num.slice(3);
+  return num;
+}
+
+// Número(s) que recebem os pagamentos do MzDocs Pro. Configurável por env
+// var (MZDOCS_RECEIVING_PHONES, separados por vírgula) para o dia em que
+// existir mais do que uma carteira — por omissão, o número único já usado
+// em todo o checkout/WhatsApp do projecto.
+const MZDOCS_RECEIVING_PHONES = String(
+  process.env.MZDOCS_RECEIVING_PHONES || process.env.WA_SUPPORT_NUMBER || '258858695506'
+)
+  .split(',')
+  .map(normalizePhone)
+  .filter(Boolean);
+
 // Preços/créditos dos pacotes: única fonte de verdade em _lib/packages.js
 // (ver esse ficheiro para o porquê — corrige duplicação em 5 locais e o
 // bug de a verificação automática de comprovativos nunca reflectir
@@ -60,6 +86,7 @@ const RECEIPT_PROMPT = (wallet) =>
   `"status" deve ser EXACTAMENTE um de: SUCESSO, CONFIRMADO, PENDENTE, FALHA. ` +
   `"confidence" é a tua certeza de 0.0 a 1.0 de que extraíste os dados correctamente — se a imagem estiver desfocada ou ilegível, usa 0.0. ` +
   `"amount" é o valor em MZN como número. "reference" é o código de transacção. ` +
+  `"recipient_phone" é MUITO IMPORTANTE: o número de telefone ou conta PARA QUEM o dinheiro foi enviado (o destinatário/beneficiário da transferência, normalmente indicado como "Para", "Recebido por", "Beneficiário" ou similar) — NUNCA o número de quem enviou o dinheiro. Extrai só os dígitos, sem espaços. Se não conseguires identificar com confiança o destinatário, devolve "recipient_phone":"". ` +
   `"rejection_reason" é vazio se válido, ou o motivo de rejeição se inválido.`;
 
 // ── Criação automática de conta avulso (NOVO v3.1) ──────────────────────────
@@ -250,7 +277,17 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
   // 4d. Status de sucesso
   const statusOk = ['SUCESSO', 'CONFIRMADO', 'APPROVED', 'SUCCESS'].includes(aiStatus);
 
-  const allChecksPass = !alreadyConfirmed && dateOk && amountOk && statusOk;
+  // 4e. Destinatário é mesmo o MzDocs (CORRIGIDO — P0.2, Master Audit Set/2026).
+  // Sem isto, um comprovativo válido de OUTRA transferência (mesmo valor,
+  // pessoa diferente) passava em todos os outros checks. Se a IA não
+  // conseguir identificar o destinatário com confiança, o número extraído
+  // fica curto/vazio e o check falha por omissão — nunca aprovamos "às
+  // cegas" (ver Nível 3 da recomendação da auditoria: elemento ilegível ⇒
+  // revisão manual, nunca AUTO_APPROVE).
+  const aiRecipientNorm = normalizePhone(aiResult.recipient_phone);
+  const recipientOk     = aiRecipientNorm.length >= 9 && MZDOCS_RECEIVING_PHONES.includes(aiRecipientNorm);
+
+  const allChecksPass = !alreadyConfirmed && dateOk && amountOk && statusOk && recipientOk;
 
   // ── 5. Decisão: aprovação automática ou revisão manual ─────────────────
   if (confidence >= 0.85 && allChecksPass) {
@@ -403,6 +440,7 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
           !dateOk          ? 'data fora do intervalo' : null,
           !amountOk        ? `valor incorreto (esperado ${pkg?.price} MZN, detectado ${aiAmount})` : null,
           !statusOk        ? `status inválido (${aiStatus})` : null,
+          !recipientOk     ? 'destinatário não confirmado (número ilegível ou diferente da conta do MzDocs)' : null,
         ].filter(Boolean).join('; ')
       : `confidence baixa (${confidence.toFixed(2)})`;
 
