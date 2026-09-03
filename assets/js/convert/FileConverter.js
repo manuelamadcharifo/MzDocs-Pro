@@ -242,8 +242,16 @@ export function initConverter(svcKey = 'conversao', creditModel = null) {
       if (res)    res.style.display = 'block';
 
       // ── Descontar crédito após conversão bem-sucedida ───────────────────
+      // NOVO (v66): se ainda houver direito a um documento grátis, este é
+      // que cobre a conversão (sem tocar em profiles.credits) — mesma
+      // regra usada em DocumentController.js para a geração normal. Só
+      // desconta 1 crédito pago quando não há (mais) documento grátis.
       if (creditModel) {
-        try { await creditModel.consume(1); } catch (_) {}
+        if (creditModel.hasFreeDocument) {
+          creditModel.consumeFreeDocument();
+        } else {
+          try { await creditModel.consume(1); } catch (_) {}
+        }
       }
 
       // Auto-revoke após 10 min
