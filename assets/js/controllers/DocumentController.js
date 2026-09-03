@@ -648,6 +648,12 @@ export class DocumentController {
   Storage.set('credits', this.creditModel.credits);
   this.creditModel._emit?.();
  }
+ // NOVO (v66): este documento foi coberto pelo mecanismo de "documento
+ // grátis" — profiles.credits não mudou, mas o contador
+ // free_documents_used sim; reflectir isso localmente (ver
+ // CreditModel.consumeFreeDocument()) para o badge/cartões actualizarem
+ // de imediato, sem esperar pela próxima sincronização periódica.
+ if (result.freeDocument) this.creditModel.consumeFreeDocument();
 
  const remainingAfterNormal = this.creditModel.value;
  const isLastCreditNormal   = remainingAfterNormal === 0;
@@ -801,6 +807,8 @@ export class DocumentController {
    Storage.set('credits', this.creditModel.credits);
    this.creditModel._emit?.();
   }
+  // NOVO (v66): ver comentário equivalente em _generateNormal() acima.
+  if (result.freeDocument) this.creditModel.consumeFreeDocument();
 
   // Analytics
   const longHistId = crypto.randomUUID();
@@ -974,8 +982,8 @@ export class DocumentController {
      cta.style.cssText = 'margin:12px 16px 4px;background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border:2px dashed #F59E0B;border-radius:14px;padding:16px;text-align:center;';
      cta.innerHTML = `
        <div style="font-size:1.6rem;margin-bottom:6px;">🎁</div>
-       <div style="font-weight:700;font-size:.9rem;color:#92400E;margin-bottom:4px;">Ganha créditos grátis!</div>
-       <p style="color:#92400E;font-size:.8rem;margin:0 0 12px;line-height:1.4;">Partilha com um amigo. Quando ele se registar, ambos ganham 1 crédito.</p>
+       <div style="font-weight:700;font-size:.9rem;color:#92400E;margin-bottom:4px;">Convida amigos e ajuda-os a começar!</div>
+       <p style="color:#92400E;font-size:.8rem;margin:0 0 12px;line-height:1.4;">Partilha com um amigo. Quando ele se registar pelo teu link, ganha 2 documentos grátis (em vez de 1).</p>
        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
          <button id="mzRefCopy" style="background:#F59E0B;color:#fff;padding:9px 18px;border-radius:100px;font-weight:600;border:none;cursor:pointer;font-size:.82rem;">📋 Copiar Link</button>
          <button id="mzRefWa" style="background:#25D366;color:#fff;padding:9px 18px;border-radius:100px;font-weight:600;border:none;cursor:pointer;font-size:.82rem;">💬 WhatsApp</button>
