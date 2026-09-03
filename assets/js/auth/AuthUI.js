@@ -291,7 +291,20 @@ export class AuthUI {
             if (loggedIn) {
                 // Login automático funcionou — fechar modal e mostrar boas-vindas
                 this.close();
-                this._toast('✅ Conta criada! Bem-vindo ao MzDocs Pro 🎉', 'success');
+                // CORRIGIDO (bug reportado: "ao cadastrar tinha que dizer que o
+                // usuário recebeu 1 documento grátis"): esta mensagem só existia
+                // no ecrã de sucesso do fluxo com confirmação de e-mail (abaixo,
+                // authSuccess) — no caminho mais comum, com login automático, o
+                // toast nunca mencionava o documento grátis (v66). Quem se
+                // registou através de um link de afiliado (mz_ref em
+                // localStorage, ver AuthManager.js) tem direito a 2, não 1 —
+                // ver grant_free_document() na migration_v66.
+                let refCode = null;
+                try { refCode = localStorage.getItem('mz_ref'); } catch (_) {}
+                const freeMsg = refCode
+                    ? '✅ Conta criada! Ganhou 2 documentos grátis (registo por convite) — bem-vindo ao MzDocs Pro 🎉'
+                    : '✅ Conta criada! Ganhou 1 documento grátis — bem-vindo ao MzDocs Pro 🎉';
+                this._toast(freeMsg, 'success');
                 // Analytics: registo bem-sucedido
                 try { window.dispatchEvent(new CustomEvent('mz:signup')); } catch(_) {}
             } else {
