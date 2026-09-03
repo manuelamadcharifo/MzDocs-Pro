@@ -168,12 +168,17 @@ export class CreditModel {
                 }
             }
             // NOVO: guarda o estado real do "documento grátis" (v66) — usado
-            // pelo banner do editor (DocumentEditor.js). Sem valor por
-            // omissão agressivo (undefined, não 0) para o banner conseguir
-            // distinguir "ainda não sincronizado" de "0 restantes reais".
+            // pelo banner do editor (DocumentEditor.js), pelo badge de
+            // créditos e pelos cartões de serviço na home (ver app.js e
+            // index.html). Sem valor por omissão agressivo (undefined, não
+            // 0) para conseguirem distinguir "ainda não sincronizado" de
+            // "0 restantes reais".
             if (data && typeof data.freeDocsRemaining === 'number') {
+                const changed = data.freeDocsRemaining !== this.freeDocsRemaining
+                             || data.freeDocsAllowance !== this.freeDocsAllowance;
                 this.freeDocsRemaining = data.freeDocsRemaining;
                 this.freeDocsAllowance = data.freeDocsAllowance;
+                if (changed) this._emitFreeDocs();
             }
         } finally {
             this._syncing = false;
@@ -188,7 +193,48 @@ export class CreditModel {
         this._syncTimer = setInterval(() => this._syncFromServer(), 30000);
     }
 
-    canConsume(n = 1) { return this.credits >= n; }
+    // NOVO (v66): true quando ainda há pelo menos um "documento grátis" por
+    // usar (ver profiles.free_documents_used / grant_free_document() na
+    // migration_v66). undefined enquanto a 1ª sincronização com o servidor
+    // não acontecer — nesse caso conta como "sem documento grátis" (false)
+    // até se saber ao certo, nunca se assume optimisticamente.
+    get hasFreeDocument() {
+        return (this.freeDocsRemaining || 0) > 0;
+    }
+
+    // CORRIGIDO (bug reportado: "depois de criar conta as pessoas não têm
+    // acesso ao primeiro documento grátis"): esta verificação só olhava
+    // para profiles.credits. Como uma conta nova nasce agora com 0
+    // créditos (o benefício passou a ser um documento grátis, não 1
+    // crédito — ver migration_v66_first_document_free.sql), o utilizador
+    // era bloqueado AQUI MESMO, no cliente, antes de qualquer pedido
+    // chegar ao servidor (via canConsume() em DocumentController.js
+    // open()/generate() e em FileConverter.js) — a função
+    // grant_free_document() nunca chegava sequer a ser chamada. Ter um
+    // documento grátis disponível é sempre suficiente para prosseguir,
+    // seja qual for o custo `n` real do serviço: o servidor cobre sempre
+    // o custo REAL do primeiro documento, sem tocar em profiles.credits
+    // (ver api/_services/account.js → handleDeductCredit).
+    canConsume(n = 1) { return this.hasFreeDocument || this.credits >= n; }
+
+    // NOVO (v66): chamado pelo DocumentController/FileConverter depois de
+    // uma geração bem-sucedida coberta pelo mecanismo de documento grátis
+    // (resposta do servidor com free:true) — mantém freeDocsRemaining
+    // correcto no cliente de imediato, sem esperar pelo próximo
+    // _syncFromServer() (até 30s de atraso), para que o badge/cartões
+    // deixem de mostrar "Grátis" logo a seguir a usá-lo.
+    consumeFreeDocument() {
+        if (typeof this.freeDocsRemaining === 'number' && this.freeDocsRemaining > 0) {
+            this.freeDocsRemaining -= 1;
+            this._emitFreeDocs();
+        }
+    }
+
+    _emitFreeDocs() {
+        window.dispatchEvent(new CustomEvent('freeDocsChanged', {
+            detail: { remaining: this.freeDocsRemaining, allowance: this.freeDocsAllowance },
+        }));
+    }
 
     async consume(n = 1) {
         // CORRIGIDO v2.5: consume() ja nao e chamado apos applyServerDeduction().
