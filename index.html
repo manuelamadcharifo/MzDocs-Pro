@@ -209,7 +209,7 @@
         <div class="gt-sp-card"><div class="gt-sp-ico">📄</div><div class="gt-sp-name">Requerimento Oficial</div></div>
       </div>
       <button class="btn-gt-register" data-action="openRegisterFromTeaser">
-        🚀 Criar conta gratuita — receber 1 crédito
+        🚀 Criar conta gratuita — receba 1 documento grátis
       </button>
       <div class="gt-login-hint">
         Já tem conta? <button data-action="openLoginFromTeaser">Entrar aqui</button>
@@ -836,6 +836,20 @@ const SVC_CREDITS = {
 
 function getCredits(id) {
   if (SVC_CREDITS[id] === null) return '<span class="cost wa-cost">📲 Via Parceiro</span>';
+  // NOVO (v66 — "no top mostra crédito zero devia aparecer grátis... em
+  // todos os cards deve mostrar grátis até que os documentos gratuitos
+  // sejam usados"): enquanto o utilizador tiver direito a um documento
+  // inicial grátis (CreditModel.freeDocsRemaining > 0 — ver Models.js),
+  // qualquer serviço com IA mostra "Grátis" em vez do custo em créditos.
+  // O custo real continua sempre coberto no servidor pelo mecanismo de
+  // documento grátis (api/_services/account.js), qualquer que seja o
+  // número de créditos aqui — nunca se aplica aos serviços via parceiro
+  // acima (sem custo em créditos de qualquer forma) nem aos templates
+  // pagos do marketplace (fora deste grid).
+  const cm = window.docController?.creditModel;
+  if (cm && cm.hasFreeDocument) {
+    return '<span class="cost free">🎁 Grátis</span>';
+  }
   const cost = (SERVICES[id] && SERVICES[id].cost) || 1;
   const label = cost === 1 ? '1 crédito' : `${cost} créditos`;
   return `<span class="cost">${label}</span>`;
@@ -935,9 +949,12 @@ function bindGridClicks() {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
+let _svcCurrentCat = 'populares';
+
 document.addEventListener('DOMContentLoaded', () => {
   // Pre-selecção: categoria mais usada ou 'populares'
   const preferred = getMostUsedCat() || 'populares';
+  _svcCurrentCat = preferred;
   setActiveFilter(preferred);
   renderServices(preferred);
   bindGridClicks();
@@ -947,10 +964,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = e.target.closest('.cat-btn');
     if (!btn) return;
     const cat = btn.dataset.cat;
+    _svcCurrentCat = cat;
     setActiveFilter(cat);
     renderServices(cat);
     // Re-bind (o innerHTML foi substituído, mas o listener está no grid — OK)
   });
+
+  // NOVO (v66): os cartões são renderizados por getCredits() antes de
+  // window.docController existir (app.js ainda está a arrancar) e antes de
+  // saber se há um documento grátis disponível — por isso mostram sempre
+  // "N créditos" na primeira pintura. Assim que o CreditModel sincronizar
+  // (ou o estado de documento grátis mudar, ex.: acabou de ser usado),
+  // voltar a pintar os cartões da categoria actual para reflectir "Grátis".
+  window.addEventListener('creditsChanged', () => renderServices(_svcCurrentCat));
+  window.addEventListener('freeDocsChanged', () => renderServices(_svcCurrentCat));
 
   // ── Setas de scroll das categorias ─────────────────────────────────────
   const filtersEl = document.getElementById('catFilters');
