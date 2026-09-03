@@ -76,6 +76,11 @@ async function raceAllProviders(prompt, apiKeys, preferProvider, maxTokens, syst
     // (independentemente do tier — usado para o fallback de reserva depois)
     const avail = {};
     for (const providerCfg of PROVIDERS) {
+        // P0.4 (Master Audit, Set/2026): providers marcados commercialAllowed:false
+        // (ex.: Cohere, cuja chave "Trial" o próprio fornecedor restringe a uso
+        // não-comercial) nunca entram na corrida em produção, mesmo que a env
+        // var da chave exista — ver comentário em aiProviderRegistry.js.
+        if (providerCfg.commercialAllowed === false) continue;
         if (apiKeys[providerCfg.id]) avail[providerCfg.id] = providerCfg;
     }
     if (Object.keys(avail).length === 0) throw new Error('Nenhum provider disponível');
