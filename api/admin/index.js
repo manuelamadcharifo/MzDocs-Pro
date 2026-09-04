@@ -411,6 +411,26 @@ async function handleConfirmAvulso(req, res) {
     if (tx.package_id !== 'avulso')
       return res.status(400).json({ error: 'Use /api/admin/confirm-payment para pacotes não avulsos' });
 
+    // CORRIGIDO (P19 — Master Hardening, Set/2026): antes, a transição
+    // pending→completed só acontecia MAIS ABAIXO, depois de já ter criado a
+    // conta temporária. O `if (tx.status !== 'pending')` acima lê o estado
+    // mas não o reserva — dois cliques/pedidos quase simultâneos na mesma
+    // transacção passavam ambos nesta verificação antes de qualquer um
+    // escrever, e cada um criava a SUA PRÓPRIA conta temporária e creditava
+    // tx.credits — resultado: 2 contas, 2x os créditos, para um único
+    // pagamento. Mesmo padrão de correcção já usado no endpoint irmão
+    // (handleConfirmPayment, mais acima neste ficheiro): reivindicar a
+    // transacção ATOMICAMENTE primeiro (WHERE status=pending), e só criar
+    // a conta se essa escrita realmente aconteceu.
+    const claimedRows = await update('transactions', 'id', tx.id, {
+      status:       'completed',
+      confirmed_by: auth.user.id,
+      confirmed_at: new Date().toISOString(),
+    }, '&status=eq.pending');
+    if (!claimedRows || !claimedRows.length) {
+      return res.status(409).json({ error: 'Transação já foi processada por outro pedido em paralelo.' });
+    }
+
     const ref       = tx.reference_id || ('AV' + Date.now());
     const tempEmail = `temp_${ref.toLowerCase()}@mzdocs.temp`;
     const tempPass  = _genPassword();
@@ -421,7 +441,18 @@ async function handleConfirmAvulso(req, res) {
         email: tempEmail, password: tempPass, emailConfirm: true,
         userMetadata: { full_name: `Avulso ${ref}`, is_temp: true, temp_ref: ref, phone: tx.phone_number || '' },
       });
-    } catch (createErr) { throw new Error('Erro ao criar conta temp: ' + createErr.message); }
+    } catch (createErr) {
+      // A transacção já ficou 'completed' (reivindicada acima) mas a conta
+      // falhou ao criar — não há créditos duplicados nem perdidos (nenhum
+      // crédito foi atribuído ainda), mas o cliente já pode ter pago.
+      // Marcar para seguimento manual em vez de deixar a falha silenciosa.
+      await restRequest(`transactions?id=eq.${tx.id}`, {
+        method: 'PATCH',
+        body:   { review_reason: 'FALHA_CRIACAO_CONTA_AVULSO: ' + createErr.message },
+        prefer: 'return=minimal',
+      }).catch(() => {});
+      throw new Error('Erro ao criar conta temp: ' + createErr.message);
+    }
 
     const tempUserId = newUser.id;
 
@@ -434,12 +465,10 @@ async function handleConfirmAvulso(req, res) {
       });
     } catch (profileErr) { throw profileErr; }
 
-    await update('transactions', 'id', tx.id, {
-      user_id:      tempUserId,
-      status:       'completed',
-      confirmed_by: auth.user.id,
-      confirmed_at: new Date().toISOString(),
-    });
+    // NOVO (P19): já não repete a transição de estado aqui (feita
+    // atomicamente acima, ANTES da criação da conta) — só falta ligar o
+    // user_id à transacção já reivindicada.
+    await update('transactions', 'id', tx.id, { user_id: tempUserId });
 
     // Registar em credit_logs
     await insert('credit_logs', {
