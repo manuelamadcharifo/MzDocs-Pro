@@ -191,7 +191,7 @@ async function handleMyPackages(req, res) {
 // api/_lib/pricingRegistry.js, nunca do cliente. Ver esse ficheiro para o
 // detalhe completo do problema e da correcção.
 const VALID_COSTS = Array.from({ length: 10 }, (_, i) => i + 1); // 1 a 10 créditos por operação
-const { resolveOfficialCost } = require('../_lib/pricingRegistry');
+const { resolveOfficialCost, CLIENT_ESTIMATED_SERVICES } = require('../_lib/pricingRegistry');
 
 async function handleDeductCredit(req, res) {
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
@@ -262,11 +262,18 @@ async function handleDeductCredit(req, res) {
   }
 
   // ── NOVO (P20): custo OFICIAL da cobrança — nunca vindo do cliente ───────
-  // `body.cost` é ignorado a partir daqui. `chargeType` só reconhece
-  // 'extra_page' explicitamente (ver LongDocumentEngine.js) — qualquer
-  // outro valor (incluindo ausência) é tratado como cobrança inicial normal.
+  // `body.cost` é ignorado a partir daqui, EXCEPTO para os serviços em
+  // CLIENT_ESTIMATED_SERVICES (ver api/_lib/pricingRegistry.js — hoje só
+  // "transcricao": custo por página OCR, um dado que só existe no cliente,
+  // limitação pré-existente e documentada, não uma regressão desta ronda).
+  // `chargeType` só reconhece 'extra_page' explicitamente (ver
+  // LongDocumentEngine.js) — qualquer outro valor (incluindo ausência) é
+  // tratado como cobrança inicial normal.
   const chargeType = body?.chargeType === 'extra_page' ? 'extra_page' : 'initial';
-  const cost = await resolveOfficialCost({ documentType, chargeType, selectOne });
+  let cost = await resolveOfficialCost({ documentType, chargeType, selectOne });
+  if (cost === null && chargeType === 'initial' && documentType && CLIENT_ESTIMATED_SERVICES.has(documentType)) {
+    cost = legacyCost;
+  }
   if (cost === null) {
     return res.status(400).json({
       error: 'Tipo de cobrança inválido para este serviço.',
