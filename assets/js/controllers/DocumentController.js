@@ -545,16 +545,24 @@ export class DocumentController {
  const data = DocumentView.collectData(svc.fields);
  const missing = Validator.required(svc.fields, data);
  if (missing) { NotificationView.warn(`⚠️ Campo obrigatório: ${missing}`); return; }
- // NOVO: custo dinâmico para serviços com dynamicCostPerPage (ex:
- // "transcricao"/Digitalizar Documento) — cobra por página fotografada em
- // vez de custo fixo, para ser justo com o consumo real de IA de um
- // documento longo. Sem páginas OCR (texto colado directamente), usa o
- // custo mínimo de 1 crédito como qualquer outro documento. O tecto de 10
- // créditos por operação é imposto de qualquer forma no servidor
- // (api/deduct-credit.js VALID_COSTS), esta é só a mesma regra replicada
- // no cliente para não tentar cobrar um valor que o servidor vai rejeitar.
+ // CORRIGIDO (P1.2 — Master Hardening, Set/2026): "trabalho"/"planonegocio"
+ // deixaram de ter um custo INICIAL dinâmico calculado aqui — a cobrança
+ // inicial é sempre 1 crédito fixo (svc.cost/pricingRegistry.js), o resto
+ // vem só da progressão real por caracteres já em curso desde a v3.0 (ver
+ // LongDocumentEngine.js). O bloqueio (canConsume) usa esse valor real —
+ // nunca uma estimativa optimista que o servidor ia rejeitar, nem uma
+ // pessimista que impedisse um utilizador legítimo de sequer começar.
+ // "transcricao" continua com o custo dinâmico ANTIGO (por página OCR,
+ // svc.dynamicCostPerPage) porque, ao contrário de trabalho/planonegocio,
+ // é cobrado numa ÚNICA vez, sem geração em cadeia — o valor calculado
+ // aqui É o valor real cobrado (ver CLIENT_ESTIMATED_SERVICES em
+ // api/_lib/pricingRegistry.js).
  let cost = svc.cost || 1;
- if (svc.dynamicCostPerPage) {
+ let estimatedTotalCost = cost;
+ if (LongDocumentEngine.isLongDoc(key, data)) {
+   const pages = parseInt(data.paginas) || 0;
+   estimatedTotalCost = LongDocumentEngine.estimateCredits(pages || 1);
+ } else if (svc.dynamicCostPerPage) {
    // CORRIGIDO: "transcricao" cobra por página FOTOGRAFADA (OCR), lida de
    // docModel.ocrPageCount — mas "trabalho" (Trabalho Escolar) não tem
    // páginas fotografadas nenhuma, tem sim um campo de formulário
@@ -566,11 +574,25 @@ export class DocumentController {
      ? (parseInt(data.paginas) || 0)
      : (this.docModel.ocrPageCount || 0);
    cost = pages > 0 ? Math.min(10, Math.max(1, Math.ceil(pages / svc.dynamicCostPerPage))) : 1;
+   estimatedTotalCost = cost;
  }
  if (!this.creditModel.canConsume(cost)) {
   const isGuest = !window.authManager?.isAuthenticated();
   window.paymentController?.showPricing(isGuest);
   return;
+ }
+ // NOVO (P1.2): avisa antecipadamente quando a estimativa total é bem
+ // maior do que o crédito inicial que está de facto a ser verificado
+ // acima — o utilizador pode decidir continuar mesmo assim (a geração
+ // pára de forma graciosa, com documento parcial, se os créditos
+ // acabarem a meio — comportamento já existente, ver LongDocumentEngine).
+ if (LongDocumentEngine.isLongDoc(key, data) && estimatedTotalCost > cost) {
+   NotificationView.info(
+     `ℹ️ Este trabalho tem uma estimativa de ≈${estimatedTotalCost} créditos no total ` +
+     `(cobrados progressivamente conforme o texto for gerado — o valor final pode variar). ` +
+     `Só ${cost} crédito é debitado agora; se os créditos acabarem antes do fim, recebe o ` +
+     `documento até onde for possível, sem perder o que já foi gerado.`
+   );
  }
 
  // Analytics: utilizador iniciou geração
