@@ -74,6 +74,39 @@ export class LongDocumentEngine {
     this._aborted    = false;
   }
 
+  // NOVO (P1.2 — Master Hardening, Set/2026): estimativa de custo TOTAL
+  // mostrada ao utilizador ANTES de gerar — ver comentário completo em
+  // ServiceDefinitions.js (campo `progressiveEstimate` de trabalho/
+  // planonegocio) e em DocumentController.js/Views.js (consumidores).
+  //
+  // PROBLEMA que isto substitui: "trabalho" tinha DOIS mecanismos de custo
+  // independentes — um cálculo por páginas (dynamicCostPerPage:5, "1
+  // crédito a cada 5 páginas") usado para a cobrança INICIAL, e este
+  // CHARS_PER_EXTRA_CREDIT (progressivo, por caracteres realmente gerados)
+  // cobrado DURANTE a geração. Um trabalho de 20 páginas mostrava/cobrava
+  // inicialmente 4 créditos (20÷5) mas depois continuava a debitar mais
+  // créditos progressivamente conforme o texto crescia — o utilizador
+  // nunca via o custo total real antecipadamente, e podia legitimamente
+  // achar que estava a pagar 4 créditos quando o total real rondava as 20.
+  //
+  // Correcção: uma ÚNICA fonte de verdade — o modelo progressivo por
+  // caracteres, que é o que REALMENTE é cobrado (ver `generate()` acima e
+  // api/_lib/pricingRegistry.js). Esta função só traduz esse modelo para
+  // uma estimativa de páginas, usando a MESMA constante
+  // CHARS_PER_EXTRA_CREDIT — se o valor de calibração mudar, a estimativa
+  // mostrada ao utilizador acompanha automaticamente, sem precisar de
+  // manter dois números sincronizados manualmente em dois ficheiros.
+  //
+  // É uma ESTIMATIVA, não um valor exacto: o comprimento real gerado pela
+  // IA varia por tema/nível/idioma — por isso a UI que consome isto (ver
+  // Views.js) mostra sempre "≈" e um aviso de que o valor pode variar.
+  static estimateCredits(pages) {
+    const p = Math.max(1, parseInt(pages) || 1);
+    const totalCharsEstimate = p * CHARS_PER_EXTRA_CREDIT;
+    const extraCredits = Math.max(0, Math.ceil((totalCharsEstimate - CHARS_PER_EXTRA_CREDIT) / CHARS_PER_EXTRA_CREDIT));
+    return 1 + extraCredits; // 1 crédito inicial + progressão por página
+  }
+
   /** Regista callback de progresso: fn({ phase, step, total, text }) */
   onProgress(fn) { this._onProgress = fn; return this; }
 
