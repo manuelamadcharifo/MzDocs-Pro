@@ -241,8 +241,19 @@ module.exports = async function handler(req, res) {
     }
 
     // ── Autenticação ───────────────────────────────────────────────────────
+    // CORRIGIDO (P1.1 — Master Hardening): antes, `isChainCall` (_planMode
+    // OU _sectionMode) escapava a esta verificação por completo —
+    // `verifiedUserId` ficava igual a `userId`, um valor enviado pelo
+    // PRÓPRIO CLIENTE no corpo do pedido, nunca confirmado por JWT. Ou seja,
+    // qualquer pedido directo a este endpoint com `_planMode:true` ou
+    // `_sectionMode:true` gerava conteúdo de IA ilimitado, gratuito e sem
+    // sessão válida — o token já ia (e continua a ir) em `chainHeaders`
+    // desde o cliente (ver LongDocumentEngine.js), mas nunca era verificado
+    // aqui. Autenticação passa a ser obrigatória para QUALQUER pedido que
+    // não seja a pré-visualização gratuita (`_previewMode`, que continua
+    // explicitamente aceite sem sessão — comportamento intencional).
     let verifiedUserId = userId;
-    if (!isChainCall && !isPreview) {
+    if (!isPreview) {
         const authHeader = req.headers['authorization'] || '';
         const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
         if (!token) {
@@ -264,7 +275,7 @@ module.exports = async function handler(req, res) {
             console.error('[generate-document] Erro ao verificar JWT:', e.message);
             return res.status(401).json({ error: 'Erro ao verificar sessão.' });
         }
-    } else if (isPreview) {
+    } else {
         const authHeader = req.headers['authorization'] || '';
         const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
         if (token) {
@@ -274,6 +285,77 @@ module.exports = async function handler(req, res) {
             } catch (_) { /* ignorar — preview continua anónimo */ }
         }
     }
+
+    // ── NOVO (P1.1 — Master Hardening): autorização por "generation job" ───
+    // Fecha a segunda metade do mesmo problema: mesmo agora que o JWT é
+    // obrigatório, nada impedia um utilizador AUTENTICADO mas SEM créditos
+    // de chamar `_sectionMode` directamente, em loop, sem nunca ter pago o
+    // débito inicial em /api/deduct-credit (que só é chamado pelo cliente
+    // legítimo entre o plano e a 1ª secção) — cada secção continua a
+    // consumir tokens de IA reais. `_planMode` cria um job em
+    // `generation_jobs` (tabela nova, migration_v68) ligado ao utilizador
+    // verificado; cada `_sectionMode` tem de apresentar esse `_jobId` e o
+    // servidor confirma pertença + validade (não expirado) antes de gastar
+    // qualquer token de IA. Falha fechada: se a RPC não existir ainda
+    // (migração não corrida nesse ambiente), a geração em cadeia bloqueia
+    // com 503 em vez de continuar sem controlo — nunca falha aberta numa
+    // função de autorização financeira.
+    let generationJobId = null;
+    if (_planMode) {
+        const chainService = typeof req.body._chainService === 'string'
+            ? req.body._chainService.slice(0, 50).replace(/[^a-z0-9_-]/gi, '')
+            : 'unknown';
+        try {
+            generationJobId = await rpc('create_generation_job', {
+                p_user_id:          verifiedUserId,
+                p_operation_id:     operationId,
+                p_service:          chainService,
+                p_credits_reserved: 0,
+            });
+        } catch (e) {
+            console.error('[generate-document] create_generation_job indisponível:', e.message);
+            return res.status(503).json({
+                error: 'Serviço de geração em cadeia temporariamente indisponível.',
+                code:  'GENERATION_JOB_UNAVAILABLE',
+            });
+        }
+        if (!generationJobId) {
+            return res.status(503).json({
+                error: 'Não foi possível iniciar a geração. Tente novamente.',
+                code:  'GENERATION_JOB_UNAVAILABLE',
+            });
+        }
+    } else if (_sectionMode) {
+        const jobId = typeof req.body._jobId === 'string' ? req.body._jobId : null;
+        const UUID_RE_JOB = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!jobId || !UUID_RE_JOB.test(jobId)) {
+            return res.status(403).json({
+                error: 'Pedido de geração sem job válido.',
+                code:  'INVALID_GENERATION_JOB',
+            });
+        }
+        let jobValid = false;
+        try {
+            jobValid = await rpc('validate_generation_job', {
+                p_job_id:  jobId,
+                p_user_id: verifiedUserId,
+            });
+        } catch (e) {
+            console.error('[generate-document] validate_generation_job indisponível:', e.message);
+            return res.status(503).json({
+                error: 'Serviço de geração em cadeia temporariamente indisponível.',
+                code:  'GENERATION_JOB_UNAVAILABLE',
+            });
+        }
+        if (jobValid !== true) {
+            return res.status(403).json({
+                error: 'Job de geração inválido, expirado ou pertencente a outra conta.',
+                code:  'INVALID_GENERATION_JOB',
+            });
+        }
+        generationJobId = jobId;
+    }
+
 
     const creditsAfterDeduction = isPreview
         ? null
@@ -340,6 +422,10 @@ module.exports = async function handler(req, res) {
             creditsRemaining: creditsAfterDeduction,
             usage: result.usage,
             preview: isPreview || undefined,
+            // NOVO (P1.1): devolvido apenas quando _planMode criou um job —
+            // o cliente tem de reenviar este valor em cada _sectionMode
+            // subsequente (ver LongDocumentEngine.js).
+            jobId: _planMode ? generationJobId : undefined,
         });
 
     } catch (err) {
