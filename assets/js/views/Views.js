@@ -1,6 +1,7 @@
 // views/NotificationView.js — Sistema de notificações em pilha
 import { renderA4Pages, A4_PAGES_CONTAINER_CSS, scalePage } from '../utils/A4Renderer.js';
 import { getPaginatedContent } from '../utils/Paginator.js';
+import { LongDocumentEngine } from '../services/LongDocumentEngine.js';
 
 export const NotificationView = {
   _stack: document.getElementById('notifStack'),
@@ -77,18 +78,34 @@ export const DocumentView = {
     // formulário (ex.: "Itens / Serviços" do Recibo/Factura).
     this.bindItemTables(formBodyEl, svc.fields);
     if (svc.hasAI) {
-      // NOVO: para serviços com custo dinâmico por página do FORMULÁRIO
-      // (ex.: "trabalho"/Trabalho Escolar — dynamicCostSource:'paginas'),
-      // o custo mostrado no botão já parte do nº de páginas pretendidas
-      // preenchido, em vez do custo fixo de 1 crédito — evita mostrar "1
-      // crédito" quando o pedido de 10+ páginas vai custar mais.
+      // CORRIGIDO (P1.2 — Master Hardening, Set/2026): para
+      // "trabalho"/"planonegocio" (geração em cadeia — ver
+      // LongDocumentEngine.isLongDoc), o rótulo já não mostra o antigo
+      // custo inicial dinâmico (que nunca reflectia o total real, cobrado
+      // progressivamente durante a geração — ver ServiceDefinitions.js
+      // para a explicação completa). Mostra agora uma ESTIMATIVA do total
+      // ("≈N créditos"), claramente marcada como aproximada, derivada da
+      // MESMA constante usada para a cobrança real
+      // (LongDocumentEngine.estimateCredits()). Para "transcricao"
+      // (custo por página OCR, cobrança única, sem geração em cadeia),
+      // mantém-se o comportamento antigo — esse valor É o valor real cobrado.
       const initialPages = svc.dynamicCostSource === 'paginas'
         ? (parseInt(svc.fields.find(f => f.id === 'paginas')?.val) || 0)
         : 0;
-      const cost = svc.dynamicCostPerPage && svc.dynamicCostSource === 'paginas'
-        ? this._computeDynamicCost(svc, initialPages)
-        : (svc.cost || 1);
-      const costLabel = cost === 1 ? '1 crédito' : `${cost} créditos`;
+      // PAGE_THRESHOLD (6) espelha LongDocumentEngine.js — a partir daqui a
+      // geração passa a usar o motor de cadeia (progressivo), abaixo disso
+      // é uma geração normal de tiro único (custo fixo/dinâmico simples).
+      const isProgressive = svc.dynamicCostSource === 'paginas' && initialPages >= 6;
+      let costLabel;
+      if (isProgressive) {
+        const est = LongDocumentEngine.estimateCredits(initialPages || 1);
+        costLabel = `1 crédito agora · ≈${est} no total`;
+      } else {
+        const cost = svc.dynamicCostPerPage && svc.dynamicCostSource === 'paginas'
+          ? this._computeDynamicCost(svc, initialPages)
+          : (svc.cost || 1);
+        costLabel = cost === 1 ? '1 crédito' : `${cost} créditos`;
+      }
       // NOVO v2.1: botão "Ver amostra grátis" — chama /api/generate-document em
       // _previewMode (sem dedução de crédito) para o utilizador avaliar a
       // qualidade antes de decidir gastar o crédito. Fica visível só ANTES da
@@ -104,14 +121,18 @@ export const DocumentView = {
       `;
       // NOVO: liga o campo "Páginas pretendidas" (ou equivalente) a uma
       // actualização em directo do rótulo de custo — o utilizador vê logo
-      // que subir de 5 para 6 páginas passa a custar 2 créditos, antes de
+      // que subir de 5 para 6 páginas passa a custar mais, antes de
       // carregar em "Gerar com IA", em vez de só descobrir depois.
       if (svc.dynamicCostPerPage && svc.dynamicCostSource === 'paginas') {
         const pagesInput = formBodyEl.querySelector('[name="paginas"], #paginas');
         if (pagesInput) {
           pagesInput.addEventListener('input', () => {
             const pages = parseInt(pagesInput.value) || 0;
-            this.updateGenCostLabel(this._computeDynamicCost(svc, pages));
+            if (pages >= 6) {
+              this.updateGenCostLabel(null, LongDocumentEngine.estimateCredits(pages || 1));
+            } else {
+              this.updateGenCostLabel(this._computeDynamicCost(svc, pages));
+            }
           });
         }
       }
@@ -136,9 +157,20 @@ export const DocumentView = {
   // processar as páginas de um serviço com dynamicCostPerPage (ex:
   // "transcricao"/Digitalizar Documento), para o utilizador ver o custo
   // real ANTES de gerar, não só depois de o crédito já ter sido debitado.
-  updateGenCostLabel(cost) {
+  //
+  // CORRIGIDO (P1.2): novo 2º parâmetro `estimatedTotal` — quando presente
+  // (trabalho/planonegocio com 6+ páginas, geração em cadeia progressiva),
+  // mostra "1 crédito agora · ≈N no total" em vez de um único número fixo
+  // que nunca reflectia o custo total real. `cost` pode ser `null` nesse
+  // caso (o crédito inicial é sempre 1 — ver ServiceDefinitions.js).
+  updateGenCostLabel(cost, estimatedTotal = null) {
     const label = document.querySelector('#btnGen small');
-    if (label) label.textContent = cost === 1 ? '1 crédito' : `${cost} créditos`;
+    if (!label) return;
+    if (estimatedTotal != null) {
+      label.textContent = `1 crédito agora · ≈${estimatedTotal} no total`;
+      return;
+    }
+    label.textContent = cost === 1 ? '1 crédito' : `${cost} créditos`;
   },
 
   // NOVO: cálculo do custo dinâmico partilhado entre o render inicial do
@@ -146,7 +178,11 @@ export const DocumentView = {
   // escreve no campo de páginas (listener 'input' registado em renderForm).
   // Mesma fórmula usada em DocumentController.generate() — 1 crédito a
   // cada 'dynamicCostPerPage' páginas, arredondado para cima, mínimo 1,
-  // tecto de 10 (VALID_COSTS em api/_services/account.js).
+  // tecto de 10 (VALID_COSTS em api/_services/account.js). NOTA (P1.2):
+  // só continua a determinar o custo REAL para "transcricao"; para
+  // "trabalho"/"planonegocio" com 6+ páginas, ver
+  // LongDocumentEngine.estimateCredits() em vez desta função — chamada
+  // acima em renderForm/updateGenCostLabel.
   _computeDynamicCost(svc, pages) {
     if (!svc.dynamicCostPerPage) return svc.cost || 1;
     const n = parseInt(pages) || 0;
