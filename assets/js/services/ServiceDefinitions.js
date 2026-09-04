@@ -49,17 +49,27 @@ export const SERVICES = {
     icon:'📚', bg:'#EFF6FF', title:'Trabalho Escolar',
     sub:'Texto académico completo com estrutura profissional', hasAI:true,
     category:'academico', popularity:2,
-    // NOVO: custo dinâmico por página pretendida (o campo "paginas" do
-    // formulário abaixo) — mesmo mecanismo já usado por "transcricao"
-    // (dynamicCostPerPage), mas lendo o valor de um campo do formulário em
-    // vez de docModel.ocrPageCount (ver dynamicCostSource:'paginas' em
-    // DocumentController.generate()). Regra pedida: 1 crédito a cada 5
-    // páginas (arredondado para cima) — 1-5 pág = 1 crédito, 6-10 = 2
-    // créditos, 11-15 = 3, etc., até ao tecto de 10 créditos já imposto no
-    // servidor (api/deduct-credit.js VALID_COSTS). Antes, "trabalho" não
-    // tinha 'cost' nenhum (caía sempre no default fixo de 1 crédito,
-    // independentemente de o trabalho ter 5 ou 30 páginas pedidas).
-    dynamicCostPerPage: 5,
+    // CORRIGIDO (P1.2 — Master Hardening, Set/2026): existiam DOIS
+    // mecanismos de custo independentes e desalinhados para este serviço —
+    // este dynamicCostPerPage:5 ("1 crédito a cada 5 páginas", arredondado
+    // para cima) determinava o valor mostrado/cobrado INICIALMENTE, e
+    // CHARS_PER_EXTRA_CREDIT (LongDocumentEngine.js) cobrava
+    // progressivamente MAIS créditos DURANTE a geração, conforme o texto
+    // realmente ia crescendo. Um trabalho de 20 páginas mostrava/cobrava
+    // 4 créditos à partida, mas o total real rondava as 20 — o utilizador
+    // nunca via o custo verdadeiro com antecedência.
+    //
+    // Fonte única de verdade adoptada: o modelo progressivo por
+    // caracteres, que é o que já é realmente cobrado (ver generate() em
+    // LongDocumentEngine.js e api/_lib/pricingRegistry.js — a cobrança
+    // INICIAL de "trabalho" é hoje sempre 1 crédito fixo; o resto vem só
+    // da progressão real). dynamicCostPerPage/dynamicCostSource ABAIXO já
+    // não determinam quanto se cobra — servem apenas para
+    // DocumentController.js/Views.js mostrarem uma ESTIMATIVA do total
+    // (via LongDocumentEngine.estimateCredits(), derivada da MESMA
+    // constante CHARS_PER_EXTRA_CREDIT), claramente rotulada como "≈",
+    // nunca como o valor exacto a debitar.
+    dynamicCostPerPage: 5, // preservado só para não quebrar leituras antigas — ver estimateCredits()
     dynamicCostSource: 'paginas',
     fields:[
       { id:'tema',       label:'Tema / Título', type:'text', required:true, ph:'Ex: O Papel da Mulher na Independência de Moçambique' },
