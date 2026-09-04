@@ -75,6 +75,22 @@ const EXTRA_PAGE_COST = 1;
 // pagar sempre 1 crédito por um serviço cujo preço de catálogo é maior.
 const LONG_DOC_SERVICES = Object.freeze(new Set(['trabalho', 'planonegocio']));
 
+// Serviços cujo custo INICIAL é legitimamente variável por pedido (não um
+// valor fixo de catálogo) mas cujo servidor ainda não tem forma própria de
+// o verificar de forma independente — ex.: "transcricao" (Digitalizar
+// Documento) cobra por página FOTOGRAFADA (OCR), um valor que só existe no
+// cliente (docModel.ocrPageCount), não em nenhum dado que o servidor já
+// possua. NOTA HONESTA (P1.2/P20 — Master Hardening, Set/2026): isto
+// continua a confiar no `cost` que o cliente envia (dentro do intervalo de
+// sanidade 1-10, igual ao comportamento anterior a esta ronda) — NÃO é uma
+// vulnerabilidade nova introduzida agora, é uma limitação pré-existente que
+// se mantém tal como estava, documentada aqui em vez de escondida. Resolvê-la
+// a sério exigiria o servidor saber, de forma independente, quantas páginas
+// foram realmente submetidas a OCR (ex.: contar no próprio pipeline de OCR e
+// gravar isso ligado à operação) — fora do âmbito desta ronda, sinalizado
+// como risco residual na tabela de Definition of Done.
+const CLIENT_ESTIMATED_SERVICES = Object.freeze(new Set(['transcricao']));
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TEMPLATE_PREFIX = 'template_';
 
@@ -133,6 +149,16 @@ async function resolveOfficialCost({ documentType, chargeType, selectOne }) {
   }
 
   // ── Catálogo normal de serviços ──────────────────────────────────────────
+  // "transcricao" é o único caso onde o custo inicial ainda vem do cliente
+  // (dentro de VALID_COSTS, ver account.js) — ver CLIENT_ESTIMATED_SERVICES
+  // acima para a explicação completa. Sinalizado devolvendo `null` aqui: o
+  // chamador (account.js) sabe que `null` para um documentType em
+  // CLIENT_ESTIMATED_SERVICES significa "usa o legacyCost", não "pedido
+  // inválido" (esse caso só se aplica a chargeType='extra_page' indevido).
+  if (documentType && CLIENT_ESTIMATED_SERVICES.has(documentType)) {
+    return null;
+  }
+
   if (documentType && Object.prototype.hasOwnProperty.call(SERVICE_COSTS, documentType)) {
     return SERVICE_COSTS[documentType];
   }
@@ -145,6 +171,7 @@ module.exports = {
   DEFAULT_COST,
   EXTRA_PAGE_COST,
   LONG_DOC_SERVICES,
+  CLIENT_ESTIMATED_SERVICES,
   isTemplateDocumentType,
   extractTemplateId,
   resolveOfficialCost,
