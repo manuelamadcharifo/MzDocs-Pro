@@ -5,14 +5,24 @@
 // por omissão, e só cai para reserva_ativa se o grupo primário falhar
 // por completo).
 //
-// Estratégia: usa modo de cadeia (_sectionMode: true), que no código real
-// SALTA a verificação de JWT (ver generate-document.js: o bloco de auth só
-// corre quando `!isChainCall && !isPreview`) — isto permite testar a
-// corrida de providers sem precisar de configurar SUPABASE_URL/SERVICE_KEY
-// nem mockar getUserFromToken. global.fetch é mockado para simular os
-// providers reais (chat/completions e endpoints /models de descoberta).
+// ATUALIZADO (P1.1 — Master Hardening, Set/2026): antes, o modo de cadeia
+// (_sectionMode: true) SALTAVA por completo a verificação de JWT — este
+// próprio comentário documentava isso como "estratégia" para testar a
+// corrida de providers sem mockar autenticação. Essa lacuna era, na
+// verdade, a vulnerabilidade P1.1 (geração de IA ilimitada e gratuita, sem
+// sessão válida). Corrigida em generate-document.js — auth (JWT) e um
+// "generation job" válido (ver migration_v68_generation_jobs.sql) passam a
+// ser obrigatórios também em modo de cadeia. Os testes abaixo que usam
+// `_sectionMode`/`_planMode` mockam agora `/auth/v1/user` e
+// `/rpc/validate_generation_job` via `global.fetch`, tal como já se fazia
+// no último teste do ficheiro para o caminho normal — ver
+// `tests/generation-chain-security.test.js` para os testes dedicados de
+// autorização (rejeição sem token, sem job, com job de outro utilizador,
+// job expirado).
 
 const handler = require('../api/generate-document');
+
+const FAKE_JOB_ID = '11111111-2222-3333-4444-555555555555';
 
 function mockReqRes(body, headers = {}) {
   const req = {
@@ -31,6 +41,27 @@ function mockReqRes(body, headers = {}) {
   };
   return { req, res };
 }
+
+// Mock padrão de /auth/v1/user + /rpc/validate_generation_job — usado por
+// todos os testes que exercitam _sectionMode/_planMode desde a correcção
+// P1.1. `extraFetch(url)` permite a cada teste continuar a decidir a
+// resposta dos providers de IA (Groq/Gemini/etc.) sem repetir este bloco.
+function withChainAuthMocks(extraFetch) {
+  return jest.fn(async (url, ...rest) => {
+    const u = String(url);
+    if (u.includes('/auth/v1/user')) {
+      return { ok: true, status: 200, json: async () => ({ id: 'user-123' }) };
+    }
+    if (u.includes('/rpc/validate_generation_job')) {
+      return { ok: true, status: 200, text: async () => 'true', json: async () => true };
+    }
+    if (u.includes('/rpc/create_generation_job')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify(FAKE_JOB_ID), json: async () => FAKE_JOB_ID };
+    }
+    return extraFetch(u, ...rest);
+  });
+}
+
 
 describe('POST /api/generate-document', () => {
   // NOTA (Ago/2026): NVIDIA_API_KEY foi substituída por SAMBANOVA_API_KEY
@@ -58,9 +89,19 @@ describe('POST /api/generate-document', () => {
   });
 
   test('devolve 503 quando nenhuma API key de provider está configurada', async () => {
-    const { req, res } = mockReqRes({ prompt: 'gera um recibo', _sectionMode: true });
+    process.env.SUPABASE_URL = 'https://example.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake-service-role';
+    global.fetch = withChainAuthMocks(() => ({ ok: false, status: 404, json: async () => ({}) }));
+
+    const { req, res } = mockReqRes(
+      { prompt: 'gera um recibo', serviceType: 'recibo', _sectionMode: true, _jobId: FAKE_JOB_ID },
+      { authorization: 'Bearer fake-jwt-token' },
+    );
     await handler(req, res);
     expect(res._status).toBe(503);
+
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   });
 
   test('grupo primário (generoso+médio) responde: formato da resposta mantém-se e nenhum provider de reserva é chamado', async () => {
@@ -68,19 +109,22 @@ describe('POST /api/generate-document', () => {
     process.env.GEMINI_API_KEY = 'fake-gemini';
     process.env.SAMBANOVA_API_KEY = 'fake-sambanova'; // reserva_ativa — não deve ser tocado
 
+    process.env.SUPABASE_URL = 'https://example.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake-service-role';
+
     const calledUrls = [];
-    global.fetch = jest.fn(async (url) => {
-      calledUrls.push(String(url));
+    global.fetch = withChainAuthMocks((url) => {
+      calledUrls.push(url);
       // Nota: as URLs de chat da Gemini também contêm "/models/" no path
       // (ex: .../v1beta/models/gemini-2.5-flash:generateContent) — por isso
       // os padrões mais específicos (chamada de chat) têm de ser verificados
       // ANTES do padrão genérico de descoberta de modelos.
-      if (String(url).includes(':generateContent') || String(url).includes('/chat/completions')) {
+      if (url.includes(':generateContent') || url.includes('/chat/completions')) {
         // tratado mais abaixo pelos ramos por provider
-      } else if (String(url).endsWith('/models')) {
+      } else if (url.endsWith('/models')) {
         return { ok: false, status: 404, json: async () => ({}) }; // descoberta falha -> usa lista curada
       }
-      if (String(url).includes('api.groq.com')) {
+      if (url.includes('api.groq.com')) {
         return {
           ok: true, status: 200,
           json: async () => ({
@@ -95,11 +139,15 @@ describe('POST /api/generate-document', () => {
       return { ok: false, status: 500, json: async () => ({ error: { message: 'indisponível' } }) };
     });
 
-    const { req, res } = mockReqRes({
-      prompt: 'Gera um recibo simples para João.',
-      serviceType: 'recibo',
-      _sectionMode: true,
-    });
+    const { req, res } = mockReqRes(
+      {
+        prompt: 'Gera um recibo simples para João.',
+        serviceType: 'recibo',
+        _sectionMode: true,
+        _jobId: FAKE_JOB_ID,
+      },
+      { authorization: 'Bearer fake-jwt-token' },
+    );
 
     await handler(req, res);
 
@@ -115,6 +163,9 @@ describe('POST /api/generate-document', () => {
     // já tinha um vencedor, o fallback nunca deveria ser accionado.
     const reserveCalled = calledUrls.some(u => u.includes('api.sambanova.ai'));
     expect(reserveCalled).toBe(false);
+
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   });
 
   test('fallback: se generoso+médio falharem por completo, usa reserva_ativa (e reporta o provider correcto)', async () => {
@@ -123,14 +174,17 @@ describe('POST /api/generate-document', () => {
     process.env.GEMINI_API_KEY = 'fake-gemini';
     process.env.SAMBANOVA_API_KEY = 'fake-sambanova';
 
+    process.env.SUPABASE_URL = 'https://example.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake-service-role';
+
     const calledUrls = [];
-    global.fetch = jest.fn(async (url) => {
-      calledUrls.push(String(url));
-      const isChatCall = String(url).includes(':generateContent') || String(url).includes('/chat/completions');
-      if (!isChatCall && String(url).endsWith('/models')) {
+    global.fetch = withChainAuthMocks((url) => {
+      calledUrls.push(url);
+      const isChatCall = url.includes(':generateContent') || url.includes('/chat/completions');
+      if (!isChatCall && url.endsWith('/models')) {
         return { ok: false, status: 404, json: async () => ({}) };
       }
-      if (String(url).includes('api.sambanova.ai')) {
+      if (url.includes('api.sambanova.ai')) {
         return {
           ok: true, status: 200,
           json: async () => ({
@@ -144,11 +198,15 @@ describe('POST /api/generate-document', () => {
       return { ok: false, status: 500, json: async () => ({ error: { message: 'esgotado' } }) };
     });
 
-    const { req, res } = mockReqRes({
-      prompt: 'Gera uma procuração.',
-      serviceType: 'procuracao',
-      _sectionMode: true,
-    });
+    const { req, res } = mockReqRes(
+      {
+        prompt: 'Gera uma procuração.',
+        serviceType: 'procuracao',
+        _sectionMode: true,
+        _jobId: FAKE_JOB_ID,
+      },
+      { authorization: 'Bearer fake-jwt-token' },
+    );
 
     await handler(req, res);
 
@@ -160,6 +218,9 @@ describe('POST /api/generate-document', () => {
     // salta directamente para a reserva).
     expect(calledUrls.some(u => u.includes('api.groq.com'))).toBe(true);
     expect(calledUrls.some(u => u.includes('generativelanguage.googleapis.com'))).toBe(true);
+
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   });
 
   test('reembolsa o crédito automaticamente quando TODOS os providers falham (fora de modo cadeia/preview)', async () => {
