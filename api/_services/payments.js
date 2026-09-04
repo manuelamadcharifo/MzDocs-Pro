@@ -125,6 +125,22 @@ async function _createAvulsoAccount({ reference, phone, credits, transactionId }
   await update('profiles', 'id', tempUserId, {
     is_temp:       true,
     temp_ref:      ref,
+    // CORRIGIDO (P19 — Master Hardening, Set/2026): esta chamada escrevia
+    // `credits` directamente aqui E os dois chamadores (verifyReceiptInternal
+    // acima e smsConfirm.js) chamavam DEPOIS `add_credits(tempUserId,
+    // credits)` — que é ADITIVO (`credits = credits + amount`, ver
+    // migration_v52_credit_ledger.sql). Resultado real, confirmado por
+    // leitura do código: uma compra avulso de X créditos, aprovada
+    // automaticamente (IA de visão ou SMS), creditava 2X. Pior ainda: o
+    // trigger on_auth_user_created (schema.sql) já insere a conta nova com
+    // `credits = 3` por omissão (créditos grátis de boas-vindas, legado,
+    // anterior à v66) ANTES desta função correr — por isso o valor tem de
+    // ser explicitamente ZERADO aqui, e não apenas omitido, para que a
+    // única fonte de verdade do saldo final seja o `add_credits()` que os
+    // chamadores já fazem a seguir (que também grava correctamente em
+    // credit_ledger — o que esta função nunca fez, ficando o ledger sempre
+    // incompleto para contas avulso).
+    credits:       0,
     // CORRIGIDO (auditoria segurança Julho 2026): já não se grava a password
     // em texto limpo em profiles.temp_password — era um risco real (qualquer
     // fuga da base de dados, ou de um admin comprometido, expunha passwords
@@ -134,7 +150,6 @@ async function _createAvulsoAccount({ reference, phone, credits, transactionId }
     // mostrar ao cliente imediatamente — só deixa de ficar guardada para sempre.
     // Para gerar uma nova mais tarde (ex: cliente perdeu o acesso), o admin
     // usa a acção 'regenerate-temp-password' em api/admin/index.js.
-    credits,
     plan:          'free',
     account_type:  'avulso',
     full_name:     `Avulso ${ref}`,
