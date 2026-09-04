@@ -157,6 +157,23 @@ describe('P20 — custo oficial nunca vem do cliente', () => {
     });
   });
 
+  test('transcricao (custo por página OCR) continua a aceitar body.cost dentro de 1-10 — limitação pré-existente, documentada, não uma regressão', async () => {
+    // NOTA: ao contrário dos outros serviços, "transcricao" cobra por
+    // página FOTOGRAFADA (OCR) — um valor que só existe no cliente
+    // (docModel.ocrPageCount). O servidor não tem hoje forma independente
+    // de o verificar, por isso continua a confiar em body.cost, dentro do
+    // intervalo de sanidade 1-10 (exactamente como antes desta ronda) — ver
+    // CLIENT_ESTIMATED_SERVICES em api/_lib/pricingRegistry.js.
+    const { req, res } = mockReqRes({ cost: 4, documentType: 'transcricao' });
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('deduct_credits', {
+      p_user_id: 'user-1',
+      p_amount:  4,
+    });
+  });
+
   test('reembolso (refund=true) continua a aceitar o cost do cliente dentro de 1-10 (comportamento inalterado, fora do âmbito do P20)', async () => {
     supabaseAdmin.rpc.mockImplementation(async (fn) => {
       if (fn === 'refund_credit') return 5;
