@@ -1376,7 +1376,16 @@ export class TemplatePicker {
         const deductRes = await fetch('/api/deduct-credit', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ cost, documentType: `template_${this._key || ''}`, operationId }),
+          // CORRIGIDO (P20 — Master Hardening, Set/2026): antes enviava
+          // `template_${this._key}` — a chave do serviço, não o UUID real
+          // do template. api/_lib/pricingRegistry.js (novo) precisa do UUID
+          // para confirmar o preço oficial em templates_custom.credit_cost
+          // do lado do servidor, em vez de confiar no `cost` calculado aqui
+          // (que já era só informativo — mas antes era também o único valor
+          // que o servidor via). `this._tpl.id` é o mesmo UUID já usado
+          // acima na confirmação de preço/posse e abaixo em
+          // /api/templates?action=use.
+          body: JSON.stringify({ cost, documentType: `template_${this._tpl.id}`, operationId }),
         });
         if (deductRes.status === 402) { _notify('⚠️ Créditos insuficientes para este modelo premium.'); return; }
         if (deductRes.status === 401) { _notify('Sessão expirada. Inicie sessão novamente.'); return; }
