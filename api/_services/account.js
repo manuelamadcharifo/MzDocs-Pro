@@ -184,7 +184,14 @@ async function handleMyPackages(req, res) {
 // ══════════════════════════════════════════════════════════════════════════
 // 2. DEDUCT-CREDIT (ex-api/deduct-credit.js, v3.0)
 // ══════════════════════════════════════════════════════════════════════════
+// CORRIGIDO (P20 — Master Hardening, Set/2026): VALID_COSTS ficou reduzido a
+// um intervalo de sanidade só para a via de REEMBOLSO (ver nota mais abaixo,
+// junto de `_refundCredit`) — a via de COBRANÇA já não usa `body.cost` para
+// nada. O preço oficial de cada operação vem sempre de
+// api/_lib/pricingRegistry.js, nunca do cliente. Ver esse ficheiro para o
+// detalhe completo do problema e da correcção.
 const VALID_COSTS = Array.from({ length: 10 }, (_, i) => i + 1); // 1 a 10 créditos por operação
+const { resolveOfficialCost } = require('../_lib/pricingRegistry');
 
 async function handleDeductCredit(req, res) {
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
@@ -223,8 +230,15 @@ async function handleDeductCredit(req, res) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
 
-  const rawCost = parseInt(body?.cost);
-  const cost    = VALID_COSTS.includes(rawCost) ? rawCost : 1;
+  // CORRIGIDO (P20): `legacyCost` só é usado na via de REEMBOLSO abaixo —
+  // devolver créditos com base no valor que o próprio cliente diz ter sido
+  // cobrado é um risco menor e distinto (o pior caso é reembolsar a mais,
+  // nunca cobrar de menos) e já está mitigado pela idempotência por
+  // operationId (deduct_credits_idempotent/refund_credit_idempotent, ver
+  // migration_v60) — não faz parte do âmbito do P20. Mantido tal como
+  // estava para não alterar esse comportamento nesta ronda.
+  const rawCost    = parseInt(body?.cost);
+  const legacyCost = VALID_COSTS.includes(rawCost) ? rawCost : 1;
 
   const documentType = typeof body?.documentType === 'string'
     ? body.documentType.slice(0, 50).replace(/[^a-z0-9_-]/gi, '')
@@ -241,8 +255,23 @@ async function handleDeductCredit(req, res) {
     : null;
 
   // ── MODO REEMBOLSO ───────────────────────────────────────────────────────
+  // Mantém o comportamento anterior (usa o valor enviado pelo cliente,
+  // dentro do intervalo de sanidade 1-10) — ver nota acima sobre `legacyCost`.
   if (body?.refund === true) {
-    return await _refundCredit(userId, cost, documentType, res, operationId);
+    return await _refundCredit(userId, legacyCost, documentType, res, operationId);
+  }
+
+  // ── NOVO (P20): custo OFICIAL da cobrança — nunca vindo do cliente ───────
+  // `body.cost` é ignorado a partir daqui. `chargeType` só reconhece
+  // 'extra_page' explicitamente (ver LongDocumentEngine.js) — qualquer
+  // outro valor (incluindo ausência) é tratado como cobrança inicial normal.
+  const chargeType = body?.chargeType === 'extra_page' ? 'extra_page' : 'initial';
+  const cost = await resolveOfficialCost({ documentType, chargeType, selectOne });
+  if (cost === null) {
+    return res.status(400).json({
+      error: 'Tipo de cobrança inválido para este serviço.',
+      code:  'INVALID_CHARGE_TYPE',
+    });
   }
 
   // ── Verificar se conta está bloqueada / créditos expirados ────────────────
