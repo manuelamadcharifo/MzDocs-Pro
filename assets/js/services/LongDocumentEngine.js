@@ -116,8 +116,9 @@ export class LongDocumentEngine {
     this._emit({ phase: 'plan', step: 0, text: '📋 A planear estrutura do documento…' });
 
     let sections;
+    let jobId = null;
     try {
-      sections = await this._planDocument(serviceType, formData, chainHeaders);
+      ({ sections, jobId } = await this._planDocument(serviceType, formData, chainHeaders));
     } catch (e) {
       console.warn('[LongDocEngine] Planeamento falhou (1ª tentativa):', e.message);
       // CORRIGIDO (Ago/2026 — bug "Não foi possível planear o documento"):
@@ -129,7 +130,7 @@ export class LongDocumentEngine {
       try {
         this._emit({ phase: 'plan', step: 0, text: '📋 A tentar planear novamente…' });
         await this._sleep(1500);
-        sections = await this._planDocument(serviceType, formData, chainHeaders);
+        ({ sections, jobId } = await this._planDocument(serviceType, formData, chainHeaders));
       } catch (e2) {
         console.warn('[LongDocEngine] Planeamento falhou (2ª tentativa):', e2.message);
         throw new Error('Não foi possível planear o documento. Verifique a ligação e tente novamente.');
@@ -139,6 +140,11 @@ export class LongDocumentEngine {
     if (this._aborted) throw new Error('Abortado pelo utilizador');
     if (!sections?.length) {
       throw new Error('O planeamento não devolveu secções válidas. Tente novamente.');
+    }
+    // NOVO (P1.1): sem jobId válido, nenhuma secção pode ser gerada — ver
+    // validate_generation_job() no servidor (migration_v68).
+    if (!jobId) {
+      throw new Error('Não foi possível autorizar a geração deste documento. Tente novamente.');
     }
 
     // ── FASE 1b: Debitar crédito DEPOIS do planeamento ter sucesso ─
@@ -212,7 +218,7 @@ export class LongDocumentEngine {
         if (i > 0) await this._sleep(INTER_CALL_DELAY);
         if (this._aborted) throw new Error('Abortado pelo utilizador');
 
-        const content = await this._generateSection(section, summaries, formData, chainHeaders, provider);
+        const content = await this._generateSection(section, summaries, formData, chainHeaders, provider, jobId);
         generatedSections.push(content);
         lastSectionIndexDone = i;
 
@@ -318,6 +324,13 @@ export class LongDocumentEngine {
         body: JSON.stringify({
           cost: 1,
           documentType: serviceType,
+          // NOVO (P20 — Master Hardening): distingue explicitamente esta
+          // cobrança incremental (sempre fixa em 1 crédito, por faixa de
+          // ~6000 caracteres) da cobrança INICIAL de serviceType, que tem
+          // um preço de catálogo diferente (ver api/_lib/pricingRegistry.js).
+          // Sem isto, o servidor não teria como saber que este pedido não é
+          // "o preço todo de trabalho/planonegocio outra vez".
+          chargeType: 'extra_page',
           // Nota informativa — guardada em credit_logs.note no servidor não é
           // suportada directamente neste payload simples, por isso registamos
           // o motivo no console para diagnóstico; a auditoria de créditos via
@@ -378,6 +391,10 @@ export class LongDocumentEngine {
           prompt:      planPrompt,
           userId,
           _planMode:   true,
+          // NOVO (P1.1): nome real do serviço (trabalho/planonegocio) para
+          // o job de geração criado no servidor — '__plan__' acima é só o
+          // tipo do PROMPT (índice), não o serviço a autorizar.
+          _chainService: serviceType,
         }),
       });
     } finally {
@@ -407,7 +424,7 @@ export class LongDocumentEngine {
       throw new Error('Plano sem secções');
     }
 
-    return plan.sections;
+    return { sections: plan.sections, jobId: typeof data.jobId === 'string' ? data.jobId : null };
   }
 
   // ── Parser tolerante do JSON de planeamento ─────────────────────
@@ -481,7 +498,7 @@ export class LongDocumentEngine {
   }
 
   // ── FASE 2: GERAR UMA SECÇÃO ───────────────────────────────────
-  async _generateSection(section, previousSummaries, formData, chainHeaders, preferProvider) {
+  async _generateSection(section, previousSummaries, formData, chainHeaders, preferProvider, jobId) {
     const userId  = localStorage.getItem('mz_uid') || 'anon';
     const context = previousSummaries.length > 0
       ? `\n\nCONTEXTO DAS SECÇÕES ANTERIORES (para coerência — não repita):\n${previousSummaries.slice(-2).join('\n')}`
@@ -509,6 +526,9 @@ export class LongDocumentEngine {
         userId,
         _preferProvider: preferProvider,
         _sectionMode:    true,
+        // NOVO (P1.1): job criado em _planDocument — obrigatório no
+        // servidor (validate_generation_job(), migration_v68).
+        _jobId:          jobId,
       });
 
       if (res.status === 429) {
@@ -536,6 +556,7 @@ export class LongDocumentEngine {
         prompt,
         userId,
         _sectionMode: true,
+        _jobId:       jobId,
       });
 
       if (!res2.ok) {
