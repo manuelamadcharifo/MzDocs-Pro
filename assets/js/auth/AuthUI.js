@@ -132,9 +132,16 @@ export class AuthUI {
                         <div class="form-group">
                             <label>E-mail ou WhatsApp da conta</label>
                             <input type="text" id="forgotEmail" placeholder="email@exemplo.com ou 8X XXX XXXX" inputmode="email" autocomplete="username">
-                            <small style="color:#6b7280;font-size:.75rem;">Enviamos sempre o link por e-mail — verifique também o spam</small>
+                            <small style="color:#6b7280;font-size:.75rem;">Enviamos o link por e-mail — verifique também o spam</small>
                         </div>
-                        <button id="btnForgot" class="btn btn-primary btn-block">Enviar link de recuperação</button>
+                        <button id="btnForgot" class="btn btn-primary btn-block">Enviar link por e-mail</button>
+                        <!-- NOVO (Set/2026): recuperação alternativa por WhatsApp, sem
+                             depender do envio de e-mail. Abre o WhatsApp do próprio
+                             utilizador com uma mensagem pré-escrita para o número de
+                             suporte; a resposta com o link chega automaticamente,
+                             de volta no WhatsApp (ver api/whatsapp-webhook.js). Tem
+                             de ser o MESMO número que foi declarado no registo. -->
+                        <button id="btnForgotWhatsApp" type="button" class="btn-wa-direct" style="margin-top:.5rem;">📱 Recuperar por WhatsApp</button>
                     </div>
                     <p class="auth-footer"><a href="#" class="auth-link" data-view="login">← Voltar ao login</a></p>
                 </div>
@@ -201,6 +208,7 @@ export class AuthUI {
         document.getElementById('btnLogin')?.addEventListener('click', () => this._handleLogin());
         document.getElementById('btnRegister')?.addEventListener('click', () => this._handleRegister());
         document.getElementById('btnForgot')?.addEventListener('click', () => this._handleForgot());
+        document.getElementById('btnForgotWhatsApp')?.addEventListener('click', () => this._handleForgotWhatsApp());
         document.getElementById('btnAnonymous')?.addEventListener('click', () => this._handleAnonymous());
 
         // NOVO: "Criar Conta" começa desactivado (ver atributo `disabled` no
@@ -357,8 +365,24 @@ export class AuthUI {
             this._switchView('forgotSent');
         } finally {
             btn.disabled    = false;
-            btn.textContent = 'Enviar link de recuperação';
+            btn.textContent = 'Enviar link por e-mail';
         }
+    }
+
+    // NOVO (Set/2026): abre o WhatsApp do utilizador com uma mensagem
+    // pré-escrita ("RECUPERAR") para o número de suporte configurado em
+    // /api/config (whatsappSupport, definido no painel de admin — ver
+    // window._mzConfig, carregado em app.js). Isso abre, do lado da Meta,
+    // uma janela de 24h em que o webhook (api/whatsapp-webhook.js) pode
+    // responder de graça com o link de recuperação, assim que o utilizador
+    // enviar a mensagem. Mesma normalização de número que
+    // UserModel.updateWhatsAppSupportFromConfig (Models.js), para nunca
+    // divergir do número realmente configurado.
+    _handleForgotWhatsApp() {
+        const raw    = window._mzConfig?.whatsappSupport || '258858695506';
+        const digits = String(raw).replace(/\D/g, '');
+        const waNumber = digits.length === 9 ? `258${digits}` : digits;
+        window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent('RECUPERAR')}`, '_blank');
     }
 
     async _handleAnonymous() {
