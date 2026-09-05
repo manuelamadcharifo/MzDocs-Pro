@@ -712,6 +712,18 @@ const FINANCE_SETTINGS_KEYS = [
   'finance_domain_provider', 'finance_domain_annual_mzn', 'finance_domain_renewal_date',
   'finance_vercel_plan', 'finance_vercel_monthly_usd',
   'finance_ai_monthly_usd', 'finance_other_monthly_mzn',
+  // NOVO (P1.11 — Master Hardening, Set/2026, Fase 6): taxa de comissão média
+  // ponderada cobrada pelos operadores de pagamento (M-Pesa/e-Mola/mKesh)
+  // sobre cada transacção — usada só no relatório de economia unitária
+  // (sub=unit-economics) para estimar o custo de processamento de
+  // pagamento por crédito/documento. Não existe nenhum campo por transacção
+  // a identificar qual operador foi usado (transactions.phone_number
+  // permitiria inferir por prefixo, mas isso é uma funcionalidade nova por
+  // direito próprio — fora do âmbito desta ronda), por isso usa-se uma
+  // média ponderada configurável em vez de tentar decompor por operador.
+  // Valor por defeito (6.5%) documentado em ROADMAP-ESCALA.md a partir das
+  // taxas reais por operadora (M-Pesa 6.48% / e-Mola 5.98% / mKesh 7.48%).
+  'finance_payment_fee_pct',
 ];
 
 // Identidade fiscal da empresa — impressa no cabeçalho dos relatórios de
@@ -721,6 +733,17 @@ const FINANCE_SETTINGS_KEYS = [
 const FISCAL_SETTINGS_KEYS = [
   'fiscal_company_name', 'fiscal_nuit', 'fiscal_address',
   'fiscal_regime', 'fiscal_year_start',
+  // NOVO (P1.11 — Master Hardening, Set/2026, Fase 6): taxa de imposto
+  // (ISPC) a aplicar sobre a receita no relatório de economia unitária.
+  // DELIBERADAMENTE sem valor por defeito diferente de 0 — a auditoria
+  // externa (P1.10, já documentada na secção 15) confirmou que a Lei
+  // n.º 9/2025 não define uma taxa única "3-20%" aplicável genericamente;
+  // o enquadramento real da actividade do MzDocs ainda não está confirmado
+  // por escrito junto de um contabilista/AT (mesmo estado "a confirmar" já
+  // assumido honestamente no resto do projecto — ver legal.html). Fica a 0%
+  // até o admin confirmar e configurar o valor real — o relatório assinala
+  // isto explicitamente em vez de fingir uma precisão que não existe.
+  'fiscal_tax_rate_pct',
 ];
 
 async function handleFinance(req, res) {
@@ -835,6 +858,167 @@ async function handleFinance(req, res) {
         address:      cfg.fiscal_address || '',
         regime:       cfg.fiscal_regime || '',
         year_start:   cfg.fiscal_year_start || '',
+      });
+    }
+
+    // ── GET: economia unitária (P1.11 — Master Hardening, Set/2026,
+    // Fase 6) — "quanto ganho por cada 1000 documentos?" ──────────────────
+    // CONTEXTO: a auditoria externa apontou que o projecto sabe o P&L
+    // agregado (receita − despesas, já implementado acima em
+    // sub=period-report e sub=summary) mas não a economia POR CRÉDITO/POR
+    // DOCUMENTO — a métrica que realmente diz se um pacote (ex.: Avulso, a
+    // 16,67 MT/crédito) é lucrativo depois de descontar IA, comissão de
+    // pagamento, comissão de afiliado e imposto, ou se está, na prática, a
+    // subsidiar o crescimento à custa de margem negativa.
+    //
+    // HONESTIDADE SOBRE OS LIMITES DESTA ESTIMATIVA (avisado também na
+    // resposta, campo `assumptions`, para nunca ser lido como mais preciso
+    // do que é):
+    //   • Custo de IA: o projecto não regista o custo REAL por pedido (a
+    //     maioria dos providers usados são tiers gratuitos/generosos, sem
+    //     API de custo por chamada) — usa-se o orçamento mensal já
+    //     configurado (`finance_ai_monthly_usd`, cartão "Finanças"),
+    //     PRORATEADO pelos dias do período. É uma média, não um custo real
+    //     por documento — documentos maiores (Trabalho Escolar, Plano de
+    //     Negócio) custam mais IA na realidade do que um CV, mas este
+    //     relatório reparte o orçamento por igual.
+    //   • Custo de pagamento: sem campo que identifique qual operador
+    //     (M-Pesa/e-Mola/mKesh) processou cada transacção, usa-se uma taxa
+    //     média ponderada configurável (`finance_payment_fee_pct`).
+    //   • Custo de afiliado: este SIM é real e exacto — soma de
+    //     `affiliate_commissions.commission_mzn` (tabela de acumulação,
+    //     criada no momento da venda, independente de já ter sido paga ou
+    //     não) para vendas com `created_at` dentro do período, excluindo
+    //     `status='cancelled'`. Escolhido em regime de acumulação (não de
+    //     pagamento, ao contrário de sub=period-report) de propósito —
+    //     este relatório mede a margem das vendas DESTE período, não o
+    //     fluxo de caixa.
+    //   • Custo de imposto: `fiscal_tax_rate_pct` (0% por defeito — ver
+    //     comentário em FISCAL_SETTINGS_KEYS acima).
+    //   • Marketplace de templates (compra/venda entre utilizadores) fica
+    //     DELIBERADAMENTE FORA deste cálculo — é um negócio diferente,
+    //     com uma estrutura de custo diferente (royalty ao autor, não IA),
+    //     que misturado aqui distorceria a margem por crédito dos pacotes.
+    //     Aparece só como informação separada (`template_marketplace`).
+    if (req.method === 'GET' && q.sub === 'unit-economics') {
+      if (!q.start || !q.end) return res.status(400).json({ error: 'start e end (AAAA-MM-DD) são obrigatórios' });
+
+      const startIso = q.start + 'T00:00:00.000Z';
+      const endIso   = q.end + 'T23:59:59.999Z';
+      const periodMs = new Date(endIso) - new Date(startIso);
+      if (!Number.isFinite(periodMs) || periodMs <= 0) {
+        return res.status(400).json({ error: 'Intervalo de datas inválido (start deve ser antes de end).' });
+      }
+      const periodDays = Math.max(1, periodMs / 86400000);
+
+      const [
+        txRows, consumeRows, documentsCount, affCommRows, tplSalesRows,
+        financeRows, fiscalRows,
+      ] = await Promise.all([
+        // Vendas de pacotes confirmadas no período — base da receita.
+        restRequest(`transactions?status=eq.completed&created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}&select=amount,credits`),
+        // Créditos realmente CONSUMIDOS (não só comprados) no período —
+        // ver api/_services/account.js, insert('credit_logs', {action:'consume',...}).
+        restRequest(`credit_logs?action=eq.consume&created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}&select=credits,document_type`),
+        // Documentos efectivamente gerados no período — denominador real de
+        // "por 1000 documentos" (distinto de créditos consumidos: alguns
+        // serviços custam mais de 1 crédito por documento).
+        countRows('documents', `created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}`),
+        // Comissões de afiliado ACUMULADAS (não pagas) no período — ver
+        // nota acima sobre regime de acumulação vs. sub=period-report.
+        restRequest(`affiliate_commissions?status=neq.cancelled&created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}&select=commission_mzn`),
+        // Vendas do marketplace de templates no período — só informativo,
+        // fora do cálculo principal (ver comentário acima).
+        restRequest(`template_sales?created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}&select=amount_mzn,author_share_mzn`),
+        restRequest(`system_settings?key=in.(${FINANCE_SETTINGS_KEYS.map(k => encodeURIComponent(k)).join(',')})&select=key,value`),
+        restRequest(`system_settings?key=in.(${FISCAL_SETTINGS_KEYS.map(k => encodeURIComponent(k)).join(',')})&select=key,value`),
+      ]);
+
+      const fin = {}; (financeRows || []).forEach(r => { fin[r.key] = r.value; });
+      const fisc = {}; (fiscalRows || []).forEach(r => { fisc[r.key] = r.value; });
+      const num = (v, def = 0) => { const n = parseFloat(v); return Number.isFinite(n) ? n : def; };
+
+      const revenueTotal   = (txRows || []).reduce((s, t) => s + (t.amount || 0), 0);
+      const creditsSold    = (txRows || []).reduce((s, t) => s + (t.credits || 0), 0);
+      const transactionCount = (txRows || []).length;
+
+      const creditsConsumedByService = {};
+      let creditsConsumedTotal = 0;
+      (consumeRows || []).forEach(r => {
+        const svc = r.document_type || 'outro';
+        const amt = Math.abs(r.credits || 0);
+        creditsConsumedByService[svc] = (creditsConsumedByService[svc] || 0) + amt;
+        creditsConsumedTotal += amt;
+      });
+
+      const documentsGenerated = Number.isFinite(documentsCount) ? documentsCount : 0;
+
+      const affiliateCostTotal = (affCommRows || []).reduce((s, c) => s + (c.commission_mzn || 0), 0);
+
+      const tplSalesTotal   = (tplSalesRows || []).reduce((s, t) => s + (t.amount_mzn || 0), 0);
+      const tplAuthorShare  = (tplSalesRows || []).reduce((s, t) => s + (t.author_share_mzn || 0), 0);
+
+      // Custo de IA — orçamento mensal configurado, prorateado pelos dias
+      // reais do período (ver aviso de honestidade no comentário acima).
+      const aiMonthlyUsd = num(fin.finance_ai_monthly_usd, 0);
+      const fx = await fetchUsdToMznRate();
+      const aiMonthlyMzn = aiMonthlyUsd * fx.rate;
+      const aiCostTotal  = aiMonthlyMzn * (periodDays / 30);
+
+      const paymentFeePct = num(fin.finance_payment_fee_pct, 6.5);
+      const paymentCostTotal = revenueTotal * (paymentFeePct / 100);
+
+      const taxRatePct = num(fisc.fiscal_tax_rate_pct, 0);
+      const taxCostTotal = revenueTotal * (taxRatePct / 100);
+
+      const totalCosts   = aiCostTotal + paymentCostTotal + affiliateCostTotal + taxCostTotal;
+      const grossMargin  = revenueTotal - totalCosts;
+      const marginPct    = revenueTotal > 0 ? (grossMargin / revenueTotal) * 100 : 0;
+
+      const safeDiv = (a, b) => (b > 0 ? a / b : 0);
+
+      return res.status(200).json({
+        success: true,
+        period: { start: q.start, end: q.end, days: Math.round(periodDays * 10) / 10 },
+        revenue: { total_mzn: round2(revenueTotal), transaction_count: transactionCount },
+        credits: {
+          sold: creditsSold,
+          consumed: creditsConsumedTotal,
+          consumed_by_service: creditsConsumedByService,
+        },
+        documents_generated: documentsGenerated,
+        costs: {
+          ai_mzn:                 round2(aiCostTotal),
+          payment_processing_mzn: round2(paymentCostTotal),
+          affiliate_mzn:          round2(affiliateCostTotal),
+          tax_mzn:                round2(taxCostTotal),
+          total_mzn:              round2(totalCosts),
+        },
+        margin: {
+          gross_margin_mzn: round2(grossMargin),
+          gross_margin_pct: round2(marginPct),
+          per_credit_sold_mzn:     round2(safeDiv(grossMargin, creditsSold)),
+          per_credit_consumed_mzn: round2(safeDiv(grossMargin, creditsConsumedTotal)),
+          per_document_mzn:        round2(safeDiv(grossMargin, documentsGenerated)),
+          per_1000_documents_mzn:  round2(safeDiv(grossMargin, documentsGenerated) * 1000),
+        },
+        template_marketplace: {
+          note: 'Informativo — fora do cálculo de margem acima (negócio diferente, custo de royalty ao autor em vez de IA).',
+          sales_mzn:          round2(tplSalesTotal),
+          author_share_mzn:   round2(tplAuthorShare),
+          platform_share_mzn: round2(tplSalesTotal - tplAuthorShare),
+        },
+        assumptions: {
+          ai_cost_method: 'Orçamento mensal configurado (finance_ai_monthly_usd) prorateado pelos dias do período — não é custo real medido por pedido/provider.',
+          payment_fee_pct: paymentFeePct,
+          payment_fee_method: 'Taxa média ponderada configurável — não há registo de qual operador (M-Pesa/e-Mola/mKesh) processou cada transacção.',
+          tax_rate_pct: taxRatePct,
+          tax_rate_confirmed: taxRatePct > 0,
+          affiliate_cost_basis: 'accrual (affiliate_commissions.created_at no período, status != cancelled) — não é o mesmo critério de sub=period-report (que usa pagamentos efectivos).',
+          fx_rate_used: fx.rate,
+          fx_source: fx.source,
+        },
+        generated_at: new Date().toISOString(),
       });
     }
 
@@ -2216,7 +2400,12 @@ async function handleBlogPages(req, res) {
         return res.status(200).json(data);
       }
       const data = await restRequest(
-        'blog_pages?order=updated_at.desc&select=id,slug,title,meta_description,published,views,ai_generated,created_at,updated_at'
+        // NOVO (P1.9 — Fase 6): needs_review/review_reason acrescentados —
+        // sem isto o admin não conseguia distinguir, na lista, um artigo
+        // simplesmente ainda não agendado de um que a app deixou de
+        // propósito por publicar automaticamente por ser um tópico
+        // legal/fiscal (ver AdminApp.js para o destaque visual).
+        'blog_pages?order=updated_at.desc&select=id,slug,title,meta_description,published,views,ai_generated,needs_review,review_reason,created_at,updated_at'
       );
       return res.status(200).json(data || []);
     }
