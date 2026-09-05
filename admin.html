@@ -1260,6 +1260,22 @@
         <div id="periodReportOutput" style="margin-top:16px;"></div>
       </div>
 
+      <!-- NOVO (P1.11 — Master Hardening, Set/2026, Fase 6): economia
+           unitária — "quanto ganho por cada 1000 documentos?", depois de
+           descontar IA, comissão de pagamento, comissão de afiliados e
+           imposto. Reaproveita as mesmas datas do relatório de período
+           acima (reportStartDate/reportEndDate). -->
+      <div class="settings-card" style="margin-top:16px">
+        <h3>🧮 Economia Unitária (margem por crédito/documento)</h3>
+        <p style="font-size:.8rem;color:#64748b;margin-bottom:10px">
+          Quanto sobra por cada crédito vendido e por cada documento gerado no período, depois de
+          IA, comissão de pagamento, comissão de afiliados e imposto. Usa as mesmas datas
+          escolhidas acima em "Relatório de Período" — ajuste-as e gere os dois de seguida.
+        </p>
+        <button type="button" class="btn-primary" style="padding:10px 18px" data-action="generateUnitEconomicsReport">🧮 Calcular Economia Unitária</button>
+        <div id="unitEconomicsOutput" style="margin-top:16px;"></div>
+      </div>
+
       <!-- Livro de transacções (receita) — base para o contabilista -->
       <div class="settings-card" style="margin-top:16px">
         <h3>📖 Livro de Transacções (Receita)</h3>
