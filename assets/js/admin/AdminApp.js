@@ -183,6 +183,7 @@ class AdminApp {
         saveFiscalConfig:        () => this._saveFiscalConfig(),
         setReportPreset:         (d) => this._setReportPreset(d.preset),
         generatePeriodReport:    () => this._generatePeriodReport(),
+        generateUnitEconomicsReport: () => this._generateUnitEconomicsReport(),
         loadTransactionLedger:   () => this._loadTransactionLedger(),
         loadAffiliatePayouts:    () => this._loadAffiliatePayouts(),
         saveSystemSettings:      () => this.saveSystemSettings(),
@@ -1635,7 +1636,9 @@ USING (EXISTS (
             const totalEl = document.getElementById('blogTotalCount');
             if (totalEl) {
                 const pubCount = this._allBlogPages.filter(p => p.published).length;
-                totalEl.textContent = `${this._allBlogPages.length} artigo(s) — ${pubCount} publicado(s)`;
+                const reviewCount = this._allBlogPages.filter(p => p.needs_review).length;
+                totalEl.textContent = `${this._allBlogPages.length} artigo(s) — ${pubCount} publicado(s)`
+                    + (reviewCount ? ` — 🔎 ${reviewCount} à espera de revisão` : '');
             }
             this.filterBlog();
             this._loadBlogQueue();
@@ -1992,23 +1995,39 @@ USING (EXISTS (
             const date = p.updated_at
                 ? new Date(p.updated_at).toLocaleDateString('pt-MZ', { day:'2-digit', month:'short', year:'numeric' })
                 : '—';
-            const pubBadge = p.published
-                ? '<span style="background:#ECFDF5;color:#065F46;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">✅ Publicada</span>'
-                : '<span style="background:#FEF9C3;color:#713F12;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">📝 Rascunho</span>';
+            // CORRIGIDO (P1.9 — Master Hardening, Set/2026, Fase 6): um
+            // rascunho com needs_review=true (tópico legal/fiscal detectado
+            // automaticamente — ver api/_services/blog.js) precisa de se
+            // distinguir claramente de um simples "ainda não publicado" —
+            // sem isto o admin não tinha forma de saber, só olhando para a
+            // lista, que aquele artigo específico está à espera de uma
+            // leitura antes de publicar (ver review_reason).
+            const pubBadge = p.needs_review
+                ? '<span title="' + escapeHtml(p.review_reason || 'Tópico sensível — reveja antes de publicar') + '" style="background:#FEE2E2;color:#991B1B;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;cursor:help;">🔎 Rever antes de publicar</span>'
+                : (p.published
+                    ? '<span style="background:#ECFDF5;color:#065F46;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">✅ Publicada</span>'
+                    : '<span style="background:#FEF9C3;color:#713F12;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">📝 Rascunho</span>');
             const aiBadge = p.ai_generated
                 ? '<span style="font-size:11px;">🤖</span>'
                 : '<span style="font-size:11px;color:#cbd5e1;">—</span>';
             const safeTitle = escapeHtml(p.title || '');
+            const safeSlug  = escapeHtml(p.slug || '');
             return '<tr>'
-                + '<td><strong>' + (p.title || '—') + '</strong></td>'
-                + '<td><code style="font-size:11px;background:#F1F5F9;padding:2px 6px;border-radius:4px;">' + p.slug + '</code></td>'
+                // CORRIGIDO (P1.9, mesma ronda): título ia para innerHTML sem
+                // escape — títulos de blog só são criados pelo admin ou pela
+                // IA (não por utilizadores públicos), por isso o risco real é
+                // bem menor do que o XSS de feedback corrigido na Fase 5, mas
+                // a correcção é trivial e a mesma disciplina de nunca confiar
+                // só na origem aplica-se aqui também.
+                + '<td><strong>' + (safeTitle || '—') + '</strong></td>'
+                + '<td><code style="font-size:11px;background:#F1F5F9;padding:2px 6px;border-radius:4px;">' + safeSlug + '</code></td>'
                 + '<td>' + pubBadge + '</td>'
                 + '<td>' + (p.views || 0) + '</td>'
                 + '<td>' + aiBadge + '</td>'
                 + '<td style="font-size:12px;color:#64748b;">' + date + '</td>'
                 + '<td>'
                 + '<button class="btn-ghost" style="font-size:12px;" data-action="openPageEditor" data-id="' + p.id + '">✏️ Editar</button> '
-                + '<a href="/pages/' + p.slug + '" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none;">🔗 Ver</a> '
+                + '<a href="/pages/' + safeSlug + '" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none;">🔗 Ver</a> '
                 + '<button class="btn-danger" style="font-size:12px;" data-action="deletePage" data-id="' + p.id + '" data-title="' + safeTitle + '">🗑️</button>'
                 + '</td>'
                 + '</tr>';
@@ -5173,6 +5192,65 @@ USING (EXISTS (
         w.document.close();
         w.focus();
         setTimeout(() => w.print(), 300);
+    }
+
+    // NOVO (P1.11 — Master Hardening, Set/2026, Fase 6): "quanto ganho por
+    // cada 1000 documentos?" — ver api/admin/index.js → handleFinance
+    // (sub=unit-economics) para a matemática completa e os avisos de
+    // honestidade sobre o que é medido de facto vs. estimado.
+    async _generateUnitEconomicsReport() {
+        const start = document.getElementById('reportStartDate')?.value;
+        const end   = document.getElementById('reportEndDate')?.value;
+        const out   = document.getElementById('unitEconomicsOutput');
+        if (!start || !end) { this._notify?.('❌ Escolha as duas datas (cartão "Relatório de Período" acima)'); return; }
+        if (out) out.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px 0">A calcular…</div>';
+        try {
+            const token = await this._getAdminToken();
+            const res = await fetch(`/api/admin/finance?sub=unit-economics&start=${start}&end=${end}`, {
+                headers: { Authorization: 'Bearer ' + token },
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao calcular economia unitária');
+
+            const fmt  = n => (n ?? 0).toLocaleString('pt-MZ', { maximumFractionDigits: 2 });
+            const fmt0 = n => Math.round(n ?? 0).toLocaleString('pt-MZ');
+            const marginColor = d.margin.gross_margin_mzn >= 0 ? '#16a34a' : '#dc2626';
+
+            if (out) out.innerHTML = `
+                <div style="border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+                    <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px;">Período: ${d.period.start} a ${d.period.end} (${d.period.days} dias)</div>
+
+                    <div style="display:flex;justify-content:space-between;padding:2px 0"><span>💰 Receita (${d.revenue.transaction_count} vendas)</span><strong>${fmt(d.revenue.total_mzn)} MZN</strong></div>
+                    <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;color:#64748b;"><span>Créditos vendidos / consumidos</span><span>${fmt0(d.credits.sold)} / ${fmt0(d.credits.consumed)}</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:2px 0 8px;font-size:12px;color:#64748b;"><span>Documentos gerados</span><span>${fmt0(d.documents_generated)}</span></div>
+
+                    <div style="margin:8px 0;padding:8px 0;border-top:1px dashed #e2e8f0;border-bottom:1px dashed #e2e8f0;">
+                        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:4px;">Custos estimados do período</div>
+                        <div style="display:flex;justify-content:space-between;padding:2px 0"><span>🤖 IA (orçamento prorateado)</span><strong>${fmt(d.costs.ai_mzn)} MZN</strong></div>
+                        <div style="display:flex;justify-content:space-between;padding:2px 0"><span>💳 Processamento de pagamento (${d.assumptions.payment_fee_pct}%)</span><strong>${fmt(d.costs.payment_processing_mzn)} MZN</strong></div>
+                        <div style="display:flex;justify-content:space-between;padding:2px 0"><span>🤝 Comissão de afiliados (acumulada)</span><strong>${fmt(d.costs.affiliate_mzn)} MZN</strong></div>
+                        <div style="display:flex;justify-content:space-between;padding:2px 0"><span>🧾 Imposto (${d.assumptions.tax_rate_pct}%)</span><strong>${fmt(d.costs.tax_mzn)} MZN</strong></div>
+                        <div style="display:flex;justify-content:space-between;padding:4px 0;margin-top:4px;"><span style="font-weight:700">Total custos</span><strong>${fmt(d.costs.total_mzn)} MZN</strong></div>
+                    </div>
+
+                    <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="font-weight:700">Margem bruta do período</span><strong style="color:${marginColor}">${fmt(d.margin.gross_margin_mzn)} MZN (${fmt(d.margin.gross_margin_pct)}%)</strong></div>
+                    <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;color:#64748b;"><span>Por crédito vendido / consumido</span><span>${fmt(d.margin.per_credit_sold_mzn)} / ${fmt(d.margin.per_credit_consumed_mzn)} MZN</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:2px 0 8px;font-size:13px;"><span style="font-weight:700">Por 1000 documentos</span><strong style="color:${marginColor}">${fmt(d.margin.per_1000_documents_mzn)} MZN</strong></div>
+
+                    ${!d.assumptions.tax_rate_confirmed ? '<div style="font-size:11px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px 8px;color:#92400E;margin-top:6px;">⚠️ Taxa de imposto ainda não configurada (0% assumido) — confirme com o contabilista e defina em "Dados Fiscais" acima para uma margem mais realista.</div>' : ''}
+
+                    <div style="font-size:11px;color:#94a3b8;margin-top:10px;line-height:1.5;">
+                        Marketplace de templates (fora deste cálculo): ${fmt(d.template_marketplace.sales_mzn)} MZN em vendas,
+                        ${fmt(d.template_marketplace.author_share_mzn)} MZN para autores.<br/>
+                        Custo de IA estimado a partir do orçamento mensal configurado (não é custo real medido por pedido).
+                        Câmbio usado: ${d.assumptions.fx_rate_used} MZN/USD (${d.assumptions.fx_source}).
+                        Gerado em ${new Date(d.generated_at).toLocaleString('pt-MZ')}.
+                    </div>
+                </div>
+            `;
+        } catch (err) {
+            if (out) out.innerHTML = `<div style="color:#dc2626;text-align:center;padding:16px 0">Erro: ${err.message}</div>`;
+        }
     }
 
     async _loadTransactionLedger() {
