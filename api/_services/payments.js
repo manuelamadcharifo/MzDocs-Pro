@@ -199,7 +199,23 @@ async function verifyReceiptInternal({ imageBase64, mimeType, reference, phone, 
   }
 
   // ── 2. Hash do comprovativo (anti-fraude: evita reutilização) ──────────
-  const receiptHash = crypto.createHash('sha256').update(imageBase64.slice(0, 5000)).digest('hex');
+  // CORRIGIDO (P-payment-fraud — Master Hardening, Set/2026): só se
+  // calculava o SHA-256 dos primeiros 5000 caracteres da string base64
+  // (`imageBase64.slice(0, 5000)`) — cerca de 3.7KB dos bytes reais da
+  // imagem, uma fracção pequena de qualquer fotografia real (tipicamente
+  // 100KB-2MB). Risco confirmado: alguém podia reenviar o MESMO
+  // comprovativo já usado, alterando só um pixel/byte QUALQUER a partir
+  // dessa fracção inicial (ex.: comprimir de novo, adicionar/editar EXIF,
+  // recortar um pouco a margem) — o hash truncado ficava idêntico ao
+  // original OU, na direcção oposta e mais grave, a verificação de
+  // duplicado (`receipt_hash=eq....`) deixava de o reconhecer como o mesmo
+  // comprovativo assim que a alteração acontecesse DENTRO dos primeiros
+  // 5000 caracteres, permitindo reutilizar o mesmo pagamento real várias
+  // vezes para reclamar créditos repetidamente. Corrigido: hash do BINÁRIO
+  // REAL completo da imagem (`Buffer.from(imageBase64, 'base64')`), não da
+  // string base64 nem de um prefixo dela — duas imagens só produzem o
+  // mesmo hash se forem byte a byte idênticas.
+  const receiptHash = crypto.createHash('sha256').update(Buffer.from(imageBase64, 'base64')).digest('hex');
 
   // Verificar se este hash já foi processado com sucesso
   try {
