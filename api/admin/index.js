@@ -2405,7 +2405,11 @@ async function handleBlogPages(req, res) {
         // simplesmente ainda não agendado de um que a app deixou de
         // propósito por publicar automaticamente por ser um tópico
         // legal/fiscal (ver AdminApp.js para o destaque visual).
-        'blog_pages?order=updated_at.desc&select=id,slug,title,meta_description,published,views,ai_generated,needs_review,review_reason,created_at,updated_at'
+        // NOVO (Set/2026, Fase 6 — extensão): research_sources/content_flags
+        // acrescentados — já vêm resumidos em review_reason (texto, mostrado
+        // no tooltip existente), mas ficam aqui também em bruto para quem
+        // consultar a lista directamente (ex.: futura UI dedicada, ou debug).
+        'blog_pages?order=updated_at.desc&select=id,slug,title,meta_description,published,views,ai_generated,needs_review,review_reason,research_sources,content_flags,created_at,updated_at'
       );
       return res.status(200).json(data || []);
     }
