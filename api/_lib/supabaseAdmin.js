@@ -408,10 +408,28 @@ async function anonAuthRequest(path, body) {
 
 /**
  * Envia email de reset de password via GoTrue Admin API (service_role).
+ *
+ * CORRIGIDO (auditoria Set/2026 — "link de recuperação nunca chega"):
+ * Antes esta função devolvia só `res.ok` (true/false) e o chamador
+ * (api/auth/index.js) nem sequer verificava esse valor — ou seja, se o
+ * GoTrue recusasse o pedido (rate limit do provedor de email por omissão
+ * do Supabase, SMTP não configurado, `redirect_to` fora da allow-list,
+ * etc.), a falha desaparecia em silêncio: nenhum log, nenhum registo em
+ * metrics_events, nada. O utilizador via sempre "sucesso" (por segurança,
+ * para não revelar se a conta existe) e o e-mail simplesmente nunca saía,
+ * sem qualquer pista no Vercel para diagnosticar porquê.
+ *
+ * Agora devolve sempre {ok, status, body}, incluindo o corpo da resposta
+ * de erro do GoTrue (útil para distinguir, por exemplo, "email rate limit
+ * exceeded" — SMTP por omissão do Supabase, não pensado para produção —
+ * de um `redirect_to` inválido ou de outro erro). O `redirect_to` passa a
+ * ir tanto no corpo como na query string, porque diferentes versões da
+ * API GoTrue leem-no de sítios diferentes para este endpoint.
  */
 async function adminSendRecovery(email, redirectTo) {
   assertConfigured();
-  const res = await fetch(`${_supaUrl()}/auth/v1/recover`, {
+  const url = `${_supaUrl()}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo || '')}`;
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       apikey: _supaKey(),
@@ -420,10 +438,48 @@ async function adminSendRecovery(email, redirectTo) {
     },
     body: JSON.stringify({ email, redirect_to: redirectTo }),
   });
-  return res.ok;
+
+  const text = await res.text().catch(() => '');
+  let body = null;
+  if (text) { try { body = JSON.parse(text); } catch { body = text; } }
+
+  return { ok: res.ok, status: res.status, body };
+}
+
+/**
+ * NOVO (Set/2026): gera um link de recuperação de password SEM enviar
+ * e-mail nenhum — usa o endpoint admin `/admin/generate_link` do GoTrue
+ * (exige service_role, nunca pode ser chamado a partir do browser). O
+ * corpo da resposta traz `action_link`, o URL completo já com o token,
+ * pronto a reencaminhar por outro canal.
+ *
+ * Criado para o fluxo de recuperação por WhatsApp (api/whatsapp-webhook.js):
+ * ao contrário de adminSendRecovery() (que depende do envio de e-mail do
+ * Supabase — por omissão limitado/pouco fiável em produção), esta função
+ * dá-nos o link em bruto para o mandarmos nós próprios, via WhatsApp, sem
+ * depender de nenhum SMTP.
+ */
+async function adminGenerateRecoveryLink(email, redirectTo) {
+  assertConfigured();
+  const res = await fetch(`${_supaUrl()}/auth/v1/admin/generate_link`, {
+    method: 'POST',
+    headers: {
+      apikey: _supaKey(),
+      Authorization: `Bearer ${_supaKey()}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ type: 'recovery', email, options: { redirect_to: redirectTo } }),
+  });
+
+  const text = await res.text().catch(() => '');
+  let body = null;
+  if (text) { try { body = JSON.parse(text); } catch { body = text; } }
+
+  return { ok: res.ok, status: res.status, body };
 }
 
 module.exports = Object.assign(module.exports, {
   anonAuthRequest,
   adminSendRecovery,
+  adminGenerateRecoveryLink,
 });
