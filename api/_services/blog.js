@@ -13,6 +13,11 @@ const { ORIGIN, SITE_URL, parseBody } = require('../_lib/httpHelpers');
 // NOVO (Ago/2026): motor de corrida por tiers partilhado com
 // api/generate-document.js — ver nota em _callAiText abaixo.
 const { raceAllProviders, buildApiKeysFromEnv } = require('../_lib/aiRace');
+// NOVO (Set/2026, Fase 6 — extensão do P1.9): pesquisa em fontes oficiais
+// ANTES de escrever tópicos sensíveis, e scanner de menções a IA/alegações
+// arriscadas DEPOIS de escrever — ver comentários nesses ficheiros.
+const { researchOfficialSources } = require('../_lib/blogResearch');
+const { guardBlogContent } = require('../_lib/blogContentGuard');
 
 // Páginas SEO estáticas — ao adicionar novas páginas em /pages/, acrescentar
 // aqui também. Páginas geradas pelo admin (blog_pages) são lidas
@@ -255,11 +260,25 @@ async function _generateAndPublishArticle({ title, keywords, existingTitles, tra
   // verificar — não substitui a revisão humana (ver `sensitiveMatch`
   // abaixo), é uma segunda camada, mais barata, na origem.
   const sensitiveMatch = _detectSensitiveTopic(title, keywords);
+
+  // NOVO (Set/2026, Fase 6 — extensão): para tópicos sensíveis, pesquisa
+  // primeiro em fontes oficiais (ver api/_lib/blogResearch.js) — só depois
+  // disso é que o prompt de geração é construído, para poder incluir (ou
+  // não) os factos confirmados. Nunca lança excepção (fail-closed, ver
+  // comentários no próprio ficheiro) — `research` fica `null` se não
+  // houver fontes fiáveis, e o prompt reforça ainda mais a instrução para
+  // não inventar números nesse caso.
+  const research = sensitiveMatch
+    ? await researchOfficialSources(title, keywords).catch(() => null)
+    : null;
+
   const legalCaveatBlock = sensitiveMatch
-    ? `\n\nATENÇÃO — este é um tópico legal/fiscal/administrativo:\n- NÃO inventes números exactos (percentagens, valores em MZN, prazos em dias) que não tenhas a certeza absoluta de estarem correctos e actualizados — prefere linguagem como "consulte a tabela oficial actual" a um número específico arriscado.\n- Termina o artigo com uma frase clara a recomendar confirmação junto de uma fonte oficial (AT, INTIC, um contabilista ou advogado, consoante o tema) antes de tomar qualquer decisão com base neste texto.`
+    ? (research && research.factos.length
+        ? `\n\nFACTOS VERIFICADOS EM FONTES OFICIAIS — usa APENAS estes números/prazos/percentagens concretos no artigo; podes reformular a linguagem à tua maneira, mas o DADO tem de vir exactamente daqui, nunca de outra fonte ou da tua memória:\n${research.factos.map(f => `- ${f.facto} (fonte: ${f.fonte_nome || f.fonte_url})`).join('\n')}\n\nMenciona pelo menos uma destas fontes pelo nome no corpo do artigo (ex.: "segundo a Autoridade Tributária...", "de acordo com o Portal do Governo..."). Para qualquer dado que precises e que NÃO esteja nesta lista, usa linguagem genérica ("consulte a tabela oficial actual") em vez de um número específico.\n\nTermina o artigo com uma frase clara a recomendar confirmação junto de uma fonte oficial (AT, INTIC, um contabilista ou advogado, consoante o tema) antes de tomar qualquer decisão com base neste texto.`
+        : `\n\nATENÇÃO — este é um tópico legal/fiscal/administrativo e a pesquisa automática em fontes oficiais NÃO confirmou dados fiáveis e actuais para este tema:\n- NÃO inventes NENHUM número exacto (percentagens, valores em MZN, prazos em dias) — usa apenas linguagem genérica ("consulte a tabela oficial actual", "o valor pode variar, confirme junto da AT").\n- Termina o artigo com uma frase clara a recomendar confirmação junto de uma fonte oficial (AT, INTIC, um contabilista ou advogado, consoante o tema) antes de tomar qualquer decisão com base neste texto.`)
     : '';
 
-  const prompt = `És um especialista em SEO e redacção de conteúdo para o mercado moçambicano.\n\nEscreve um artigo de blog completo sobre: "${title}"\nPalavras-chave a incluir naturalmente: ${keywords || 'documentos, Moçambique'}\nTom: informativo\nExtensão aproximada: 700 palavras${avoidBlock}${legalCaveatBlock}\n\nREGRAS OBRIGATÓRIAS:\n- Escreve em português europeu (não brasileiro)\n- Conteúdo específico para Moçambique (exemplos locais, instituições moçambicanas, M-Pesa, etc.)\n- Inclui H2 e H3, e uma secção FAQ com 3-4 perguntas no final\n- Menciona que o MzDocs Pro pode ajudar a criar estes documentos rapidamente com IA\n- NÃO incluis <html>, <head>, <body> ou <!DOCTYPE> — apenas conteúdo do artigo\n- Devolve APENAS HTML válido: <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>\n- Não uses Markdown, apenas HTML puro\n\nComeça directamente com o conteúdo HTML, sem preâmbulo.`;
+  const prompt = `És um especialista em SEO e redacção de conteúdo para o mercado moçambicano.\n\nEscreve um artigo de blog completo sobre: "${title}"\nPalavras-chave a incluir naturalmente: ${keywords || 'documentos, Moçambique'}\nTom: informativo\nExtensão aproximada: 700 palavras${avoidBlock}${legalCaveatBlock}\n\nREGRAS OBRIGATÓRIAS:\n- Escreve em português europeu (não brasileiro)\n- Conteúdo específico para Moçambique (exemplos locais, instituições moçambicanas, M-Pesa, etc.)\n- Inclui H2 e H3, e uma secção FAQ com 3-4 perguntas no final\n- Menciona brevemente, de forma natural, que o MzDocs Pro pode ajudar a criar este tipo de documento em poucos minutos, de forma simples e sem complicações\n- NÃO incluis <html>, <head>, <body> ou <!DOCTYPE> — apenas conteúdo do artigo\n- Devolve APENAS HTML válido: <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>\n- Não uses Markdown, apenas HTML puro\n\nREGRAS OBRIGATÓRIAS DE MARCA/JURÍDICO — nunca violes estas, mesmo que pareça natural fazê-lo:\n- NUNCA menciones que este conteúdo é gerado por inteligência artificial, "IA", chatbot, GPT, LLM, nem o nome de qualquer fornecedor de IA (Gemini, OpenAI, Groq, Cohere, etc.) — escreve como um artigo editorial normal, escrito por uma pessoa.\n- NUNCA afirmes que o MzDocs Pro substitui aconselhamento jurídico profissional, inclui um advogado, garante aprovação por qualquer entidade, submete documentos automaticamente às autoridades (AT, INSS, conservatória, etc.), oferece reconhecimento notarial, ou é uma empresa comercialmente registada — nenhuma destas coisas está disponível hoje na plataforma.\n\nComeça directamente com o conteúdo HTML, sem preâmbulo.`;
 
   const result = await _callAiText(prompt, { maxTokens: 3000, temperature: 0.5 });
   if (!result) throw new Error('Nenhum provider de IA disponível para gerar o artigo.');
@@ -279,12 +298,44 @@ async function _generateAndPublishArticle({ title, keywords, existingTitles, tra
     if (suffix > 20) { finalSlug = `${slug}-${Date.now()}`; break; }
   }
 
-  // NOVO (P1.9): tópicos sensíveis nunca ficam `published: true`
+  // NOVO (Set/2026, Fase 6 — extensão do P1.9): scanner determinístico
+  // pós-geração — corre para TODOS os artigos (não só tópicos sensíveis),
+  // porque menções a IA ou alegações que a plataforma não cumpre são um
+  // risco de marca/jurídico independente do tema ser fiscal ou não (ex.:
+  // um artigo sobre "como fazer um CV" também não pode dizer "gerado por
+  // IA"). Segunda camada de defesa: o prompt já pede para evitar isto, mas
+  // um pedido no prompt não é garantia — ver comentário em
+  // api/_lib/blogContentGuard.js.
+  const guardResult   = guardBlogContent(html);
+  const contentFlags  = [
+    ...(guardResult.aiMention ? ['ai_mention'] : []),
+    ...guardResult.overclaims.map(o => o.id),
+  ];
+  const guardMessages = [
+    ...(guardResult.aiMention ? [`Menciona geração automática/IA ("${guardResult.aiMention}")`] : []),
+    ...guardResult.overclaims.map(o => `Alegação arriscada: ${o.label} ("${o.match}")`),
+  ];
+
+  // NOVO (P1.9, alargado na Fase 6): tópicos sensíveis OU artigos que
+  // dispararam o guard de conteúdo acima nunca ficam `published: true`
   // automaticamente — ficam à espera de revisão manual do admin (ver
   // handleBlogPages, ação `pages`, PUT `published:true` já publica
-  // correctamente o ficheiro estático quando o admin aprovar). Tópicos
-  // normais mantêm o comportamento 100% automático de sempre.
-  const needsReview = Boolean(sensitiveMatch);
+  // correctamente o ficheiro estático quando o admin aprovar). Artigos
+  // normais, sem avisos, mantêm o comportamento 100% automático de sempre.
+  const needsReview = Boolean(sensitiveMatch) || contentFlags.length > 0;
+
+  const reviewReasonParts = [];
+  if (sensitiveMatch) reviewReasonParts.push(`Tópico legal/fiscal/administrativo detectado: "${sensitiveMatch}"`);
+  reviewReasonParts.push(...guardMessages);
+  if (sensitiveMatch) {
+    reviewReasonParts.push(
+      research && research.fontesUnicas.length
+        ? `Fontes oficiais confirmadas pela pesquisa automática: ${research.fontesUnicas.join(', ')}`
+        : 'A pesquisa automática NÃO confirmou fontes oficiais para este tema — confirme manualmente antes de aprovar.'
+    );
+  }
+  const reviewReason = reviewReasonParts.length ? reviewReasonParts.join(' | ') : null;
+
   const nowIso = new Date().toISOString();
   const inserted = await insert('blog_pages', {
     slug: finalSlug, title, meta_description: metaDescription, content_html: html,
@@ -292,7 +343,9 @@ async function _generateAndPublishArticle({ title, keywords, existingTitles, tra
     published_at: needsReview ? null : nowIso, updated_at: nowIso,
     topic_keywords: keywords || null,
     needs_review: needsReview,
-    review_reason: needsReview ? `Tópico legal/fiscal/administrativo detectado: "${sensitiveMatch}"` : null,
+    review_reason: reviewReason,
+    research_sources: research ? research.factos : null,
+    content_flags: contentFlags,
   });
   const newPage = Array.isArray(inserted) ? inserted[0] : inserted;
 
@@ -302,8 +355,8 @@ async function _generateAndPublishArticle({ title, keywords, existingTitles, tra
     // uma lista (mesmo padrão já usado para falhas de publicação abaixo).
     await insert('admin_notifications', {
       type:    'blog_needs_review',
-      title:   '📝 Artigo de blog à espera de revisão (tópico legal/fiscal)',
-      message: `"${title}" (slug: ${finalSlug}) foi gerado mas NÃO foi publicado automaticamente — motivo: "${sensitiveMatch}". Reveja o conteúdo em Blog → Páginas antes de publicar.`,
+      title:   '📝 Artigo de blog à espera de revisão',
+      message: `"${title}" (slug: ${finalSlug}) foi gerado mas NÃO foi publicado automaticamente — motivo: ${reviewReason}. Reveja o conteúdo em Blog → Páginas antes de publicar.`,
       link:    '#blog',
     }).catch(() => {});
     return { slug: finalSlug, title, id: newPage?.id, provider: result.provider, needs_review: true };
@@ -615,3 +668,4 @@ module.exports = {
   // tests/blog-seo-review-gate.test.js.
   _detectSensitiveTopic,
 };
+
