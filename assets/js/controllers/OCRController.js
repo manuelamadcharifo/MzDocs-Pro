@@ -48,7 +48,39 @@ export class OCRController {
     document.getElementById('btnOcrRunTranscribe')?.addEventListener('click', () => this.runStaged());
   }
 
+  // NOVO (P1.7 — Master Hardening, Set/2026): consentimento explícito antes
+  // do 1º uso do OCR neste navegador. Contexto do problema (documentado em
+  // detalhe no README, secção 7): a imagem fotografada é enviada para um
+  // fornecedor externo de IA de visão (Google Gemini / Groq) para ser
+  // transcrita — nunca fica guardada no servidor da MzDocs Pro nem em nenhum
+  // log (confirmado por leitura de api/_services/ocr.js: só metadados como
+  // nº de páginas e duração vão para observabilidade, nunca a imagem nem os
+  // valores extraídos). Redacção automática de regiões sensíveis (BI, NUIT,
+  // assinatura, foto) DENTRO da imagem antes de a enviar exigiria um motor
+  // de visão computacional dedicado — fora do âmbito realista desta ronda de
+  // correcções (ver nota "BLOCKED" na tabela de Definition of Done). Em vez
+  // disso, mitigação por consentimento informado: avisar explicitamente,
+  // uma única vez por navegador, ANTES da primeira fotografia, para que o
+  // utilizador possa decidir com conhecimento de causa — nunca a app envia
+  // a foto para o fornecedor externo silenciosamente sem este aviso ter
+  // aparecido primeiro pelo menos uma vez.
+  _ensureOcrConsent() {
+    const KEY = 'mz_ocr_consent_v1';
+    if (localStorage.getItem(KEY) === '1') return true;
+    const proceed = window.confirm(
+      '📷 Para preencher automaticamente a partir de uma foto, a imagem é enviada ' +
+      'para um serviço externo de IA (Google/Groq) só para ser lida — não fica ' +
+      'guardada nos nossos servidores.\n\n' +
+      'Evite fotografar documentos de outras pessoas com dados sensíveis (BI, NUIT, ' +
+      'dados bancários) quando não for estritamente necessário.\n\n' +
+      'Deseja continuar?'
+    );
+    if (proceed) { try { localStorage.setItem(KEY, '1'); } catch (_) {} }
+    return proceed;
+  }
+
   trigger(mode) {
+    if (!this._ensureOcrConsent()) return;
     const input = document.getElementById('ocrInput');
     if (!input) return;
     if (mode === 'cam') input.setAttribute('capture', 'environment');
