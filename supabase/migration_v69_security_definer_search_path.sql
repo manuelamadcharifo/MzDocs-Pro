@@ -108,6 +108,41 @@
 -- Idempotente — seguro correr múltiplas vezes.
 -- ──────────────────────────────────────────────────────────────────────────
 
+-- ── 0. Helper _v67_lock_if_exists() — definido aqui também ─────────────────
+-- CORRIGIDO (relatado ao correr esta migração numa base de dados onde a
+-- migration_v67_security_hardening_rpc.sql nunca tinha sido aplicada com
+-- sucesso, ou foi aplicada antes de o helper existir): "42883: function
+-- public._v67_lock_if_exists(unknown) does not exist". Esta migração NÃO
+-- deve depender de outra já ter corrido primeiro — por isso o mesmo helper
+-- (idêntico ao de migration_v67_security_hardening_rpc.sql) é redefinido
+-- aqui via CREATE OR REPLACE: se a v67 já o tiver criado, isto só o
+-- substitui por uma cópia idêntica (inofensivo); se nunca tiver corrido,
+-- passa a existir agora. Tranca uma função existente (REVOKE de
+-- PUBLIC/anon/authenticated + GRANT só a service_role) SE ela existir com
+-- exactamente essa assinatura nesta base de dados — se não existir, regista
+-- um NOTICE e continua sem erro, em vez de abortar toda a migração.
+CREATE OR REPLACE FUNCTION public._v67_lock_if_exists(p_signature TEXT)
+RETURNS VOID AS $$
+DECLARE
+  fn_oid regprocedure;
+BEGIN
+  BEGIN
+    fn_oid := to_regprocedure(p_signature);
+  EXCEPTION WHEN OTHERS THEN
+    fn_oid := NULL;
+  END;
+
+  IF fn_oid IS NULL THEN
+    RAISE NOTICE 'v69: função % não existe nesta base de dados — ignorada.', p_signature;
+    RETURN;
+  END IF;
+
+  EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated', fn_oid);
+  EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', fn_oid);
+  RAISE NOTICE 'v69: função % trancada a service_role.', p_signature;
+END;
+$$ LANGUAGE plpgsql;
+
 -- ── 1. is_admin_jwt() — search_path vazio, GRANT a "authenticated" preservado ──
 CREATE OR REPLACE FUNCTION public.is_admin_jwt()
 RETURNS BOOLEAN
