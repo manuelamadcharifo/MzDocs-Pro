@@ -1,3 +1,22 @@
+// api/auth/index.js — v2.3 (recuperação de password: falhas deixam de ser invisíveis)
+// ALTERAÇÕES v2.3:
+//  1. CORRIGIDO (bug reportado em produção: "o link de recuperação nunca
+//     chega"): handleResetPassword() chamava adminSendRecovery() mas nunca
+//     verificava o resultado — se o GoTrue recusasse o envio (rate limit
+//     do serviço de e-mail por omissão do Supabase, que NÃO é pensado para
+//     produção; `redirect_to` fora da allow-list; etc.) ou se nenhum
+//     perfil correspondesse ao e-mail/telemóvel indicado, não ficava
+//     nenhum rasto — a resposta genérica de "sucesso" (correcta, por
+//     segurança) escondia por completo a causa real também dos logs do
+//     servidor. Agora cada desfecho é registado via logEvent (categoria
+//     'auth': reset_password_sent / reset_password_send_failed /
+//     reset_password_no_account — ver api/_lib/observability.js), sem
+//     alterar em nada a resposta que o utilizador vê.
+//  2. CORRIGIDO: adminSendRecovery() (api/_lib/supabaseAdmin.js) passa a
+//     devolver {ok, status, body} em vez de um boolean cego, e envia
+//     `redirect_to` também como query string (algumas versões do GoTrue só
+//     o leem daí para este endpoint específico), além do corpo do pedido.
+//
 // api/auth/index.js — v2.2 (LPD/RGPD: consentimento explícito + rate limiting)
 // ALTERAÇÕES v2.2:
 //  1. NOVO: signup passa a exigir consentTerms === true (Termos de Serviço),
@@ -40,6 +59,14 @@ const {
   anonAuthRequest,
   adminSendRecovery,
 } = require('../_lib/supabaseAdmin');
+
+// NOVO (Set/2026): logEvent regista, de forma estruturada, se o link de
+// recuperação chegou realmente a ser enviado ao GoTrue — ver comentário
+// completo em handleResetPassword() mais abaixo. require() protegido:
+// nunca deve impedir o login/registo se, por algum motivo, este módulo
+// falhar ao carregar.
+let logEvent = () => {};
+try { ({ logEvent } = require('../_lib/observability')); } catch (_) {}
 
 // CORRIGIDO (bug crítico — signup sempre a devolver 503 "Supabase não
 // configurado no servidor", mesmo com todas as env vars correctas no
@@ -473,13 +500,46 @@ async function handleResetPassword(req, res) {
     }
   }
 
-  try {
-    if (targetEmail) {
-      await adminSendRecovery(targetEmail, `${origin}/?reset=true`);
+  // CORRIGIDO (auditoria Set/2026 — "o link de recuperação nunca chega"):
+  // antes disto, se nenhum perfil correspondesse ao e-mail/telemóvel
+  // indicado, ou se o próprio pedido ao GoTrue falhasse (ex.: rate limit
+  // do envio de e-mail por omissão do Supabase — o serviço de testes
+  // embutido, limitado a poucos e-mails/hora e NÃO recomendado para
+  // produção — ou um `redirect_to` fora da allow-list), a função
+  // simplesmente devolvia sucesso genérico sem deixar QUALQUER rasto.
+  // Não havia forma de distinguir, olhando para os logs, "número não
+  // corresponde a nenhuma conta" de "conta encontrada mas o e-mail falhou
+  // ao ser enviado" — os dois pareciam exactamente o mesmo "sucesso" para
+  // sempre. Agora cada caso fica registado (via logEvent, categoria
+  // 'auth' — ver api/_lib/observability.js / metrics_events) e visível no
+  // Vercel Logs, sem nunca expor essa informação na resposta ao cliente.
+  if (!targetEmail) {
+    logEvent('auth', 'reset_password_no_account', { identifierType: isEmail ? 'email' : 'phone' });
+  } else {
+    try {
+      const sendResult = await adminSendRecovery(targetEmail, `${origin}/?reset=true`);
+      if (sendResult.ok) {
+        logEvent('auth', 'reset_password_sent', { emailDomain: targetEmail.split('@')[1] || 'unknown' });
+      } else {
+        // NÃO lançar — a resposta genérica ao cliente tem de sair na mesma.
+        // Mas isto É o sintoma que devias procurar no Vercel Logs quando
+        // um utilizador diz "não chegou o e-mail": se aparecer aqui
+        // repetidamente com status 429/"rate limit", a causa mais provável
+        // é o SMTP por omissão do Supabase (Authentication → Settings →
+        // SMTP Settings no dashboard — configurar um provedor próprio,
+        // ex. Resend/Brevo/SendGrid, resolve de forma definitiva).
+        console.error('[auth/reset-password] GoTrue recusou o envio:', sendResult.status, JSON.stringify(sendResult.body));
+        logEvent('auth', 'reset_password_send_failed', {
+          status: sendResult.status,
+          reason: (sendResult.body && (sendResult.body.error_description || sendResult.body.msg || sendResult.body.error)) || 'desconhecido',
+        });
+      }
+    } catch (err) {
+      console.error('[auth/reset-password] Excepção ao chamar o GoTrue:', err.message);
+      logEvent('auth', 'reset_password_send_failed', { reason: err.message || 'excepção' });
     }
-  } catch (err) {
-    console.error('[auth/reset-password]', err.message);
   }
+
   // Resposta sempre genérica por segurança (não revelar se a conta existe)
   return res.status(200).json({
     success: true,
