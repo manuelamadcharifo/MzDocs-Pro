@@ -43,7 +43,8 @@ const SENSITIVE_DEGRADED_LIMIT = {
   'receipt':              1,  // verificação de comprovativo de pagamento
   'auth-signin':          2,  // login
   'auth-signup':          1,  // registo
-  'auth-reset-password':  1,  // recuperação de password
+  'auth-reset-password':  1,  // recuperação de password (por e-mail)
+  'wa-recover':           1,  // recuperação de password (NOVO, Set/2026 — via WhatsApp)
   'ocr-analyze':          2,  // digitalização/OCR
 };
 let _degradeAlerted = false;
