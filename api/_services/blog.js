@@ -216,12 +216,50 @@ async function _publishBlogStaticFile(slug, title, metaDescription, contentHtml,
   await publishBlogPageToGithub({ slug, title, metaDescription, contentHtml, SITE_URL });
 }
 
+// NOVO (P1.9 — Master Hardening, Set/2026, Fase 6): lista de palavras-chave
+// que identificam um tópico legal/fiscal/administrativo — onde um erro
+// factual gerado por IA tem consequências reais (ver comentário completo em
+// _generateAndPublishArticle() e em migration_v71_blog_review_gate.sql).
+// Verificada contra o TÍTULO + palavras-chave do artigo, não contra o corpo
+// gerado (o corpo só existe depois de já ter sido gerado — a decisão de
+// pedir revisão tem de poder ser tomada antes disso, incluindo para ajustar
+// o próprio prompt, ver `avoidBlock`/`legalCaveatBlock` abaixo).
+// Deliberadamente ampla (falsos positivos — ex.: "carta de recomendação"
+// não é realmente um tópico de risco fiscal, mas não faz mal nenhum passar
+// por revisão a mais) em vez de restrita — falsos negativos (um artigo
+// fiscal a escapar à revisão) são o erro caro aqui, não o inverso.
+const SENSITIVE_TOPIC_PATTERN = new RegExp([
+  'lei\\b', 'legisla', 'decreto', 'c[oó]digo\\s+(civil|penal|comercial|do\\s+trabalho)',
+  'imposto', 'ispc', 'irps', 'irpc', '\\biva\\b', 'inss', 'fisco', 'tributa', 'fiscal',
+  'nuit', 'intic', 'registo\\s+comercial', 'licen[cç]a', 'alvar[aá]',
+  'contrato', 'procura[cç][aã]o', 'requerimento', 'heran[cç]a', 'test[ae]mento',
+  'div[oó]rcio', 'casamento', 'tribunal', 'multa', 'visto\\b', 'imigra[cç][aã]o',
+  'direitos\\s+(do\\s+)?(trabalhador|consumidor|cidad[aã]o)', 'obriga[cç][oõ]es\\s+fiscais',
+  'declara[cç][aã]o\\s+de\\s+rendimentos', 'seguran[cç]a\\s+social',
+].join('|'), 'i');
+
+function _detectSensitiveTopic(title, keywords) {
+  const haystack = `${title || ''} ${keywords || ''}`;
+  const match = haystack.match(SENSITIVE_TOPIC_PATTERN);
+  return match ? match[0] : null;
+}
+
 async function _generateAndPublishArticle({ title, keywords, existingTitles, transactionNote }) {
   const avoidBlock = existingTitles.length
     ? `\n\nJÁ EXISTEM estes artigos no blog — o teu deve cobrir um ângulo/subtema DIFERENTE, sem repetir conteúdo:\n${existingTitles.slice(0, 80).map(t => `- ${t}`).join('\n')}`
     : '';
 
-  const prompt = `És um especialista em SEO e redacção de conteúdo para o mercado moçambicano.\n\nEscreve um artigo de blog completo sobre: "${title}"\nPalavras-chave a incluir naturalmente: ${keywords || 'documentos, Moçambique'}\nTom: informativo\nExtensão aproximada: 700 palavras${avoidBlock}\n\nREGRAS OBRIGATÓRIAS:\n- Escreve em português europeu (não brasileiro)\n- Conteúdo específico para Moçambique (exemplos locais, instituições moçambicanas, M-Pesa, etc.)\n- Inclui H2 e H3, e uma secção FAQ com 3-4 perguntas no final\n- Menciona que o MzDocs Pro pode ajudar a criar estes documentos rapidamente com IA\n- NÃO incluis <html>, <head>, <body> ou <!DOCTYPE> — apenas conteúdo do artigo\n- Devolve APENAS HTML válido: <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>\n- Não uses Markdown, apenas HTML puro\n\nComeça directamente com o conteúdo HTML, sem preâmbulo.`;
+  // NOVO (P1.9): para tópicos legal/fiscal/administrativos, reforça o
+  // prompt para reduzir a chance de a IA apresentar valores/percentagens/
+  // prazos específicos como facto absoluto quando não tem forma de os
+  // verificar — não substitui a revisão humana (ver `sensitiveMatch`
+  // abaixo), é uma segunda camada, mais barata, na origem.
+  const sensitiveMatch = _detectSensitiveTopic(title, keywords);
+  const legalCaveatBlock = sensitiveMatch
+    ? `\n\nATENÇÃO — este é um tópico legal/fiscal/administrativo:\n- NÃO inventes números exactos (percentagens, valores em MZN, prazos em dias) que não tenhas a certeza absoluta de estarem correctos e actualizados — prefere linguagem como "consulte a tabela oficial actual" a um número específico arriscado.\n- Termina o artigo com uma frase clara a recomendar confirmação junto de uma fonte oficial (AT, INTIC, um contabilista ou advogado, consoante o tema) antes de tomar qualquer decisão com base neste texto.`
+    : '';
+
+  const prompt = `És um especialista em SEO e redacção de conteúdo para o mercado moçambicano.\n\nEscreve um artigo de blog completo sobre: "${title}"\nPalavras-chave a incluir naturalmente: ${keywords || 'documentos, Moçambique'}\nTom: informativo\nExtensão aproximada: 700 palavras${avoidBlock}${legalCaveatBlock}\n\nREGRAS OBRIGATÓRIAS:\n- Escreve em português europeu (não brasileiro)\n- Conteúdo específico para Moçambique (exemplos locais, instituições moçambicanas, M-Pesa, etc.)\n- Inclui H2 e H3, e uma secção FAQ com 3-4 perguntas no final\n- Menciona que o MzDocs Pro pode ajudar a criar estes documentos rapidamente com IA\n- NÃO incluis <html>, <head>, <body> ou <!DOCTYPE> — apenas conteúdo do artigo\n- Devolve APENAS HTML válido: <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <blockquote>\n- Não uses Markdown, apenas HTML puro\n\nComeça directamente com o conteúdo HTML, sem preâmbulo.`;
 
   const result = await _callAiText(prompt, { maxTokens: 3000, temperature: 0.5 });
   if (!result) throw new Error('Nenhum provider de IA disponível para gerar o artigo.');
@@ -241,13 +279,35 @@ async function _generateAndPublishArticle({ title, keywords, existingTitles, tra
     if (suffix > 20) { finalSlug = `${slug}-${Date.now()}`; break; }
   }
 
+  // NOVO (P1.9): tópicos sensíveis nunca ficam `published: true`
+  // automaticamente — ficam à espera de revisão manual do admin (ver
+  // handleBlogPages, ação `pages`, PUT `published:true` já publica
+  // correctamente o ficheiro estático quando o admin aprovar). Tópicos
+  // normais mantêm o comportamento 100% automático de sempre.
+  const needsReview = Boolean(sensitiveMatch);
   const nowIso = new Date().toISOString();
   const inserted = await insert('blog_pages', {
     slug: finalSlug, title, meta_description: metaDescription, content_html: html,
-    published: true, ai_generated: true, published_at: nowIso, updated_at: nowIso,
+    published: !needsReview, ai_generated: true,
+    published_at: needsReview ? null : nowIso, updated_at: nowIso,
     topic_keywords: keywords || null,
+    needs_review: needsReview,
+    review_reason: needsReview ? `Tópico legal/fiscal/administrativo detectado: "${sensitiveMatch}"` : null,
   });
   const newPage = Array.isArray(inserted) ? inserted[0] : inserted;
+
+  if (needsReview) {
+    // Sem publicação estática nenhuma enquanto não for aprovado — e avisa
+    // o admin activamente, para não depender de ele se lembrar de ir ver
+    // uma lista (mesmo padrão já usado para falhas de publicação abaixo).
+    await insert('admin_notifications', {
+      type:    'blog_needs_review',
+      title:   '📝 Artigo de blog à espera de revisão (tópico legal/fiscal)',
+      message: `"${title}" (slug: ${finalSlug}) foi gerado mas NÃO foi publicado automaticamente — motivo: "${sensitiveMatch}". Reveja o conteúdo em Blog → Páginas antes de publicar.`,
+      link:    '#blog',
+    }).catch(() => {});
+    return { slug: finalSlug, title, id: newPage?.id, provider: result.provider, needs_review: true };
+  }
 
   const SITE_URL = process.env.SITE_URL || 'https://mzdocs.co.mz';
   await _publishBlogStaticFile(finalSlug, title, metaDescription, html, SITE_URL)
@@ -416,10 +476,20 @@ async function handleBlogCron(req, res) {
             transactionNote: `fila:${item.id}`,
           });
           existingTitles.push(item.title);
+          // NOVO (P1.9): um tópico legal/fiscal fica 'needs_review' na fila
+          // em vez de 'published' — a página real (blog_pages) tem
+          // published=FALSE até o admin aprovar; marcar a fila como
+          // "published" aqui seria enganador.
           await restRequest(`blog_schedule_queue?id=eq.${item.id}`, {
-            method: 'PATCH', body: { status: 'published', blog_page_id: article.id }, prefer: 'return=minimal',
+            method: 'PATCH',
+            body: { status: article.needs_review ? 'needs_review' : 'published', blog_page_id: article.id },
+            prefer: 'return=minimal',
           });
-          results.published.push({ id: item.id, title: item.title, slug: article.slug });
+          if (article.needs_review) {
+            results.published.push({ id: item.id, title: item.title, slug: article.slug, needs_review: true });
+          } else {
+            results.published.push({ id: item.id, title: item.title, slug: article.slug });
+          }
         } catch (itemErr) {
           console.error('[blog-cron] falha ao publicar item da fila:', item.id, itemErr.message);
           await restRequest(`blog_schedule_queue?id=eq.${item.id}`, {
@@ -500,7 +570,7 @@ async function handleBlogCron(req, res) {
             method: 'PATCH', body: { value: new Date().toISOString() }, prefer: 'return=minimal',
           });
 
-          results.autogen = { title: idea.title, slug: article.slug };
+          results.autogen = { title: idea.title, slug: article.slug, needs_review: !!article.needs_review };
         } catch (autoErr) {
           console.error('[blog-cron] geração automática falhou:', autoErr.message);
           results.autogen = { error: autoErr.message };
@@ -541,4 +611,7 @@ module.exports = {
   handleBlogList,
   handleBlogCron,
   handleGithubDiagnostic,
+  // Exportado só para teste directo (função pura, sem I/O) — ver
+  // tests/blog-seo-review-gate.test.js.
+  _detectSensitiveTopic,
 };
