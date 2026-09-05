@@ -2547,12 +2547,20 @@ USING (EXISTS (
         const rows = filtered.map(f => `
             <tr style="border-bottom:1px solid #f1f5f9">
                 <td style="padding:6px 8px;font-size:.8rem;white-space:nowrap;color:${f.is_logged ? '#1e293b' : '#94a3b8'}">
-                    ${f.is_logged ? '👤' : '👻'} ${f.user_name}
+                    ${f.is_logged ? '👤' : '👻'} ${escapeHtml(f.user_name || '')}
                 </td>
                 <td style="padding:6px 8px;font-size:.8rem;white-space:nowrap">${resolveLabel(f.service)}</td>
                 <td style="padding:6px 4px;white-space:nowrap;font-size:.85rem">${starHtml(f.rating)} <strong>${f.rating}</strong>/5</td>
                 <td style="padding:6px 8px;font-size:.78rem;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                    ${f.comment || '<span style="color:#cbd5e1">—</span>'}
+                    <!-- CORRIGIDO (P1.8 — Master Hardening, Set/2026): esta célula escrevia
+                         f.comment DIRECTAMENTE em innerHTML, sem NENHUM escaping — um
+                         comentário com <script>/onerror=/etc. executava aqui, na sessão do
+                         PRÓPRIO ADMIN, ao abrir esta lista para rever feedback pendente
+                         (exactamente o mais provável de conter conteúdo hostil). O backend
+                         (api/admin/index.js, sanitizePlainText()) já remove marcação antes de
+                         gravar, mas esta camada nunca deve depender só disso — ver
+                         api/_lib/textSanitize.js para o detalhe completo. -->
+                    ${f.comment ? escapeHtml(f.comment) : '<span style="color:#cbd5e1">—</span>'}
                 </td>
                 <td style="padding:6px 8px;font-size:.75rem;color:#94a3b8;white-space:nowrap">${fmtDate(f.created_at)}</td>
             </tr>`).join('');
@@ -2620,7 +2628,7 @@ USING (EXISTS (
                 <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:8px;">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
                         <div>
-                            <div style="font-size:13px;font-weight:700;color:#0f172a;">${starHtml(r.rating)} <span style="color:#64748b;font-weight:400;">· ${r.user_name}${r.display_name ? ' (mostra como "' + r.display_name.replace(/</g,'&lt;') + '")' : ''}</span></div>
+                            <div style="font-size:13px;font-weight:700;color:#0f172a;">${starHtml(r.rating)} <span style="color:#64748b;font-weight:400;">· ${escapeHtml(r.user_name || '')}${r.display_name ? ' (mostra como "' + escapeHtml(r.display_name) + '")' : ''}</span></div>
                             <div style="font-size:11px;color:#94a3b8;">${r.service || 'geral'} · ${fmtDate(r.created_at)}</div>
                         </div>
                         ${status === 'pending' ? `
@@ -2629,7 +2637,7 @@ USING (EXISTS (
                                 <button type="button" data-action="moderateReview" data-id="${escapeHtml(r.id)}" data-status="rejected" style="background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">❌ Rejeitar</button>
                             </div>` : ''}
                     </div>
-                    ${r.comment ? `<p style="font-size:13px;color:#334155;margin:8px 0 0;">${r.comment.replace(/</g,'&lt;')}</p>` : '<p style="font-size:12px;color:#cbd5e1;margin:8px 0 0;">Sem comentário — só estrelas.</p>'}
+                    ${r.comment ? `<p style="font-size:13px;color:#334155;margin:8px 0 0;">${escapeHtml(r.comment)}</p>` : '<p style="font-size:12px;color:#cbd5e1;margin:8px 0 0;">Sem comentário — só estrelas.</p>'}
                 </div>
             `).join('');
         } catch (err) {
