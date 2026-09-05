@@ -44,6 +44,7 @@ const {
 } = require('../_lib/supabaseAdmin');
 const { loadPackagesFromSettings, estimateMznPerCredit } = require('../_lib/packages');
 const { moderateComment, approvalStatusFor } = require('../_lib/contentModeration');
+const { sanitizePlainText } = require('../_lib/textSanitize');
 const { checkRateLimit } = require('../_lib/rateLimit');
 
 const ALLOWED_ORIGIN = process.env.SITE_URL || 'https://mzdocs.co.mz';
@@ -1858,7 +1859,17 @@ async function handleFeedback(req, res) {
   }
   service = String(service).slice(0, 50).toLowerCase().replace(/[^a-z0-9_-]/g, '');
 
-  const cleanComment = (comment || '').trim().slice(0, 500);
+  // CORRIGIDO (P1.8 — Master Hardening, Set/2026): antes só se fazia
+  // `.trim().slice(0, 500)` — nenhuma remoção de HTML/scripts/handlers de
+  // eventos. `moderateComment()` abaixo verifica só linguagem ofensiva, é
+  // uma camada diferente e não relacionada com segurança de marcação. Ver
+  // api/_lib/textSanitize.js para o detalhe completo do problema e da
+  // correcção — sanitizePlainText() garante que o que fica gravado em
+  // user_feedback.comment é sempre texto puro, independentemente de quem
+  // vier a mostrá-lo (o painel admin tinha, confirmado por leitura,
+  // exactamente este XSS armazenado por falta desta camada — ver
+  // AdminApp.js, corrigido no mesmo âmbito desta ronda).
+  const cleanComment = sanitizePlainText(comment, 500);
   const moderation = moderateComment(cleanComment);
   if (moderation === 'blocked') {
     // Conteúdo abusivo/spam nunca chega a ser gravado — nem sequer entra
@@ -1871,7 +1882,13 @@ async function handleFeedback(req, res) {
   // Nome curto opcional a mostrar publicamente junto ao comentário (ex:
   // "Sofia M.") — nunca o telefone, nunca o nome completo do perfil sem
   // consentimento explícito neste campo.
-  const cleanDisplayName = String(display_name || '').trim().slice(0, 40).replace(/[<>]/g, '') || null;
+  // CORRIGIDO (P1.8): antes só removia `<`/`>` (`.replace(/[<>]/g, '')`) —
+  // suficiente para impedir construir uma tag, mas incompleto face a
+  // handlers de eventos soltos ou esquemas javascript: sem tag nenhuma à
+  // volta. Mesma sanitizePlainText() usada para o comentário, por
+  // consistência (defesa em profundidade, mesmo sendo um campo mais curto
+  // e de menor risco).
+  const cleanDisplayName = sanitizePlainText(display_name, 40) || null;
 
   try {
     let userId = null;
