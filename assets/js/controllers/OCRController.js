@@ -265,6 +265,13 @@ export class OCRController {
         // do serviço "transcricao" (Digitalizar Documento), que cobra por
         // página em vez de custo fixo (ver ServiceDefinitions.js).
         this.docModel.ocrPageCount = files.length;
+        // NOVO (P20 residual, Set/2026): prova server-side do nº real de
+        // páginas processadas (ver api/_services/ocr.js) — quando presente,
+        // DocumentController.generate() usa isto para a cobrança oficial de
+        // "transcricao" em vez de um custo calculado só no cliente. Pode
+        // vir vazio (ex.: RPC indisponível, ou OCR feito sem sessão) — a
+        // cobrança cai então para o mínimo de sanidade, nunca bloqueia.
+        this.docModel.ocrJobId = result.ocrJobId || null;
 
         // se este serviço tiver custo dinâmico, mostra já o custo real no
         // botão "Gerar com IA" — antes disto o utilizador só via "1
@@ -374,7 +381,7 @@ export class OCRController {
   }
 
   discard() {
-    if (this.docModel) { this.docModel.ocrText = null; this.docModel.ocrPageCount = 0; }
+    if (this.docModel) { this.docModel.ocrText = null; this.docModel.ocrPageCount = 0; this.docModel.ocrJobId = null; }
     DocumentView.updateGenCostLabel(1);
     document.getElementById('smartFillBanner')?.remove();
     document.querySelectorAll('#formBody input, #formBody textarea, #formBody select').forEach(el => {
