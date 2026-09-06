@@ -1,0 +1,31 @@
+-- supabase/migrations/20240101004000_migration_v31_marketing_purchase_attribution.sql
+--
+-- ⚠️ ATENÇÃO — FICHEIRO ORIGINAL CORROMPIDO, CONTEÚDO REAL DESCONHECIDO ⚠️
+--
+-- O ficheiro original (supabase/_legacy_archive/migration_v31_marketing_purchase_attribution.sql,
+-- 76 linhas anunciadas no nome de outros sítios do projecto) está composto
+-- inteiramente por bytes nulos (\0) — não é SQL válido, é dados
+-- corrompidos, provavelmente por um problema no export/zip do projecto em
+-- algum momento. Isto CONFIRMA a suspeita já registada no README (secção
+-- 13, "Dívida técnica"): "possivelmente corrompida/vazia".
+--
+-- Este ficheiro está aqui como PLACEHOLDER inofensivo (nenhuma instrução
+-- SQL — um `db reset` continua a funcionar normalmente, só que sem o que
+-- quer que esta migração adicionasse).
+--
+-- BOA NOTÍCIA: procurei em todo o código da aplicação (api/, assets/) por
+-- qualquer referência a "attribution" ou "purchase_attribution" e não
+-- encontrei NENHUMA — nada no código actualmente depende desta migração.
+-- Isso sugere fortemente que, mesmo que esta migração tenha corrido em
+-- produção no passado, a funcionalidade nunca chegou a ser ligada ao
+-- resto da app (ou já foi descontinuada) — ou seja, a corrupção deste
+-- ficheiro não está a causar nenhum erro visível hoje.
+--
+-- SE PRECISARES do schema real desta migração (para reconstruir a
+-- funcionalidade, ou só para ter o histórico completo):
+--   1. Supabase Dashboard → Database → Tables — procura por uma tabela
+--      relacionada com atribuição de compras/campanhas (ex.:
+--      "purchase_attribution", "marketing_attribution" ou semelhante).
+--   2. Ou corre `supabase db pull` (CLI) contra o projecto de produção —
+--      isso gera uma migração nova com o schema REAL tal como existe
+--      hoje, que podes usar para substituir este placeholder.
