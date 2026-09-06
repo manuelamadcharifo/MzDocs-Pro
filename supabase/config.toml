@@ -1,0 +1,58 @@
+# supabase/config.toml
+#
+# NOVO (dívida técnica P2, Set/2026): este projecto nunca teve um
+# config.toml — todas as 81 migrações em supabase/migrations/ foram
+# sempre corridas manualmente, uma a uma, no SQL Editor do dashboard do
+# Supabase (ver o cabeçalho de cada ficheiro: "Execute no SQL Editor do
+# Supabase"). Sem este ficheiro, o `supabase` CLI não reconhece a pasta
+# como um projecto e `supabase db reset` não funciona.
+#
+# Gerado com base nos valores por omissão do `supabase init` (CLI
+# recente). Se já tiveres um projecto Supabase CLI ligado, substitui
+# `project_id` pelo teu; caso contrário, deixa como está para
+# desenvolvimento 100% local (Docker).
+
+project_id = "mzdocs-pro"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["https://mzdocs.co.mz"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[realtime]
+enabled = true
+
+[analytics]
+enabled = false

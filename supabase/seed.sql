@@ -1,0 +1,32 @@
+-- supabase/seed.sql
+--
+-- O Supabase CLI corre este ficheiro AUTOMATICAMENTE depois de aplicar
+-- todas as migrações, sempre que fazes `supabase db reset`.
+--
+-- A maior parte dos dados de referência do MzDocs Pro já vive DENTRO das
+-- próprias migrações versionadas (proposital — assim ficam ligados à
+-- versão do schema que os introduziu, em vez de duplicados aqui):
+--
+--   • Templates oficiais da galeria
+--       → supabase/migrations/..._migration_v22_seed_official_templates.sql
+--   • Pacotes de créditos e calendário de bónus por omissão
+--       → supabase/migrations/..._migration_v61_dynamic_packages_and_bonus_schedule.sql
+--   • Definições de preços/pacotes de parceiros
+--       → supabase/migrations/..._migration_v65_partner_category_packages.sql
+--
+-- Este ficheiro é só para dados de conveniência para DESENVOLVIMENTO
+-- LOCAL que NÃO fazem sentido em produção (ex.: uma conta de teste).
+-- Fica vazio por omissão — o `db reset` funciona na mesma sem nada aqui.
+--
+-- Para promover uma conta real a admin (produção ou local), usa
+-- supabase/ops/promote_admin.sql em vez deste ficheiro.
+
+-- Exemplo (comentado) de utilizador de teste para desenvolvimento local:
+--
+-- INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at)
+-- VALUES (
+--   '00000000-0000-0000-0000-000000000001',
+--   'dev@mzdocs.local',
+--   crypt('dev123456', gen_salt('bf')),
+--   NOW()
+-- );
