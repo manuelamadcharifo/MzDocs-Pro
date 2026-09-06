@@ -48,7 +48,14 @@ async function callGemini(apiKey, imageBase64, mimeType, prompt) {
             { inline_data: { mime_type: mimeType, data: imageBase64 } },
             { text: prompt },
           ]}],
-          generationConfig: { maxOutputTokens: 4096, temperature: 0.1 },
+          // CORRIGIDO: 4096 tokens era insuficiente para o HTML+CSS completo
+          // que o prompt pede (ex: CV com sidebar tem ~30 classes CSS) — a
+          // resposta era cortada a meio, o JSON ficava inválido, parseJSON()
+          // rebentava, e o chamador (TemplatePicker._handleUpload) caía no
+          // fallback de template genérico/aleatório sem avisar o utilizador.
+          // 8192 dá margem confortável para o HTML+CSS mais extenso previsto
+          // nos prompts de extracção (CV e genérico).
+          generationConfig: { maxOutputTokens: 8192, temperature: 0.1, responseMimeType: 'application/json' },
           safetySettings: [
             { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
             { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
@@ -91,7 +98,11 @@ async function callOpenRouter(apiKey, imageBase64, mimeType, prompt) {
         },
         body: JSON.stringify({
           model,
-          max_tokens: 1024,
+          // CORRIGIDO: 1024 tokens tornava quase impossível devolver um
+          // HTML+CSS completo (mesma causa da falha silenciosa descrita
+          // acima em callGemini) — este fallback falhava quase sempre,
+          // deixando a extracção 100% dependente do Gemini.
+          max_tokens: 8192,
           temperature: 0.1,
           messages: [{ role: 'user', content: [
             { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
