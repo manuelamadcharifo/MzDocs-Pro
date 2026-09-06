@@ -209,10 +209,36 @@ export class OpenRouterService {
     // ── PASSO 1: Deduzir créditos via /api/deduct-credit ────────────────
     // Feito ANTES da geração para garantir que os créditos são consumidos
     // mesmo que a geração falhe (o servidor de IA pode falhar, o crédito foi usado).
+    // CORRIGIDO (P20 residual — confirmado por revisão externa, Set/2026):
+    // este corpo NUNCA enviou `documentType` — api/_services/account.js
+    // (resolveOfficialCost(), ver api/_lib/pricingRegistry.js) precisa
+    // dele para saber o preço OFICIAL de catálogo de cada serviço; sem
+    // ele, `documentType` chegava `null` ao servidor e caía sempre no
+    // custo por omissão (1 crédito) — TODOS os documentos gerados por este
+    // caminho (praticamente todo o catálogo: cv, carta, procuração, acta,
+    // prestação de serviços, etc.) estavam a ser cobrados 1 crédito em vez
+    // do preço real (2 ou 3 créditos nalguns casos), desde a correcção do
+    // P20 na Fase 1 do Master Hardening — uma regressão séria, introduzida
+    // sem ninguém dar por isso porque os testes desse ponto testavam
+    // directamente a função do servidor (com `documentType` já presente no
+    // pedido construído no teste), nunca o caminho real do cliente até lá.
+    // Ver tests/cost-tampering.test.js (novo teste de regressão) e
+    // tests/documenttype-regression.test.js para a prova deste bug.
+    //
+    // Aproveitado também para enviar `_ocrJobId` (P20 residual de
+    // "transcricao"/Digitalizar Documento — ver api/_services/ocr.js): a
+    // prova server-side de quantas páginas foram realmente digitalizadas,
+    // para o servidor deixar de confiar apenas no `cost` calculado aqui no
+    // cliente (ver api/_lib/pricingRegistry.js, CLIENT_ESTIMATED_SERVICES).
     const deductRes = await fetch('/api/deduct-credit', {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ cost, operationId }),
+      body: JSON.stringify({
+        cost,
+        operationId,
+        documentType: serviceType,
+        _ocrJobId: (serviceType === 'transcricao' && window.docController?.docModel?.ocrJobId) || undefined,
+      }),
     });
 
     if (deductRes.status === 401) {
