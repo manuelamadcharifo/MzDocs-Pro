@@ -89,7 +89,26 @@ const LONG_DOC_SERVICES = Object.freeze(new Set(['trabalho', 'planonegocio']));
 // foram realmente submetidas a OCR (ex.: contar no próprio pipeline de OCR e
 // gravar isso ligado à operação) — fora do âmbito desta ronda, sinalizado
 // como risco residual na tabela de Definition of Done.
+// CORRIGIDO (P20 residual — confirmado por revisão externa e resolvido,
+// Set/2026): "transcricao" já não confia cegamente no `cost` do cliente.
+// api/_services/ocr.js agora cria um "job" (reaproveitando
+// generation_jobs, migration_v68) com o nº REAL de páginas processadas
+// (`images.length`, o próprio array que a IA de visão recebeu) sempre que
+// o pedido de OCR tem sessão válida — api/_services/account.js valida esse
+// job (validate_generation_job(), mesma RPC do P1.1) e usa
+// `credits_reserved` desse job como custo oficial, nunca o `cost` do
+// corpo do pedido. CLIENT_ESTIMATED_SERVICES continua a existir só como
+// FALLBACK — quando não há `_ocrJobId` válido (ex.: OCR foi feito sem
+// sessão iniciada, ou a RPC estava indisponível nesse momento), a
+// cobrança cai para o mínimo de sanidade (1 crédito, nunca o valor maior
+// que o cliente eventualmente peça) em vez de bloquear a geração por
+// completo — um utilizador legítimo não fica impedido de gerar o
+// documento só porque a prova de página falhou por uma razão técnica.
 const CLIENT_ESTIMATED_SERVICES = Object.freeze(new Set(['transcricao']));
+// Tecto do fallback acima — nunca maior do que 1 crédito quando não há
+// prova de página válida (evita que alguém contorne o job simplesmente
+// não o enviando e continuando a declarar um `cost` maior à mesma).
+const CLIENT_ESTIMATED_FALLBACK_COST = 1;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TEMPLATE_PREFIX = 'template_';
@@ -113,10 +132,17 @@ function extractTemplateId(documentType) {
  * @param {'initial'|'extra_page'} params.chargeType
  * @param {Function} params.selectOne  — mesma função de api/_lib/supabaseAdmin.js
  *                                       (injectada para permitir mock em testes)
+ * @param {Function} [params.rpc]      — mesma função de api/_lib/supabaseAdmin.js,
+ *                                       usada para validar o job de OCR (ver
+ *                                       CLIENT_ESTIMATED_SERVICES acima)
+ * @param {string}   [params.userId]   — utilizador autenticado (JWT), para
+ *                                       confirmar que o job de OCR lhe pertence
+ * @param {string}   [params.ocrJobId] — id devolvido por api/_services/ocr.js
+ *                                       quando o OCR teve sessão válida
  * @returns {Promise<number|null>} custo em créditos, ou `null` se o pedido
  *          for inválido (o chamador deve responder 400 nesse caso).
  */
-async function resolveOfficialCost({ documentType, chargeType, selectOne }) {
+async function resolveOfficialCost({ documentType, chargeType, selectOne, rpc, userId, ocrJobId }) {
   // ── Cobrança incremental (custo progressivo por tamanho) ────────────────
   if (chargeType === 'extra_page') {
     return LONG_DOC_SERVICES.has(documentType) ? EXTRA_PAGE_COST : null;
@@ -148,17 +174,39 @@ async function resolveOfficialCost({ documentType, chargeType, selectOne }) {
     return DEFAULT_COST;
   }
 
-  // ── Catálogo normal de serviços ──────────────────────────────────────────
-  // "transcricao" é o único caso onde o custo inicial ainda vem do cliente
-  // (dentro de VALID_COSTS, ver account.js) — ver CLIENT_ESTIMATED_SERVICES
-  // acima para a explicação completa. Sinalizado devolvendo `null` aqui: o
-  // chamador (account.js) sabe que `null` para um documentType em
-  // CLIENT_ESTIMATED_SERVICES significa "usa o legacyCost", não "pedido
-  // inválido" (esse caso só se aplica a chargeType='extra_page' indevido).
-  if (documentType && CLIENT_ESTIMATED_SERVICES.has(documentType)) {
-    return null;
+  // ── "transcricao" (Digitalizar Documento) — prova server-side de página ──
+  // NOVO (P20 residual, Set/2026): antes de cair no fallback de
+  // CLIENT_ESTIMATED_SERVICES, tenta validar o job criado por
+  // api/_services/ocr.js (create_generation_job, ligado ao utilizador
+  // autenticado, com credits_reserved = custo oficial calculado a partir
+  // do nº real de páginas processadas). Só usa o valor do job se
+  // validate_generation_job confirmar que pertence a ESTE utilizador e
+  // ainda não expirou — exactamente a mesma verificação já usada em P1.1
+  // para _sectionMode.
+  if (documentType === 'transcricao' && ocrJobId && userId && typeof rpc === 'function') {
+    try {
+      const valid = await rpc('validate_generation_job', { p_job_id: ocrJobId, p_user_id: userId });
+      if (valid === true) {
+        const job = await selectOne('generation_jobs', 'id', ocrJobId, 'credits_reserved,service');
+        if (job && typeof job.credits_reserved === 'number' && job.credits_reserved > 0
+            && typeof job.service === 'string' && job.service.startsWith('ocr:')) {
+          return job.credits_reserved;
+        }
+      }
+    } catch (e) {
+      console.warn('[pricingRegistry] Falha ao validar job de OCR — cai no fallback de sanidade:', e.message);
+    }
   }
 
+  // ── Catálogo normal de serviços ──────────────────────────────────────────
+  // NOTA: chegar aqui para "transcricao" significa que não havia
+  // _ocrJobId válido (ver bloco acima) — cai no custo de catálogo
+  // (SERVICE_COSTS.transcricao, hoje 1), que funciona como o mínimo de
+  // sanidade seguro: nunca cobra o valor (potencialmente maior) que o
+  // cliente declararia sozinho. CLIENT_ESTIMATED_FALLBACK_COST (em
+  // account.js) só entra em jogo no caso residual de chargeType='extra_page'
+  // indevido para este documentType (ver bloco 'extra_page' no topo desta
+  // função) — aqui já não é preciso devolver `null` para isso.
   if (documentType && Object.prototype.hasOwnProperty.call(SERVICE_COSTS, documentType)) {
     return SERVICE_COSTS[documentType];
   }
@@ -172,6 +220,7 @@ module.exports = {
   EXTRA_PAGE_COST,
   LONG_DOC_SERVICES,
   CLIENT_ESTIMATED_SERVICES,
+  CLIENT_ESTIMATED_FALLBACK_COST,
   isTemplateDocumentType,
   extractTemplateId,
   resolveOfficialCost,
