@@ -269,14 +269,17 @@ pgvector) e pagamento manual por carteira móvel (M-Pesa, e-Mola, mKesh).
 > o mesmo v57 e não têm relação directa; é uma coincidência de numeração entre o histórico de
 > migrações SQL e o histórico de rondas de correcção descrito em prosa.
 
-> ⚠️ **Acção urgente e não resolvida — plano Vercel:** este projecto processa pagamentos
+> ✅ **Resolvido (Set/2026) — plano Vercel:** este projecto processa pagamentos
 > (`api/process-payment.js`, tabela `transactions`). Os Termos de Serviço da Vercel definem
 > **qualquer fluxo de cobrança a visitantes do site** como uso comercial, não permitido no plano
-> Hobby — apenas no Pro (US$20/mês) ou Enterprise. Esta recomendação já aparece em, pelo menos,
-> três auditorias anteriores e continua sem evidência de ter sido resolvida. Adicionalmente, nos
-> Termos da Vercel, projectos em Hobby (ou em trial Pro) concedem à Vercel o direito de usar o
-> conteúdo do site para treinar modelos de IA — relevante porque esta plataforma processa dados
-> pessoais sensíveis (BI, NUIT, moradas, procurações, contratos).
+> Hobby — apenas no Pro (US$20/mês) ou Enterprise. Esta recomendação apareceu em, pelo menos, três
+> auditorias anteriores sem evidência de ter sido resolvida — **o proprietário confirmou o
+> upgrade para o plano Pro em Set/2026**, antes do lançamento comercial oficial. Com o Pro,
+> deixa de se aplicar também a cláusula dos Termos Hobby (e do trial Pro) que concede à Vercel o
+> direito de usar o conteúdo do site para treinar modelos de IA — relevante porque esta
+> plataforma processa dados pessoais sensíveis (BI, NUIT, moradas, procurações, contratos).
+> Nenhuma alteração de código foi necessária para este ponto — era puramente uma decisão de
+> plano/facturação, fora do repositório.
 
 > ✅ **`ROADMAP-ESCALA.md` existe** (544 linhas, versão de Agosto/2026, secção 12) — fusão dos três
 > documentos de roadmap anteriores (técnico + rentabilidade + plano de execução de 14 dias) contra
@@ -719,7 +722,7 @@ MzDocs-Pro/
 
 ### 6.1. Pré-requisitos
 
-- Conta Vercel (Hobby ou Pro — ver aviso comercial no topo deste documento).
+- Conta Vercel Pro (obrigatório para uso comercial — ver nota no topo deste documento; confirmado activo desde Set/2026).
 - Projecto Supabase com extensão `pgvector` activada (Dashboard → Extensions) — necessária para
   o Motor Jurídico RAG.
 - Pelo menos **uma** chave de IA (quantas mais, maior a disponibilidade e mais resiliente o
@@ -1304,38 +1307,47 @@ confirmado (v43).
 
 ---
 
-## 10. Limites do Vercel Hobby
+## 10. Plano Vercel — Pro (desde Set/2026)
 
-| Recurso | Limite | Usado |
+> ✅ Migrado de Hobby para **Pro** em Set/2026, antes do lançamento comercial — ver nota no topo
+> deste documento. Esta secção documenta os limites concretos e o histórico de como a contagem de
+> functions foi gerida quando o projecto ainda estava no Hobby (12 functions, tecto rígido) —
+> mantido por ser útil caso o projecto alguma vez precise de voltar a otimizar por alguma razão,
+> e porque as boas práticas de organização (routers finos + `_services/`) continuam válidas
+> independentemente do plano.
+
+| Recurso | Hobby (antigo) | Pro (actual) |
 |---|---|---|
-| Serverless Functions | 12 | **10 — 2 de margem** (ver secção 5; `api/_lib/` e `api/_services/` não contam) |
-| `generate-document.js` / `extract-template.js` / `convert.js` | 60 s | — |
-| `process-payment.js` / `admin/index.js` / `auth/index.js` / `account.js` | 30 s | — |
-| `whatsapp-webhook.js` | 15 s | — |
-| `partners.js` | 15 s | — |
-| Bandwidth | 100 GB/mês | — |
+| Serverless Functions | 12 (tecto rígido) | Sem tecto fixo por contagem — facturação por utilização; continua a valer a pena manter a organização em routers finos por manutenibilidade, não por limite |
+| `maxDuration` por function | até 60 s | até 300 s (5 min) por omissão — `vercel.json` pode continuar a declarar os valores actuais (60 s/30 s/15 s) sem problema; só vale a pena alargar se algum endpoint especifico começar a expirar |
+| Bandwidth | 100 GB/mês | 1 TB/mês incluído (uso adicional facturado) |
+| Uso comercial | Proibido pelos Termos de Serviço | Permitido — é precisamente o que o Pro cobre |
+| Treino de IA sobre o conteúdo do site | Vercel reserva-se esse direito nos Termos Hobby/trial Pro | Não se aplica no Pro pago |
 
-**Como a margem foi aberta (Ago/2026):** `api/verify-credits.js`, `api/deduct-credit.js`,
-`api/delete-temp-account.js` e `api/cleanup-temp-accounts.js` — 4 functions pequenas do mesmo
-domínio (conta/crédito) — foram absorvidas por um único `api/account.js` (router, dispatch por
-`?_op=`) + `api/_services/account.js` (lógica). Rotas públicas inalteradas, via rewrite em
-`vercel.json`. Antes disso, `api/misc.js` já tinha sido reduzido de ~3.234 linhas para um router
-fino de ~90 linhas (`api/_services/{payments,ocr,legal,blog,site,templates,affiliates,smsConfirm}.js`),
-o que resolveu a manutenibilidade mas **não** a contagem de functions — o número de ficheiros em
-`api/` é que determina isso, não como o código está organizado internamente.
+**Contagem actual de functions em `api/`** (informativa, já sem tecto a vigiar): 10 —
+`generate-document.js`, `extract-template.js`, `convert.js`, `process-payment.js`,
+`admin/index.js`, `auth/index.js`, `account.js`, `whatsapp-webhook.js`, `partners.js`, `misc.js`.
+`api/_lib/` e `api/_services/` continuam a não contar (não são rotas, são módulos importados
+pelos routers acima).
 
-**Set/2026:** `api/whatsapp-webhook.js` (recuperação de password via WhatsApp — ver secção 7)
-voltou a consumir 1 slot — 9 → 10, 3 → 2 de margem. Foi uma function nova (não um router
-existente) por precisar de desligar o parsing automático de JSON da Vercel para verificar a
-assinatura HMAC da Meta sobre o corpo exacto do pedido — ver comentário no topo do próprio
-ficheiro para o porquê de não ter ido para dentro de `api/misc.js`.
+**Histórico (relevante só para contexto, já não é uma restrição activa):** em Ago/2026, 4
+functions pequenas do mesmo domínio (`verify-credits.js`, `deduct-credit.js`,
+`delete-temp-account.js`, `cleanup-temp-accounts.js`) foram consolidadas num único `api/account.js`
+(router, dispatch por `?_op=`) + `api/_services/account.js` (lógica) — isto abriu margem (12/12 →
+9/12) enquanto o projecto ainda estava no Hobby. Da mesma forma, `api/misc.js` tinha sido reduzido
+de ~3.234 linhas para um router fino de ~90 linhas (`api/_services/{payments,ocr,legal,blog,site,
+templates,affiliates,smsConfirm}.js`) — resolveu manutenibilidade, não contagem de functions (o
+número de ficheiros em `api/` é que contava para o tecto do Hobby). Em Set/2026,
+`api/whatsapp-webhook.js` (recuperação de password via WhatsApp — ver secção 7) foi uma function
+nova em vez de ir para dentro de um router existente, por precisar de desligar o parsing
+automático de JSON da Vercel para verificar a assinatura HMAC da Meta sobre o corpo exacto do
+pedido — ver comentário no topo do próprio ficheiro.
 
-**Regra prática:** toda nova lógica de API deve ir num router existente (`api/misc.js`,
-`api/account.js`, `api/admin/index.js`) ou usar o mesmo padrão router+`_services/` para uma nova
-function, só quando o domínio for genuinamente distinto. Helpers partilhados vão em `api/_lib/`,
-lógica de negócio por domínio em `api/_services/` — nenhum dos dois conta para o limite. Com 2
-slots livres, há margem para integrar o webhook do PaySuite/ClicPay (ver secção 13), sem precisar
-do plano Pro — mas confirmar sempre a contagem real em `vercel.json` antes de assumir margem.
+**Regra prática, ainda válida no Pro:** toda nova lógica de API deve preferencialmente ir num
+router existente (`api/misc.js`, `api/account.js`, `api/admin/index.js`) ou usar o mesmo padrão
+router+`_services/` — boa prática de organização, não uma necessidade imposta por um tecto. Casos
+como o `whatsapp-webhook.js`, que precisam de configuração própria incompatível com o router
+partilhado, continuam a justificar uma function dedicada sem preocupação de limite no Pro.
 
 ---
 
@@ -1448,12 +1460,13 @@ reaproveitando `notifyTelegram.js`.
 
 ## 13. Dívida técnica e problemas conhecidos (honesto, sem filtro)
 
-- ~~**Plano Vercel Hobby sem margem de functions para crescer**~~ — **parcialmente resolvido
-  (Ago/2026):** 12/12 → 9/12 (3 de margem) via consolidação de 4 functions pequenas em
-  `api/account.js` — ver secção 10. **Continua por resolver** o outro risco desta mesma nota: este
-  projecto processa pagamentos, e os Termos de Serviço da Vercel definem qualquer fluxo de
-  cobrança a visitantes do site como uso comercial, não permitido no plano Hobby — isso exige o
-  plano Pro independentemente de quantas functions sobrem. Ver aviso no topo.
+- ~~**Plano Vercel Hobby sem margem de functions para crescer**~~ — **resolvido (Set/2026):**
+  12/12 → 9/12 (3 de margem, Ago/2026, via consolidação de 4 functions pequenas em
+  `api/account.js`) → 10/12 (2 de margem) com a adição do `whatsapp-webhook.js` — ver secção 10.
+  O outro risco desta mesma nota (este projecto processa pagamentos, e os Termos de Serviço da
+  Vercel definem qualquer fluxo de cobrança a visitantes do site como uso comercial, não
+  permitido no plano Hobby) está também **resolvido — o proprietário confirmou o upgrade para o
+  plano Pro em Set/2026**, antes do lançamento comercial oficial. Ver nota no topo.
 - ~~**`schema.sql` central desactualizado**~~ — **resolvido (Set/2026):** ver
   `supabase/README.md`. As 81 migrações foram reorganizadas em `supabase/migrations/` com a
   convenção do Supabase CLI, permitindo `supabase db reset` a partir do zero.
@@ -1493,9 +1506,9 @@ reaproveitando `notifyTelegram.js`.
   desenhado e testado à parte (`paymentGateway.js`, adaptadores PaySuite/ClicPay, webhook PaySuite
   reaproveitando a lógica de `verifyReceiptInternal`), mas por decisão do autor ainda não foi
   merged; o fluxo de pagamento em produção continua 100% manual (comprovativo + verificação por
-  IA de visão, secção 8). Desde a consolidação de Ago/2026 (secção 10) já **há margem** (3
-  functions livres) para integrar o webhook do PaySuite sem precisar do plano Pro — antes disto
-  não havia nenhum slot livre.
+  IA de visão, secção 8). Com o plano Pro (Set/2026, ver secção 10), a contagem de functions deixou
+  de ser um factor limitante para esta integração — pode avançar quando fizer sentido
+  comercialmente, sem depender de haver "slots" livres.
 - **Templates visuais continuam em 70** (14 serviços × 5) apesar do número total de serviços já
   ter crescido para 18 — `transcricao` e `conversao` ainda não têm galeria de templates própria.
 - ~~Seleccionar várias fotos de uma vez no OCR (`transcricao`/`trabalho`) perdia silenciosamente
@@ -1619,6 +1632,7 @@ recentes — o que causava mais confusão do que valor. Um resumo das rondas mai
 | Set/2026 (Master Hardening — Fase 5) — P1.7 (OCR/privacidade de imagem) + P1.8 (XSS armazenado no feedback) | **(8) P1.8:** o painel de moderação de avaliações do admin (`AdminApp.js`) interpolava `user_name` (= `profiles.full_name` de quem avaliou) e `display_name`/`comment` em `innerHTML` sem escape correcto — um nome de conta malicioso (`<img src=x onerror=...>`) corria na sessão do admin ao abrir a aba "Avaliações", accionado só por enviar qualquer avaliação. Corrigido com `escapeHtml()` no admin, mais uma função partilhada nova `api/_lib/textSanitize.js` (`sanitizePlainText()`) usada em `handleFeedback` para nunca gravar HTML em `comment`/`display_name`; teste `feedback-security.test.js`. Residual de baixo risco, não corrigido (a saída já está sempre escapada): `full_name` continua sem limpeza de caracteres no signup/edição de perfil. **(9) P1.7:** confirmado que `SmartOCRService._compressImage()` já redesenha a imagem num `<canvas>` antes de a enviar à IA, o que já elimina o EXIF/GPS como efeito colateral — protecção pré-existente, não um bug novo. Corrigido: consentimento explícito obrigatório antes do primeiro uso da câmara/OCR (`OCRController.js`); garantia de que nem a imagem nem os valores extraídos ficam em logs do servidor (`api/_services/ocr.js`, redacção de campos sensíveis em `api/_lib/observability.js`); teste `ocr-privacy.test.js`. Mascarar automaticamente uma região de BI/NUIT dentro da própria foto exigiria visão computacional dedicada — sinalizado como fora do âmbito, não corrigido |
 | Set/2026 (Master Hardening — Fase 6) — P1.9 (fact-check do SEO automático) + P1.11 (contabilidade económica no Admin) | **(10) P1.9:** confirmado, por leitura de `_generateAndPublishArticle()` (`api/_services/blog.js`), que um artigo gerado por IA era gravado com `published: true` e publicado no GitHub imediatamente, sem revisão nenhuma — mesmo para tópicos legais/fiscais/administrativos, onde um erro factual tem consequências reais. Corrigida com uma nova detecção `_detectSensitiveTopic()` (palavras-chave legal/fiscal/administrativo, verificada contra título+palavras-chave): um tópico sinalizado é gravado com `published: false` + `needs_review: true` + `review_reason` (`migration_v71_blog_review_gate.sql`), nunca publicado automaticamente, com notificação para o admin e um aviso extra no prompt para não inventar números/prazos exactos nesses casos; a fila de agendamento reflecte o novo estado (`status='needs_review'`, CHECK constraint alargado); tópicos normais mantêm o fluxo 100% automático de sempre. Admin panel passa a destacar visualmente "🔎 Rever antes de publicar" com o motivo em tooltip; corrigido de raspão um segundo XSS de baixo risco no mesmo ecrã (título do artigo sem escape em `innerHTML` — só admin/IA criam artigos, não o público). Teste novo: `blog-seo-review-gate.test.js` (15 casos, incluindo títulos reais do catálogo confirmados como NÃO sensíveis). **(11) P1.11:** novo sub-relatório `GET /api/admin?action=finance&sub=unit-economics`, respondendo à pergunta da auditoria original — "quanto ganho por cada 1000 documentos?". Calcula receita, créditos vendidos vs. realmente consumidos (`credit_logs`, acção `consume`) e documentos gerados no período; custos de IA (orçamento mensal prorateado, assumido explicitamente como estimativa, não medição real), processamento de pagamento (`finance_payment_fee_pct`, nova, 6,5% por defeito), comissão de afiliados (real, regime de acumulação via `affiliate_commissions`) e imposto (`fiscal_tax_rate_pct`, nova, 0% até confirmado com contabilista); devolve margem bruta total, por crédito vendido/consumido, por documento e por 1000 documentos, com um bloco `assumptions` que documenta os limites de cada estimativa; marketplace de templates tratado à parte. Nova UI no separador Finanças do admin ("🧮 Economia Unitária"). Teste novo: `finance-unit-economics.test.js` (4 casos, incluindo protecção contra divisão por zero). Suite completa: 182/182 testes, `npm run lint`: 0 erros (241 avisos, baseline inalterada). **Com esta fase fica coberta a lista completa P0.1–P1.12 da auditoria externa "Master Audit" (Set/2026)** |
 | Set/2026 (Master Hardening — Fase 6-ext, pedido explícito do cliente) — fact-check por pesquisa real + 2ª camada de guarda de conteúdo do blog | Extensão a pedido directo do cliente, para além do que a Fase 6 já cobria: **(1) `api/_lib/blogResearch.js`** — antes de gerar o texto de um artigo, o sistema pesquisa agora activamente em sites oficiais (governo/entidades reconhecidas) sobre o tópico, compara as fontes entre si, e só depois passa esse contexto à IA para escrever — em vez de a IA escrever directamente do que "sabe" de memória, sem verificação. **(2) `api/_lib/blogContentGuard.js`** — 2ª camada de segurança sobre o conteúdo já gerado: o prompt em `blog.js` já pedia à IA para nunca mencionar que o conteúdo é gerado por IA, nem afirmar que a MzDocs Pro faz algo que não faz, nem dizer coisas com risco jurídico — mas um pedido no prompt não é garantia (o projecto já viu, noutros contextos, um modelo a ignorar instruções). Este guard verifica o texto já escrito à procura desses padrões, complementar à detecção de tópico sensível já existente (`migration_v71`, Fase 6). **(3) `api/_lib/blogTemplate.js`** — eliminada uma duplicação real: existiam DUAS cópias quase idênticas do template HTML das páginas de artigo, uma em `api/misc.js` (usada pelo blog-cron automático) e outra em `api/admin/index.js` (usada quando o admin cria/edita uma página manualmente) — a cópia do admin nunca tinha sido actualizada com o header/CSS/CTA reais, por isso páginas criadas por essa via saíam "cruas". Agora só há um sítio para o template; as duas vias produzem o mesmo resultado. Teste `blog-content-guard.test.js` cobre o novo guard |
+| Set/2026 (Master Hardening — pós-Fase 6, resolução do risco residual do P20 + Vercel Pro) | **Confirmado GENUÍNO por revisão técnica externa** que "transcricao" (Digitalizar Documento) continuava em `CLIENT_ESTIMATED_SERVICES` (`api/_lib/pricingRegistry.js`) — o servidor confiava no `cost` que o cliente enviava (dentro de um intervalo de sanidade 1-10) para este serviço específico, porque o nº real de páginas fotografadas só existia no cliente (`docModel.ocrPageCount`). **Corrigido**, reaproveitando a infra-estrutura de "job" já criada para P1.1 (`generation_jobs`, `migration_v68`): `api/_services/ocr.js` passa a criar um job ligado ao utilizador autenticado com `credits_reserved` = custo oficial calculado a partir do nº REAL de páginas processadas (`images.length`, o próprio array que a IA de visão recebeu — não um número que o cliente "diz" à parte); `api/_services/account.js` valida esse job (`validate_generation_job`, mesma RPC do P1.1) e usa o valor do job, nunca o `cost` do corpo do pedido. OCR continua a funcionar sem sessão (amostra/pré-visualização) — nesse caso, sem job possível, a cobrança cai para o mínimo de sanidade fixo (1 crédito), nunca bloqueia a geração. **Achado colateral MUITO mais grave, encontrado ao seguir esta cadeia até ao cliente real** (não fazia parte do pedido original, nem de nenhuma auditoria anterior): `Services.js::_callBackend()` — o caminho usado para PRATICAMENTE TODO o catálogo de serviços (cv, carta, arrendamento, requerimento, recibo, procuração, orçamento, residência, prestação de serviços, recomendação, licença, acta, impressão, foto, conversão, transcrição) — nunca enviava `documentType` a `/api/deduct-credit`, só `{ cost, operationId }`. Como `resolveOfficialCost()` precisa de `documentType` para determinar o preço oficial de catálogo, e este chegava sempre `null`/`undefined` por este caminho, TODOS os documentos gerados por aqui — incluindo os que custam oficialmente 2 ou 3 créditos — estavam a ser cobrados apenas 1 crédito, desde a correcção do P20 na Fase 1 deste Master Hardening. Uma regressão de receita real e activa, introduzida sem detecção porque os testes anteriores (`cost-tampering.test.js`) testavam directamente a função do servidor com `documentType` já presente no pedido construído no próprio teste — nunca confirmavam se o CLIENTE REAL o enviava de facto. **Corrigido**: `_callBackend()` passa a enviar `documentType: serviceType` (e `_ocrJobId` quando aplicável) em todas as chamadas de dedução — `generateRaw()` (fluxo de reedição) já enviava correctamente, confirmado sem alteração. Testes novos: `ocr-job-cost.test.js` (7 — job válido/inválido/doutro utilizador/tipo errado/RPC indisponível/`credits_reserved` inválido/outros serviços ignoram o job), `documenttype-regression.test.js` (3 — confirma por leitura estática do ficheiro real que `documentType`/`_ocrJobId` são enviados, e que `generateRaw()` não regrediu); `cost-tampering.test.js` actualizado (o teste de "transcricao aceita cost do cliente" passou a confirmar o oposto: cai sempre no mínimo de sanidade sem job válido). Suite completa: 213/213 testes, `npm run lint`: 0 erros (241 avisos, baseline inalterada). **Adicionalmente, confirmado nesta mesma revisão**: o plano Vercel foi migrado de Hobby para Pro — resolve em definitivo o único bloqueador não-técnico que restava de todas as auditorias anteriores (uso comercial não permitido no Hobby); ver nota no topo deste documento e secção 10 (reescrita para reflectir os limites do Pro) |
 | Set/2026 — recuperação de password por WhatsApp (pedido do cliente: "o link de recuperação nunca chega por e-mail") | Diagnóstico inicial: `handleResetPassword()` (`api/auth/index.js`) chamava o envio de e-mail do Supabase (GoTrue) mas nunca verificava o resultado — uma falha de envio (rate limit do e-mail por omissão do Supabase, não pensado para produção; `redirect_to` inválido; etc.) desaparecia em silêncio, sem log nenhum, atrás da resposta genérica "se os dados corresponderem a uma conta..." (correcta, por segurança). Corrigido: `adminSendRecovery()` passa a devolver `{ok, status, body}`, com cada desfecho registado via `logEvent` (categoria `auth`) — sem alterar a resposta ao utilizador. **Canal novo, a pedido, 100% automatizado e sem custo:** `api/whatsapp-webhook.js` — no ecrã de recuperação, um botão abre o WhatsApp do utilizador com uma mensagem pré-escrita ("RECUPERAR") para o número de suporte; isso abre, do lado da Meta, a janela grátis de 24h de resposta a quem escreve primeiro (WhatsApp Cloud API oficial — texto livre dentro dessa janela nunca tem custo, ao contrário de o sistema iniciar a conversa, que seria pago); o webhook responde automaticamente com um link de recuperação gerado via `adminGenerateRecoveryLink()` (endpoint admin do GoTrue que devolve o link em bruto, sem depender do envio de e-mail). Number normalizado com `api/_lib/phone.js` (extraído para partilhar exactamente a mesma normalização `+258...` já usada no registo, evitando um número "quase igual" nunca corresponder). Assinatura HMAC de cada pedido da Meta verificada (`api/_lib/whatsappCloud.js`) antes de processar qualquer mensagem. Mensagens que não contenham "recuperar" são ignoradas pelo webhook e continuam a ser lidas manualmente por um humano no WhatsApp, exactamente como antes — nada no fluxo de suporte/pagamento existente foi alterado |
 | Set/2026 (dívida técnica P2) — reorganização completa das migrações Supabase | 81 ficheiros SQL soltos (`schema.sql`, `polices.sql`, `transactions.sql`, `supabase-partners-setup.sql`, `EMERGENCIA_*`, `EXECUTAR_AGORA_*`, `migration_add_*`, `migration_fix_*`, `migration_v8_*`...`migration_v72_*`), sempre corridos manualmente no SQL Editor do Supabase, foram reorganizados em `supabase/migrations/` com a convenção `<timestamp>_<nome>.sql` do Supabase CLI — um developer novo consegue agora `supabase db reset` a partir do zero. **Nenhuma instrução SQL foi reescrita**: cada migração é cópia byte-a-byte do original (verificado programaticamente), só o nome/pasta mudou; os 81 ficheiros originais ficam intocados em `supabase/_legacy_archive/`. Duas excepções documentadas: `EXECUTAR_promote_admin.sql` foi dividido em parte estrutural (migração) + parte operacional com dados de uma conta específica (`supabase/ops/promote_admin.sql`, e-mail pessoal substituído por placeholder); `migration_v31_marketing_purchase_attribution.sql` confirmou-se estar corrompido no export (100% bytes nulos, já suspeitado antes) — substituído por placeholder documentado, sem referências no código da app. Novo `supabase/config.toml` (nunca tinha existido), `supabase/seed.sql`, e `supabase/tests/database/00_schema_smoke_test.sql` (23 testes pgTAP focados nas estruturas que já causaram incidentes reais em produção: colunas de `profiles`, RLS activo, `is_admin_jwt()` sem recursão, trigger de signup). Ordem das 13 migrações "legado" pré-`v8` reconstruída por análise de conteúdo (dependências declaradas nos comentários + sequência lógica dos 4 fixes sucessivos ao mesmo bug de recursão de RLS) — documentada com ressalvas explícitas em `supabase/README.md`, incluindo uma discrepância encontrada entre `migration_fix_credits.sql` (remove `DELETE FROM auth.users` de `deduct_credit()`) e `EXECUTAR_AGORA_completo.sql`, mais recente, que a reintroduz — recomenda-se confirmar contra a definição real em produção |
 
