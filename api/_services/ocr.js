@@ -14,6 +14,35 @@
 const { checkRateLimit } = require('../_lib/rateLimit');
 const { ORIGIN, SITE_URL, parseBody } = require('../_lib/httpHelpers');
 const { logEvent } = require('../_lib/observability');
+const { getUserFromToken, rpc } = require('../_lib/supabaseAdmin');
+
+// CORRIGIDO (P20 residual — confirmado por revisão externa, Set/2026):
+// "transcricao" (Digitalizar Documento) ficava em CLIENT_ESTIMATED_SERVICES
+// (api/_lib/pricingRegistry.js) porque o número REAL de páginas fotografadas
+// só existia no cliente (docModel.ocrPageCount) — o servidor não tinha
+// forma independente de o confirmar, por isso continuava a confiar no
+// `cost` que o próprio cliente enviava a /api/deduct-credit (dentro de um
+// intervalo de sanidade 1-10, mas sem ligação real ao nº de páginas). Um
+// cliente malicioso podia fotografar 10 páginas (OCR completo, de graça,
+// sem custo nenhum nesta chamada) e depois declarar `cost:1` na cobrança.
+//
+// Corrigido reaproveitando a MESMA infra-estrutura de "job" já criada para
+// P1.1 (generation_jobs, migration_v68): esta função, que já sabe o número
+// REAL de páginas processadas (`images.length`, o próprio array que a IA
+// de visão recebeu — não um número que o cliente "diz" à parte), cria um
+// job ligado ao utilizador autenticado (se houver sessão — OCR continua a
+// funcionar sem login, como amostra/pré-visualização, simplesmente sem
+// gerar prova de página nesse caso) com `credits_reserved` = custo oficial
+// calculado a partir de `images.length`. api/_services/account.js passa a
+// exigir esse `_ocrJobId` para "transcricao" e usa o `credits_reserved`
+// desse job — nunca o `cost` que o cliente envia directamente.
+const OCR_BILLED_SERVICES = new Set(['transcricao']);
+const OCR_CREDITS_PER_PAGE_GROUP = 3; // mesma fórmula usada antes em DocumentController.js
+
+function computeOcrOfficialCost(pageCount) {
+  const n = parseInt(pageCount) || 0;
+  return n > 0 ? Math.min(10, Math.max(1, Math.ceil(n / OCR_CREDITS_PER_PAGE_GROUP))) : 1;
+}
 
 async function handleOcrAnalyze(req, res) {
   res.setHeader('Access-Control-Allow-Origin', ORIGIN);
@@ -36,6 +65,47 @@ async function handleOcrAnalyze(req, res) {
   const body = parseBody(req);
   const { ocrText = '', schema = [], serviceType = '', imageBase64, imagesBase64, mimeType } = body;
   if (!schema.length) return res.status(400).json({ error: 'schema required' });
+
+  // NOVO: sessão opcional — OCR continua a funcionar sem login (amostra),
+  // mas só com sessão válida é que conseguimos criar o "job" de prova de
+  // página usado depois na cobrança de "transcricao" (ver nota no topo do
+  // ficheiro). Nunca bloqueia nem exige login aqui — falha silenciosamente
+  // para anónimo, exactamente como acontecia antes desta correcção.
+  let verifiedUserId = null;
+  const _authHeader = req.headers['authorization'] || '';
+  const _token = _authHeader.startsWith('Bearer ') ? _authHeader.slice(7).trim() : null;
+  if (_token) {
+    try {
+      const { user } = await getUserFromToken(_token);
+      if (user) verifiedUserId = user.id;
+    } catch (_) { /* anónimo — segue sem job */ }
+  }
+
+  // Envolve QUALQUER resposta de sucesso (200) desta função — há 4 pontos
+  // de retorno mais abaixo, consoante o caminho seguido (página-a-página,
+  // combinado, fallback) — sem duplicar a criação do job em cada um deles.
+  async function _finalizeOcrSuccess(payload) {
+    if (verifiedUserId && images.length > 0 && OCR_BILLED_SERVICES.has(serviceType)) {
+      try {
+        const jobId = await rpc('create_generation_job', {
+          p_user_id:          verifiedUserId,
+          p_operation_id:     null,
+          p_service:          `ocr:${serviceType}`,
+          p_credits_reserved: computeOcrOfficialCost(images.length),
+        });
+        if (jobId) payload = { ...payload, ocrJobId: jobId, ocrPagesConfirmed: images.length };
+      } catch (e) {
+        console.warn('[ocr-analyze] create_generation_job indisponível — cobrança cai para o mínimo de sanidade:', e.message);
+        // Não bloqueia o OCR em si (a transcrição já está feita e é o que
+        // o utilizador está à espera de ver) — falha aberta SÓ aqui, na
+        // parte de "prova de página", nunca na parte de autorização da
+        // Fase 1 (_planMode/_sectionMode), que continua a falhar fechada.
+        // account.js tem um mínimo de sanidade (1 crédito) para quando
+        // não há ocrJobId nenhum — nunca cobra 0.
+      }
+    }
+    return res.status(200).json(payload);
+  }
 
   // NOVO: várias páginas do mesmo rascunho manuscrito (Trabalho Escolar) —
   // imagesBase64 é um array; mantém-se compatibilidade total com o fluxo de
@@ -314,7 +384,7 @@ async function handleOcrAnalyze(req, res) {
     const merged = await transcribeAllPagesSeparately();
     if (merged) {
       logEvent('ocr', 'success', { serviceType, pages: images.length, path: 'per_page', duration_ms: Date.now() - _ocrStartedAt });
-      return res.status(200).json({ ...merged, _debug: _ocrDebugLog });
+      return await _finalizeOcrSuccess({ ...merged, _debug: _ocrDebugLog });
     }
   } else if (isMultiPage && wantsTranscript) {
     _logOcrAttempt('multi-página', 'nem GEMINI_API_KEY nem GROQ_API_KEY configuradas — a saltar directamente para o fallback combinado');
@@ -389,7 +459,7 @@ async function handleOcrAnalyze(req, res) {
     const parsed = await tryProvider();
     if (parsed) {
       logEvent('ocr', 'success', { serviceType, pages: images.length, path: 'combined', duration_ms: Date.now() - _ocrStartedAt });
-      return res.status(200).json(parsed);
+      return await _finalizeOcrSuccess(parsed);
     }
   }
 
@@ -410,7 +480,7 @@ async function handleOcrAnalyze(req, res) {
           _logOcrAttempt('OpenRouter (combinado)', 'ok');
           logEvent('ocr', 'fallback_model', { serviceType, provider: 'openrouter' });
           logEvent('ocr', 'success', { serviceType, pages: images.length, path: 'openrouter_fallback', duration_ms: Date.now() - _ocrStartedAt });
-          return res.status(200).json(parsed);
+          return await _finalizeOcrSuccess(parsed);
         }
         _logOcrAttempt('OpenRouter (combinado)', 'HTTP 200 mas sem conteúdo útil');
       } else {
@@ -426,7 +496,7 @@ async function handleOcrAnalyze(req, res) {
     serviceType, pages: images.length, duration_ms: Date.now() - _ocrStartedAt,
     debug: _ocrDebugLog.slice(-5), // últimas tentativas só, para não inchar o payload
   });
-  return res.status(200).json({ fields: {}, missing: schema.map(f => f.id), _debug: _ocrDebugLog });
+  return await _finalizeOcrSuccess({ fields: {}, missing: schema.map(f => f.id), _debug: _ocrDebugLog });
 }
 
 function _safeJSON(raw) {
