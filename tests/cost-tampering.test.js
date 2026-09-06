@@ -157,20 +157,23 @@ describe('P20 — custo oficial nunca vem do cliente', () => {
     });
   });
 
-  test('transcricao (custo por página OCR) continua a aceitar body.cost dentro de 1-10 — limitação pré-existente, documentada, não uma regressão', async () => {
-    // NOTA: ao contrário dos outros serviços, "transcricao" cobra por
-    // página FOTOGRAFADA (OCR) — um valor que só existe no cliente
-    // (docModel.ocrPageCount). O servidor não tem hoje forma independente
-    // de o verificar, por isso continua a confiar em body.cost, dentro do
-    // intervalo de sanidade 1-10 (exactamente como antes desta ronda) — ver
-    // CLIENT_ESTIMATED_SERVICES em api/_lib/pricingRegistry.js.
+  test('transcricao (custo por página OCR) SEM job válido → cai no mínimo de sanidade (1), NUNCA no cost do cliente (CORRIGIDO — residual P20 resolvido, Set/2026)', async () => {
+    // NOTA: "transcricao" cobra por página FOTOGRAFADA (OCR). Antes desta
+    // correcção, sem prova nenhuma, o servidor confiava em body.cost, até
+    // ao intervalo de sanidade 1-10 — um cliente podia declarar `cost:4`
+    // sem nunca ter fotografado 4 páginas. Agora, sem um `_ocrJobId`
+    // válido (criado por api/_services/ocr.js com o nº REAL de páginas
+    // processadas, ver CLIENT_ESTIMATED_SERVICES em
+    // api/_lib/pricingRegistry.js), a cobrança cai sempre para o mínimo de
+    // sanidade fixo (1 crédito) — nunca o valor que o cliente pediria.
+    // Ver tests/ocr-job-cost.test.js para o caminho COM job válido.
     const { req, res } = mockReqRes({ cost: 4, documentType: 'transcricao' });
     await handler(req, res);
 
     expect(res._status).toBe(200);
     expect(supabaseAdmin.rpc).toHaveBeenCalledWith('deduct_credits', {
       p_user_id: 'user-1',
-      p_amount:  4,
+      p_amount:  1,
     });
   });
 
