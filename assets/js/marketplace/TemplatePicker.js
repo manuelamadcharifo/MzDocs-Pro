@@ -1525,12 +1525,27 @@ export class TemplatePicker {
 
       if (zone)  zone.classList.add('active');
       if (badge) badge.style.display = 'block';
-      if (sub)   sub.textContent = `✅ ${friendlyName} — Template gerado do seu ficheiro`;
+
+      // CORRIGIDO: este ramo só é alcançado quando a extracção REAL do
+      // layout da imagem falhou (ver catch de _extractTemplateFromImage
+      // acima) — o template aplicado aqui é um design genérico dos 5
+      // pré-fabricados em _buildLocalFallbackTemplate, escolhido por hash
+      // do nome do ficheiro, e NÃO tem qualquer relação com o layout da
+      // imagem carregada. Mostrar "✅ Template gerado do seu ficheiro"
+      // enganava o utilizador a pensar que o layout foi replicado fielmente,
+      // quando na prática saiu um design diferente. Mensagem agora reflecte
+      // a realidade e o utilizador sabe que pode tentar novamente ou editar.
+      const isRealFallback = isImg; // só para imagem existe extracção "real" a comparar
+      if (isRealFallback) {
+        if (sub) sub.textContent = `⚠️ Não foi possível ler o layout exacto da imagem — modelo aproximado "${friendlyName}" aplicado`;
+        _notify(`⚠️ Não foi possível extrair o layout exacto da imagem. Foi aplicado um modelo aproximado ("${friendlyName}") — pode voltar a tentar carregar a imagem ou ajustar manualmente.`);
+      } else {
+        if (sub) sub.textContent = `✅ ${friendlyName} — Template gerado do seu ficheiro`;
+        _notify(`✅ Template "${friendlyName}" pronto!`);
+      }
 
       const selBar = document.getElementById('tplSelBar');
       if (selBar) selBar.textContent = `📎 ${friendlyName} — ${file.name}`;
-
-      _notify(`✅ Template "${friendlyName}" pronto!`);
 
     } catch (err) {
       removeProcessingCard();
