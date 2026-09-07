@@ -14,6 +14,13 @@ import { AcademicEngine } from '../academic/AcademicEngine.js';
 // carta, recomendacao, planonegocio, orcamento, acta, transcricao)
 // continuam exactamente como estavam, sem qualquer alteração de comportamento.
 import { MINUTA_RENDERERS } from './minutas/index.js';
+// NOVO (Set/2026 — minutas de parceiro): quando o utilizador escolhe
+// explicitamente uma minuta submetida por um parceiro/afiliado (em vez da
+// minuta padrão da plataforma), este motor faz a mesma substituição
+// segura de texto — nunca executa o texto do parceiro como código. Ver
+// assets/js/services/minutas/partnerEngine.js para a nota de segurança
+// completa.
+import { renderMinutaParceiro } from './minutas/partnerEngine.js';
 
 // ── FASE 2 (Motor Jurídico/RAG) ───────────────────────────────────────────
 // Para cada serviço jurídico, gera a query em linguagem natural usada para
@@ -39,7 +46,20 @@ export class OpenRouterService {
     this.currentModel = this.models.primary;
   }
 
-  async generate(serviceType, formData, ocrText = null, credits = null, cost = 1, templateData = null, pickerTemplate = null) {
+  async generate(serviceType, formData, ocrText = null, credits = null, cost = 1, templateData = null, pickerTemplate = null, partnerMinuta = null) {
+    // NOVO (Set/2026 — minutas de parceiro): se o utilizador escolheu
+    // explicitamente uma minuta de parceiro (via UI de selecção — ver
+    // partnerMinutaClient.js), esta tem prioridade sobre a minuta padrão
+    // da plataforma. `partnerMinuta` é opcional e só chega preenchido
+    // quando o chamador (DocumentController) o define; todas as chamadas
+    // existentes continuam a funcionar sem qualquer alteração.
+    if (partnerMinuta && partnerMinuta.minuta_text) {
+      const renderFn = (data) => renderMinutaParceiro(serviceType, partnerMinuta.minuta_text, data);
+      return await this._generateFromMinuta(
+        serviceType, formData, credits, cost, renderFn,
+        `Minuta de parceiro: ${partnerMinuta.minuta_name || 'sem nome'}`
+      );
+    }
     // NOVO (Set/2026 — minuta fixa, custo de IA super baixo): se este
     // serviceType tiver uma minuta fixa registada, o documento é montado
     // localmente (instantâneo, sem custo de IA) — ver
@@ -64,8 +84,11 @@ export class OpenRouterService {
   // uma montagem local e síncrona do documento. Mantido como método
   // separado (em vez de misturar dentro de _callBackend) para não
   // arriscar alterar, por engano, o caminho de IA existente, que continua
-  // a ser usado por todos os outros serviços.
-  async _generateFromMinuta(serviceType, rawData, credits, cost, renderFn) {
+  // a ser usado por todos os outros serviços. `modelLabel` permite
+  // distinguir "Minuta MzDocs Pro" de "Minuta de parceiro: X" no
+  // resultado final (mesmo campo `model` que a UI já mostra para os
+  // documentos gerados por IA).
+  async _generateFromMinuta(serviceType, rawData, credits, cost, renderFn, modelLabel = 'Minuta MzDocs Pro (modelo fixo, sem IA)') {
     const userId = localStorage.getItem('mz_uid') || 'anon';
 
     let authToken = null;
@@ -128,7 +151,7 @@ export class OpenRouterService {
 
     return {
       document,
-      model: 'Minuta MzDocs Pro (modelo fixo, sem IA)',
+      model: modelLabel,
       creditsRemaining: creditsAfterDeduct,
       usage: null,
       freeDocument: wasFree === true,
