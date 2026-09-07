@@ -129,7 +129,7 @@
          não faça (a linha antiga de "linguagem formal para bancos,
          empresas e repartições" era mais específica; a nova é mais aberta
          e cobre também o ecossistema de parceiros, não só impressão). -->
-    <p class="hero-p">Crie o seu documento pelo telemóvel, de forma simples e rápida.<br/>CV • Requerimentos • Cartas • Contratos • Documentos académicos e muito mais.<br/>Gere, reveja e guarde o seu documento. Se precisar de apoio adicional, pode contar com um parceiro MzDocs.</p>
+    <p class="hero-p">Crie o seu documento pelo telemóvel, de forma simples e rápida.<br/>CV • Requerimentos • Cartas • Contratos • Documentos académicos e muito mais.<br/>Gere, reveja e guarde o seu documento. Se precisar de apoio adicional, pode contar com um parceiro MzDocs Pro.</p>
     <div class="chips">
       <span class="chip gr">⚡ Pronto em minutos</span>
       <span class="chip">🔒 Arquivo seguro</span>
@@ -244,13 +244,26 @@
         centros de apoio e profissionais parceiros podem ajudá-lo conforme o serviço de que precisa.
       </div>
       <div class="gt-login-hint" style="margin-top:0;">
-        ⚖️ Para questões que exigem aconselhamento jurídico, procure um profissional habilitado.
+        ⚖️ Para documentos e situações que exigem orientação jurídica, pode encontrar advogados parceiros através do MzDocs Pro. O aconselhamento é prestado directamente pelo profissional escolhido.
       </div>
     </div>
   </div>
 
-  <!-- GRADE DE SERVIÇOS — homeController.js controla display -->
-  <div id="servicesSection">
+  <!-- GRADE DE SERVIÇOS — homeController.js controla display.
+       CORRIGIDO (Set/2026): faltava aqui o `style="display:none;"` por
+       omissão que o #guestTeaser já tinha. Sem isto, esta secção nascia
+       VISÍVEL no HTML puro e só ficava escondida depois de
+       homeController.js confirmar `isAuth === false` — o que só acontece
+       depois de `await authManager.ready()` resolver (pedido assíncrono
+       à sessão do Supabase). Nesse intervalo, QUALQUER visitante via a
+       grelha completa de serviços, com badges "Pro" e custo em créditos,
+       antes sequer de criar conta — exactamente o oposto do que o teaser
+       ao lado (#guestTeaser) já protegia correctamente. Em ligações mais
+       lentas (comuns em Moçambique) esse intervalo é bem mais visível do
+       que num ambiente de desenvolvimento rápido. Com este valor por
+       omissão, a secção só aparece quando homeController.js confirmar
+       `isAuth === true` — nunca antes disso, para ninguém. -->
+  <div id="servicesSection" style="display:none;">
     <p class="grid-label">O QUE PRECISA CRIAR?</p>
 
     <!-- FILTROS DE CATEGORIA -->
