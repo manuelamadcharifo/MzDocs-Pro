@@ -50,7 +50,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .hero-inner{position:relative;z-index:1}
 .hero-body{max-width:1024px;display:flex;align-items:center;justify-content:center;flex-direction:column;}
 .hero-eye{font-size:11.5px;font-weight:700;letter-spacing:.8px;color:rgba(255,255,255,.5);text-transform:uppercase;margin-bottom:14px}
-.hero-h1{font-family:'Instrument Serif',serif;font-size:clamp(30px,8vw,46px);line-height:1.08;color:#fff;margin-bottom:14px}
+.hero-h1{font-family:'Instrument Serif',serif;font-size:clamp(30px,8vw,46px);line-height:1.08;color:#fff;margin-bottom:14px;text-align: center;}
 .hero-h1 em{font-style:italic;color:#93C5FD}
 .hero-p{font-size:14px;line-height:1.6;color:rgba(255,255,255,.6);margin-bottom:20px}
 .chips{display:flex;flex-wrap:wrap;gap:7px}
