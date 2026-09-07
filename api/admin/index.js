@@ -80,6 +80,10 @@ module.exports = async function handler(req, res) {
     case 'delete-document':   return handleDeleteDocument(req, res);
     case 'documents':         return handleDocuments(req, res);
     case 'templates':         return handleTemplates(req, res);
+    // NOVO (Set/2026): moderação das minutas submetidas por parceiros —
+    // mesmo padrão de handleTemplates acima (GET lista/filtra, POST com
+    // {updates:[{id,status,rejection_reason}]} aprova/rejeita em lote).
+    case 'partner-minutas':   return handlePartnerMinutasAdmin(req, res);
     case 'pages':             return handleBlogPages(req, res);
     case 'generate-page':     return handleGeneratePage(req, res);
     case 'blog-queue':        return handleBlogQueue(req, res);
@@ -112,7 +116,7 @@ module.exports = async function handler(req, res) {
     default:
       return res.status(404).json({
         error: `Acção desconhecida: "${action}".`,
-        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','regenerate-temp-password','delete-document','analytics','feedback','static-pages','documents','templates','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt','ai-providers','qrcodes','funnel','user-timeline','republish-blog','notifications','campaigns','goals','push-subscribe','push-send','finance','template-withdrawals','marketing-materials','packages'],
+        available: ['confirm-payment','confirm-avulso','fix-profiles','stats','transactions','settings','audit-log','delete-user','regenerate-temp-password','delete-document','analytics','feedback','static-pages','documents','templates','partner-minutas','pages','generate-page','blog-queue','blog-settings','affiliates','pending-receipts','approve-receipt','ai-providers','qrcodes','funnel','user-timeline','republish-blog','notifications','campaigns','goals','push-subscribe','push-send','finance','template-withdrawals','marketing-materials','packages'],
       });
   }
 };
@@ -2164,6 +2168,67 @@ async function handleReviews(req, res) {
 // template_html/template_css) é devolvida em GET como `complexity_score`
 // — uma estimativa objectiva (não vinculativa) para ajudar o admin a
 // decidir o preço; a decisão final continua sempre manual.
+// NOVO (Set/2026) — Moderação de minutas de parceiro. Mesmo padrão de
+// handleTemplates() acima (validateAdmin → GET lista/filtra, POST em lote
+// via {updates:[...]}), mas sobre a tabela partner_minutas (migration_v73).
+// Ao contrário de templates_custom (aparência), aqui o campo mais
+// importante a mostrar ao admin é o TEXTO da minuta em si — é conteúdo
+// jurídico submetido por terceiros, por isso devolve-se minuta_text
+// completo (o preview no AdminApp.js mostra-o dentro de <pre> escapado,
+// nunca via innerHTML directo do texto cru).
+async function handlePartnerMinutasAdmin(req, res) {
+  const token = req.headers.authorization?.replace('Bearer ', '').trim();
+  try {
+    const auth = await validateAdmin(token);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    if (req.method === 'GET') {
+      const limit  = Math.min(parseInt(req.query?.limit || '100'), 200);
+      const status = (req.query?.status || '').trim();
+      const service = (req.query?.service_type || '').trim();
+      let path = `partner_minutas?order=created_at.desc&limit=${limit}` +
+        `&select=id,user_id,service_type,minuta_name,description,minuta_text,placeholders_used,status,is_active,use_count,rejection_reason,liability_accepted_at,liability_accepted_ip,created_at`;
+      if (status)  path += `&status=eq.${encodeURIComponent(status)}`;
+      if (service) path += `&service_type=eq.${encodeURIComponent(service)}`;
+      const data = await restRequest(path);
+      return res.status(200).json({ success: true, minutas: data || [] });
+    }
+
+    if (req.method === 'PUT' || req.method === 'POST') {
+      const body    = parseBody(req);
+      const updates = body?.updates; // [{ id, status?, rejection_reason?, is_active? }]
+      if (!Array.isArray(updates) || !updates.length) {
+        return res.status(400).json({ error: 'updates (array) é obrigatório' });
+      }
+      const results = [];
+      for (const u of updates) {
+        if (!u?.id) { results.push({ id: null, ok: false, error: 'id em falta' }); continue; }
+        const patch = {};
+        if (u.status && ['pending', 'approved', 'rejected'].includes(u.status)) {
+          patch.status = u.status;
+          patch.reviewed_by = auth.user.id;
+          patch.reviewed_at = new Date().toISOString();
+        }
+        if (typeof u.rejection_reason === 'string') patch.rejection_reason = u.rejection_reason.slice(0, 500);
+        if (typeof u.is_active === 'boolean') patch.is_active = u.is_active;
+        if (!Object.keys(patch).length) { results.push({ id: u.id, ok: false, error: 'nada para actualizar' }); continue; }
+        try {
+          await update('partner_minutas', 'id', u.id, patch);
+          results.push({ id: u.id, ok: true });
+        } catch (err) {
+          results.push({ id: u.id, ok: false, error: err.message });
+        }
+      }
+      return res.status(200).json({ success: true, results });
+    }
+
+    return res.status(405).json({ error: 'Método não suportado' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+
 async function handleTemplates(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   try {
