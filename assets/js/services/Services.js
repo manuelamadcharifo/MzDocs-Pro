@@ -4,6 +4,16 @@ import { Formatter } from '../utils/Formatter.js';
 import { PROMPT_BUILDERS, DATA_BLOCK_BUILDERS } from './prompts/index.js';
 import { maskFormData, unmaskText } from './prompts/piiShield.js';
 import { AcademicEngine } from '../academic/AcademicEngine.js';
+// NOVO (Set/2026 — custo de IA super baixo): para serviços cujo clausulado
+// legal é fixo (recibo/factura, procuração, requerimento, declaração de
+// residência, pedido de licença, contrato de prestação de serviços,
+// contrato de arrendamento), o documento passa a ser montado localmente por
+// substituição directa de dados — SEM QUALQUER chamada a um provider de IA.
+// Ver assets/js/services/minutas/index.js para a lista completa e como
+// acrescentar um novo tipo. Todos os restantes serviços (cv, trabalho,
+// carta, recomendacao, planonegocio, orcamento, acta, transcricao)
+// continuam exactamente como estavam, sem qualquer alteração de comportamento.
+import { MINUTA_RENDERERS } from './minutas/index.js';
 
 // ── FASE 2 (Motor Jurídico/RAG) ───────────────────────────────────────────
 // Para cada serviço jurídico, gera a query em linguagem natural usada para
@@ -30,9 +40,99 @@ export class OpenRouterService {
   }
 
   async generate(serviceType, formData, ocrText = null, credits = null, cost = 1, templateData = null, pickerTemplate = null) {
+    // NOVO (Set/2026 — minuta fixa, custo de IA super baixo): se este
+    // serviceType tiver uma minuta fixa registada, o documento é montado
+    // localmente (instantâneo, sem custo de IA) — ver
+    // assets/js/services/minutas/index.js. Nenhum prompt é construído,
+    // nenhuma chamada de rede é feita a /api/generate-document; os
+    // créditos continuam a ser deduzidos normalmente (mesmo mecanismo de
+    // sempre — ver _generateFromMinuta), preservando o comportamento de
+    // negócio existente (preço, "documento grátis", etc.).
+    const minutaRender = MINUTA_RENDERERS[serviceType];
+    if (minutaRender) {
+      return await this._generateFromMinuta(serviceType, formData, credits, cost, minutaRender);
+    }
     const { prompt, tokenMap, maxTokensHint } = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
     const result = await this._callBackend(serviceType, prompt, credits, cost, maxTokensHint);
     return this._unmaskResult(result, tokenMap);
+  }
+
+  // NOVO (Set/2026): equivalente a _callBackend(), mas para serviços com
+  // minuta fixa — mantém EXACTAMENTE o mesmo "PASSO 1" (dedução de crédito
+  // via /api/deduct-credit, com o mesmo operationId/documentType/idempotência
+  // já usados em _callBackend) e substitui o "PASSO 2" (chamada à IA) por
+  // uma montagem local e síncrona do documento. Mantido como método
+  // separado (em vez de misturar dentro de _callBackend) para não
+  // arriscar alterar, por engano, o caminho de IA existente, que continua
+  // a ser usado por todos os outros serviços.
+  async _generateFromMinuta(serviceType, rawData, credits, cost, renderFn) {
+    const userId = localStorage.getItem('mz_uid') || 'anon';
+
+    let authToken = null;
+    try {
+      const { authManager } = await import('../auth/AuthManager.js');
+      await authManager.ready();
+      authToken = await authManager.getValidToken();
+    } catch { /* sem token */ }
+
+    if (!authToken) {
+      throw Object.assign(new Error('Sessão expirada. Inicie sessão novamente.'), { code: 'AUTH_REQUIRED' });
+    }
+
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+    };
+
+    const operationId = crypto.randomUUID();
+
+    // PASSO 1: Deduzir créditos via /api/deduct-credit — idêntico ao
+    // caminho com IA, para preservar preço/cobrança/"documento grátis"
+    // exactamente como já funcionam hoje.
+    const deductRes = await fetch('/api/deduct-credit', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        cost,
+        operationId,
+        documentType: serviceType,
+      }),
+    });
+
+    if (deductRes.status === 401) {
+      const e = new Error('Sessão inválida. Inicie sessão novamente.'); e.status = 401;
+      throw e;
+    }
+    if (deductRes.status === 402) {
+      const e = new Error('INSUFFICIENT_CREDITS'); e.status = 402; throw e;
+    }
+    if (!deductRes.ok) {
+      const d = await deductRes.json().catch(() => ({}));
+      throw new Error(d.error || 'Erro ao verificar créditos. Tente novamente.');
+    }
+
+    const { credits: creditsAfterDeduct, free: wasFree } = await deductRes.json();
+
+    // PASSO 2: montar o documento localmente a partir da minuta fixa —
+    // sem qualquer chamada a fornecedor de IA. Se a própria renderização
+    // falhar (erro de programação na minuta), o crédito já foi deduzido —
+    // por isso devolve-se um erro claro e específico em vez de deixar
+    // a excepção genérica confundir o utilizador com um problema de IA.
+    let document;
+    try {
+      document = renderFn(rawData || {});
+    } catch (err) {
+      console.error('[Services] Erro ao montar minuta fixa', serviceType, err);
+      throw new Error('Não foi possível montar o documento a partir dos dados preenchidos. Tente novamente.');
+    }
+
+    return {
+      document,
+      model: 'Minuta MzDocs Pro (modelo fixo, sem IA)',
+      creditsRemaining: creditsAfterDeduct,
+      usage: null,
+      freeDocument: wasFree === true,
+    };
   }
 
   // ── NOVO v2.1: amostra grátis ───────────────────────────────────────────
@@ -43,6 +143,21 @@ export class OpenRouterService {
   // function nova foi criada — o projecto já está no limite de 12 do Vercel
   // Hobby).
   async previewDocument(serviceType, formData, ocrText = null, templateData = null, pickerTemplate = null) {
+    // NOVO (Set/2026): para serviços com minuta fixa, a "amostra grátis"
+    // não precisa de IA nenhuma — devolve-se directamente o documento
+    // completo (já é instantâneo e sem custo, ao contrário da amostra
+    // truncada gerada por IA para os restantes serviços).
+    const minutaRender = MINUTA_RENDERERS[serviceType];
+    if (minutaRender) {
+      let document;
+      try {
+        document = minutaRender(formData || {});
+      } catch (err) {
+        console.error('[Services] Erro ao montar amostra da minuta fixa', serviceType, err);
+        throw new Error('Não foi possível gerar a amostra agora. Tente novamente em alguns segundos.');
+      }
+      return { document, model: 'Minuta MzDocs Pro (modelo fixo, sem IA)', preview: true };
+    }
     const { prompt, tokenMap } = await this._buildPrompt(serviceType, formData, ocrText, templateData, pickerTemplate);
     const userId = localStorage.getItem('mz_uid') || 'anon';
 
