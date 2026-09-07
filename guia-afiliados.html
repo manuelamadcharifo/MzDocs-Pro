@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="pt" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+  <meta name="robots" content="index,follow"/>
+  <title>Guia do Afiliado MzDocs — Transforme recomendações em rendimento</title>
+  <meta name="description" content="Aprenda a promover o MzDocs, ganhar comissão por referências, usar créditos profissionais para prestar serviços e submeter conteúdo próprio quando elegível."/>
+  <link rel="icon" href="/assets/icons/icon.svg" type="image/svg+xml"/>
+  <link rel="stylesheet" href="/assets/css/styles.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--ink:#07101F;--muted:#64748B;--border:#E2E8F0;--surface:#F8FAFD;--white:#fff;--blue:#3B82F6;--green:#009A44;--gold:#F59E0B;--r:16px;--sh:0 2px 12px rgba(7,16,31,.07)}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);color:var(--ink);min-height:100vh}
+    .container{max-width:1024px;margin:0 auto;padding:0 16px;box-sizing:border-box}
+
+    .hdr{background:var(--ink);padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+    .hdr-logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+    .hdr-badge{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#009A44);display:flex;align-items:center;justify-content:center;font-size:15px}
+    .hdr-name{font-size:16px;font-weight:800;color:#fff}
+    .hdr-name span{color:var(--gold)}
+    .btn-back{color:rgba(255,255,255,.6);font-size:13px;text-decoration:none;display:flex;align-items:center;gap:4px}
+    .btn-back:hover{color:#fff}
+
+    .hero{background:linear-gradient(135deg,var(--ink) 0%,#0F2D4A 100%);padding:48px 20px 40px;text-align:center;position:relative;overflow:hidden}
+    .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(59,130,246,.2),transparent 70%)}
+    .hero-inner{position:relative}
+    .hero-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(0,154,68,.2);border:1px solid rgba(0,154,68,.4);color:#4ade80;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:20px;margin-bottom:18px;letter-spacing:.5px}
+    .hero h1{font-family:'Instrument Serif',serif;font-size:clamp(26px,7vw,40px);line-height:1.15;color:#fff;margin-bottom:14px}
+    .hero h1 em{font-style:italic;color:#93C5FD}
+    .hero p{font-size:14.5px;color:rgba(255,255,255,.68);line-height:1.65;max-width:460px;margin:0 auto 26px}
+    .hero-ctas{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:13px 22px;border-radius:12px;font-size:14px;font-weight:800;text-decoration:none;cursor:pointer;border:none;font-family:inherit}
+    .btn-green{background:linear-gradient(135deg,var(--green),#047857);color:#fff;box-shadow:0 4px 16px rgba(0,154,68,.35)}
+    .btn-outline{background:rgba(255,255,255,.08);color:#fff;border:1.5px solid rgba(255,255,255,.3)}
+    .btn-blue{background:linear-gradient(135deg,var(--blue),#1D4ED8);color:#fff;box-shadow:0 4px 16px rgba(59,130,246,.3)}
+
+    .section{padding:36px 16px}
+    .sec-label{font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+    .sec-title{font-size:21px;font-weight:800;margin-bottom:8px;line-height:1.3}
+    .sec-desc{font-size:13.5px;color:var(--muted);line-height:1.6;margin-bottom:20px;max-width:640px}
+
+    .steps{display:flex;flex-direction:column;gap:12px}
+    .step{display:flex;gap:14px;align-items:flex-start;background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--sh)}
+    .step-num{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#1D4ED8);color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .step-title{font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:3px}
+    .step-desc{font-size:12px;color:var(--muted);line-height:1.5}
+
+    .cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .cards-grid.cols-3{grid-template-columns:1fr 1fr 1fr}
+    .fcard{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:18px 14px;box-shadow:var(--sh)}
+    .fcard-ico{font-size:26px;margin-bottom:10px}
+    .fcard-title{font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:5px}
+    .fcard-desc{font-size:12px;color:var(--muted);line-height:1.55}
+    .fcard-full{grid-column:1/-1}
+
+    .cat-grid{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+    .cat-pill{background:var(--white);border:1.5px solid var(--border);border-radius:20px;padding:8px 14px;font-size:12.5px;font-weight:700;color:var(--ink)}
+
+    .flow{background:var(--white);border:1.5px solid var(--border);border-radius:var(--r);padding:20px 16px;box-shadow:var(--sh)}
+    .flow-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:700;color:#334155}
+    .flow-node{background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px}
+    .flow-arrow{color:var(--muted);font-weight:400}
+
+    .note{background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;font-size:12.5px;color:#1E3A8A;line-height:1.6;margin-top:14px}
+    .note.warn{background:#FFFBEB;border-color:#FDE68A;color:#92400E}
+    .note.legal{background:#F8FAFD;border-color:var(--border);color:#334155}
+    .note strong{font-weight:800}
+
+    /* TABELA DE COMISSÕES */
+    .rates-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    .rate-pill{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;text-align:center}
+    .rate-pkg{font-size:11px;color:var(--muted);font-weight:700}
+    .rate-pct{font-size:18px;font-weight:900;color:var(--green)}
+    .rate-mzn{font-size:11px;color:var(--muted)}
+
+    /* NÍVEIS */
+    .tier-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    .tier-card{background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:12px 8px;text-align:center}
+    .tier-ico{font-size:20px}
+    .tier-name{font-size:12px;font-weight:800;margin:4px 0 2px}
+    .tier-req{font-size:10.5px;color:var(--muted)}
+    .tier-bonus{font-size:10.5px;color:var(--green);font-weight:700;margin-top:2px}
+
+    /* DAY PLAN */
+    .day-grid{display:flex;flex-direction:column;gap:8px}
+    .day-row{display:flex;gap:12px;align-items:flex-start;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px}
+    .day-badge{background:var(--ink);color:#fff;font-size:11px;font-weight:800;border-radius:8px;padding:4px 9px;flex-shrink:0}
+    .day-text{font-size:12.5px;color:#334155;line-height:1.5}
+
+    .rules-grid{display:grid;grid-template-columns:1fr;gap:14px}
+    .rule-box{border-radius:14px;padding:16px;border:1.5px solid var(--border)}
+    .rule-box.no{background:#FEF2F2;border-color:#FCA5A5}
+    .rule-box-title{font-size:12.5px;font-weight:800;margin-bottom:8px;color:#991B1B}
+    .rule-box ul{list-style:none;display:flex;flex-direction:column;gap:6px}
+    .rule-box li{font-size:12.5px;line-height:1.5;color:#991B1B}
+
+    .final-cta{background:linear-gradient(135deg,var(--ink) 0%,#0F2D4A 100%);border-radius:24px;padding:34px 20px;text-align:center;color:#fff}
+    .final-cta h2{font-family:'Instrument Serif',serif;font-size:24px;margin-bottom:10px}
+    .final-cta p{font-size:13.5px;color:rgba(255,255,255,.7);margin-bottom:20px;max-width:420px;margin-left:auto;margin-right:auto}
+
+    footer{background:var(--ink);color:rgba(255,255,255,.5);text-align:center;padding:20px 16px;font-size:12px}
+    footer a{color:rgba(255,255,255,.6);text-decoration:none}
+    footer a:hover{color:#fff}
+
+    @media(max-width:480px){.cards-grid,.cards-grid.cols-3,.rates-grid{grid-template-columns:1fr 1fr}.tier-grid{grid-template-columns:1fr 1fr}}
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="hdr">
+  <a href="/" class="hdr-logo">
+    <img id="siteLogo" src="/assets/icons/mzdocs-pro-transparent.svg" alt="MzDocs Pro" style="max-height:150px;height:auto;width:auto;display:block;margin-left:-70px;">
+    <div id="siteLogoFallback" style="display:none;align-items:center;gap:8px">
+      <div class="hdr-badge">📄</div>
+      <div class="hdr-name">Mz<span>Docs</span> Pro</div>
+    </div>
+  </a>
+  <script>
+  document.getElementById('siteLogo').addEventListener('error', function(){
+    this.style.display = 'none';
+    document.getElementById('siteLogoFallback').style.display = 'flex';
+  });
+  </script>
+  <a href="/" class="btn-back">← Voltar ao início</a>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner container">
+    <div class="hero-tag">🤝 Guia do Afiliado</div>
+    <h1>Transforme recomendações em <em>rendimento</em></h1>
+    <p>Partilhe o MzDocs com pessoas que precisam de documentos, acompanhe as suas referências e receba comissões pelas conversões elegíveis.</p>
+    <div class="hero-ctas">
+      <a href="/afiliado.html" class="btn btn-green">Quero ser Afiliado</a>
+      <a href="/afiliado.html" class="btn btn-outline">Já sou Afiliado — Entrar</a>
+    </div>
+  </div>
+</section>
+
+<!-- O QUE É -->
+<section class="section container">
+  <p class="sec-label">O que é um afiliado</p>
+  <p class="sec-title">Alguém que ajuda o MzDocs a chegar a novos utilizadores</p>
+  <p class="sec-desc">Você recebe um link pessoal, um QR Code pessoal e materiais de divulgação, e partilha com outras pessoas. Quando alguém entra através da sua referência e realiza uma conversão elegível, o sistema atribui essa actividade à sua conta, segundo as regras do programa.</p>
+</section>
+
+<!-- COMO COMEÇAR -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Como começar</p>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div><div class="step-title">Crie a sua conta</div><div class="step-desc">Crie uma conta MzDocs gratuita.</div></div></div>
+    <div class="step"><div class="step-num">2</div><div><div class="step-title">Candidate-se e escolha o segmento</div><div class="step-desc">O programa contempla actualmente os segmentos Individual, Papelaria, Cyber Café, Universidade, Centro de Explicações e Digitador.</div></div></div>
+    <div class="step"><div class="step-num">3</div><div><div class="step-title">Aguarde aprovação</div><div class="step-desc">Depois de aprovado, terá acesso às ferramentas de afiliado no seu painel.</div></div></div>
+    <div class="step"><div class="step-num">4</div><div><div class="step-title">Receba o seu link e QR Code</div><div class="step-desc">O sistema gera o seu código de referência (ex: mzdocs.co.mz/?ref=SEUCODIGO) e um QR Code associado. Não altere o código — é ele que atribui o referido à sua conta.</div></div></div>
+  </div>
+</section>
+
+<!-- 3 FORMAS DE GANHAR -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">3 formas de ganhar</p>
+  <div class="cards-grid cols-3">
+    <div class="fcard">
+      <div class="fcard-ico">①💰</div>
+      <div class="fcard-title">Comissões</div>
+      <div class="fcard-desc">Indique novos utilizadores e receba comissão nas conversões elegíveis.</div>
+    </div>
+    <div class="fcard">
+      <div class="fcard-ico">②🛠️</div>
+      <div class="fcard-title">Serviços</div>
+      <div class="fcard-desc">Se o seu segmento tiver créditos profissionais disponíveis, use-os para produzir documentos para clientes e cobre pelo seu próprio serviço.</div>
+    </div>
+    <div class="fcard">
+      <div class="fcard-ico">③🧩</div>
+      <div class="fcard-title">Conteúdo</div>
+      <div class="fcard-desc">Crie templates/minutas elegíveis, submeta, e se aprovadas e comercializadas, participe da receita conforme as regras aplicáveis.</div>
+    </div>
+  </div>
+</section>
+
+<!-- COMISSÕES -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Comissões por pacote</p>
+  <p class="sec-desc">Estes são os valores actualmente exibidos no programa (podem ser ajustados pelo administrador — confirme sempre no seu painel):</p>
+  <div class="rates-grid">
+    <div class="rate-pill"><div class="rate-pkg">Avulso</div><div class="rate-pct">10%</div><div class="rate-mzn">= 5 MZN</div></div>
+    <div class="rate-pill"><div class="rate-pkg">Starter</div><div class="rate-pct">15%</div><div class="rate-mzn">= 18 MZN</div></div>
+    <div class="rate-pill"><div class="rate-pkg">Básico</div><div class="rate-pct">15%</div><div class="rate-mzn">= 42 MZN</div></div>
+    <div class="rate-pill"><div class="rate-pkg">Pro</div><div class="rate-pct">20%</div><div class="rate-mzn">= 120 MZN</div></div>
+    <div class="rate-pill"><div class="rate-pkg">Empresa</div><div class="rate-pct">20%</div><div class="rate-mzn">= 300 MZN</div></div>
+  </div>
+  <div class="note" style="margin-top:12px">✨ Papelarias, Cyber Cafés e Universidades ganham bónus extra de 3–5% sobre a comissão base.</div>
+</section>
+
+<!-- CRÉDITOS PROFISSIONAIS -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Créditos profissionais por segmento</p>
+  <p class="sec-desc">Não precisa ganhar apenas por comissão. Se o seu segmento tiver acesso a pacotes profissionais de créditos, pode comprá-los em condições específicas e usar o MzDocs para prestar serviços — por exemplo, produzir um documento para um cliente e cobrar pelo serviço.</p>
+  <div class="cat-grid">
+    <span class="cat-pill">🏪 Papelaria</span>
+    <span class="cat-pill">💻 Cyber Café</span>
+    <span class="cat-pill">🎓 Universidade</span>
+    <span class="cat-pill">📚 Centro de Explicações</span>
+    <span class="cat-pill">⌨️ Digitador</span>
+    <span class="cat-pill">👤 Individual</span>
+  </div>
+  <div class="flow">
+    <div class="flow-row">
+      <span class="flow-node">Compra créditos profissionais</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Recebe/atende cliente</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Produz o documento</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Entrega o serviço</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Cobra pelo serviço</span>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin-top:14px">Tem um negócio físico (papelaria, gráfica, cyber café, escritório)? Pode também candidatar-se ao programa de parceiros para aparecer no mapa "Perto de Si". <a href="/guia-parceiros.html" style="color:var(--blue);font-weight:700;text-decoration:none">Ver o Guia do Parceiro →</a></p>
+</section>
+
+<!-- KIT DE MARKETING -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Kit de marketing</p>
+  <p class="sec-desc">No seu painel encontra materiais prontos a usar (panfletos, banners, posts) já preparados com o seu QR Code pessoal. Não edite manualmente o QR de outra pessoa — gere sempre o seu material através do sistema.</p>
+  <div class="flow"><div class="flow-row">
+    <span class="flow-node">Escolher material</span><span class="flow-arrow">→</span>
+    <span class="flow-node">Aplicar QR/link</span><span class="flow-arrow">→</span>
+    <span class="flow-node">Descarregar</span><span class="flow-arrow">→</span>
+    <span class="flow-node">Publicar</span>
+  </div></div>
+</section>
+
+<!-- COMO PROMOVER -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Como conseguir os primeiros referidos</p>
+  <div class="cards-grid">
+    <div class="fcard"><div class="fcard-ico">👨‍👩‍👧</div><div class="fcard-title">Família e amigos</div><div class="fcard-desc">Em vez de "regista-te aqui", pergunte: "precisa fazer algum documento esta semana?" Se sim, mostre a solução.</div></div>
+    <div class="fcard"><div class="fcard-ico">📱</div><div class="fcard-title">WhatsApp Status</div><div class="fcard-desc">Um problema diferente por dia: segunda CV, terça requerimento, quarta trabalho escolar, quinta contrato, sexta pequeno negócio.</div></div>
+    <div class="fcard"><div class="fcard-ico">📘</div><div class="fcard-title">Facebook</div><div class="fcard-desc">Problema → demonstração → resultado → link.</div></div>
+    <div class="fcard"><div class="fcard-ico">🎥</div><div class="fcard-title">Vídeos</div><div class="fcard-desc">"Vou mostrar como criar um CV no MzDocs em menos de um minuto." Finalize: "o primeiro documento é grátis. Link na descrição."</div></div>
+  </div>
+  <div class="note" style="margin-top:14px"><strong>Não venda o MzDocs. Venda a solução do problema.</strong> Em vez de "compre créditos MzDocs", diga "precisa de um requerimento? pode começar gratuitamente" — o MzDocs oferece o primeiro documento grátis.</div>
+</section>
+
+<!-- NÍVEIS -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Evolua de nível</p>
+  <p class="sec-desc">A progressão depende das conversões acumuladas. Os limiares e bónus abaixo são os actualmente configurados por omissão — consulte no seu painel as metas e benefícios activos, já que o administrador pode ajustá-los.</p>
+  <div class="tier-grid">
+    <div class="tier-card"><div class="tier-ico">🥉</div><div class="tier-name">Bronze</div><div class="tier-req">a partir de 0</div></div>
+    <div class="tier-card"><div class="tier-ico">🥈</div><div class="tier-name">Prata</div><div class="tier-req">5+ conversões</div><div class="tier-bonus">+2% comissão</div></div>
+    <div class="tier-card"><div class="tier-ico">🥇</div><div class="tier-name">Ouro</div><div class="tier-req">20+ conversões</div><div class="tier-bonus">+5% comissão</div></div>
+    <div class="tier-card"><div class="tier-ico">💎</div><div class="tier-name">Diamante</div><div class="tier-req">50+ conversões</div><div class="tier-bonus">+8% comissão</div></div>
+  </div>
+</section>
+
+<!-- LEVANTAMENTO -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Levantamento</p>
+  <div class="flow"><div class="flow-row">
+    <span class="flow-node">Painel</span><span class="flow-arrow">→</span>
+    <span class="flow-node">Levantamento</span><span class="flow-arrow">→</span>
+    <span class="flow-node">Introduzir valor</span><span class="flow-arrow">→</span>
+    <span class="flow-node">Número M-Pesa</span><span class="flow-arrow">→</span>
+    <span class="flow-node">Enviar pedido</span><span class="flow-arrow">→</span>
+    <span class="flow-node">Processamento</span>
+  </div></div>
+  <div class="note warn" style="margin-top:14px">Os levantamentos estão sujeitos às regras, ao saldo disponível e às validações antifraude do programa. Não há pagamento automático ou instantâneo garantido.</div>
+</section>
+
+<!-- CONTEÚDO -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Quer ajudar a construir o catálogo do MzDocs?</p>
+  <p class="sec-desc">O MzDocs precisa de conteúdo útil para Moçambique. Pode identificar documentos que as pessoas procuram frequentemente e sugerir/criar conteúdo.</p>
+  <div class="flow">
+    <div class="flow-row">
+      <span class="flow-node">Identificar necessidade</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Criar template/minuta</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Validar campos</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Aceitar responsabilidade</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Submeter</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Revisão MzDocs</span><span class="flow-arrow">→</span>
+      <span class="flow-node">Publicado (grátis ou pago)</span>
+    </div>
+  </div>
+  <div class="note legal" style="margin-top:14px">
+    <strong>Template</strong> é estrutura/apresentação/modelo. <strong>Minuta</strong> é o conteúdo textual/clausulado de um documento. Ao submeter uma minuta, o autor aceita, de forma expressa, a responsabilidade exclusiva pelo conteúdo jurídico submetido — isto é explicado antes de qualquer submissão.
+  </div>
+</section>
+
+<!-- 10 IDEIAS DE CONTEÚDO -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">10 ideias de conteúdo prontas a usar</p>
+  <div class="cards-grid">
+    <div class="fcard"><div class="fcard-desc">Como criar um CV profissional</div></div>
+    <div class="fcard"><div class="fcard-desc">Como fazer um requerimento</div></div>
+    <div class="fcard"><div class="fcard-desc">Como criar um contrato de arrendamento</div></div>
+    <div class="fcard"><div class="fcard-desc">Como preparar uma carta formal</div></div>
+    <div class="fcard"><div class="fcard-desc">Como transformar um rascunho em documento</div></div>
+    <div class="fcard"><div class="fcard-desc">Como usar OCR para digitalizar um documento</div></div>
+    <div class="fcard"><div class="fcard-desc">Como criar documentos pelo telemóvel</div></div>
+    <div class="fcard"><div class="fcard-desc">Como editar o documento antes de descarregar</div></div>
+    <div class="fcard"><div class="fcard-desc">PDF ou Word: qual escolher?</div></div>
+    <div class="fcard"><div class="fcard-desc">O primeiro documento é grátis</div></div>
+  </div>
+</section>
+
+<!-- PLANO 7 DIAS -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Plano de 7 dias</p>
+  <div class="day-grid">
+    <div class="day-row"><span class="day-badge">Dia 1</span><span class="day-text">Criar conta e completar perfil.</span></div>
+    <div class="day-row"><span class="day-badge">Dia 2</span><span class="day-text">Conhecer o seu link e QR Code.</span></div>
+    <div class="day-row"><span class="day-badge">Dia 3</span><span class="day-text">Publicar o primeiro conteúdo.</span></div>
+    <div class="day-row"><span class="day-badge">Dia 4</span><span class="day-text">Fazer o primeiro vídeo.</span></div>
+    <div class="day-row"><span class="day-badge">Dia 5</span><span class="day-text">Publicar no WhatsApp e Facebook.</span></div>
+    <div class="day-row"><span class="day-badge">Dia 6</span><span class="day-text">Falar directamente com potenciais utilizadores.</span></div>
+    <div class="day-row"><span class="day-badge">Dia 7</span><span class="day-text">Ver estatísticas no painel e repetir o conteúdo que funcionou melhor.</span></div>
+  </div>
+</section>
+
+<!-- COMO NÃO PERDER A CONTA -->
+<section class="section container" style="padding-top:0">
+  <p class="sec-label">Como não perder a conta</p>
+  <div class="rules-grid">
+    <div class="rule-box no">
+      <div class="rule-box-title">⚠️ Evite</div>
+      <ul>
+        <li>Fazer spam ou publicidade enganosa.</li>
+        <li>Fazer falsas promessas de rendimento garantido.</li>
+        <li>Fingir ser funcionário do MzDocs.</li>
+        <li>Fazer auto-referências fraudulentas ou tentar manipular conversões.</li>
+        <li>Publicar informação falsa sobre documentos jurídicos.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note" style="margin-top:14px"><strong>A regra de ouro:</strong> não tente convencer toda a gente — encontre quem realmente precisa do MzDocs. Um afiliado com 20 pessoas realmente interessadas pode ser muito mais eficiente do que enviar o link para 2.000 pessoas aleatórias.</div>
+</section>
+
+<!-- CTA FINAL -->
+<section class="section container" style="padding-bottom:56px">
+  <div class="final-cta">
+    <h2>Pronto para começar?</h2>
+    <p>Crie a sua conta, escolha o seu segmento e receba o seu link e QR Code em minutos.</p>
+    <div class="hero-ctas">
+      <a href="/afiliado.html" class="btn btn-green">Quero ser Afiliado</a>
+      <a href="/guia-parceiros.html" class="btn btn-outline">Ver Guia do Parceiro</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>© 2026 MzDocs Pro · Moçambique 🇲🇿 &nbsp;|&nbsp;
+    <a href="/blog.html" style="color:rgba(255,255,255,.55);text-decoration:none;">📰 Blog</a> &nbsp;|&nbsp;
+    <a href="/legal.html">Termos &amp; Privacidade</a></p>
+  <p style="margin-top:6px">Dúvidas? <a href="mailto:suporte.mzdocs@gmail.com">suporte.mzdocs@gmail.com</a></p>
+  <p style="margin-top:6px">Já é afiliado? <a href="/afiliado.html">Aceda ao seu painel</a> &nbsp;|&nbsp; <a href="/guia-parceiros.html">Guia do Parceiro</a></p>
+</footer>
+
+</body>
+</html>
