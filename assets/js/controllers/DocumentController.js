@@ -38,6 +38,12 @@ import { authManager } from '../auth/AuthManager.js';
 import { Analytics } from '../analytics/Analytics.js';
 import { showUsageLimitModal } from '../components/UsageLimitModal.js';
 import { normalizeTrabalhoCover } from '../utils/CoverNormalizer.js';
+// NOVO (Set/2026): selector de minuta de parceiro, para os serviços com
+// minuta fixa (ver assets/js/services/minutas/index.js). MINUTA_RENDERERS
+// não é importado aqui de propósito (é código do motor de geração, não da
+// UI) — em vez disso usa-se a mesma lista de serviceTypes que a API expõe.
+import { PartnerMinutaClient } from '../services/minutas/partnerMinutaClient.js';
+const MINUTA_FIXA_SERVICES = ['recibo', 'procuracao', 'requerimento', 'residencia', 'licenca', 'prestacao', 'arrendamento'];
 
 // ─── documentState: single source of truth for generated content ─────────────
 export const documentState = {
@@ -267,6 +273,51 @@ export class DocumentController {
    countEl.style.display = n > 0 ? 'inline-block' : 'none';
  }
 
+ // NOVO (Set/2026): injecta (ou remove, se não houver opções) um selector
+ // de minuta no topo do formulário para os serviços com minuta fixa. A
+ // escolha fica em this._selectedPartnerMinuta = {id, minuta_text,
+ // minuta_name} ou null (minuta padrão da plataforma) — lido no momento
+ // de gerar, ver generate().
+ async _renderPartnerMinutaSelector(key) {
+  const formBody = document.getElementById('formBody');
+  if (!formBody) return;
+  document.getElementById('mz-partner-minuta-block')?.remove();
+
+  let minutas = [];
+  try { ({ minutas = [] } = await PartnerMinutaClient.listForService(key)); }
+  catch { return; } // falha silenciosa — a minuta padrão continua a funcionar
+
+  // A verificação `this.docModel.service === key` protege contra o
+  // utilizador já ter trocado de serviço enquanto este fetch estava
+  // pendente — não injecta o selector no formulário errado.
+  if (!minutas.length || this.docModel.service !== key) return;
+
+  const block = document.createElement('div');
+  block.id = 'mz-partner-minuta-block';
+  block.style.cssText = 'margin:0 0 16px;padding:12px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px';
+  block.innerHTML = `
+    <label style="font-size:12.5px;font-weight:700;color:#334155;display:block;margin-bottom:6px">📜 Minuta a usar</label>
+    <select id="mzPartnerMinutaSelect" style="width:100%;padding:9px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:inherit">
+      <option value="">✅ Minuta padrão da plataforma</option>
+      ${minutas.map(m => `<option value="${m.id}">📜 ${(m.minuta_name || '').replace(/</g, '&lt;')}${m.description ? ' — ' + m.description.replace(/</g, '&lt;').slice(0, 60) : ''}</option>`).join('')}
+    </select>
+  `;
+  formBody.insertBefore(block, formBody.firstChild);
+
+  document.getElementById('mzPartnerMinutaSelect').addEventListener('change', async (e) => {
+   const id = e.target.value;
+   if (!id) { this._selectedPartnerMinuta = null; return; }
+   try {
+    const data = await PartnerMinutaClient.get(id);
+    this._selectedPartnerMinuta = data;
+   } catch (err) {
+    NotificationView.warn('Não foi possível carregar essa minuta — a usar a minuta padrão.');
+    e.target.value = '';
+    this._selectedPartnerMinuta = null;
+   }
+  });
+ }
+
  open(key) {
  const svc = SERVICES[key];
  if (!svc) return;
@@ -286,6 +337,9 @@ export class DocumentController {
 
  this.docModel.reset();
  this.docModel.service = key;
+ // NOVO (Set/2026): a escolha de minuta de parceiro é por-abertura-de-
+ // formulário — nunca deve "sobreviver" de um serviço para outro.
+ this._selectedPartnerMinuta = null;
 
  document.getElementById('shIco').textContent = svc.icon;
  document.getElementById('shIco').style.background = svc.bg;
@@ -362,6 +416,13 @@ export class DocumentController {
 
  DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
  DocumentView.removePreviewPanel();
+
+ // NOVO (Set/2026): para os serviços com minuta fixa, mostra um selector
+ // "Minuta padrão da plataforma" vs minutas aprovadas de parceiros — só
+ // aparece se houver pelo menos uma opção de parceiro (não polui o
+ // formulário nos outros 10 serviços, nem quando ainda não há nenhuma
+ // minuta de parceiro aprovada para este tipo).
+ if (MINUTA_FIXA_SERVICES.includes(key)) this._renderPartnerMinutaSelector(key);
 
  this.templateCtrl.reset();
  this.templateCtrl.bindEvents();
@@ -506,7 +567,7 @@ export class DocumentController {
    const result = await this.openRouter.previewDocument(
      key, data, this.docModel.ocrText,
      this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null,
-     null
+     null, this._selectedPartnerMinuta
    );
 
    if (!result?.document || result.document.trim().length < 10) {
@@ -640,7 +701,7 @@ export class DocumentController {
  try {
  const result = await Promise.race([
   this.queue.add(() =>
-   this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost, this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null, null)
+   this.openRouter.generate(key, data, this.docModel.ocrText, this.creditModel.value, cost, this.templateCtrl.isActive() ? this.templateCtrl.getTemplateData() : null, null, this._selectedPartnerMinuta)
   ),
   timeout,
   new Promise((_, reject) => { signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }); }),
