@@ -55,6 +55,10 @@ const {
 }                                                      = require('./_services/site');
 const { handleTemplates }                             = require('./_services/templates');
 const { handleAffiliate }                             = require('./_services/affiliates');
+// NOVO (Set/2026): minutas de parceiro (marketplace de conteúdo jurídico —
+// distinto do marketplace de templates VISUAIS acima). Mesmo padrão de
+// namespace, sem criar nenhuma Serverless Function nova.
+const { handlePartnerMinutas }                        = require('./_services/partnerMinutas');
 // NOVO (monetização — Tarefa 3): confirmação automática de pagamento via
 // SMS M-Pesa reencaminhado (Telegram webhook OU HTTP directo). Continua
 // tudo dentro de /api/misc — não cria uma nova Serverless Function (ver
@@ -75,6 +79,7 @@ module.exports = async function handler(req, res) {
 
   if (q._ns === 'affiliate') return handleAffiliate(q._a || lastSegment || '', req, res);
   if (q._ns === 'templates') return handleTemplates(q._a || 'list', req, res);
+  if (q._ns === 'partnerMinutas') return handlePartnerMinutas(q._a || 'list', req, res);
   if (q._ns === 'marketing') return handleMarketing(q._a || 'track', req, res);
 
   const isAffiliate = pathParts.includes('affiliate');
