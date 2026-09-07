@@ -77,3 +77,28 @@ describe('P1.2 — LongDocumentEngine.estimateCredits() é a fonte única de ver
     expect(LongDocumentEngine.isLongDoc('planonegocio', {})).toBe(true);
   });
 });
+
+describe('Risco residual resolvido (Set/2026) — estimativa de "planonegocio" sem campo de páginas', () => {
+  const LongDocumentEngine = loadLongDocumentEngine();
+
+  test('estimateCreditsForPlanoNegocio() devolve um valor fixo, determinístico, > 1 crédito', () => {
+    const est = LongDocumentEngine.estimateCreditsForPlanoNegocio();
+    // A estrutura de "planonegocio" é sempre a mesma (8 secções fixas, ver
+    // _planDocument()) — por isso o valor tem de ser sempre o mesmo entre
+    // chamadas, ao contrário de estimateCredits(pages), que varia com o
+    // input do utilizador.
+    expect(est).toBe(LongDocumentEngine.estimateCreditsForPlanoNegocio());
+    expect(est).toBeGreaterThan(1);
+    expect(Number.isInteger(est)).toBe(true);
+  });
+
+  test('a estimativa é coerente com o total de ~6300 palavras fixas do plano (não um número arbitrário)', () => {
+    // 700+900+1100+900+800+1000+500+400 = 6300 palavras, ~5.5 chars/palavra
+    // ≈ 34.650 caracteres ≈ 6 créditos (1 inicial + 5 progressivos), pelo
+    // mesmo CHARS_PER_EXTRA_CREDIT usado em toda a parte para geração em
+    // cadeia — nunca deve saltar para um valor extremo (ex.: 1 ou 30).
+    const est = LongDocumentEngine.estimateCreditsForPlanoNegocio();
+    expect(est).toBeGreaterThanOrEqual(4);
+    expect(est).toBeLessThanOrEqual(8);
+  });
+});
