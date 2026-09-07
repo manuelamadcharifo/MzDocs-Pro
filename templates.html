@@ -275,6 +275,7 @@
     <button class="tpl-tab active" data-tab="gallery">🏪 Galeria</button>
     <button class="tpl-tab" data-tab="mine">✏️ Os Meus</button>
     <button class="tpl-tab" data-tab="saved">🔖 Guardados</button>
+    <button class="tpl-tab" data-tab="minutas">📜 Minutas</button>
   </div>
 
   <!-- ═══════ GALERIA ═══════ -->
@@ -335,6 +336,21 @@
   <!-- ═══════ GUARDADOS ═══════ -->
   <div id="tabSaved" style="display:none">
     <div id="savedList"></div>
+  </div>
+
+  <!-- ═══════ MINUTAS DE PARCEIRO (Set/2026) ═══════ -->
+  <!-- Distinto dos Templates acima: aqui submete-se o TEXTO/clausulado de
+       um documento (não aparência) para os tipos com "minuta fixa" da
+       plataforma. Ver assets/js/services/minutas/partnerMinutaClient.js
+       e api/_services/partnerMinutas.js. -->
+  <div id="tabMinutas" style="display:none">
+    <div id="minutaEligibilityNotice" style="display:none;background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;color:#92400e">
+      Só afiliados ou parceiros aprovados podem submeter minutas. <a href="/afiliado.html" style="color:#92400e;font-weight:800">Torne-se afiliado</a> para participar.
+    </div>
+    <div id="minutasList"></div>
+    <button class="btn-tpl-submit" id="btnOpenSubmitMinuta" style="margin-top:16px;width:100%;padding:13px;background:var(--ink);color:#fff;border:none;border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">
+      + Submeter Minuta
+    </button>
   </div>
 
 </div><!-- /.tpl-page -->
@@ -524,6 +540,68 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- MODAL: SUBMETER MINUTA DE PARCEIRO (Set/2026)                      -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="tpl-submit-overlay" id="minutaSubmitOverlay">
+  <div class="tpl-submit-sheet">
+    <div class="tpl-detail-drag"></div>
+    <div class="tpl-submit-hdr">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2>📜 Submeter Minuta</h2>
+        <button id="minutaSubmitClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--dim)">✕</button>
+      </div>
+      <p>Escreva o texto de um documento (recibo, procuração, requerimento, declaração de residência, licença, prestação de serviços ou arrendamento) para outros utilizadores escolherem em vez da minuta padrão da plataforma.</p>
+    </div>
+    <div class="tpl-form" id="minutaSubmitForm">
+
+      <div class="tpl-field">
+        <label>Tipo de Documento *</label>
+        <select id="msService">
+          <option value="">— Seleccione —</option>
+        </select>
+      </div>
+
+      <div class="tpl-field">
+        <label>Placeholders permitidos para este tipo</label>
+        <div id="msPlaceholdersHint" style="font-size:11.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;line-height:1.6;font-family:monospace">Seleccione um tipo de documento acima.</div>
+      </div>
+
+      <div class="tpl-field">
+        <label>Nome da Minuta *</label>
+        <input type="text" id="msName" placeholder="Ex: Procuração — modelo Dr. Fulano" maxlength="100"/>
+      </div>
+
+      <div class="tpl-field">
+        <label>Descrição</label>
+        <textarea id="msDesc" placeholder="O que torna esta minuta diferente da padrão?" maxlength="500"></textarea>
+      </div>
+
+      <div class="tpl-field">
+        <label>Texto da Minuta * (use {{PLACEHOLDER}} para os dados do utilizador)</label>
+        <textarea id="msText" rows="14" style="font-family:monospace;font-size:12.5px" placeholder="Ex: Eu, {{OUTORGANTE}}, portador do BI n.º {{BI_OUTORGANTE}}, nomeio {{PROCURADOR}} para {{ACTO}}..." maxlength="20000"></textarea>
+      </div>
+
+      <div class="tpl-field" id="msInvalidPlaceholders" style="display:none;color:#dc2626;font-size:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 10px"></div>
+
+      <!-- Disclaimer de responsabilidade — texto obtido do servidor
+           (fonte única de verdade), nunca escrito à mão aqui, para nunca
+           divergir de api/_lib/minutaLiabilityDisclaimer.js. -->
+      <div class="tpl-field">
+        <label>Declaração de Responsabilidade *</label>
+        <div id="msDisclaimerText" style="font-size:11.5px;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;line-height:1.6;max-height:220px;overflow:auto;white-space:pre-wrap">A carregar…</div>
+        <label style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-size:12.5px;color:#334155;cursor:pointer">
+          <input type="checkbox" id="msLiabilityAccepted" style="margin-top:2px"/>
+          <span>Li e aceito integralmente a declaração de responsabilidade acima — sou o único responsável pelo conteúdo jurídico desta minuta, inclusive em caso de acção judicial.</span>
+        </label>
+      </div>
+
+      <button class="btn-tpl-submit-form" id="btnSubmitMinuta">🚀 Submeter Minuta</button>
+      <button class="btn-tpl-cancel" id="btnCancelSubmitMinuta">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAIS PARTILHADOS (mesmos IDs que index.html) — esta página já carrega
      o app.js completo (ver <script src="assets/js/app.js"> no fim), que já
      cria o PaymentController/HistoryController/DocumentController e já liga
@@ -653,6 +731,9 @@
 import { renderA4Pages, markdownToHtml, A4_PAGES_CONTAINER_CSS } from '/assets/js/utils/A4Renderer.js';
 import { SAMPLE_DATA, SAMPLE_MARKDOWN, fillTemplate, getSampleData } from '/assets/js/marketplace/SampleData.js';
 import { escapeHtml, sanitizeHtml } from '/assets/js/utils/Sanitizer.js';
+// NOVO (Set/2026): cliente da API de minutas de parceiro (texto/clausulado
+// submetido por afiliados/parceiros — distinto dos templates visuais acima).
+import { PartnerMinutaClient } from '/assets/js/services/minutas/partnerMinutaClient.js';
 
 // CSP FASE 1 (auditoria Ago/2026): delegação de eventos por data-action, em
 // vez de onclick="..." inline — mesma lógica usada em AdminApp.js.
@@ -1238,6 +1319,150 @@ function closeSubmit() {
   _setPhotoStatus('', null);
 }
 
+// ── Minutas de parceiro (Set/2026) ──────────────────────────────────────────
+// Aba "📜 Minutas" — distinta de "✏️ Os Meus" (templates visuais). Usa
+// PartnerMinutaClient (assets/js/services/minutas/partnerMinutaClient.js),
+// que já trata de auth/erro; aqui só se liga a UI.
+let _msServiceTypesCache = null; // [{serviceType, placeholders}]
+let _msDisclaimerCache = null;   // {version, text}
+
+async function loadMinutas() {
+  const list = document.getElementById('minutasList');
+  const notice = document.getElementById('minutaEligibilityNotice');
+  list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--dim)">⏳ A carregar…</div>';
+  if (!currentUser) {
+    list.innerHTML = '<div class="tpl-empty"><div class="tpl-empty-ico">🔐</div><h3>Login necessário</h3><p>Faça login para ver as suas minutas.</p></div>';
+    return;
+  }
+  if (notice) notice.style.display = 'none';
+  try {
+    const { minutas = [] } = await PartnerMinutaClient.mine();
+    if (!minutas.length) {
+      list.innerHTML = '<div class="tpl-empty"><div class="tpl-empty-ico">📜</div><h3>Sem minutas</h3><p>Ainda não submeteu nenhuma minuta. Submeta a primeira!</p></div>';
+      return;
+    }
+    const svcIco = { recibo:'🧾', procuracao:'⚖️', requerimento:'📄', residencia:'🏡', licenca:'🏛️', prestacao:'🤝', arrendamento:'🏠' };
+    list.innerHTML = minutas.map(m => `
+      <div class="tpl-mine-card" style="margin-bottom:10px">
+        <div class="tpl-mine-ico">${svcIco[m.service_type] || '📜'}</div>
+        <div class="tpl-mine-info">
+          <div class="tpl-mine-name">${escapeHtml(m.minuta_name)}</div>
+          <div class="tpl-mine-meta">${escapeHtml(m.service_type)} · ${new Date(m.created_at).toLocaleDateString('pt-MZ')}</div>
+          <span class="tpl-mine-status ${m.status}">${
+            m.status === 'pending'  ? '⏳ A aguardar aprovação' :
+            m.status === 'approved' ? '✅ Aprovada' : '❌ Rejeitada'
+          }</span>
+          ${m.status === 'rejected' && m.rejection_reason ? `<div style="font-size:11px;color:#EF4444;margin-top:4px">Motivo: ${escapeHtml(m.rejection_reason)}</div>` : ''}
+          ${m.use_count ? `<div style="font-size:11px;color:var(--dim);margin-top:3px">📄 ${m.use_count} usos</div>` : ''}
+          ${m.status === 'approved' ? `
+            <div class="tpl-mine-actions">
+              <label style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" data-toggle-minuta="${escapeHtml(m.id)}" ${m.is_active ? 'checked' : ''}/> Activa (visível a outros utilizadores)
+              </label>
+            </div>` : ''}
+        </div>
+      </div>`).join('');
+    list.querySelectorAll('[data-toggle-minuta]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        cb.disabled = true;
+        try { await PartnerMinutaClient.toggleActive(cb.dataset.toggleMinuta, cb.checked); }
+        catch (e) { notify('Erro: ' + e.message, 'error'); cb.checked = !cb.checked; }
+        finally { cb.disabled = false; }
+      });
+    });
+  } catch (e) {
+    if (e.code === 'NOT_ELIGIBLE' && notice) notice.style.display = 'block';
+    list.innerHTML = '';
+  }
+}
+
+async function openSubmitMinuta() {
+  if (!currentUser) { notify('Faça login para submeter minutas', 'warning'); return; }
+  document.getElementById('minutaSubmitOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Preencher o select de tipos + dica de placeholders (uma vez só, cache
+  // em memória — a lista não muda durante a sessão).
+  const select = document.getElementById('msService');
+  if (!_msServiceTypesCache) {
+    try { ({ serviceTypes: _msServiceTypesCache } = await PartnerMinutaClient.serviceTypes()); }
+    catch { _msServiceTypesCache = []; }
+  }
+  const svcLabel = { recibo:'Recibo / Factura', procuracao:'Procuração / Mandato', requerimento:'Requerimento Oficial',
+    residencia:'Declaração de Residência', licenca:'Pedido de Licença', prestacao:'Contrato de Prestação de Serviços',
+    arrendamento:'Contrato de Arrendamento' };
+  select.innerHTML = '<option value="">— Seleccione —</option>' +
+    _msServiceTypesCache.map(s => `<option value="${escapeHtml(s.serviceType)}">${escapeHtml(svcLabel[s.serviceType] || s.serviceType)}</option>`).join('');
+
+  // Disclaimer — sempre buscado ao servidor (fonte única de verdade);
+  // guarda-se a versão devolvida para a enviar de volta no submit.
+  const disclaimerBox = document.getElementById('msDisclaimerText');
+  disclaimerBox.textContent = 'A carregar…';
+  try {
+    _msDisclaimerCache = await PartnerMinutaClient.disclaimer();
+    disclaimerBox.textContent = _msDisclaimerCache.text;
+  } catch {
+    disclaimerBox.textContent = 'Não foi possível carregar a declaração de responsabilidade. Tente novamente.';
+    _msDisclaimerCache = null;
+  }
+}
+
+function closeSubmitMinuta() {
+  document.getElementById('minutaSubmitOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function _updateMsPlaceholdersHint() {
+  const hint = document.getElementById('msPlaceholdersHint');
+  const svc = document.getElementById('msService').value;
+  const entry = (_msServiceTypesCache || []).find(s => s.serviceType === svc);
+  hint.textContent = entry
+    ? entry.placeholders.map(p => `{{${p}}}`).join('  ')
+    : 'Seleccione um tipo de documento acima.';
+}
+
+async function submitMinuta() {
+  const btn  = document.getElementById('btnSubmitMinuta');
+  const svc  = document.getElementById('msService').value;
+  const name = document.getElementById('msName').value.trim();
+  const desc = document.getElementById('msDesc').value.trim();
+  const text = document.getElementById('msText').value.trim();
+  const accepted = document.getElementById('msLiabilityAccepted').checked;
+  const invalidBox = document.getElementById('msInvalidPlaceholders');
+  invalidBox.style.display = 'none';
+
+  if (!svc || !name || !text) { notify('Preencha Tipo de Documento, Nome e Texto da Minuta', 'warning'); return; }
+  if (!accepted) { notify('É obrigatório aceitar a declaração de responsabilidade', 'warning'); return; }
+  if (!_msDisclaimerCache) { notify('Não foi possível confirmar a declaração de responsabilidade. Reabra o formulário.', 'error'); return; }
+
+  btn.disabled = true; btn.textContent = '⏳ A enviar…';
+  try {
+    const data = await PartnerMinutaClient.submit({
+      serviceType: svc, minutaName: name, description: desc, minutaText: text,
+      liabilityAccepted: true, liabilityAcceptedVersion: _msDisclaimerCache.version,
+    });
+    closeSubmitMinuta();
+    notify(data.message, 'success');
+    ['msName','msDesc','msText'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('msService').value = '';
+    document.getElementById('msLiabilityAccepted').checked = false;
+    _updateMsPlaceholdersHint();
+    loadMinutas();
+  } catch (e) {
+    if (e.code === 'INVALID_PLACEHOLDERS') {
+      invalidBox.textContent = e.message;
+      invalidBox.style.display = 'block';
+    } else if (e.code === 'LIABILITY_VERSION_MISMATCH') {
+      notify('A declaração de responsabilidade foi actualizada — feche e reabra o formulário para rever.', 'warning');
+      _msDisclaimerCache = null;
+    } else {
+      notify(e.message, 'error');
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = '🚀 Submeter Minuta';
+  }
+}
+
 // NOVO: só afiliados ou parceiros aprovados podem vender templates — a
 // plataforma não tem como pagar royalties a quem não está associado ao
 // projecto. Um utilizador comum continua a poder submeter os seus
@@ -1457,12 +1682,13 @@ async function checkTokenAccess() {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  ['gallery','mine','saved'].forEach(t => {
+  ['gallery','mine','saved','minutas'].forEach(t => {
     document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`).style.display = t === tab ? '' : 'none';
   });
   document.querySelectorAll('.tpl-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'mine') loadMine();
   if (tab === 'saved') loadSaved();
+  if (tab === 'minutas') loadMinutas();
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1507,6 +1733,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Submeter
   document.getElementById('btnOpenSubmit').addEventListener('click', openSubmit);
   document.getElementById('btnOpenSubmitMine').addEventListener('click', openSubmit);
+  // NOVO (Set/2026): Minutas de parceiro
+  document.getElementById('btnOpenSubmitMinuta').addEventListener('click', openSubmitMinuta);
+  document.getElementById('minutaSubmitClose').addEventListener('click', closeSubmitMinuta);
+  document.getElementById('btnCancelSubmitMinuta').addEventListener('click', closeSubmitMinuta);
+  document.getElementById('btnSubmitMinuta').addEventListener('click', submitMinuta);
+  document.getElementById('msService').addEventListener('change', _updateMsPlaceholdersHint);
+  document.getElementById('minutaSubmitOverlay').addEventListener('click', e => {
+    if (e.target.id === 'minutaSubmitOverlay') closeSubmitMinuta();
+  });
   document.getElementById('submitClose').addEventListener('click', closeSubmit);
   document.getElementById('btnSubmitForm').addEventListener('click', submitTemplate);
 
