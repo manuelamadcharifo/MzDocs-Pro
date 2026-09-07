@@ -559,7 +559,14 @@ export class DocumentController {
  // api/_lib/pricingRegistry.js).
  let cost = svc.cost || 1;
  let estimatedTotalCost = cost;
- if (LongDocumentEngine.isLongDoc(key, data)) {
+ if (key === 'planonegocio') {
+   // NOVO (Set/2026 — risco residual do Master Hardening, resolvido): ao
+   // contrário de "trabalho", não há campo "páginas" do qual derivar a
+   // estimativa — a estrutura de "planonegocio" é sempre fixa (8 secções,
+   // sempre do mesmo tamanho, ver LongDocumentEngine.estimateCreditsForPlanoNegocio()
+   // e o comentário completo em Views.js, mesma correcção).
+   estimatedTotalCost = LongDocumentEngine.estimateCreditsForPlanoNegocio();
+ } else if (LongDocumentEngine.isLongDoc(key, data)) {
    const pages = parseInt(data.paginas) || 0;
    estimatedTotalCost = LongDocumentEngine.estimateCredits(pages || 1);
  } else if (svc.dynamicCostPerPage) {
@@ -586,11 +593,12 @@ export class DocumentController {
  // acima — o utilizador pode decidir continuar mesmo assim (a geração
  // pára de forma graciosa, com documento parcial, se os créditos
  // acabarem a meio — comportamento já existente, ver LongDocumentEngine).
- if (LongDocumentEngine.isLongDoc(key, data) && estimatedTotalCost > cost) {
+ if ((key === 'planonegocio' || LongDocumentEngine.isLongDoc(key, data)) && estimatedTotalCost > cost) {
+   const nomeServico = key === 'planonegocio' ? 'plano de negócios' : 'trabalho';
    NotificationView.info(
-     `ℹ️ Este trabalho tem uma estimativa de ≈${estimatedTotalCost} créditos no total ` +
+     `ℹ️ Este ${nomeServico} tem uma estimativa de ≈${estimatedTotalCost} créditos no total ` +
      `(cobrados progressivamente conforme o texto for gerado — o valor final pode variar). ` +
-     `Só ${cost} crédito é debitado agora; se os créditos acabarem antes do fim, recebe o ` +
+     `Só ${cost} crédito${cost === 1 ? '' : 's'} ${cost === 1 ? 'é' : 'são'} debitado${cost === 1 ? '' : 's'} agora; se os créditos acabarem antes do fim, recebe o ` +
      `documento até onde for possível, sem perder o que já foi gerado.`
    );
  }
