@@ -55,7 +55,13 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 const SITE_URL = (process.env.SITE_URL || 'https://mzdocs.co.mz').replace(/\/$/, '');
-const PER_ATTEMPT_TIMEOUT_MS = 8000; // ver nota acima sobre o orçamento de 60s
+// CORRIGIDO (confirmado por logs reais da Vercel): 8000ms cortava o
+// OpenRouter minimax-m3:free a meio de uma resposta que provavelmente
+// terminaria com mais alguns segundos — modelos grátis de visão sob carga
+// são lentos, não só falham. 12000ms dá mais margem sem estourar os 60s
+// da função (pior caso actual: Gemini 2 modelos + OR 2 modelos = 4
+// tentativas × 12s = 48s, com folga).
+const PER_ATTEMPT_TIMEOUT_MS = 12000;
 
 // ── Gemini ─────────────────────────────────────────────────────────────────
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
