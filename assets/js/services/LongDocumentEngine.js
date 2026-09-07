@@ -107,6 +107,41 @@ export class LongDocumentEngine {
     return 1 + extraCredits; // 1 crédito inicial + progressão por página
   }
 
+  // NOVO (Set/2026 — risco residual do Master Hardening, resolvido a pedido):
+  // "planonegocio" (Plano de Negócios) não tem campo "páginas" no formulário
+  // — ao contrário de "trabalho", a sua estrutura é sempre EXACTAMENTE a
+  // mesma: 8 secções fixas, com contagens de palavras fixas directamente no
+  // código (ver _planDocument() acima, o próprio texto do prompt de
+  // planeamento) — nunca varia consoante o que o utilizador preenche no
+  // formulário (nome do negócio, sector, etc. só mudam o CONTEÚDO, não o
+  // TAMANHO das secções). Isto torna possível uma estimativa exacta, ao
+  // contrário de "trabalho" (que depende de um nº de páginas escolhido
+  // livremente pelo utilizador): não há nada para "adivinhar", a estrutura
+  // é sempre a mesma. Fonte única de verdade: a MESMA lista de secções que
+  // _planDocument() usa para construir o prompt — se algum dia mudar o
+  // plano de secções ali, este total tem de ser actualizado a par (ambos
+  // vivem no mesmo ficheiro, lado a lado, para minimizar o risco de
+  // ficarem dessincronizados).
+  //
+  // Puramente uma estimativa de EXIBIÇÃO — não altera em nada a cobrança
+  // real, que continua a ser sempre 1 crédito inicial + progressão real
+  // por caracteres efectivamente gerados (LongDocumentEngine.generate()),
+  // exactamente como já acontecia antes desta alteração.
+  static estimateCreditsForPlanoNegocio() {
+    // 700+900+1100+900+800+1000+500+400 — ver a lista de secções em
+    // _planDocument(), ramo `serviceType === 'planonegocio'`.
+    const PLANONEGOCIO_TOTAL_WORDS = 700 + 900 + 1100 + 900 + 800 + 1000 + 500 + 400;
+    // Estimativa de caracteres por palavra em português formal (incluindo
+    // o espaço a seguir) — mesma ordem de grandeza usada informalmente
+    // noutras partes do projecto para dimensionar prompts; não precisa de
+    // ser exacta, é só para chegar a uma ESTIMATIVA razoável de créditos,
+    // nunca ao valor exacto cobrado (que vem sempre do servidor).
+    const CHARS_PER_WORD_PT = 5.5;
+    const totalCharsEstimate = PLANONEGOCIO_TOTAL_WORDS * CHARS_PER_WORD_PT;
+    const extraCredits = Math.max(0, Math.ceil((totalCharsEstimate - CHARS_PER_EXTRA_CREDIT) / CHARS_PER_EXTRA_CREDIT));
+    return 1 + extraCredits;
+  }
+
   /** Regista callback de progresso: fn({ phase, step, total, text }) */
   onProgress(fn) { this._onProgress = fn; return this; }
 
