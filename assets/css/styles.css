@@ -27,7 +27,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
    Assim .hdr-inner continua a tratar do layout interno (flex, altura,
    etc.) e .container só da largura máxima/centragem — uma única fonte de
    verdade para essa largura em toda a app. */
-.container{max-width:1024px;margin:0 auto;padding:0 16px;box-sizing:border-box}
+.container{max-width:1024px;margin:0 auto;box-sizing:border-box}
 
 /* HEADER */
 .hdr{position:sticky;top:0;z-index:60;background:var(--ink);height:58px;border-bottom:1px solid rgba(255,255,255,.06)}
