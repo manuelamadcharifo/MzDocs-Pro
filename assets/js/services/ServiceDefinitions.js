@@ -159,6 +159,8 @@ export const SERVICES = {
     icon:'🏠', bg:'#FEF3C7', title:'Contrato de Arrendamento',
     sub:'Contrato legal para aluguer de casa ou loja conforme lei moçambicana', hasAI:true,
     category:'juridico', popularity:4,
+    // NOVO (Set/2026): minuta fixa — ver nota igual em 'recibo' acima.
+    mode:'template',
     // NOVO (monetização): serviço "Premium" — 2 créditos (ver nota em cv acima).
     cost: 2,
     fields:[
@@ -203,6 +205,8 @@ export const SERVICES = {
     icon:'📄', bg:'#DBEAFE', title:'Requerimento Oficial',
     sub:'Pedidos formais para repartições, escolas, hospitais e serviços públicos', hasAI:true,
     category:'juridico', popularity:5,
+    // NOVO (Set/2026): minuta fixa — ver nota igual em 'recibo' acima.
+    mode:'template',
     // NOVO (monetização): serviço "Premium" — 2 créditos (ver nota em cv acima).
     cost: 2,
     fields:[
@@ -225,6 +229,12 @@ export const SERVICES = {
     icon:'🧾', bg:'#FFEDD5', title:'Recibo / Factura',
     sub:'Documento de venda para pequenos negócios e prestadores — os campos ajustam-se ao tipo escolhido', hasAI:true,
     category:'negocio', popularity:6,
+    // NOVO (Set/2026): minuta fixa — montado localmente sem IA, ver
+    // assets/js/services/minutas/index.js (MINUTA_RENDERERS). Campo
+    // meramente informativo (ex.: para uma badge "⚡ instantâneo" na UI);
+    // quem decide de facto o caminho usado é Services.js.generate() ao
+    // consultar MINUTA_RENDERERS[serviceType].
+    mode:'template',
     // NOVO (correcção 2.4): os ids dos campos abaixo foram alinhados com as
     // variáveis já usadas em services/prompts/recibo.js (data.nuitEmitente,
     // data.enderecoEmitente, data.biCliente, data.valor, data.iva,
@@ -337,6 +347,12 @@ export const SERVICES = {
     icon:'📜', bg:'#E0E7FF', title:'Procuração / Mandato',
     sub:'Documento para representar outra pessoa em repartições, bancos ou negócios', hasAI:true,
     category:'juridico', popularity:7,
+    // NOVO (Set/2026): minuta fixa — ver nota igual em 'recibo' acima.
+    // Corrige também um bug crítico anterior: o gerador por IA que estava
+    // ligado a este serviço tinha o conteúdo errado (um contrato de
+    // prestação de serviços, não uma procuração — ver comentário no topo
+    // de assets/js/services/minutas/procuracao.js).
+    mode:'template',
     // NOVO (monetização): serviço "Expert" — 3 créditos (ver nota em cv acima).
     cost: 3,
     fields:[
@@ -394,6 +410,8 @@ export const SERVICES = {
     icon:'🏡', bg:'#D1FAE5', title:'Declaração de Residência',
     sub:'Modelo pronto para junta de bairro ou chefe de quarteirão', hasAI:true,
     category:'juridico', popularity:9,
+    // NOVO (Set/2026): minuta fixa — ver nota igual em 'recibo' acima.
+    mode:'template',
     fields:[
       { id:'requerente',  label:'Nome do Requerente', type:'text', required:true, ph:'João Machel' },
       { id:'bi',          label:'Número do BI',        type:'text', required:true, ph:'110100123456A' },
@@ -413,6 +431,12 @@ export const SERVICES = {
     icon:'🤝', bg:'#FCE7F3', title:'Contrato de Prestação de Serviços',
     sub:'Para freelancers, técnicos e pequenos prestadores', hasAI:true,
     category:'negocio', popularity:10,
+    // NOVO (Set/2026): minuta fixa — ver nota igual em 'recibo' acima.
+    // Corrige também um bug pré-existente: o gerador por IA lia
+    // data.moradaPrestador/data.nuitPrestador, campos que não existem
+    // neste formulário (ver comentário no topo de
+    // assets/js/services/minutas/prestacao.js).
+    mode:'template',
     // NOVO (monetização): serviço "Expert" — 3 créditos (ver nota em cv acima).
     cost: 3,
     fields:[
@@ -496,6 +520,8 @@ export const SERVICES = {
     icon:'📋', bg:'#FEF9C3', title:'Pedido de Licença',
     sub:'Para abertura de negócio, eventos ou autorizações municipais', hasAI:true,
     category:'negocio', popularity:13,
+    // NOVO (Set/2026): minuta fixa — ver nota igual em 'recibo' acima.
+    mode:'template',
     fields:[
       { id:'tipoLicenca', label:'Tipo de Licença', type:'select', required:true,
         opts:['Licença Comercial (Alvará)','Licença de Construção','Autorização de Evento','Licença de Transporte','Licença Ambiental','Outra'] },
