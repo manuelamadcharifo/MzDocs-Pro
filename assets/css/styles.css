@@ -58,7 +58,7 @@ body{font-family:'Bricolage Grotesque',sans-serif;background:var(--surface);colo
 .chip.gr{background:var(--green);border-color:var(--green);color:#fff}
 
 /* ── HERO CONVERSION — CTA + Prova Social ─────────────────────────────── */
-.hero-cta-wrap{margin-top:24px;display:flex;flex-direction:column;gap:12px}
+.hero-cta-wrap{margin-top:24px;display:flex;flex-direction:column;gap:12px;align-items:center;}
 .btn-hero-cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;
   background:linear-gradient(135deg,var(--green),#047857);color:#fff;border:none;
   font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;
