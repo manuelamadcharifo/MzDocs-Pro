@@ -1951,6 +1951,29 @@ export class DocumentController {
  // CORRECÇÃO: debita no servidor via /api/deduct-credit ANTES de chamar a IA
  // ────────────────────────────────────────────────────────────────────────────
  async handleReedit({ currentContent, instruction, serviceType }) {
+   // CORRIGIDO (Set/2026 — regressão reportada por Manuel, comparando
+   // 31/08 vs 06/09): a reedição por IA reescreve SEMPRE o documento
+   // inteiro numa única chamada (raceAllProviders, tecto fixo de 8192
+   // tokens — ver api/generate-document.js), porque nunca foi actualizada
+   // para reconhecer os documentos "longos" (trabalho/transcricao, que na
+   // geração original são montados por uma CADEIA de várias chamadas —
+   // ver LongDocumentEngine.js). Para um "Trabalho Escolar" de 24
+   // páginas/5420 palavras, uma única chamada de 8192 tokens não chega
+   // para reescrever o documento todo — o resultado vem cortado a meio,
+   // o que também apaga o rótulo "Cadeia de Geração · multi-provider"
+   // (passa a mostrar só o provider único que respondeu à chamada
+   // truncada). Em vez de deixar isto acontecer silenciosamente (e ainda
+   // cobrar 1 crédito por um documento pior do que o original), bloqueia-se
+   // aqui, ANTES de debitar qualquer crédito, com uma explicação clara.
+   const isLongDoc = serviceType === 'trabalho' || serviceType === 'transcricao';
+   const contentTooLong = (currentContent || '').length > 9000; // ~ 2200+ palavras
+   if (isLongDoc || contentTooLong) {
+     NotificationView.warn(
+       '⚠️ A reedição por IA ainda não suporta documentos longos como este — reescrever tudo numa só vez cortaria o texto a meio. Edite directamente no editor (sem gastar créditos) para alterações pontuais.'
+     );
+     return;
+   }
+
    // Verificação local (UX rápida — não substituí a verificação no servidor)
    if (!this.creditModel.canConsume(1)) {
      NotificationView.warn('⚠️ Créditos insuficientes para reedição por IA.');
@@ -1958,6 +1981,17 @@ export class DocumentController {
    }
 
    NotificationView.info('🤖 A debitar crédito e reeditar documento…');
+
+   // CORRIGIDO (Set/2026): "currentContent" (o texto tal como o editor o
+   // representa internamente, ver DocumentEditor.js#L500) contém sempre o
+   // marcador interno "---PAGE_BREAK---" entre páginas — um detalhe de
+   // implementação do editor, nunca conteúdo real do documento. Enviá-lo
+   // à IA sem explicação nenhuma fazia-a por vezes tratar o marcador como
+   // texto a reescrever/reproduzir, deixando "---PAGE_BREAK---" literal e
+   // visível no documento final (o bug reportado nas imagens). O editor
+   // volta a paginar sozinho a partir do conteúdo reeditado — não é
+   // preciso (nem seguro) pedir à IA para reproduzir os marcadores.
+   const cleanContent = (currentContent || '').replace(/\s*---PAGE_BREAK---\s*/g, '\n\n').trim();
 
    try {
      // ── PASSO 1: Debitar crédito no SERVIDOR ────────────────────────────────
@@ -2015,16 +2049,27 @@ export class DocumentController {
      // ── PASSO 2: Chamar IA para reedição ────────────────────────────────────
      const result = await this.queue.add(() =>
        this.openRouter.generateRaw(
-         `EDITAR DOCUMENTO conforme instrução: "${instruction}"\n\nDOCUMENTO ATUAL:\n"""\n${currentContent}\n"""\n\nINSTRUÇÃO: ${instruction}\n\nReescreva o documento completo aplicando as alterações. Mantenha formato Markdown.`,
-         { serviceType: serviceType || this.docModel.service, currentContent, instruction },
+         `EDITAR DOCUMENTO conforme instrução: "${instruction}"\n\nDOCUMENTO ATUAL:\n"""\n${cleanContent}\n"""\n\nINSTRUÇÃO: ${instruction}\n\nReescreva o documento completo aplicando as alterações. Mantenha formato Markdown.`,
+         { serviceType: serviceType || this.docModel.service, currentContent: cleanContent, instruction },
          creditsAfterDeduct,
          true // skipDeduct = true — crédito já debitado acima
        )
      );
 
      // ── PASSO 3: Actualizar editor com conteúdo reeditado ───────────────────
+     // CORRIGIDO (Set/2026 — reportado por Manuel): loadDocument() só
+     // mantém o modelo/template aplicado se receber templateCss/templateHtml
+     // explicitamente — esta chamada nunca os passava, por isso QUALQUER
+     // reedição por IA (mesmo num documento curto, sem ligação ao bug dos
+     // documentos longos corrigido acima) apagava o modelo escolhido pelo
+     // utilizador e voltava ao layout padrão. Captura-se o template
+     // actualmente aplicado no editor (fonte mais fresca — pode ter sido
+     // editado manualmente no separador "Editar Modelo" antes deste
+     // pedido) e devolve-se tal e qual ao recarregar.
      if (window.documentEditor) {
-       window.documentEditor.loadDocument(result.document, serviceType || this.docModel.service);
+       const keepTemplateCss  = window.documentEditor._templateCss  || null;
+       const keepTemplateHtml = window.documentEditor._templateHtml || null;
+       window.documentEditor.loadDocument(result.document, serviceType || this.docModel.service, keepTemplateCss, keepTemplateHtml);
      }
      this.docModel.setGenerated(result.document, result.model);
      documentState.set(result.document, this.docModel.service);
