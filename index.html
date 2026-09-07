@@ -122,21 +122,27 @@
   <div class="hero-body">
     <div class="hero-eye">🇲🇿 &nbsp;Feito para Moçambique · Simples e Seguro</div>
     <h1 class="hero-h1">Chega de perder<br/>a manhã <em>numa fila</em><br/>por causa de um documento</h1>
-    <p class="hero-p">CV, procuração, contrato, requerimento — pronto em minutos, com a linguagem formal certa para bancos, empresas e repartições.<br/>Crie o documento em minutos e, se precisar, encontre uma papelaria parceira perto de si.</p>
+    <!-- Texto revisto (Set/2026), a pedido explícito do cliente, seguindo
+         de perto a versão sugerida pelo ChatGPT — mais directo, sem listar
+         serviços específicos (isso já está nos chips/grelha de serviços
+         mais abaixo) e sem prometer nada que a papelaria/o parceiro talvez
+         não faça (a linha antiga de "linguagem formal para bancos,
+         empresas e repartições" era mais específica; a nova é mais aberta
+         e cobre também o ecossistema de parceiros, não só impressão). -->
+    <p class="hero-p">Crie o seu documento pelo telemóvel, de forma simples e rápida.<br/>CV • Requerimentos • Cartas • Contratos • Documentos académicos e muito mais.<br/>Gere, reveja e guarde o seu documento. Se precisar de apoio adicional, pode contar com um parceiro MzDocs.</p>
     <div class="chips">
-      <span class="chip gr">⚡ Entrega Imediata</span>
-      <span class="chip">📷 Digitalizar</span>
-      <span class="chip">🔒 Arquivo Seguro</span>
+      <span class="chip gr">⚡ Pronto em minutos</span>
+      <span class="chip">🔒 Arquivo seguro</span>
       <span class="chip">🇲🇿 Feito para Moçambique</span>
     </div>
 
     <!-- CTA + Prova Social (homeController.js controla estado) -->
     <div class="hero-cta-wrap">
       <button id="heroCta" class="btn-hero-cta">
-        🎁 Obter o meu primeiro documento GRÁTIS
+        📄 Criar meu documento
       </button>
       <div class="hero-social-proof">
-        <span class="hsp-counter" id="hspCounter">📄 <strong id="heroDocCount">…</strong> documentos gerados em Moçambique 🇲🇿</span>
+        <span class="hsp-counter" id="hspCounter">📄 +<strong id="heroDocCount">…</strong> documentos gerados em Moçambique</span>
         <span class="hsp-stars" id="hspStars" style="display:none;"></span>
       </div>
       <!-- CORRIGIDO (auditoria 3.3, revisto): "Ver Modelos" estava entre os
@@ -146,7 +152,7 @@
            social, como saída secundária de baixo peso visual, não como
            alternativa ao "Obter documento grátis". -->
       <a href="/templates.html" style="display:block;text-align:center;margin-top:10px;font-size:12.5px;color:rgba(255,255,255,.45);text-decoration:none;">
-        🖼️ Prefere ver exemplos primeiro? <span style="text-decoration:underline;">Ver modelos →</span>
+        📚 Prefere ver exemplos? <span style="text-decoration:underline;">Ver modelos →</span>
       </a>
     </div>
   </div><!-- /.hero-body -->
@@ -213,6 +219,32 @@
       </button>
       <div class="gt-login-hint">
         Já tem conta? <button data-action="openLoginFromTeaser">Entrar aqui</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APOIO DE PARCEIROS — pedido do cliente (Set/2026): visível SÓ para
+       visitantes que ainda não fizeram login, para não sobrecarregar o ecrã
+       de quem já está autenticado. Mesmo mecanismo de #guestTeaser acima —
+       ver homeController.js, _applyVisibility() — nenhum mecanismo novo,
+       só mais um elemento a alternar da mesma forma. Texto revisto para
+       cobrir TODO o ecossistema de parceiros (papelaria, cyber, digitador,
+       universidade/centro de explicações, advogado) em vez de só
+       "papelaria" — e sem prometer nenhuma acção (busca, marcação) que
+       ainda não existe fora do fluxo de geração de documento: é só
+       informativo, com a distinção jurídica clara pedida (o MzDocs Pro não
+       presta aconselhamento jurídico — quem faz isso é o advogado parceiro,
+       quando o utilizador precisar). -->
+  <div id="partnerFinderSection" style="display:none;">
+    <div class="guest-teaser" style="margin-top:16px;">
+      <div class="gt-icon">🤝</div>
+      <div class="gt-title">Precisa de apoio?</div>
+      <div class="gt-desc">
+        Encontre um parceiro MzDocs — papelarias, gráficas, cyber cafés, digitadores,
+        centros de apoio e profissionais parceiros podem ajudá-lo conforme o serviço de que precisa.
+      </div>
+      <div class="gt-login-hint" style="margin-top:0;">
+        ⚖️ Para questões que exigem aconselhamento jurídico, procure um profissional habilitado.
       </div>
     </div>
   </div>
