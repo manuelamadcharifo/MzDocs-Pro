@@ -96,9 +96,27 @@ export const DocumentView = {
       // geração passa a usar o motor de cadeia (progressivo), abaixo disso
       // é uma geração normal de tiro único (custo fixo/dinâmico simples).
       const isProgressive = svc.dynamicCostSource === 'paginas' && initialPages >= 6;
+      // NOVO (Set/2026 — risco residual do Master Hardening, resolvido):
+      // "planonegocio" (Plano de Negócios) é sempre geração em cadeia
+      // (LongDocumentEngine.isLongDoc('planonegocio', ...) === true
+      // incondicionalmente), mas não tem campo "páginas" no formulário do
+      // qual derivar uma estimativa como "trabalho" — a sua estrutura é
+      // sempre fixa (8 secções, tamanho sempre igual, ver
+      // LongDocumentEngine.estimateCreditsForPlanoNegocio()). Antes desta
+      // correcção mostrava sempre "2 créditos" (svc.cost fixo), sem
+      // qualquer indicação do total real (progressivo, como qualquer outra
+      // geração em cadeia). Identifica o serviço por correspondência
+      // inversa no catálogo (mesma técnica já usada nesta base de código
+      // para não depender de passar a chave como parâmetro extra em toda a
+      // cadeia de chamadas de renderForm()).
+      const svcKey = Object.keys(SERVICES).find(k => SERVICES[k] === svc);
+      const isPlanoNegocio = svcKey === 'planonegocio';
       let costLabel;
       if (isProgressive) {
         const est = LongDocumentEngine.estimateCredits(initialPages || 1);
+        costLabel = `1 crédito agora · ≈${est} no total`;
+      } else if (isPlanoNegocio) {
+        const est = LongDocumentEngine.estimateCreditsForPlanoNegocio();
         costLabel = `1 crédito agora · ≈${est} no total`;
       } else {
         const cost = svc.dynamicCostPerPage && svc.dynamicCostSource === 'paginas'
