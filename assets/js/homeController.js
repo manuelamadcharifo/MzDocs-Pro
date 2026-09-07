@@ -50,6 +50,17 @@ function _applyVisibility(user) {
     guestTeaser.style.display = isAuth ? 'none' : '';
   }
 
+  // NOVO (Set/2026): bloco "Precisa de apoio? Encontre um parceiro
+  // MzDocs" — mesma regra do guestTeaser acima, visível só para
+  // visitantes não autenticados (pedido explícito: não sobrecarregar o
+  // ecrã de quem já está autenticado — quem já tem conta já vê os
+  // parceiros no fluxo normal de geração de documento, via
+  // NearbyPartners.js).
+  const partnerFinderSection = document.getElementById('partnerFinderSection');
+  if (partnerFinderSection) {
+    partnerFinderSection.style.display = isAuth ? 'none' : '';
+  }
+
   // Hero CTA principal — mudar texto conforme estado
   const heroCta = document.getElementById('heroCta');
   if (heroCta) {
@@ -60,7 +71,7 @@ function _applyVisibility(user) {
         if (el) el.scrollIntoView({ behavior: 'smooth' });
       };
     } else {
-      heroCta.textContent = '🎁 Obter o meu primeiro documento GRÁTIS';
+      heroCta.textContent = '📄 Criar meu documento';
       heroCta.onclick = () => authUI.open('register');
     }
   }
@@ -172,7 +183,7 @@ function _animateSocialCounter() {
         // "muito volume" — só como sinal de crescimento genuíno.
         wrap.innerHTML = `🚀 <strong id="heroDocCount">${count}</strong> documentos gerados — em crescimento`;
       } else {
-        wrap.innerHTML = `📄 <strong id="heroDocCount">…</strong> documentos gerados em Moçambique 🇲🇿`;
+        wrap.innerHTML = `📄 +<strong id="heroDocCount">…</strong> documentos gerados em Moçambique`;
         _runCounter(document.getElementById('heroDocCount'), count, _formatCompact);
         return;
       }
@@ -213,7 +224,7 @@ async function _loadRealReviews() {
       clearInterval(poll);
       const starsEl = document.getElementById('hspStars');
       if (starsEl && summary && summary.count > 0) {
-        starsEl.textContent = `⭐ ${summary.avg} (${summary.count} avaliaç${summary.count === 1 ? 'ão' : 'ões'})`;
+        starsEl.textContent = `⭐ ${summary.avg}/5 — ${summary.count} avaliaç${summary.count === 1 ? 'ão' : 'ões'}`;
         starsEl.style.display = '';
       }
       // Se ainda não há avaliações, o elemento fica escondido — em vez de
