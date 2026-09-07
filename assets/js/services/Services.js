@@ -165,7 +165,20 @@ export class OpenRouterService {
   // decidir gastar um crédito. Reaproveita /api/generate-document (nenhuma
   // function nova foi criada — o projecto já está no limite de 12 do Vercel
   // Hobby).
-  async previewDocument(serviceType, formData, ocrText = null, templateData = null, pickerTemplate = null) {
+  async previewDocument(serviceType, formData, ocrText = null, templateData = null, pickerTemplate = null, partnerMinuta = null) {
+    // NOVO (Set/2026 — minutas de parceiro): mesma prioridade que em
+    // generate() — se o utilizador escolheu uma minuta de parceiro, a
+    // amostra usa-a directamente (também sem IA, também instantânea).
+    if (partnerMinuta && partnerMinuta.minuta_text) {
+      let document;
+      try {
+        document = renderMinutaParceiro(serviceType, partnerMinuta.minuta_text, formData || {});
+      } catch (err) {
+        console.error('[Services] Erro ao montar amostra da minuta de parceiro', serviceType, err);
+        throw new Error('Não foi possível gerar a amostra agora. Tente novamente em alguns segundos.');
+      }
+      return { document, model: `Minuta de parceiro: ${partnerMinuta.minuta_name || 'sem nome'}`, preview: true };
+    }
     // NOVO (Set/2026): para serviços com minuta fixa, a "amostra grátis"
     // não precisa de IA nenhuma — devolve-se directamente o documento
     // completo (já é instantâneo e sem custo, ao contrário da amostra
