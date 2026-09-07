@@ -1,4 +1,4 @@
-// api/_lib/visionAI.js — v2.0 (Set/2026 — cascata alargada de providers)
+// api/_lib/visionAI.js — v2.1 (Set/2026 — cascata alargada + modelos actualizados)
 // ──────────────────────────────────────────────────────────────────────────
 // Helper reutilizável de IA visão (imagem → texto/JSON).
 // Extraído de api/extract-template.js para ser partilhado com
@@ -9,24 +9,43 @@
 // Não conta para o limite de 12 functions do Vercel Hobby.
 //
 // Providers suportados (em cascata, por esta ordem):
-//   1. Gemini        — GEMINI_API_KEY        (já usado no motor de texto)
-//   2. Groq           — GROQ_API_KEY          (modelos Llama 4 com visão)
-//   3. Mistral        — MISTRAL_API_KEY       (Pixtral, modelo com visão)
-//   4. GitHub Models  — GITHUB_MODELS_TOKEN   (gpt-4o-mini com visão)
-//   5. OpenRouter     — OPENROUTER_API_KEY ou OR_API_KEY (vários :free)
+//   1. Gemini        — GEMINI_API_KEY
+//   2. Mistral        — MISTRAL_API_KEY (mistral-small-latest tem visão nativa
+//                       desde a v3.2 — é o MESMO modelo já usado no motor de
+//                       texto, portanto zero risco de quota extra)
+//   3. GitHub Models  — GITHUB_MODELS_TOKEN (gpt-4o-mini com visão)
+//   4. OpenRouter     — OPENROUTER_API_KEY ou OR_API_KEY (modelos :free)
 //
-// CORRIGIDO (Set/2026 — bug "template extraído não corresponde à imagem"):
-// só havia 2 providers (Gemini + OpenRouter). Quando Gemini falhava (ou
-// devolvia JSON cortado — ver nota nos tokens abaixo) e o OpenRouter também
-// falhava/esgotava quota, TemplatePicker.js caía silenciosamente num
-// template genérico aleatório, sem qualquer relação com a imagem do
-// utilizador. Esta versão reaproveita as env vars de IA JÁ CONFIGURADAS na
-// Vercel para o motor de geração de texto (aiProviderRegistry.js) — não é
-// preciso criar nenhuma conta nova — para dar 5 tentativas independentes
-// antes de desistir, reduzindo muito a frequência desse fallback.
+// CORRIGIDO (Set/2026, 2ª ronda — "continua a dar o mesmo erro"):
+// a 1ª versão desta cascata (v2.0) incluía Groq (llama-4-scout /
+// llama-4-maverick) e Mistral (pixtral-12b-2409) como providers de visão —
+// só que ENTRETANTO ambos os modelos da Groq foram descontinuados
+// (llama-4-maverick a 09/Mar/2026, llama-4-scout a 17/Jul/2026 — a Groq
+// não tem NENHUM modelo de visão grátis neste momento) e o pixtral-12b-2409
+// da Mistral foi retirado a 31/Dez/2025. Ou seja, 2 dos 5 providers estavam
+// GARANTIDOS a falhar com 404 "model_decommissioned", só a perder tempo
+// sem nunca poder ajudar — o que ainda por cima piorava a latência total
+// (mais tentativas condenadas antes de chegar a um provider que funciona).
+// Corrigido: Groq removido (sem alternativa de visão grátis actual);
+// Mistral trocado para "mistral-small-latest" (Mistral Small 3.2 — tem
+// visão nativa e é o MESMO modelo grátis já usado no motor de texto,
+// confirmado em docs.mistral.ai/capabilities/vision). Gemini também
+// sincronizado com a correcção já feita em aiProviderRegistry.js
+// (gemini-2.0-flash e gemini-1.5-flash estão desligados pela Google).
+// OpenRouter actualizado para os modelos :free com visão confirmados
+// activos em Set/2026 (a lista anterior tinha nomes já retirados do
+// catálogo da OpenRouter).
 //
-// Todos os providers "kind: openai" (Groq, Mistral, GitHub Models,
-// OpenRouter) falam o mesmo formato de chat/completions com
+// Timeout por tentativa: cada função de function/vercel.json tem
+// maxDuration: 60s. Sem limite por pedido individual, UM provider lento a
+// não responder (não é erro, é simplesmente devagar) podia gastar sozinho
+// os 60s todos e nunca chegar a tentar os restantes. AbortController com
+// 8s por tentativa garante que, no pior caso (todas as 6 tentativas desta
+// cascata falham/demoram), o total fica em ~48s — dentro do limite, com
+// margem.
+//
+// Todos os providers "kind: openai" (Mistral, GitHub Models, OpenRouter)
+// falam o mesmo formato de chat/completions com
 // `image_url: { url: "data:<mime>;base64,<...>" }` — por isso partilham o
 // mesmo helper genérico `callOpenAIVision()` em vez de código duplicado.
 //
@@ -36,45 +55,48 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 const SITE_URL = (process.env.SITE_URL || 'https://mzdocs.co.mz').replace(/\/$/, '');
+const PER_ATTEMPT_TIMEOUT_MS = 8000; // ver nota acima sobre o orçamento de 60s
 
 // ── Gemini ─────────────────────────────────────────────────────────────────
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_VISION_MODELS = [
-  'gemini-2.5-flash-preview-05-20',
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-];
+// Sincronizado com a correcção já feita em aiProviderRegistry.js:
+// gemini-2.0-flash e gemini-1.5-flash foram desligados pela Google em 2026.
+// "-latest" aponta sempre ao Flash mais recente (2 semanas de aviso antes
+// de qualquer troca por parte da Google).
+const GEMINI_VISION_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
 
 async function callGemini(apiKey, imageBase64, mimeType, prompt) {
   let lastErr;
   for (const model of GEMINI_VISION_MODELS) {
     try {
-      const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [
-            { inline_data: { mime_type: mimeType, data: imageBase64 } },
-            { text: prompt },
-          ]}],
-          // CORRIGIDO: 4096 tokens era insuficiente para o HTML+CSS completo
-          // que o prompt pede (ex: CV com sidebar tem ~30 classes CSS) — a
-          // resposta era cortada a meio, o JSON ficava inválido, parseJSON()
-          // rebentava, e o chamador (TemplatePicker._handleUpload) caía no
-          // fallback de template genérico/aleatório sem avisar o utilizador.
-          // 8192 dá margem confortável para o HTML+CSS mais extenso previsto
-          // nos prompts de extracção (CV e genérico). responseMimeType força
-          // JSON válido (sem crases nem texto extra à volta).
-          generationConfig: { maxOutputTokens: 8192, temperature: 0.1, responseMimeType: 'application/json' },
-          safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-          ],
-        }),
-      });
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), PER_ATTEMPT_TIMEOUT_MS);
+      let res;
+      try {
+        res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [
+              { inline_data: { mime_type: mimeType, data: imageBase64 } },
+              { text: prompt },
+            ]}],
+            // CORRIGIDO: 4096 tokens era insuficiente para o HTML+CSS completo
+            // que o prompt pede (ex: CV com sidebar tem ~30 classes CSS) — a
+            // resposta era cortada a meio, o JSON ficava inválido, parseJSON()
+            // rebentava. 8192 dá margem confortável. responseMimeType força
+            // JSON válido (sem crases nem texto extra à volta).
+            generationConfig: { maxOutputTokens: 8192, temperature: 0.1, responseMimeType: 'application/json' },
+            safetySettings: [
+              { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+            ],
+          }),
+        });
+      } finally { clearTimeout(t); }
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         lastErr = new Error(d?.error?.message || `Gemini HTTP ${res.status} (${model})`);
@@ -87,24 +109,25 @@ async function callGemini(apiKey, imageBase64, mimeType, prompt) {
       console.log(`[visionAI] Gemini OK ${model} (${text.length} chars)`);
       return text;
     } catch (err) {
-      console.warn(`[visionAI] Gemini ${model}:`, err.message);
-      lastErr = err;
+      const msg = err.name === 'AbortError' ? `Gemini timeout (${PER_ATTEMPT_TIMEOUT_MS}ms, ${model})` : err.message;
+      console.warn(`[visionAI] Gemini ${model}:`, msg);
+      lastErr = new Error(msg);
     }
   }
   throw lastErr || new Error('Gemini: todos os modelos falharam');
 }
 
 // ── Helper genérico para providers "OpenAI-compatible" com visão ───────────
-// Groq, Mistral, GitHub Models e OpenRouter usam todos o mesmo formato de
-// chat/completions com content[] misto (image_url + text). Um único helper
-// evita repetir a mesma lógica de retry/erro 4 vezes.
 async function callOpenAIVision({ label, url, headers, models, imageBase64, mimeType, prompt, maxTokens }) {
   let lastErr;
   for (const model of models) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), PER_ATTEMPT_TIMEOUT_MS);
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
+        signal: ctrl.signal,
         body: JSON.stringify({
           model,
           max_tokens: maxTokens,
@@ -127,33 +150,22 @@ async function callOpenAIVision({ label, url, headers, models, imageBase64, mime
       console.log(`[visionAI] ${label} OK ${model} (${text.length} chars)`);
       return text;
     } catch (err) {
-      console.warn(`[visionAI] ${label} ${model}:`, err.message);
-      lastErr = err;
+      const msg = err.name === 'AbortError' ? `${label} timeout (${PER_ATTEMPT_TIMEOUT_MS}ms, ${model})` : err.message;
+      console.warn(`[visionAI] ${label} ${model}:`, msg);
+      lastErr = new Error(msg);
+    } finally {
+      clearTimeout(t);
     }
   }
   throw lastErr || new Error(`${label}: todos os modelos falharam`);
 }
 
-// ── Groq (Llama 4 com visão — mesma GROQ_API_KEY já usada no motor de texto,
-//    mas com modelos DIFERENTES: os modelos de texto de aiProviderRegistry.js
-//    não têm visão; llama-4-scout/maverick sim) ──────────────────────────────
-const GROQ_VISION_MODELS = [
-  'meta-llama/llama-4-scout-17b-16e-instruct',
-  'meta-llama/llama-4-maverick-17b-128e-instruct',
-];
-function callGroq(apiKey, imageBase64, mimeType, prompt) {
-  return callOpenAIVision({
-    label:   'Groq',
-    url:     'https://api.groq.com/openai/v1/chat/completions',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    models:  GROQ_VISION_MODELS,
-    imageBase64, mimeType, prompt,
-    maxTokens: 8192,
-  });
-}
-
-// ── Mistral (Pixtral — modelo de visão da Mistral; mesma MISTRAL_API_KEY) ──
-const MISTRAL_VISION_MODELS = ['pixtral-12b-2409', 'pixtral-large-latest'];
+// ── Mistral — CORRIGIDO: pixtral-12b-2409 foi retirado pela Mistral a
+//    31/Dez/2025 (404 garantido). mistral-small-latest (Mistral Small 3.2)
+//    tem visão nativa desde Jun/2025 e é o MESMO modelo grátis já usado no
+//    motor de texto (aiProviderRegistry.js) — sem quota extra, sem conta
+//    nova, e confirmado activo em docs.mistral.ai/capabilities/vision. ──────
+const MISTRAL_VISION_MODELS = ['mistral-small-latest'];
 function callMistral(apiKey, imageBase64, mimeType, prompt) {
   return callOpenAIVision({
     label:   'Mistral',
@@ -167,7 +179,7 @@ function callMistral(apiKey, imageBase64, mimeType, prompt) {
 
 // ── GitHub Models (gpt-4o-mini tem visão; mesma GITHUB_MODELS_TOKEN) ───────
 // Tier grátis limita a saída a 4K tokens (ver aiProviderRegistry.js,
-// maxTokensCap: 4096 para este provider) — respeitado aqui also.
+// maxTokensCap: 4096 para este provider) — respeitado aqui também.
 const GITHUB_VISION_MODELS = ['openai/gpt-4o-mini'];
 function callGithub(token, imageBase64, mimeType, prompt) {
   return callOpenAIVision({
@@ -180,13 +192,13 @@ function callGithub(token, imageBase64, mimeType, prompt) {
   });
 }
 
-// ── OpenRouter (vários modelos :free em cascata — último recurso, o mais
-//    diverso em quantidade de modelos disponíveis) ─────────────────────────
+// ── OpenRouter — CORRIGIDO: lista anterior (gemini-2.0-flash-exp:free,
+//    llama-4-scout:free, phi-4-multimodal:free) já não consta do catálogo
+//    :free actual da OpenRouter. Modelos abaixo confirmados com "Vision" nas
+//    capacidades e activos no tier :free em Set/2026. ───────────────────────
 const OR_VISION_MODELS = [
-  'google/gemini-2.0-flash-exp:free',
-  'google/gemini-flash-1.5-8b',
-  'meta-llama/llama-4-scout:free',
-  'microsoft/phi-4-multimodal-instruct:free',
+  'google/gemma-4-31b-it:free',
+  'minimax/minimax-m3:free',
 ];
 function callOpenRouter(apiKey, imageBase64, mimeType, prompt) {
   return callOpenAIVision({
@@ -207,8 +219,8 @@ function callOpenRouter(apiKey, imageBase64, mimeType, prompt) {
 
 /**
  * analyzeImage — percorre a cascata de providers de visão configurados
- * (Gemini → Groq → Mistral → GitHub Models → OpenRouter) até um responder
- * com sucesso, e devolve o texto bruto da resposta (normalmente JSON,
+ * (Gemini → Mistral → GitHub Models → OpenRouter) até um responder com
+ * sucesso, e devolve o texto bruto da resposta (normalmente JSON,
  * dependendo do prompt). Providers sem env var configurada são saltados
  * sem erro — só falha (lança excepção) se NENHUM provider disponível
  * conseguir responder.
@@ -224,26 +236,21 @@ async function analyzeImage(imageBase64, prompt, opts = {}) {
   const mimeType  = opts.mimeType  || 'image/jpeg';
   const logPrefix = opts.logPrefix || 'visionAI';
 
-  const GEMINI_KEY = process.env.GEMINI_API_KEY;
-  const GROQ_KEY   = process.env.GROQ_API_KEY;
-  const MISTRAL_KEY = process.env.MISTRAL_API_KEY;
-  const GITHUB_TOKEN = process.env.GITHUB_MODELS_TOKEN;
-  const OR_KEY     = process.env.OPENROUTER_API_KEY || process.env.OR_API_KEY;
+  const GEMINI_KEY    = process.env.GEMINI_API_KEY;
+  const MISTRAL_KEY   = process.env.MISTRAL_API_KEY;
+  const GITHUB_TOKEN  = process.env.GITHUB_MODELS_TOKEN;
+  const OR_KEY        = process.env.OPENROUTER_API_KEY || process.env.OR_API_KEY;
 
   // Cascata declarativa: cada entrada só entra se tiver a env var definida.
-  // Mantém a ordem Gemini-primeiro (era o comportamento anterior, e é o
-  // provider historicamente mais fiável para este prompt), mas já não pára
-  // em apenas mais 1 fallback — agora são até 5 tentativas independentes.
   const attempts = [
     GEMINI_KEY   && { label: 'Gemini',        fn: () => callGemini(GEMINI_KEY, imageBase64, mimeType, prompt) },
-    GROQ_KEY     && { label: 'Groq',          fn: () => callGroq(GROQ_KEY, imageBase64, mimeType, prompt) },
     MISTRAL_KEY  && { label: 'Mistral',       fn: () => callMistral(MISTRAL_KEY, imageBase64, mimeType, prompt) },
     GITHUB_TOKEN && { label: 'GitHub Models', fn: () => callGithub(GITHUB_TOKEN, imageBase64, mimeType, prompt) },
     OR_KEY       && { label: 'OpenRouter',    fn: () => callOpenRouter(OR_KEY, imageBase64, mimeType, prompt) },
   ].filter(Boolean);
 
   if (attempts.length === 0) {
-    throw new Error('Nenhuma API key de IA de visão configurada (GEMINI_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY, GITHUB_MODELS_TOKEN ou OPENROUTER_API_KEY)');
+    throw new Error('Nenhuma API key de IA de visão configurada (GEMINI_API_KEY, MISTRAL_API_KEY, GITHUB_MODELS_TOKEN ou OPENROUTER_API_KEY)');
   }
 
   let lastErr;
