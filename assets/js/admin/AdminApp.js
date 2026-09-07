@@ -98,6 +98,12 @@ class AdminApp {
         saveTemplatePricing:    (d) => this._saveTemplatePricing(d.id),
         approveTemplate:        (d) => this._approveTemplate(d.id),
         rejectTemplate:         (d) => this._rejectTemplate(d.id),
+        // NOVO (Set/2026): moderação das minutas de parceiro (texto/
+        // clausulado, distinto dos templates visuais acima).
+        loadPartnerMinutas:      (d) => this._loadPartnerMinutas(d.status),
+        togglePartnerMinutaText: (d, el) => this._togglePartnerMinutaText(el, d.id),
+        approvePartnerMinuta:    (d) => this._approvePartnerMinuta(d.id),
+        rejectPartnerMinuta:     (d) => this._rejectPartnerMinuta(d.id),
         // Secção Marketing (QR codes, materiais) (CSP Fase 1, parte 4)
         toggleQrCode:           (d) => this._toggleQrCode(d.id, d.active === 'true'),
         openMaterialForm:       (d) => this._openMaterialForm(d.id),
@@ -299,6 +305,7 @@ class AdminApp {
           this._loadBlog(),
           this._loadAffiliates(),
           this._loadTemplates('pending'),
+          this._loadPartnerMinutas('pending'),
         ]).catch(() => {});
 
         // Realtime: subscrever mudanças na tabela online_sessions via Supabase Realtime
@@ -410,6 +417,7 @@ class AdminApp {
         if (section === 'analytics')    { this._loadAnalytics(); this._loadReviewsModeration('pending'); }
         if (section === 'affiliates')   this._loadAffiliates();
         if (section === 'templates')    { this._loadTemplates('pending'); this._loadTemplateWithdrawals(); }
+        if (section === 'partner-minutas') { this._loadPartnerMinutas('pending'); }
         if (section === 'ai-providers') this._loadAiProviders();
         if (section === 'qrcodes')      this._loadQrCodes();
         if (section === 'funnel')       this._loadFunnel();
@@ -3634,6 +3642,161 @@ USING (EXISTS (
             if (d.results?.[0] && !d.results[0].ok) throw new Error(d.results[0].error || 'Erro ao rejeitar');
             this._notify('Template rejeitado.');
             this._loadTemplates('pending');
+        } catch (err) { this._notify('Erro ao rejeitar: ' + err.message, 'error'); }
+    }
+
+    // NOVO (Set/2026) — Moderação de minutas de parceiro. Mesmo padrão de
+    // _loadTemplates/_approveTemplate/_rejectTemplate acima, mas sobre
+    // /api/admin/partner-minutas (ver api/admin/index.js). Diferença: o
+    // que importa mostrar aqui é o TEXTO da minuta (conteúdo jurídico),
+    // não uma pré-visualização visual — por isso o texto fica escondido
+    // por omissão (pode ser longo) e é inserido sempre via textContent
+    // (nunca innerHTML) para não correr nenhum risco de XSS armazenado
+    // vindo de texto submetido por terceiros.
+    async _loadPartnerMinutas(status = 'pending') {
+        const container = document.getElementById('partner-minutas-list');
+        if (!container) return;
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">⏳ A carregar…</div>';
+
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch(`/api/admin/partner-minutas?status=${encodeURIComponent(status)}&limit=50`, {
+                headers: { Authorization: 'Bearer ' + token },
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao carregar minutas de parceiro');
+            const data = d.minutas || [];
+
+            if (status === 'pending') {
+                const badge = document.getElementById('navBadgePartnerMinutas');
+                if (badge) badge.textContent = data.length || 0;
+            }
+
+            if (!data.length) {
+                container.innerHTML = `<div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">Nenhuma minuta ${status === 'pending' ? 'pendente' : status === 'approved' ? 'aprovada' : 'rejeitada'} encontrada.</div>`;
+                return;
+            }
+
+            const statusColor = { pending: '#f59e0b', approved: '#16a34a', rejected: '#dc2626' };
+            const statusLabel = { pending: '⏳ Pendente', approved: '✅ Aprovada', rejected: '❌ Rejeitada' };
+
+            container.innerHTML = '';
+            data.forEach(m => {
+                const card = document.createElement('div');
+                card.style.cssText = 'background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;padding:14px;margin-bottom:12px';
+
+                const header = document.createElement('div');
+                header.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px';
+                header.innerHTML = `<div>
+                  <div style="font-size:14px;font-weight:800;color:#0f172a">${escapeHtml(m.minuta_name || '')} <span style="font-size:11px;font-weight:700;color:#64748b">(${escapeHtml(m.service_type || '')})</span></div>
+                  <div style="font-size:12px;color:#64748b;margin-top:2px">${escapeHtml(m.description || '—')}</div>
+                </div>
+                <span style="background:${statusColor[m.status]};color:#fff;font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap">${statusLabel[m.status]}</span>`;
+                card.appendChild(header);
+
+                const meta = document.createElement('div');
+                meta.style.cssText = 'font-size:11px;color:#94a3b8;margin:8px 0';
+                meta.textContent = `📅 ${new Date(m.created_at).toLocaleDateString('pt')} · 📥 ${m.use_count || 0} usos · placeholders: ${(m.placeholders_used || []).join(', ') || '—'} · aceitação registada em ${m.liability_accepted_at ? new Date(m.liability_accepted_at).toLocaleString('pt') : '—'} (IP ${m.liability_accepted_ip || '—'})`;
+                card.appendChild(meta);
+
+                if (m.rejection_reason) {
+                    const rej = document.createElement('div');
+                    rej.style.cssText = 'font-size:11px;color:#dc2626;background:#fef2f2;border-radius:6px;padding:6px 10px;margin-bottom:8px';
+                    rej.textContent = '❌ ' + m.rejection_reason;
+                    card.appendChild(rej);
+                }
+
+                const toggleBtn = document.createElement('button');
+                toggleBtn.textContent = '📄 Ver texto da minuta';
+                toggleBtn.dataset.action = 'togglePartnerMinutaText';
+                toggleBtn.dataset.id = m.id;
+                toggleBtn.style.cssText = 'padding:6px 10px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:8px';
+                card.appendChild(toggleBtn);
+
+                // Texto cru inserido via textContent (nunca innerHTML) — é
+                // conteúdo submetido por terceiros; <pre> preserva quebras
+                // de linha sem precisar de nenhuma conversão a HTML.
+                const pre = document.createElement('pre');
+                pre.id = `partnerMinutaText-${m.id}`;
+                pre.style.cssText = 'display:none;white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:12px;color:#0f172a;max-height:320px;overflow:auto;margin-bottom:10px';
+                pre.textContent = m.minuta_text || '';
+                card.appendChild(pre);
+
+                const actions = document.createElement('div');
+                actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+                if (status !== 'approved') {
+                    const b = document.createElement('button');
+                    b.textContent = '✅ Aprovar';
+                    b.dataset.action = 'approvePartnerMinuta'; b.dataset.id = m.id;
+                    b.style.cssText = 'flex:1;padding:8px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer';
+                    actions.appendChild(b);
+                }
+                if (status !== 'rejected') {
+                    const b = document.createElement('button');
+                    b.textContent = '❌ Rejeitar';
+                    b.dataset.action = 'rejectPartnerMinuta'; b.dataset.id = m.id;
+                    b.style.cssText = 'flex:1;padding:8px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer';
+                    actions.appendChild(b);
+                }
+                card.appendChild(actions);
+
+                container.appendChild(card);
+            });
+
+        } catch (err) {
+            container.innerHTML = `<div style="text-align:center;padding:40px;color:#ef4444;font-size:14px">❌ Erro: ${err.message}</div>`;
+        }
+    }
+
+    _togglePartnerMinutaText(el, id) {
+        const pre = document.getElementById(`partnerMinutaText-${id}`);
+        if (!pre) return;
+        const showing = pre.style.display !== 'none';
+        pre.style.display = showing ? 'none' : 'block';
+        if (el) el.textContent = showing ? '📄 Ver texto da minuta' : '🔼 Esconder texto';
+    }
+
+    async _approvePartnerMinuta(id) {
+        const confirmed = await this._dialog(
+            'Aprovar minuta de parceiro?',
+            'Fica disponível para qualquer utilizador escolher, em vez da minuta padrão da plataforma, para este tipo de documento.',
+            { confirmLabel: 'Aprovar', confirmColor: '#22c55e', icon: '✅' }
+        );
+        if (!confirmed) return;
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/partner-minutas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify({ updates: [{ id, status: 'approved' }] }),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao aprovar');
+            if (d.results?.[0] && !d.results[0].ok) throw new Error(d.results[0].error || 'Erro ao aprovar');
+            this._notify('✅ Minuta aprovada e publicada!');
+            this._loadPartnerMinutas('pending');
+        } catch (err) { this._notify('Erro ao aprovar: ' + err.message, 'error'); }
+    }
+
+    async _rejectPartnerMinuta(id) {
+        const note = await this._prompt(
+            'Rejeitar minuta',
+            'Ex: Clausulado desactualizado, linguagem inadequada, redundante com a minuta padrão…',
+            { icon: '❌', subtitle: 'Opcional — será enviado ao autor.', confirmLabel: 'Rejeitar' }
+        );
+        if (note === null) return; // cancelou
+        try {
+            const token = await this._getAdminToken();
+            const res   = await fetch('/api/admin/partner-minutas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify({ updates: [{ id, status: 'rejected', rejection_reason: note || null }] }),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Erro ao rejeitar');
+            if (d.results?.[0] && !d.results[0].ok) throw new Error(d.results[0].error || 'Erro ao rejeitar');
+            this._notify('Minuta rejeitada.');
+            this._loadPartnerMinutas('pending');
         } catch (err) { this._notify('Erro ao rejeitar: ' + err.message, 'error'); }
     }
 
