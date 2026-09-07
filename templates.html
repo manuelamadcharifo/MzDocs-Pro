@@ -596,7 +596,7 @@
         </label>
       </div>
 
-      <button class="btn-tpl-submit-form" id="btnSubmitMinuta">🚀 Submeter Minuta</button>
+      <button class="btn-tpl-submit-form" id="btnSubmitMinuta" disabled style="opacity:.5;cursor:not-allowed">🚀 Submeter Minuta</button>
       <button class="btn-tpl-cancel" id="btnCancelSubmitMinuta">Cancelar</button>
     </div>
   </div>
@@ -1380,6 +1380,8 @@ async function openSubmitMinuta() {
   if (!currentUser) { notify('Faça login para submeter minutas', 'warning'); return; }
   document.getElementById('minutaSubmitOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  document.getElementById('msLiabilityAccepted').checked = false;
+  _updateMsSubmitBtnState();
 
   // Preencher o select de tipos + dica de placeholders (uma vez só, cache
   // em memória — a lista não muda durante a sessão).
@@ -1421,6 +1423,14 @@ function _updateMsPlaceholdersHint() {
     : 'Seleccione um tipo de documento acima.';
 }
 
+function _updateMsSubmitBtnState() {
+  const btn = document.getElementById('btnSubmitMinuta');
+  const accepted = document.getElementById('msLiabilityAccepted').checked;
+  btn.disabled = !accepted;
+  btn.style.opacity = accepted ? '' : '.5';
+  btn.style.cursor = accepted ? '' : 'not-allowed';
+}
+
 async function submitMinuta() {
   const btn  = document.getElementById('btnSubmitMinuta');
   const svc  = document.getElementById('msService').value;
@@ -1446,6 +1456,7 @@ async function submitMinuta() {
     ['msName','msDesc','msText'].forEach(id => { document.getElementById(id).value = ''; });
     document.getElementById('msService').value = '';
     document.getElementById('msLiabilityAccepted').checked = false;
+    _updateMsSubmitBtnState();
     _updateMsPlaceholdersHint();
     loadMinutas();
   } catch (e) {
@@ -1739,6 +1750,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnCancelSubmitMinuta').addEventListener('click', closeSubmitMinuta);
   document.getElementById('btnSubmitMinuta').addEventListener('click', submitMinuta);
   document.getElementById('msService').addEventListener('change', _updateMsPlaceholdersHint);
+  document.getElementById('msLiabilityAccepted').addEventListener('change', _updateMsSubmitBtnState);
   document.getElementById('minutaSubmitOverlay').addEventListener('click', e => {
     if (e.target.id === 'minutaSubmitOverlay') closeSubmitMinuta();
   });
