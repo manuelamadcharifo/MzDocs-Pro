@@ -2119,21 +2119,71 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; color: #1e
   // ── Extrair template HTML+CSS via backend /api/extract-template ─────────────
   // CORRIGIDO: chamada feita pelo backend Vercel para evitar bloqueio CORS.
   // O browser não pode chamar api.anthropic.com directamente — a Vercel faz o proxy.
-  async _extractTemplateFromImage(file) {
-    // Converter imagem para base64 (sem o prefixo data:image/...;base64,)
-    const base64 = await new Promise((res, rej) => {
+  // CORRIGIDO (Set/2026 — reportado por Manuel + confirmado nos logs da
+  // Vercel: "[visionAI] Gemini gemini-2.5-flash: Gemini timeout (12000ms)"):
+  // fotos de telemóvel modernas facilmente passam de 3000-4000px e vários
+  // MB — o ficheiro ia para o servidor tal e qual, sem qualquer redução, o
+  // que aumenta directamente o tempo que a IA de visão demora a processar
+  // a imagem (mais pixels para "ler") e o tempo de upload em si, tornando
+  // muito mais fácil estourar os 12s de tecto por tentativa em
+  // api/_lib/visionAI.js. Uma imagem de referência de layout não precisa
+  // de resolução de foto — 1400px no lado maior já preserva texto e
+  // estrutura perfeitamente legíveis para a IA. Ao contrário do recorte de
+  // foto de perfil (_resizePhotoToDataUrl, quadrado), aqui NÃO se recorta —
+  // mantém-se a proporção original, para não cortar partes do layout.
+  _resizeReferenceImage(file, maxSide = 1400, quality = 0.82) {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload  = () => res(reader.result.split(',')[1]);
-      reader.onerror = () => rej(new Error('Falha ao ler ficheiro'));
+      reader.onerror = () => reject(new Error('Falha a ler o ficheiro'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Ficheiro não é uma imagem válida'));
+        img.onload = () => {
+          const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          // JPEG mesmo para PNG de entrada — layouts de referência não
+          // precisam de transparência, e JPEG comprime muito melhor
+          // fotografias/capturas de ecrã, reduzindo ainda mais o payload.
+          resolve({ dataUrl: canvas.toDataURL('image/jpeg', quality), mimeType: 'image/jpeg' });
+        };
+        img.src = reader.result;
+      };
       reader.readAsDataURL(file);
     });
+  }
+
+  async _extractTemplateFromImage(file) {
+    // Redimensionar ANTES de converter para base64 — ver nota acima.
+    // Em caso de falha a processar a imagem (raro — ficheiro corrompido,
+    // por exemplo), cai-se para o ficheiro original em vez de abortar
+    // logo a extracção por causa de um passo que é só uma optimização.
+    let base64, mimeType;
+    try {
+      const resized = await this._resizeReferenceImage(file);
+      base64   = resized.dataUrl.split(',')[1];
+      mimeType = resized.mimeType;
+    } catch (err) {
+      console.warn('[TemplatePicker] redimensionamento falhou, a usar imagem original:', err.message);
+      base64 = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload  = () => res(reader.result.split(',')[1]);
+        reader.onerror = () => rej(new Error('Falha ao ler ficheiro'));
+        reader.readAsDataURL(file);
+      });
+      mimeType = file.type || 'image/jpeg';
+    }
 
     const resp = await fetch('/api/extract-template', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageBase64: base64,
-        mimeType:    file.type || 'image/jpeg',
+        mimeType,
         serviceKey:  this._key,
       }),
     });
