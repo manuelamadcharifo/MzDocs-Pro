@@ -83,6 +83,14 @@ const PLACEHOLDER_ALIASES = {
 // {{idioma2}}, dividindo o texto por vírgula/ponto-e-vírgula/quebra de linha.
 const PLACEHOLDER_LIST_FIELDS = { habilidades: true, linguas: true };
 
+// CORRIGIDO (Set/2026): campos "estruturados" — cada item já é um bloco de
+// HTML (data-título-organização), não texto simples separável por vírgula.
+// Usados para preencher {{formacao1}}, {{formacao2}}, {{experiencia1}}...
+// com UMA entrada por slot (ver _ENTRIES_FORMACAO/_ENTRIES_EXPERIENCIA em
+// _extractRealData), em vez de mostrar o mesmo bloco completo duplicado em
+// cada slot (era o que PLACEHOLDER_ALIASES fazia sozinho, abaixo).
+const STRUCTURED_ENTRY_FIELDS = { formacao: 'entries_formacao', experiencia: 'entries_experiencia' };
+
 // ── CSS completo ──────────────────────────────────────────────────────────────
 const PICKER_CSS = `
 /* ── Overlay ── */
@@ -868,8 +876,24 @@ export class TemplatePicker {
       if (indexedMatch) {
         const [, base, idxStr] = indexedMatch;
         const aliasBase = PLACEHOLDER_ALIASES[base] || base;
+        const idx = parseInt(idxStr, 10);
+
+        // 2a. CORRIGIDO (Set/2026): campos estruturados (formacao,
+        // experiencia) — uma ENTRADA já formatada por slot, nunca o
+        // mesmo bloco inteiro repetido em todos os slots.
+        if (STRUCTURED_ENTRY_FIELDS[aliasBase]) {
+          const entriesArr = normalizedData[STRUCTURED_ENTRY_FIELDS[aliasBase]];
+          if (Array.isArray(entriesArr)) {
+            // Sem entrada suficiente para este slot (ex: só há 1 formação
+            // mas o template pede {{formacao2}}) → placeholder removido
+            // (branch 4 mais abaixo), nunca preenchido com o mesmo texto
+            // do slot 1.
+            return entriesArr[idx - 1] || '';
+          }
+        }
+
         if (PLACEHOLDER_LIST_FIELDS[aliasBase]) {
-          const item = getListItem(aliasBase, parseInt(idxStr, 10));
+          const item = getListItem(aliasBase, idx);
           if (item) return item;
         }
       }
@@ -1131,15 +1155,28 @@ export class TemplatePicker {
       data['HABILIDADES_LIST'] = habList.map(h=>`<li>${esc(h)}</li>`).join('') || '<li>Competências profissionais</li>';
 
       // Formação
-      data['FORMACAO'] = sectionToEntries(
-        section('Forma[cç][aã]o|Educa[cç][aã]o|Academic|Escolar')
-      );
+      // CORRIGIDO (Set/2026 — reportado por Manuel via captura do template
+      // "CV Profissional ATS Moçambique"): esse template usa
+      // {{formacao1}}/{{formacao2}} (dois "slots" separados, um por
+      // formação). Antes, só existia data['FORMACAO'] com TODAS as
+      // formações já achatadas num único bloco de HTML — em
+      // _fillTemplate, PLACEHOLDER_ALIASES mapeava formacao1 E formacao2
+      // para essa MESMA data['FORMACAO'], mostrando o mesmo bloco
+      // duplicado nos dois placeholders (o bug reportado). Agora
+      // guardam-se também as entradas UMA A UMA (_ENTRIES_FORMACAO), para
+      // _fillTemplate poder dar a 1ª entrada a {{formacao1}} e a 2ª a
+      // {{formacao2}}, tal como já fazia para {{competencia1}}/{{idioma1}}.
+      const formacaoRaw     = section('Forma[cç][aã]o|Educa[cç][aã]o|Academic|Escolar');
+      const formacaoEntries = parseEntries(formacaoRaw);
+      data['FORMACAO'] = formacaoEntries.length ? entriesToHTML(formacaoEntries) : sectionToEntries(formacaoRaw);
+      data['_ENTRIES_FORMACAO'] = formacaoEntries.map(e => entriesToHTML([e]));
 
-      // Experiência — pode ter vários padrões de nome
-      data['EXPERIENCIA'] = sectionToEntries(
-        section('Experi[eê]ncia Profissional|Experi[eê]ncia de Trabalho|Experi[eê]ncia|Hist[oó]rico|Work Experience') ||
-        section('Experi[eê]ncia')
-      );
+      // Experiência — pode ter vários padrões de nome (mesma correcção acima)
+      const experienciaRaw = section('Experi[eê]ncia Profissional|Experi[eê]ncia de Trabalho|Experi[eê]ncia|Hist[oó]rico|Work Experience') ||
+                              section('Experi[eê]ncia');
+      const experienciaEntries = parseEntries(experienciaRaw);
+      data['EXPERIENCIA'] = experienciaEntries.length ? entriesToHTML(experienciaEntries) : sectionToEntries(experienciaRaw);
+      data['_ENTRIES_EXPERIENCIA'] = experienciaEntries.map(e => entriesToHTML([e]));
 
       // Línguas
       const linguasRaw = section('L[íi]ngua|Idioma|Language') || '';
