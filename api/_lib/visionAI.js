@@ -258,6 +258,15 @@ async function analyzeImage(imageBase64, prompt, opts = {}) {
   if (attempts.length === 0) {
     throw new Error('Nenhuma API key de IA de visão configurada (GEMINI_API_KEY, MISTRAL_API_KEY, GITHUB_MODELS_TOKEN ou OPENROUTER_API_KEY)');
   }
+  // NOVO (Set/2026): se só houver 1 provider activo, uma falha/timeout
+  // dele é sempre falha total — sem isto, essa situação só aparecia nos
+  // logs como "Gemini timeout" seguido do 500 final, sem nada a indicar
+  // que não havia mais nenhum provider para tentar a seguir (foi
+  // exactamente o que aconteceu em produção em 07/Set — ver
+  // requestId whwd9... nos logs). Este aviso torna isso óbvio de imediato.
+  if (attempts.length === 1) {
+    console.warn(`[${logPrefix}] Só 1 provider de visão configurado (${attempts[0].label}) — sem fallback se este falhar/atrasar. Configure MISTRAL_API_KEY/GITHUB_MODELS_TOKEN/OPENROUTER_API_KEY para redundância.`);
+  }
 
   let lastErr;
   for (const attempt of attempts) {
