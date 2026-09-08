@@ -13,8 +13,13 @@
 //   2. Mistral        — MISTRAL_API_KEY (mistral-small-latest tem visão nativa
 //                       desde a v3.2 — é o MESMO modelo já usado no motor de
 //                       texto, portanto zero risco de quota extra)
-//   3. GitHub Models  — GITHUB_MODELS_TOKEN (gpt-4o-mini com visão)
-//   4. OpenRouter     — OPENROUTER_API_KEY ou OR_API_KEY (modelos :free)
+//   3. OpenRouter     — OPENROUTER_API_KEY ou OR_API_KEY (modelos :free)
+//
+// REMOVIDO (Set/2026, 3ª ronda): "GitHub Models" foi permanentemente
+// desligado pela própria GitHub a 30/Jul/2026 (confirmado —
+// github.blog/changelog/2026-07-30-github-models-is-now-retired) — todas
+// as chamadas devolviam sempre HTTP 410 Gone, uma tentativa garantidamente
+// falhada em cada pedido (confirmado nos logs de produção de 08/Set/2026).
 //
 // CORRIGIDO (Set/2026, 2ª ronda — "continua a dar o mesmo erro"):
 // a 1ª versão desta cascata (v2.0) incluía Groq (llama-4-scout /
@@ -44,7 +49,7 @@
 // cascata falham/demoram), o total fica em ~48s — dentro do limite, com
 // margem.
 //
-// Todos os providers "kind: openai" (Mistral, GitHub Models, OpenRouter)
+// Todos os providers "kind: openai" (Mistral, OpenRouter)
 // falam o mesmo formato de chat/completions com
 // `image_url: { url: "data:<mime>;base64,<...>" }` — por isso partilham o
 // mesmo helper genérico `callOpenAIVision()` em vez de código duplicado.
@@ -55,6 +60,73 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 const SITE_URL = (process.env.SITE_URL || 'https://mzdocs.co.mz').replace(/\/$/, '');
+
+// NOVO (Set/2026, 4ª ronda): liga a cascata de visão ao MESMO disjuntor
+// (circuit breaker) por modelo e ao MESMO alerta de operação já usados
+// pelo motor principal de texto (ver api/_lib/aiRace.js) — até agora este
+// ficheiro corria "às cegas": nada aqui memorizava que um modelo tinha
+// acabado de falhar, por isso o mesmo modelo morto era tentado de novo em
+// TODOS os pedidos seguintes, e ninguém era avisado sem ir ver os logs da
+// Vercel manualmente (foi exactamente assim que o 410 do GitHub Models e o
+// 404 do modelo errado da OpenRouter passaram despercebidos).
+//
+// Com isto:
+//   - Um modelo que falhe com um erro "permanente" (ex: "model not
+//     found", "decommissioned") fica automaticamente de fora por 7 dias —
+//     sem esperar por outro pedido igual para "descobrir" de novo que
+//     está morto.
+//   - Falhas transitórias (rate limit, 5xx, timeout) só desactivam um
+//     modelo depois de 3 falhas seguidas, com recuo crescente
+//     (10min→30min→2h) — não desliga por um azar pontual.
+//   - Se um provider INTEIRO (todos os seus modelos) esgotar 5 vezes
+//     seguidas, dispara automaticamente um alerta por Telegram/WhatsApp
+//     (mesmo canal já configurado para o motor de texto) — é essa a parte
+//     que substitui teres de reparar num log da Vercel por acaso.
+// Os IDs usados aqui (`gemini-vision`, `mistral-vision`,
+// `openrouter-vision`) são DELIBERADAMENTE diferentes dos IDs do motor de
+// texto (`gemini`, `mistral`, `openrouter`) mesmo quando o modelo por
+// trás é o mesmo — uma falha a analisar uma imagem não deve desactivar
+// esse modelo para gerar texto, e vice-versa; são cargas de trabalho
+// diferentes com quotas que podem esgotar-se de forma independente.
+const { isModelDisabled, recordModelResult, recordProviderSuccess, recordProviderExhaustion } = require('./modelHealth');
+const { notifyProviderIssue } = require('./notifyOps');
+// NOVO (Set/2026, 5ª ronda): descoberta ao vivo de catálogo — o MESMO
+// mecanismo já usado pelo motor de texto (ver aiRace.js →
+// tryProviderChain), agora também aplicado à cascata de visão. Antes desta
+// ronda, o único jeito de a app "saber" que um ID de modelo já não existe
+// (ex: o 404 de "minimax/minimax-m3:free") era um humano ver o erro nos
+// logs e corrigir o código à mão. Com isto, antes de cada tentativa,
+// pergunta-se ao PRÓPRIO provider (GET /models) que modelos ele tem AGORA;
+// se um modelo da lista curada já não existir, é saltado sem gastar um
+// pedido — e se a descoberta confirmar que um modelo existe apesar de um
+// disjuntor permanente antigo o ter marcado como morto, esse disjuntor é
+// ignorado (ver `discoveredLive` abaixo). getAvailableModels() é
+// best-effort e NUNCA atrasa nem bloqueia — devolve `null` em qualquer
+// problema (timeout, provider sem /models, etc.) e o código continua a
+// usar a lista curada tal como já fazia antes.
+//
+// getProvider('gemini'/'mistral'/'openrouter') reaproveita os MESMOS
+// providerCfg (modelsUrl, authHeader, kind) já definidos em
+// aiProviderRegistry.js para o motor de texto — o catálogo de um provider
+// é o mesmo independentemente de ser para texto ou visão, por isso a
+// descoberta (e a respectiva cache de 3h) fica PARTILHADA entre os dois
+// motores, evitando pedidos duplicados a /models. Já o disjuntor de saúde
+// (isModelDisabled/recordModelResult acima) continua com IDs próprios
+// ('gemini-vision', etc.) — esse sim tem de ficar isolado, porque uma
+// falha a analisar uma imagem não deve desactivar um modelo para gerar
+// texto, e vice-versa.
+const { getAvailableModels } = require('./modelDiscovery');
+const { getProvider } = require('./aiProviderRegistry');
+
+// Metadados mínimos por provider de visão, só para a mensagem de alerta
+// (mesmo formato que providerCfg em aiProviderRegistry.js, mas não precisa
+// de tudo o resto — chatUrl, kind, etc. — porque a chamada em si já está
+// implementada às boas em callGemini/callOpenAIVision).
+const VISION_PROVIDER_META = {
+  'gemini-vision':     { name: 'Gemini (visão)',     envVar: 'GEMINI_API_KEY',     signupUrl: 'https://aistudio.google.com/apikey' },
+  'mistral-vision':    { name: 'Mistral (visão)',    envVar: 'MISTRAL_API_KEY',    signupUrl: 'https://console.mistral.ai/api-keys' },
+  'openrouter-vision': { name: 'OpenRouter (visão)', envVar: 'OPENROUTER_API_KEY', signupUrl: 'https://openrouter.ai/keys' },
+};
 // CORRIGIDO (confirmado por logs reais da Vercel): 8000ms cortava o
 // OpenRouter minimax-m3:free a meio de uma resposta que provavelmente
 // terminaria com mais alguns segundos — modelos grátis de visão sob carga
@@ -73,7 +145,28 @@ const GEMINI_VISION_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
 
 async function callGemini(apiKey, imageBase64, mimeType, prompt) {
   let lastErr;
-  for (const model of GEMINI_VISION_MODELS) {
+  let anyAttempted = false;
+
+  const discovered = await getAvailableModels(getProvider('gemini'), apiKey);
+  let candidates = discovered
+    ? GEMINI_VISION_MODELS.filter(m => discovered.includes(m))
+    : GEMINI_VISION_MODELS.slice();
+  if (discovered && candidates.length === 0) {
+    // Nenhum dos modelos curados existe mais no catálogo real — usa os
+    // primeiros que a descoberta devolveu (mesma rede de segurança já
+    // usada pelo motor de texto para sobreviver a uma troca de catálogo
+    // sem deploy novo).
+    candidates = discovered.slice(0, 3);
+    console.warn('[visionAI] Gemini: catálogo curado indisponível — a usar descoberta ao vivo:', candidates);
+  }
+
+  for (const model of candidates) {
+    const discoveredLive = !!(discovered && discovered.includes(model));
+    if (await isModelDisabled('gemini-vision', model, { discoveredLive })) {
+      console.warn(`[visionAI] gemini-vision/${model} desactivado pelo disjuntor — a saltar`);
+      continue;
+    }
+    anyAttempted = true;
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), PER_ATTEMPT_TIMEOUT_MS);
@@ -106,6 +199,7 @@ async function callGemini(apiKey, imageBase64, mimeType, prompt) {
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         lastErr = new Error(d?.error?.message || `Gemini HTTP ${res.status} (${model})`);
+        recordModelResult('gemini-vision', model, false, lastErr); // fire-and-forget
         if (res.status === 429 || res.status === 503) { continue; }
         throw lastErr;
       }
@@ -113,20 +207,39 @@ async function callGemini(apiKey, imageBase64, mimeType, prompt) {
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
       if (!text) throw new Error(`Gemini resposta vazia (${data.candidates?.[0]?.finishReason})`);
       console.log(`[visionAI] Gemini OK ${model} (${text.length} chars)`);
+      recordModelResult('gemini-vision', model, true, null); // fire-and-forget
+      recordProviderSuccess('gemini-vision'); // fire-and-forget
       return text;
     } catch (err) {
       const msg = err.name === 'AbortError' ? `Gemini timeout (${PER_ATTEMPT_TIMEOUT_MS}ms, ${model})` : err.message;
       console.warn(`[visionAI] Gemini ${model}:`, msg);
       lastErr = new Error(msg);
+      recordModelResult('gemini-vision', model, false, lastErr); // fire-and-forget
     }
   }
+  if (!anyAttempted) lastErr = new Error('Gemini: todos os modelos desactivados pelo disjuntor');
   throw lastErr || new Error('Gemini: todos os modelos falharam');
 }
 
 // ── Helper genérico para providers "OpenAI-compatible" com visão ───────────
-async function callOpenAIVision({ label, url, headers, models, imageBase64, mimeType, prompt, maxTokens }) {
+async function callOpenAIVision({ providerId, registryId, apiKey, label, url, headers, models, imageBase64, mimeType, prompt, maxTokens }) {
   let lastErr;
-  for (const model of models) {
+  let anyAttempted = false;
+
+  const discovered = await getAvailableModels(getProvider(registryId), apiKey);
+  let candidates = discovered ? models.filter(m => discovered.includes(m)) : models.slice();
+  if (discovered && candidates.length === 0) {
+    candidates = discovered.slice(0, 3);
+    console.warn(`[visionAI] ${label}: catálogo curado indisponível — a usar descoberta ao vivo:`, candidates);
+  }
+
+  for (const model of candidates) {
+    const discoveredLive = !!(discovered && discovered.includes(model));
+    if (await isModelDisabled(providerId, model, { discoveredLive })) {
+      console.warn(`[visionAI] ${providerId}/${model} desactivado pelo disjuntor — a saltar`);
+      continue;
+    }
+    anyAttempted = true;
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), PER_ATTEMPT_TIMEOUT_MS);
     try {
@@ -147,6 +260,7 @@ async function callOpenAIVision({ label, url, headers, models, imageBase64, mime
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         lastErr = new Error(d?.error?.message || `${label} HTTP ${res.status} (${model})`);
+        recordModelResult(providerId, model, false, lastErr); // fire-and-forget
         if (res.status === 429) { continue; }
         throw lastErr;
       }
@@ -154,15 +268,19 @@ async function callOpenAIVision({ label, url, headers, models, imageBase64, mime
       const text = data.choices?.[0]?.message?.content?.trim() || '';
       if (!text) throw new Error(`${label} resposta vazia`);
       console.log(`[visionAI] ${label} OK ${model} (${text.length} chars)`);
+      recordModelResult(providerId, model, true, null); // fire-and-forget
+      recordProviderSuccess(providerId); // fire-and-forget
       return text;
     } catch (err) {
       const msg = err.name === 'AbortError' ? `${label} timeout (${PER_ATTEMPT_TIMEOUT_MS}ms, ${model})` : err.message;
       console.warn(`[visionAI] ${label} ${model}:`, msg);
       lastErr = new Error(msg);
+      recordModelResult(providerId, model, false, lastErr); // fire-and-forget
     } finally {
       clearTimeout(t);
     }
   }
+  if (!anyAttempted) lastErr = new Error(`${label}: todos os modelos desactivados pelo disjuntor`);
   throw lastErr || new Error(`${label}: todos os modelos falharam`);
 }
 
@@ -174,6 +292,9 @@ async function callOpenAIVision({ label, url, headers, models, imageBase64, mime
 const MISTRAL_VISION_MODELS = ['mistral-small-latest'];
 function callMistral(apiKey, imageBase64, mimeType, prompt) {
   return callOpenAIVision({
+    providerId: 'mistral-vision',
+    registryId: 'mistral',
+    apiKey,
     label:   'Mistral',
     url:     'https://api.mistral.ai/v1/chat/completions',
     headers: { Authorization: `Bearer ${apiKey}` },
@@ -183,31 +304,32 @@ function callMistral(apiKey, imageBase64, mimeType, prompt) {
   });
 }
 
-// ── GitHub Models (gpt-4o-mini tem visão; mesma GITHUB_MODELS_TOKEN) ───────
-// Tier grátis limita a saída a 4K tokens (ver aiProviderRegistry.js,
-// maxTokensCap: 4096 para este provider) — respeitado aqui também.
-const GITHUB_VISION_MODELS = ['openai/gpt-4o-mini'];
-function callGithub(token, imageBase64, mimeType, prompt) {
-  return callOpenAIVision({
-    label:   'GitHub Models',
-    url:     'https://models.github.ai/inference/chat/completions',
-    headers: { Authorization: `Bearer ${token}` },
-    models:  GITHUB_VISION_MODELS,
-    imageBase64, mimeType, prompt,
-    maxTokens: 4096,
-  });
-}
+// REMOVIDO (Set/2026): "GitHub Models" (callGithub) foi permanentemente
+// desligado pela GitHub a 30/Jul/2026 — ver
+// https://github.blog/changelog/2026-07-30-github-models-is-now-retired/
+// Toda a chamada a models.github.ai devolvia sempre HTTP 410 Gone
+// (confirmado nos logs de produção de 08/Set/2026), uma tentativa
+// garantidamente falhada em cada pedido de extracção de template. Mesma
+// remoção aplicada ao motor principal de texto em
+// api/_lib/aiProviderRegistry.js.
 
-// ── OpenRouter — CORRIGIDO: lista anterior (gemini-2.0-flash-exp:free,
-//    llama-4-scout:free, phi-4-multimodal:free) já não consta do catálogo
-//    :free actual da OpenRouter. Modelos abaixo confirmados com "Vision" nas
-//    capacidades e activos no tier :free em Set/2026. ───────────────────────
+// ── OpenRouter — CORRIGIDO (Set/2026, 3ª ronda): "minimax/minimax-m3:free"
+//    não existe no catálogo actual da OpenRouter — devolvia sempre 404
+//    (confirmado nos logs de produção de 08/Set/2026). Substituído por dois
+//    modelos grátis com visão CONFIRMADOS activos em Set/2026 (fontes
+//    diferentes da Gemma, para não esgotar a mesma quota subjacente em
+//    caso de falha): NVIDIA Nemotron (multimodal texto+imagem+vídeo+áudio)
+//    e uma segunda variante Gemma (MoE, mais leve). ─────────────────────────
 const OR_VISION_MODELS = [
   'google/gemma-4-31b-it:free',
-  'minimax/minimax-m3:free',
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+  'google/gemma-4-26b-a4b-it:free',
 ];
 function callOpenRouter(apiKey, imageBase64, mimeType, prompt) {
   return callOpenAIVision({
+    providerId: 'openrouter-vision',
+    registryId: 'openrouter',
+    apiKey,
     label:   'OpenRouter',
     url:     'https://openrouter.ai/api/v1/chat/completions',
     headers: {
@@ -225,7 +347,7 @@ function callOpenRouter(apiKey, imageBase64, mimeType, prompt) {
 
 /**
  * analyzeImage — percorre a cascata de providers de visão configurados
- * (Gemini → Mistral → GitHub Models → OpenRouter) até um responder com
+ * (Gemini → Mistral → OpenRouter) até um responder com
  * sucesso, e devolve o texto bruto da resposta (normalmente JSON,
  * dependendo do prompt). Providers sem env var configurada são saltados
  * sem erro — só falha (lança excepção) se NENHUM provider disponível
@@ -244,19 +366,17 @@ async function analyzeImage(imageBase64, prompt, opts = {}) {
 
   const GEMINI_KEY    = process.env.GEMINI_API_KEY;
   const MISTRAL_KEY   = process.env.MISTRAL_API_KEY;
-  const GITHUB_TOKEN  = process.env.GITHUB_MODELS_TOKEN;
-  const OR_KEY        = process.env.OPENROUTER_API_KEY || process.env.OR_API_KEY;
+  const OR_KEY         = process.env.OPENROUTER_API_KEY || process.env.OR_API_KEY;
 
   // Cascata declarativa: cada entrada só entra se tiver a env var definida.
   const attempts = [
-    GEMINI_KEY   && { label: 'Gemini',        fn: () => callGemini(GEMINI_KEY, imageBase64, mimeType, prompt) },
-    MISTRAL_KEY  && { label: 'Mistral',       fn: () => callMistral(MISTRAL_KEY, imageBase64, mimeType, prompt) },
-    GITHUB_TOKEN && { label: 'GitHub Models', fn: () => callGithub(GITHUB_TOKEN, imageBase64, mimeType, prompt) },
-    OR_KEY       && { label: 'OpenRouter',    fn: () => callOpenRouter(OR_KEY, imageBase64, mimeType, prompt) },
+    GEMINI_KEY   && { id: 'gemini-vision',     label: 'Gemini',     fn: () => callGemini(GEMINI_KEY, imageBase64, mimeType, prompt) },
+    MISTRAL_KEY  && { id: 'mistral-vision',    label: 'Mistral',    fn: () => callMistral(MISTRAL_KEY, imageBase64, mimeType, prompt) },
+    OR_KEY       && { id: 'openrouter-vision', label: 'OpenRouter', fn: () => callOpenRouter(OR_KEY, imageBase64, mimeType, prompt) },
   ].filter(Boolean);
 
   if (attempts.length === 0) {
-    throw new Error('Nenhuma API key de IA de visão configurada (GEMINI_API_KEY, MISTRAL_API_KEY, GITHUB_MODELS_TOKEN ou OPENROUTER_API_KEY)');
+    throw new Error('Nenhuma API key de IA de visão configurada (GEMINI_API_KEY, MISTRAL_API_KEY ou OPENROUTER_API_KEY)');
   }
   // NOVO (Set/2026): se só houver 1 provider activo, uma falha/timeout
   // dele é sempre falha total — sem isto, essa situação só aparecia nos
@@ -265,7 +385,7 @@ async function analyzeImage(imageBase64, prompt, opts = {}) {
   // exactamente o que aconteceu em produção em 07/Set — ver
   // requestId whwd9... nos logs). Este aviso torna isso óbvio de imediato.
   if (attempts.length === 1) {
-    console.warn(`[${logPrefix}] Só 1 provider de visão configurado (${attempts[0].label}) — sem fallback se este falhar/atrasar. Configure MISTRAL_API_KEY/GITHUB_MODELS_TOKEN/OPENROUTER_API_KEY para redundância.`);
+    console.warn(`[${logPrefix}] Só 1 provider de visão configurado (${attempts[0].label}) — sem fallback se este falhar/atrasar. Configure MISTRAL_API_KEY/OPENROUTER_API_KEY para redundância.`);
   }
 
   let lastErr;
@@ -275,6 +395,23 @@ async function analyzeImage(imageBase64, prompt, opts = {}) {
     } catch (err) {
       console.warn(`[${logPrefix}] ${attempt.label} falhou, a tentar o próximo provider:`, err.message);
       lastErr = err;
+      // NOVO (Set/2026, 4ª ronda): este provider acabou de esgotar TODOS
+      // os seus modelos de visão numa única tentativa (mesmo mecanismo já
+      // usado pelo motor de texto — ver aiRace.js). Fire-and-forget: nunca
+      // atrasa nem faz falhar a resposta ao utilizador. Só dispara um
+      // alerta por Telegram/WhatsApp ao fim de 5 esgotamentos SEGUIDOS
+      // (protecção contra spam, ver recordProviderExhaustion em
+      // modelHealth.js) — é isto que substitui teres de notar um problema
+      // de configuração só porque um cliente se queixou ou foste ver os
+      // logs da Vercel por acaso.
+      recordProviderExhaustion(attempt.id)
+        .then(shouldAlert => {
+          if (shouldAlert) {
+            const meta = VISION_PROVIDER_META[attempt.id] || { name: attempt.label };
+            notifyProviderIssue(meta, err.message).catch(() => {});
+          }
+        })
+        .catch(() => {});
     }
   }
   throw lastErr || new Error('Todos os providers de visão falharam');
