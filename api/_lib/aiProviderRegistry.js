@@ -253,36 +253,25 @@ const PROVIDERS = [
         ],
     },
 
-    // ── Novos providers Ago/2026 — substituem NVIDIA NIM (bloqueio de conta
-    // do lado da NVIDIA, sem solução) e Together AI / Fireworks AI (deixaram
-    // de ter tier gratuito contínuo) — ver auditoria no topo do ficheiro.
-    {
-        id: 'github',
-        name: 'GitHub Models',
-        kind: 'openai',
-        tier: 'reserva_ativa',
-        envVar: 'GITHUB_MODELS_TOKEN',
-        signupUrl: 'https://github.com/marketplace/models',
-        chatUrl: 'https://models.github.ai/inference/chat/completions',
-        // Sem modelsUrl: o catálogo da GitHub Models não devolve o formato
-        // OpenAI-compatible padrão em /models (é um endpoint próprio em
-        // /catalog/models, com esquema diferente) — a descoberta ao vivo
-        // fica desligada para este provider (getAvailableModels devolve
-        // `null` de forma segura) e o motor usa sempre a lista curada.
-        authHeader: (key) => ({ Authorization: `Bearer ${key}` }),
-        maxTokensCap: 4096, // tier grátis limita a 4K tokens de saída
-        limitType: 'requests',
-        dailyLimit: 150,
-        limitLabel: 'Grátis com conta GitHub (Personal Access Token com scope "models:read") — ≈10 pedidos/min, 50-150 pedidos/dia consoante o modelo',
-        note: 'Requer um Personal Access Token do GitHub (não o GITHUB_TOKEN automático das Actions) com o scope "models:read" — gerar em github.com/settings/personal-access-tokens. Modelos "low-tier" (gpt-4o-mini, Phi-4, Mistral Small) têm tecto diário mais alto do que os "high-tier" (Llama 3.3 70B) — por isso vêm primeiro na lista.',
-        models: [
-            'openai/gpt-4o-mini',
-            'microsoft/Phi-4',
-            'mistral-ai/Mistral-Small-2503',
-            'meta/Llama-3.3-70B-Instruct',
-            'deepseek/DeepSeek-V3-0324',
-        ],
-    },
+    // REMOVIDO (Set/2026): o provider "GitHub Models" (id: 'github') foi
+    // permanentemente desligado pela própria GitHub a 30/Jul/2026 — ver
+    // https://github.blog/changelog/2026-07-30-github-models-is-now-retired/
+    // ("the playground, model catalog, inference API, and BYOK are no
+    // longer available to any customer, including existing customers with
+    // active usage"). Desde então, TODAS as chamadas a
+    // models.github.ai/inference/chat/completions devolvem sempre
+    // HTTP 410 Gone (confirmado nos logs de produção de 08/Set/2026,
+    // pedido a /api/extract-template) — não é uma falha temporária, é um
+    // serviço extinto. Manter esta entrada só acrescentava uma tentativa
+    // garantidamente falhada (mais latência, sem hipótese de sucesso) a
+    // TODA a geração de texto e de visão do projecto. Mesma remoção
+    // aplicada ao cascata de visão em api/_lib/visionAI.js.
+    //
+    // Se algum dia quiseres um provider grátis equivalente no lugar deste,
+    // o sucessor oficial indicado pela própria GitHub é o Microsoft
+    // Foundry Models — mas esse já não é gratuito (corre sobre uma
+    // subscrição Azure), por isso não é um substituto directo "cortar e
+    // colar" do tier grátis que este provider ocupava.
     {
         id: 'cloudflare',
         name: 'Cloudflare Workers AI',
