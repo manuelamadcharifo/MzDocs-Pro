@@ -47,7 +47,7 @@ export class SmartOCRService {
 
         const timeout = new Promise(r => setTimeout(r, 8000));
         await Promise.race([tesseractPromise, timeout]);
-        if (onProgress) onProgress(80, 'A analisar com IA…');
+        if (onProgress) onProgress(80, 'A analisar o documento…');
       }
     } catch (err) {
       console.warn('[SmartOCR] Extracção falhou:', err.message);
@@ -56,7 +56,7 @@ export class SmartOCRService {
       }
     }
 
-    if (onProgress) onProgress(88, 'A preencher campos com IA…');
+    if (onProgress) onProgress(88, 'A preencher campos automaticamente…');
 
     const schema = this._getFieldSchema(serviceType);
     if (!schema.length) return { rawText: text, confidence, fields: {}, missing: [] };
@@ -117,7 +117,7 @@ export class SmartOCRService {
     }
     if (!images.length) return { rawText: '', confidence: 0, fields: {}, missing: [] };
 
-    if (onProgress) onProgress(60, 'A analisar todas as páginas com IA…');
+    if (onProgress) onProgress(60, 'A analisar todas as páginas…');
     const schema = this._getFieldSchema(serviceType);
     if (!schema.length) return { rawText: '', confidence: 0, fields: {}, missing: [] };
 
@@ -354,7 +354,7 @@ export class SmartOCRService {
       el.style.borderColor = data.source === 'ocr' ? '#22c55e' : '#f59e0b';
       el.title = data.source === 'ocr'
         ? `✓ Extraído (${Math.round((data.confidence||0)*100)}%)`
-        : `⚠ Sugerido IA (${Math.round((data.confidence||0)*100)}%)`;
+        : `⚠ Sugerido Auto (${Math.round((data.confidence||0)*100)}%)`;
       applied++;
     });
     return applied;
