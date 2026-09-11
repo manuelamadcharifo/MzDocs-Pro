@@ -59,7 +59,7 @@ export class DocumentEditor {
             <button id="edBtnDownload" class="ed-action-btn primary">⬇️ Download</button>
             <button id="edBtnWa"       class="ed-action-btn wa">💬 WhatsApp</button>
             <button id="edBtnCopy"     class="ed-action-btn">📋 Copiar</button>
-            <button id="edBtnReedit" class="ed-action-btn ai" title="Redigir com IA (consome 1 crédito)">🤖 Redigir c/ IA <span style="font-size:10px;opacity:.75;font-weight:400;">(-1 cr.)</span></button>
+            <button id="edBtnReedit" class="ed-action-btn ai" title="Redigir automaticamente (consome 1 crédito)">✨ Redigir Auto <span style="font-size:10px;opacity:.75;font-weight:400;">(-1 cr.)</span></button>
             <button id="edBtnSign"    class="ed-action-btn" title="Inserir assinatura digital no documento">✍️ Assinar</button>
           </div>
         </div>
@@ -136,7 +136,7 @@ export class DocumentEditor {
             <div class="ed-word-group" style="margin-left:auto;flex-wrap:wrap;gap:4px;">
               <button class="ed-wbtn" id="edBtnZoomOut" title="Ver página completa / reduzir zoom">🔍 Zoom</button>
               <button class="ed-action-btn" id="edBtnCopy2">📋 Copiar</button>
-              <button class="ed-action-btn ai" id="edBtnReedit2" title="Reeditar com IA (consome 1 crédito)">🤖 Redigir c/ IA <span style="font-size:10px;opacity:.75;font-weight:400;">(-1 cr.)</span></button>
+              <button class="ed-action-btn ai" id="edBtnReedit2" title="Reeditar automaticamente (consome 1 crédito)">✨ Redigir Auto <span style="font-size:10px;opacity:.75;font-weight:400;">(-1 cr.)</span></button>
               <button class="ed-action-btn save" id="edBtnSave" title="Guardar edição e voltar ao preview">💾 Guardar</button>
               <div id="editorStats" class="ed-stats">0 palavras</div>
             </div>
@@ -1322,7 +1322,7 @@ export class DocumentEditor {
       if (digits.length === 9) waNumber = `258${digits}`;
       else if (digits.length >= 11) waNumber = digits;
     }
-    window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(`📄 *${this.serviceType||'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado por IA via MzDocs Pro_`)}`, '_blank');
+    window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(`📄 *${this.serviceType||'Documento'} – MzDocs Pro*\n\n${preview}\n\n_Gerado via MzDocs Pro_`)}`, '_blank');
   }
 
   // CORRIGIDO: prompt() nativo do browser mostrava o diálogo genérico
@@ -1344,7 +1344,7 @@ export class DocumentEditor {
     modal.innerHTML = `
       <div style="background:#fff;border-radius:16px;padding:24px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-          <h3 style="font-size:16px;font-weight:700;color:#07101f;">🤖 Redigir com IA</h3>
+          <h3 style="font-size:16px;font-weight:700;color:#07101f;">✨ Redigir Automaticamente</h3>
           <button id="reeditModalClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:4px;">✕</button>
         </div>
         <p style="font-size:13px;color:#6b7280;margin-bottom:10px;">O que deseja alterar no documento?</p>
