@@ -133,7 +133,7 @@ export const DocumentView = {
           <span>👀 Ver amostra grátis</span>
         </button>
         <button id="btnGen" class="btn-primary btn-gen" type="button">
-          <span>✨ Gerar com IA</span>
+          <span>✨ Gerar Automaticamente</span>
           <small>${costLabel}</small>
         </button>
       `;
@@ -672,7 +672,7 @@ export const DocumentView = {
     // verificado e o que ainda está pendente de confirmação.
     const legalNotice = (svc && svc.category === 'juridico')
       ? `<div style="background:#fffbeb;border-bottom:1px solid #fde68a;padding:8px 14px;font-size:11.5px;line-height:1.5;color:#92400e;">
-          ⚖️ Esta minuta cita legislação moçambicana. Confirme os artigos e diplomas junto de um advogado ou notário antes de uso formal — a IA pode cometer erros em referências legais.
+          ⚖️ Esta minuta cita legislação moçambicana. Confirme os artigos e diplomas junto de um advogado ou notário antes de uso formal — o sistema pode cometer erros em referências legais.
         </div>`
       : '';
 
