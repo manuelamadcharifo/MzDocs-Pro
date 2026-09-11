@@ -526,9 +526,9 @@ function _showOnboardingIfNeeded() {
 @keyframes tplSlideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}`;
 
   const STEPS = [
-    { icon:'📄', title:'Bem-vindo ao MzDocs Pro!', desc:'Crie documentos profissionais em segundos com Inteligência Artificial. Rápido, simples e pensado para Moçambique.' },
+    { icon:'📄', title:'Bem-vindo ao MzDocs Pro!', desc:'Crie documentos profissionais em segundos, com tecnologia inteligente. Rápido, simples e pensado para Moçambique.' },
     { icon:'🎯', title:'Escolha o seu documento', desc:'Trabalho escolar, currículo, carta formal, orçamento de obra e muito mais — basta clicar no serviço que precisa.' },
-    { icon:'🤖', title:'A IA faz o trabalho', desc:'Preencha um formulário rápido e a nossa IA gera o documento completo em segundos, já formatado e pronto a usar.' },
+    { icon:'✨', title:'A tecnologia faz o trabalho', desc:'Preencha um formulário rápido e o sistema gera o documento completo em segundos, já formatado e pronto a usar.' },
     { icon:'🎨', title:'Personalize o modelo', desc:'Escolha entre 5 estilos visuais por serviço. Exporte em PDF ou Word com um toque.' },
     { icon:'🚀', title:'Pronto a começar!', desc:'Toque em qualquer serviço na lista abaixo. O primeiro documento de demonstração é gratuito.' },
   ];
