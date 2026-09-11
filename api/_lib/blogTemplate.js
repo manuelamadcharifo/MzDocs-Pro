@@ -205,7 +205,7 @@ const BLOG_POST_TEMPLATE = `<!DOCTYPE html>
   <!-- CTA integrado -->
   <div class="cta-box">
     <h3>📄 Crie o seu documento em segundos</h3>
-    <p>O MzDocs Pro usa IA para gerar documentos profissionais adaptados a Moçambique.<br/>CV, cartas, requerimentos e muito mais — sem complicação.</p>
+    <p>O MzDocs Pro gera documentos profissionais adaptados a Moçambique, em minutos.<br/>CV, cartas, requerimentos e muito mais — sem complicação.</p>
     <a class="cta-btn" href="/" data-track-link>Experimentar Grátis →</a>
   </div>
 </article>
