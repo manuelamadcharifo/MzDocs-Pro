@@ -139,6 +139,11 @@ class AdminApp {
         closeSidebar:            () => this.closeSidebar(),
         openSidebar:             () => this.openSidebar(),
         toggleNotifPanel:        () => this._toggleNotifPanel(),
+        // NOVO (Set/2026): torna cada notificação clicável — navega para a
+        // secção relevante (usa o campo `link` já gravado em
+        // admin_notifications pelo backend, ex: '#affiliates', '#transactions')
+        // e marca-a como lida.
+        openNotif:               (d) => this._openNotif(d.id, d.link),
         openPushSendForm:        () => this._openPushSendForm(),
         refresh:                 () => this.refresh(),
         markAllNotifsRead:       () => this._markAllNotifsRead(),
@@ -2412,35 +2417,55 @@ USING (EXISTS (
             // ── NOVO (auditoria de analytics, v27): páginas mais vistas,
             // desempenho por artigo do blog, origem de novos clientes e
             // cliques de afiliados por segmento.
+            // CORRIGIDO (Set/2026): listas convertidas de <div> para <table
+            // class="admin-table"> — permite ordenar por qualquer coluna
+            // (ex: "Visitas") através do AdminTableSort.js, mantendo o
+            // mesmo conteúdo/dados de antes, só a marcação mudou.
             const topPages = d.topPages || [];
             if (!topPages.length) {
                 setEl('topPagesList', '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">Sem dados ainda</div>');
             } else {
                 const maxP = topPages[0]?.views || 1;
-                setEl('topPagesList', topPages.slice(0, 15).map(p => {
-                    const pct   = Math.round((p.views / maxP) * 100);
-                    const icon  = p.type === 'blog' ? '📝' : (p.type === 'home' ? '🏠' : '📄');
-                    const label = p.title || p.page;
-                    return `<div style="margin:.5rem 0">
-                        <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px;gap:4px">
-                            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${icon} ${label}</span><strong style="white-space:nowrap;flex-shrink:0">${p.views}</strong>
-                        </div>
-                        <div style="background:#e2e8f0;border-radius:4px;height:7px">
-                            <div style="background:#8B5CF6;height:7px;border-radius:4px;width:${pct}%;"></div>
-                        </div>
-                    </div>`;
-                }).join(''));
+                setEl('topPagesList', `
+                    <table class="admin-table" style="min-width:0">
+                        <thead><tr><th>Página</th><th>Visitas</th></tr></thead>
+                        <tbody>
+                        ${topPages.slice(0, 15).map(p => {
+                            const pct   = Math.round((p.views / maxP) * 100);
+                            const icon  = p.type === 'blog' ? '📝' : (p.type === 'home' ? '🏠' : '📄');
+                            const label = p.title || p.page;
+                            return `<tr>
+                                <td style="max-width:1px">
+                                    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${icon} ${label}</div>
+                                    <div style="background:#e2e8f0;border-radius:4px;height:6px;margin-top:4px">
+                                        <div style="background:#8B5CF6;height:6px;border-radius:4px;width:${pct}%;"></div>
+                                    </div>
+                                </td>
+                                <td style="font-weight:700;white-space:nowrap">${p.views}</td>
+                            </tr>`;
+                        }).join('')}
+                        </tbody>
+                    </table>
+                `);
             }
 
             const blogPerf = d.blogPerformance || [];
             if (!blogPerf.length) {
                 setEl('blogPerformanceList', '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">Ainda sem artigos publicados</div>');
             } else {
-                setEl('blogPerformanceList', blogPerf.slice(0, 15).map(b => `
-                    <div style="display:flex;justify-content:space-between;font-size:.8rem;padding:6px 0;border-bottom:1px solid #f1f5f9;gap:8px">
-                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📝 ${b.title}</span>
-                        <span style="white-space:nowrap;flex-shrink:0;color:#64748b">${b.views_total} vistas totais · ${b.views_period} no período</span>
-                    </div>`).join(''));
+                setEl('blogPerformanceList', `
+                    <table class="admin-table" style="min-width:0">
+                        <thead><tr><th>Artigo</th><th>Vistas totais</th><th>Vistas no período</th></tr></thead>
+                        <tbody>
+                        ${blogPerf.slice(0, 15).map(b => `
+                            <tr>
+                                <td style="max-width:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📝 ${b.title}</td>
+                                <td style="white-space:nowrap">${b.views_total}</td>
+                                <td style="white-space:nowrap;color:#64748b">${b.views_period}</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                `);
             }
 
             const nc = d.newClients || { total: 0, organic: 0, avulso: 0, bySegment: {} };
@@ -2462,11 +2487,20 @@ USING (EXISTS (
             if (!affSeg.length) {
                 setEl('affiliateSegmentList', '<div style="color:#94a3b8;font-size:.8rem;padding:.5rem">Sem cliques de afiliados no período</div>');
             } else {
-                setEl('affiliateSegmentList', affSeg.map(s => `
-                    <div style="display:flex;justify-content:space-between;font-size:.8rem;padding:5px 0;border-bottom:1px solid #f1f5f9">
-                        <span>${segLabels[s.segment] || s.segment}</span>
-                        <span><strong>${s.clicks}</strong> cliques · ${s.conversions} conversões (${s.conversion_rate}%)</span>
-                    </div>`).join(''));
+                setEl('affiliateSegmentList', `
+                    <table class="admin-table" style="min-width:0">
+                        <thead><tr><th>Segmento</th><th>Cliques</th><th>Conversões</th><th>Conv.</th></tr></thead>
+                        <tbody>
+                        ${affSeg.map(s => `
+                            <tr>
+                                <td>${segLabels[s.segment] || s.segment}</td>
+                                <td style="white-space:nowrap">${s.clicks}</td>
+                                <td style="white-space:nowrap">${s.conversions}</td>
+                                <td style="white-space:nowrap">${s.conversion_rate}%</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                `);
             }
 
             // NOVO (Fase 2 — Marketing Analytics): tabela de origens
@@ -2479,18 +2513,22 @@ USING (EXISTS (
             } else {
                 const fmtMzn = v => 'MZN ' + Number(v || 0).toLocaleString('pt-MZ', { maximumFractionDigits: 0 });
                 setEl('marketingSourcesList', `
-                    <div style="display:grid;grid-template-columns:1.3fr .7fr .7fr .7fr 1fr .8fr;gap:4px;font-size:.72rem;font-weight:800;color:#94a3b8;text-transform:uppercase;padding:2px 0 6px;border-bottom:1.5px solid #e2e8f0">
-                        <span>Origem</span><span>Visitas</span><span>Registos</span><span>Compras</span><span>Receita</span><span>Conv.</span>
-                    </div>
-                    ${mktSources.map(s => `
-                    <div style="display:grid;grid-template-columns:1.3fr .7fr .7fr .7fr 1fr .8fr;gap:4px;font-size:.8rem;padding:6px 0;border-bottom:1px solid #f1f5f9;align-items:center">
-                        <span style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${this._sourceLabel(s.source)}</span>
-                        <span>${s.visits}</span>
-                        <span>${s.signups}</span>
-                        <span>${s.buyers}</span>
-                        <span style="font-weight:700;color:#047857">${fmtMzn(s.revenue)}</span>
-                        <span>${s.conversion_rate}%</span>
-                    </div>`).join('')}
+                    <table class="admin-table" style="min-width:0">
+                        <thead>
+                            <tr><th>Origem</th><th>Visitas</th><th>Registos</th><th>Compras</th><th>Receita</th><th>Conv.</th></tr>
+                        </thead>
+                        <tbody>
+                        ${mktSources.map(s => `
+                            <tr>
+                                <td style="font-weight:700;max-width:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${this._sourceLabel(s.source)}</td>
+                                <td style="white-space:nowrap">${s.visits}</td>
+                                <td style="white-space:nowrap">${s.signups}</td>
+                                <td style="white-space:nowrap">${s.buyers}</td>
+                                <td style="font-weight:700;color:#047857;white-space:nowrap">${fmtMzn(s.revenue)}</td>
+                                <td style="white-space:nowrap">${s.conversion_rate}%</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
                 `);
             }
 
@@ -2503,6 +2541,12 @@ USING (EXISTS (
             this._feedbackAll     = fbList;
             this._feedbackSummary = fbSummary;
             this._renderFeedback(fbList, fbSummary, null);
+
+            // As tabelas acima (Páginas Mais Vistas, Desempenho do Blog,
+            // Cliques de Afiliados por Segmento, Origens de Marketing) são
+            // recriadas via innerHTML a cada recarregamento — é preciso
+            // marcá-las como ordenáveis de novo (idempotente, seguro).
+            window.AdminTableSort?.init();
 
         } catch (err) {
             console.error('[Admin] Analytics:', err);
@@ -4715,17 +4759,51 @@ USING (EXISTS (
                 return;
             }
             list.innerHTML = notifs.map(n => `
-                <div style="display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid #f1f5f9;${n.read ? 'opacity:.55' : 'background:#F8FAFC'}">
+                <div data-action="openNotif" data-id="${n.id}" data-link="${escapeHtml(n.link || '')}"
+                     style="display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer;${n.read ? 'opacity:.55' : 'background:#F8FAFC'}"
+                     onmouseover="this.style.background='#EFF6FF'" onmouseout="this.style.background='${n.read ? 'transparent' : '#F8FAFC'}'">
                     <div style="font-size:18px;flex-shrink:0">${this._notifIcon(n.type)}</div>
                     <div style="flex:1;min-width:0">
                         <div style="font-size:12.5px;font-weight:700;color:#0f172a">${n.title}</div>
                         <div style="font-size:11.5px;color:#64748b;margin-top:2px;line-height:1.4">${n.message || ''}</div>
                         <div style="font-size:10.5px;color:#94a3b8;margin-top:4px">${new Date(n.created_at).toLocaleString('pt-MZ')}</div>
                     </div>
+                    ${n.link ? '<div style="font-size:14px;color:#94a3b8;flex-shrink:0;align-self:center">›</div>' : ''}
                 </div>
             `).join('');
         } catch (err) {
             list.innerHTML = `<div style="text-align:center;padding:24px;color:#dc2626;font-size:13px">Erro: ${err.message}</div>`;
+        }
+    }
+
+    // NOVO (Set/2026): clicar numa notificação leva directamente ao
+    // conteúdo relacionado (secção do admin indicada em `link`, ex:
+    // '#affiliates' → aba Afiliados) e marca-a como lida — best-effort,
+    // nunca deve impedir a navegação mesmo que a marcação falhe.
+    async _openNotif(id, link) {
+        const panel = document.getElementById('notifPanel');
+        if (panel) panel.style.display = 'none';
+
+        if (id) {
+            try {
+                const token = await this._getAdminToken();
+                await fetch('/api/admin/notifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    body: JSON.stringify({ ids: [id] }),
+                });
+                this._loadNotifCount().catch(() => {});
+            } catch (err) {
+                console.warn('[Admin] Marcar notificação como lida:', err.message);
+            }
+        }
+
+        if (link && link.startsWith('#')) {
+            const section = link.slice(1);
+            if (document.getElementById(`section-${section}`)) {
+                this.nav(section);
+                this.closeSidebar();
+            }
         }
     }
 
