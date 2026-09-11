@@ -360,6 +360,34 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--sur
 .admin-table tr:last-child td { border-bottom: none; }
 .admin-table tr:hover td { background: #F8FAFF; }
 
+/* ── SORTABLE TABLE HEADERS (Set/2026) ──────────────────────────────────
+   Aplicado via AdminTableSort.js a qualquer <table class="admin-table">
+   ou <table class="data-table"> — clicar num cabeçalho (ex: "Estado" ou
+   "Visitas") ordena as linhas por essa coluna. */
+.admin-table th.sortable-col,
+.data-table th.sortable-col {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 20px !important;
+}
+.admin-table th.sortable-col:hover,
+.data-table th.sortable-col:hover { color: #1D4ED8; }
+.admin-table th.sortable-col::after,
+.data-table th.sortable-col::after {
+  content: '↕';
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: .35;
+  font-size: .8em;
+}
+.admin-table th.sortable-col[data-sort-dir="asc"]::after,
+.data-table th.sortable-col[data-sort-dir="asc"]::after { content: '▲'; opacity: 1; color: #1D4ED8; }
+.admin-table th.sortable-col[data-sort-dir="desc"]::after,
+.data-table th.sortable-col[data-sort-dir="desc"]::after { content: '▼'; opacity: 1; color: #1D4ED8; }
+
 .action-group { display: flex; gap: .375rem; flex-wrap: wrap; }
 
 /* ── USER CARDS (mobile) ─────────────────────────────────────── */
