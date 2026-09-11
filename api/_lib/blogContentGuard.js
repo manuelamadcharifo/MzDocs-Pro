@@ -82,7 +82,48 @@ const OVERCLAIM_PATTERNS = [
     label: 'promete suporte 24 horas por dia',
     re:    /suporte\s+24\s*(?:horas|\/\s*7|h\b)/i,
   },
+  {
+    // Set/2026 — extensão: cerca de 25 posts antigos afirmavam que o MzDocs
+    // Pro "cria"/"gera"/"emite"/"obtém" documentos de identificação
+    // oficiais (BI, passaporte, certidões, cartão de eleitor, NUIT, DIRE,
+    // apostilha) — isto NUNCA foi verdade: a plataforma só gera modelos de
+    // apoio (requerimentos, declarações, cartas), nunca o documento oficial
+    // em si, que é sempre emitido pela entidade competente.
+    //
+    // IMPORTANTE: ao contrário dos outros padrões desta lista, este exige
+    // "MzDocs" nas imediações do match (`nearby`, ver scanOverclaims) — sem
+    // essa exigência, disparava em qualquer título/H1 do género "Como Tirar
+    // Passaporte em Moçambique" (o TEMA do artigo, não uma alegação sobre a
+    // plataforma), o que testei e confirmei gerar falsos positivos em ~10
+    // dos posts existentes. Com a janela de proximidade, só dispara quando
+    // o verbo de criação aparece mesmo associado à marca.
+    id:      'official_id_document_issuance',
+    label:   'sugere que a plataforma cria/emite um documento de identificação oficial (BI, passaporte, certidão, cartão de eleitor, NUIT, DIRE, apostilha) — a plataforma só gera documentos de apoio, nunca o documento oficial em si',
+    re:      /(cri[ae]|criar|ger[ae]|gerar|emit[ei]|emitir|obt[eé]m|obter|tir[ae]|tirar)\s+(?:(?:o|a|os|as|seu|sua|seus|suas|um|uma)\s+){0,2}(BI\b|bilhete\s+de\s+identidade|passaporte|certid[aã]o\s+de\s+(?:nascimento|casamento|[oó]bito)|cart[aã]o\s+de\s+eleitor|cart[aã]o\s+de\s+contribuinte|\bNUIT\b|\bDIRE\b|apostilha)/i,
+    nearby:  /mzdocs/i,
+    window:  90,
+  },
 ];
+
+/**
+ * Procura `re` (convertida para global internamente) em `text` e devolve o
+ * primeiro match cuja vizinhança (± `window` caracteres) contém `nearbyRe`.
+ * Usado só pelos padrões que marcam `nearby` em OVERCLAIM_PATTERNS — os
+ * restantes continuam a usar `String.match` simples, sem esta exigência de
+ * proximidade.
+ */
+function _findWithProximity(text, re, nearbyRe, window) {
+  const flags = re.flags.includes('g') ? re.flags : re.flags + 'g';
+  const g = new RegExp(re.source, flags);
+  let m;
+  while ((m = g.exec(text))) {
+    const start = Math.max(0, m.index - window);
+    const end   = Math.min(text.length, m.index + m[0].length + window);
+    if (nearbyRe.test(text.slice(start, end))) return m[0];
+    if (g.lastIndex === m.index) g.lastIndex += 1; // evita loop infinito em match de comprimento zero
+  }
+  return null;
+}
 
 function _plainText(html) {
   return String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -101,7 +142,12 @@ function detectAiMention(html) {
 function scanOverclaims(html) {
   const text = _plainText(html);
   const found = [];
-  for (const { id, label, re } of OVERCLAIM_PATTERNS) {
+  for (const { id, label, re, nearby, window } of OVERCLAIM_PATTERNS) {
+    if (nearby) {
+      const match = _findWithProximity(text, re, nearby, window || 90);
+      if (match) found.push({ id, label, match });
+      continue;
+    }
     const m = text.match(re);
     if (m) found.push({ id, label, match: m[0] });
   }
