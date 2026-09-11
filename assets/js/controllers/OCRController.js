@@ -300,7 +300,7 @@ export class OCRController {
       }
       if (ocrConf) {
         ocrConf.textContent = fieldCount > 0
-          ? `IA: ${displayConf}% confiança`
+          ? `Auto: ${displayConf}% confiança`
           : `Confiança: ${conf}%`;
         ocrConf.style.color = displayConf >= 70 ? '#16a34a'
                             : displayConf >= 40 ? '#d97706'
@@ -323,7 +323,7 @@ export class OCRController {
       // legitimamente ser 0 mesmo quando a transcrição funcionou muito bem —
       // o objectivo desse serviço é o texto transcrito em si, não campos).
       if (fieldCount > 0) {
-        NotificationView.success(`✅ ${fieldCount} campo(s) preenchido(s) pela IA!`);
+        NotificationView.success(`✅ ${fieldCount} campo(s) preenchido(s) automaticamente!`);
       } else if (text && displayConf >= 60) {
         NotificationView.success('✅ Documento lido com sucesso! Reveja o texto abaixo.');
       } else if (!text || conf < 30) {
@@ -358,7 +358,7 @@ export class OCRController {
       'gap:8px'
     ].join(';');
 
-    let msg = `✨ ${applied} campo(s) preenchido(s) automaticamente pela IA`;
+    let msg = `✨ ${applied} campo(s) preenchido(s) automaticamente`;
     if (missing > 0) msg += ` · ${missing} campo(s) precisam revisão`;
 
     banner.innerHTML = `

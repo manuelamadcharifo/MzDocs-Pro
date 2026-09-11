@@ -84,7 +84,7 @@ export class TemplateController {
 
       this._active = true;
       this._showBanner(file.name);
-      NotificationView.success('✅ Modelo carregado! A IA usará o seu layout.');
+      NotificationView.success('✅ Modelo carregado! O sistema usará o seu layout.');
     } catch (err) {
       NotificationView.error('Erro ao ler o modelo: ' + err.message);
     }
@@ -160,7 +160,7 @@ export class TemplateController {
     else if (ocrZone) ocrZone.appendChild(banner);
     document.getElementById('btnClearTemplate')?.addEventListener('click', () => {
       this.reset();
-      NotificationView.info('Modelo removido. A IA gerará o documento do zero.');
+      NotificationView.info('Modelo removido. O documento será gerado do zero.');
     });
   }
 

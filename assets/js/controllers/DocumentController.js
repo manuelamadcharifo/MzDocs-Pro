@@ -682,7 +682,7 @@ export class DocumentController {
  async _generateNormal(key, svc, data, cost, btn) {
  const STEPS = [
   'A analisar dados do formulário…',
-  'A consultar IA…',
+  'A processar o pedido…',
   'A redigir o documento…',
   'A finalizar…',
  ];
@@ -712,7 +712,7 @@ export class DocumentController {
  DocumentView.hideLoader(this._genIv);
 
  if (!result?.document || result.document.trim().length < 20) {
-  throw new Error('A IA devolveu uma resposta vazia. Tente novamente.');
+  throw new Error('Não foi possível gerar o documento. Tente novamente.');
  }
 
  // CORRIGIDO: a capa de "Trabalho Escolar" depende de a IA reproduzir bem
@@ -1011,7 +1011,7 @@ export class DocumentController {
          <div style="font-size:1.5rem;font-weight:800;color:#0F766E;margin-bottom:4px;">Pack Básico — MZN 280</div>
          <div style="color:#6B7280;font-size:.85rem;margin-bottom:14px;">25 créditos · MZN 11.2 por documento</div>
          <div style="display:flex;flex-direction:column;gap:8px;">
-           <div style="display:flex;align-items:center;gap:8px;font-size:.9rem;"><span style="color:#10B981;font-weight:700;">✓</span> 25 documentos com IA</div>
+           <div style="display:flex;align-items:center;gap:8px;font-size:.9rem;"><span style="color:#10B981;font-weight:700;">✓</span> 25 documentos gerados automaticamente</div>
            <div style="display:flex;align-items:center;gap:8px;font-size:.9rem;"><span style="color:#10B981;font-weight:700;">✓</span> Templates premium incluídos</div>
            <div style="display:flex;align-items:center;gap:8px;font-size:.9rem;"><span style="color:#10B981;font-weight:700;">✓</span> Módulo académico APA 7</div>
            <div style="display:flex;align-items:center;gap:8px;font-size:.9rem;"><span style="color:#10B981;font-weight:700;">✓</span> Arquivo de documentos ilimitado</div>
@@ -1101,7 +1101,7 @@ export class DocumentController {
      // WhatsApp
      document.getElementById('mzRefWa')?.addEventListener('click', () => {
        const text = encodeURIComponent(
-         `Olá! Descobri o MzDocs Pro — cria documentos profissionais com IA em 2 minutos. ` +
+         `Olá! Descobri o MzDocs Pro — cria documentos profissionais em 2 minutos. ` +
          `O primeiro documento é GRÁTIS! Usa o meu link: ${refLink}`
        );
        window.open(`https://wa.me/?text=${text}`, '_blank');
@@ -1738,7 +1738,7 @@ export class DocumentController {
  const refLink = (user && !user.is_anonymous)
    ? `https://mzdocs.co.mz?ref=${(user.id || '').slice(0, 8).toUpperCase()}`
    : 'https://mzdocs.co.mz';
- const msg = `📄 Acabei de criar um(a) *${svc?.title || 'documento'}* em minutos com o *MzDocs Pro* — vou enviar o PDF a seguir nesta conversa.\n\n✨ Documentos profissionais com IA, prontos em menos de 2 minutos, sem sair de casa. O primeiro é GRÁTIS!\n👉 ${refLink}`;
+ const msg = `📄 Acabei de criar um(a) *${svc?.title || 'documento'}* em minutos com o *MzDocs Pro* — vou enviar o PDF a seguir nesta conversa.\n\n✨ Documentos profissionais, prontos em menos de 2 minutos, sem sair de casa. O primeiro é GRÁTIS!\n👉 ${refLink}`;
  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
  NotificationView.info('📎 Descarregue o PDF (botão Download) e anexe-o a esta conversa — o WhatsApp não permite a sites anexarem ficheiros automaticamente.');
  }
@@ -1969,14 +1969,14 @@ export class DocumentController {
    const contentTooLong = (currentContent || '').length > 9000; // ~ 2200+ palavras
    if (isLongDoc || contentTooLong) {
      NotificationView.warn(
-       '⚠️ A reedição por IA ainda não suporta documentos longos como este — reescrever tudo numa só vez cortaria o texto a meio. Edite directamente no editor (sem gastar créditos) para alterações pontuais.'
+       '⚠️ A redacção automática ainda não suporta documentos longos como este — reescrever tudo numa só vez cortaria o texto a meio. Edite directamente no editor (sem gastar créditos) para alterações pontuais.'
      );
      return;
    }
 
    // Verificação local (UX rápida — não substituí a verificação no servidor)
    if (!this.creditModel.canConsume(1)) {
-     NotificationView.warn('⚠️ Créditos insuficientes para reedição por IA.');
+     NotificationView.warn('⚠️ Créditos insuficientes para redacção automática.');
      return;
    }
 
