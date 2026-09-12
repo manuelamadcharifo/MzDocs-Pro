@@ -64,41 +64,62 @@ export function render(data = {}) {
   const itens = _parseItens(data);
   const valorTotal = parseFloat(data.valorTotal || 0) || itens.reduce((s, it) => s + it.subtotal, 0);
   const numOrc = `ORC/____/${hoje.getFullYear()}`;
+  const validade = data.validade || '30 dias';
 
+  // UX (Set/2026 — "o orçamento está com cara de recibo"): o motor de
+  // renderização (A4Renderer.js) é genérico para TODOS os documentos — não
+  // há folha de estilo por tipo, então a única forma de diferenciar
+  // orçamento de recibo é pela ESTRUTURA/CONTEÚDO do próprio texto. Um
+  // Nota: chegámos a tentar usar '> texto' (blockquote) para este aviso —
+  // a CSS existe (DEFAULT_PAGE_CSS tem regra para <blockquote>), mas
+  // markdownToHtml() escapa a string INTEIRA para HTML antes de analisar
+  // linha a linha, por isso o '>' já chega como '&gt;' ao detector de
+  // blockquote e nunca casa — bug pré-existente no motor partilhado, não
+  // específico deste ficheiro (confirmado: nenhum outro minuta usa '>' na
+  // prática). Não corrigido aqui de propósito — mexer em A4Renderer.js
+  // afecta a renderização de TODOS os documentos da app, risco a avaliar
+  // à parte. Em vez disso, o aviso usa só **negrito**, que já funciona. O
+  // bloco de aceitação no fim (duas assinaturas, não uma, numa tabela real
+  // — texto com espaços manuais NÃO funciona: o navegador colapsa espaços
+  // consecutivos, testado e confirmado) e o
+  // "ESTIMADO" no total reforçam a mesma ideia. Ver também: existe já uma
+  // Galeria de Modelos com 5 designs próprios para orçamento (botão "🎨
+  // Modelo" no resultado — assets/js/marketplace/TemplatePicker.js) para
+  // quem quiser um visual totalmente diferente, não só o texto.
   return `---
 
-# ORÇAMENTO — ${tipo.toUpperCase()}
+# PROPOSTA DE ORÇAMENTO
+
+## ${tipo.toUpperCase()}
 
 **N.º:** ${numOrc}
 **Data:** ${dataFmt}
-**Válido por:** ${data.validade || '30 dias'} a contar da data acima
+
+**📋 Nota:** este documento é uma proposta de valores — só se torna definitivo depois de aceite pelo cliente. Válido por **${validade}** a contar da data acima.
 
 Cliente: ${data.cliente || ''}
 Total Geral: ${formatMZN(valorTotal)} MZN
 
 ---
 
-## DESCRIÇÃO GERAL
-
-**${data.titulo || ''}**
-${data.local ? `\n**Local:** ${data.local}` : ''}
-
-## CLIENTE / REQUISITANTE
+## RESUMO
 
 | | |
 |---|---|
-| **Nome:** | ${data.cliente || ''} |
+| **Descrição:** | ${data.titulo || ''} |
+| **Cliente:** | ${data.cliente || ''} |
+${data.local ? `| **Local:** | ${data.local} |\n` : ''}| **Validade da proposta:** | ${validade} |
 
 ---
 
 ## ITENS / SERVIÇOS ORÇAMENTADOS
 
-| Descrição | Qtd | Preço Unit. (MZN) | Subtotal (MZN) |
+| Descrição | Qtd | Preço Unit. estimado (MZN) | Subtotal (MZN) |
 |---|---|---|---|
 ${itens.length
   ? itens.map(it => `| ${it.desc} | ${it.qtd} | ${formatMZN(it.preco)} | ${formatMZN(it.subtotal)} |`).join('\n')
   : `| ${(data.obs || 'Item a definir').trim()} | 1 | ${formatMZN(valorTotal)} | ${formatMZN(valorTotal)} |`}
-| | | **VALOR TOTAL:** | **${formatMZN(valorTotal)} MZN** |
+| | | **VALOR TOTAL ESTIMADO:** | **${formatMZN(valorTotal)} MZN** |
 
 ---
 
@@ -106,13 +127,18 @@ ${itens.length
 
 - **Forma de pagamento:** ${data.condicoes || 'a combinar'}
 ${data.prazo ? `- **Prazo de execução/entrega:** ${data.prazo}` : ''}
-- **Validade desta proposta:** ${data.validade || '30 dias'} a contar da data acima
+- **Validade desta proposta:** ${validade} a contar da data acima
 ${data.obs ? `\n**Observações:** ${data.obs}` : ''}
 
 ---
 
-*Este orçamento é uma proposta de valores sujeita a confirmação — não constitui factura nem comprovativo de pagamento. Após aprovação do cliente, deve ser emitido o recibo/factura correspondente.*
+## ACEITAÇÃO
 
-_________________________________________
-*(Assinatura de quem elabora o orçamento)*`;
+*Após aceitação, deve ser emitido o recibo/factura correspondente — este documento, por si só, não tem valor fiscal nem comprovativo de pagamento.*
+
+| Elaborado por: | Aceito pelo cliente: |
+|---|---|
+| _________________________________ | _________________________________ |
+| ${(data.emitente || '(nome de quem elabora)')} | ${data.cliente || '(nome do cliente)'} |
+| Data: ___/___/______ | Data: ___/___/______ |`;
 }
