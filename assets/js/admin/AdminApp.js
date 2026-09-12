@@ -2370,7 +2370,7 @@ USING (EXISTS (
             // ── Top serviços ─────────────────────────────────────────
             const serviceLabels = {
                 trabalho:'📚 Trabalho Escolar', cv:'📋 Curriculum Vitae',
-                carta:'✉️ Carta', orcamento:'🏗️ Orçamento de Obra',
+                carta:'✉️ Carta', orcamento:'📊 Orçamento',
                 impressao:'🖨️ Impressão', foto:'📷 Foto Documentos',
                 conversao:'🔄 Conversão', declaracao:'📄 Declaração',
                 contrato:'📑 Contrato', procuracao:'⚖️ Procuração',
@@ -2560,7 +2560,7 @@ USING (EXISTS (
 
         const serviceLabels = {
             trabalho:'📚 Trabalho Escolar', cv:'📋 Curriculum Vitae',
-            carta:'✉️ Carta', orcamento:'🏗️ Orçamento de Obra',
+            carta:'✉️ Carta', orcamento:'📊 Orçamento',
             impressao:'🖨️ Impressão', foto:'📷 Foto Documentos',
             conversao:'🔄 Conversão', declaracao:'📄 Declaração',
             contrato:'📑 Contrato', procuracao:'⚖️ Procuração',
