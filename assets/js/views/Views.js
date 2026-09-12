@@ -2,6 +2,7 @@
 import { renderA4Pages, A4_PAGES_CONTAINER_CSS, scalePage } from '../utils/A4Renderer.js';
 import { getPaginatedContent } from '../utils/Paginator.js';
 import { LongDocumentEngine } from '../services/LongDocumentEngine.js';
+import { resizeImageToDataUrl } from '../utils/ImageResize.js';
 
 export const NotificationView = {
   _stack: document.getElementById('notifStack'),
@@ -67,6 +68,62 @@ export const DocumentView = {
   // limpo por DocumentController.closeResult()
   _activeTemplateCss: null,
 
+  // ── Campo opcional "Logotipo" no formulário (NOVO — Set/2026) ──────────
+  // HTML do bloco + input escondido onde fica o data URL já redimensionado
+  // (lido por DocumentController.generate() via
+  // #mzFormLogoDataUrl.value — não faz parte de svc.fields porque não é
+  // um dado do documento em si, é uma personalização visual aplicada
+  // DEPOIS de gerar, ver insertLogoImage() em DocumentEditor.js).
+  _buildFormLogoFieldHTML() {
+    return `
+      <div class="form-group" id="mzFormLogoGroup" style="margin-top:6px;">
+        <label style="font-weight:700;font-size:13px;color:#374151;display:block;margin-bottom:6px;">
+          🖼️ Logotipo (opcional)
+        </label>
+        <p style="font-size:12px;color:#6b7280;margin:0 0 8px;">
+          Escolha uma imagem para aparecer no topo do documento gerado — o editor abre-se com ela já aplicada.
+        </p>
+        <input type="file" id="mzFormLogoInput" accept="image/*" style="display:block;width:100%;font-size:13px;">
+        <input type="hidden" id="mzFormLogoDataUrl" value="">
+        <div id="mzFormLogoPreviewWrap" style="display:none;margin-top:8px;text-align:center;border:1.5px dashed #d1d5db;border-radius:8px;padding:10px;background:#fafafa;">
+          <img id="mzFormLogoPreviewImg" style="max-width:100%;max-height:90px;object-fit:contain;">
+          <button type="button" id="mzFormLogoRemove" style="display:block;margin:8px auto 0;background:none;border:none;color:#EF4444;font-size:12px;font-weight:600;cursor:pointer;">🗑 Remover</button>
+        </div>
+      </div>`;
+  },
+
+  // Liga o <input type="file"> acima à mesma rotina de redimensionamento/
+  // compressão partilhada com o botão "🖼️ Logo" do editor — ver nota de
+  // segurança completa em assets/js/utils/ImageResize.js.
+  _bindFormLogoField(formBodyEl) {
+    const fileInput   = formBodyEl.querySelector('#mzFormLogoInput');
+    const dataUrlInput = formBodyEl.querySelector('#mzFormLogoDataUrl');
+    const previewWrap  = formBodyEl.querySelector('#mzFormLogoPreviewWrap');
+    const previewImg   = formBodyEl.querySelector('#mzFormLogoPreviewImg');
+    const removeBtn    = formBodyEl.querySelector('#mzFormLogoRemove');
+    if (!fileInput) return;
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const dataUrl = await resizeImageToDataUrl(file);
+        dataUrlInput.value = dataUrl;
+        previewImg.src = dataUrl;
+        previewWrap.style.display = 'block';
+      } catch (err) {
+        NotificationView.warn('⚠️ ' + err.message);
+        fileInput.value = '';
+      }
+    });
+
+    removeBtn?.addEventListener('click', () => {
+      dataUrlInput.value = '';
+      fileInput.value = '';
+      previewWrap.style.display = 'none';
+    });
+  },
+
   renderForm(svc, formBodyEl, formFootEl) {
     formBodyEl.innerHTML = this._buildFieldsHTML(svc.fields);
     this.bindConditionalFields(formBodyEl);
@@ -77,6 +134,17 @@ export const DocumentView = {
     // NOVO (correcção 2.6): inicializa qualquer tabela de itens do
     // formulário (ex.: "Itens / Serviços" do Recibo/Factura).
     this.bindItemTables(formBodyEl, svc.fields);
+    // NOVO (Set/2026): campo opcional de logotipo — só para serviços que
+    // geram mesmo um documento (svc.hasAI); o fluxo "papelaria" (pedido de
+    // impressão via WhatsApp) não gera nada em texto, não há onde aplicar
+    // um logo. Guardado num <input type="hidden"> lido por
+    // DocumentController.generate() — ver _bindFormLogoField() e nota de
+    // segurança completa em assets/js/utils/ImageResize.js (o mesmo
+    // utilitário já usado pelo botão "🖼️ Logo" do editor).
+    if (svc.hasAI) {
+      formBodyEl.insertAdjacentHTML('beforeend', this._buildFormLogoFieldHTML());
+      this._bindFormLogoField(formBodyEl);
+    }
     if (svc.hasAI) {
       // CORRIGIDO (P1.2 — Master Hardening, Set/2026): para
       // "trabalho"/"planonegocio" (geração em cadeia — ver
