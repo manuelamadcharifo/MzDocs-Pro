@@ -154,6 +154,15 @@ function _parseMarkdownTable(lines, startIdx) {
 // ── Formatação inline: bold, italic, code (reutilizado em células de tabela) ──
 function _inlineMd(text) {
   return (text || '')
+    // NOVO (Set/2026): ![alt](data:image/...) → <img>. Único tipo de src
+    // aceite é "data:image/" — é o único que este projecto gera (logo,
+    // assinatura — ver DocumentEditor.js#insertLogoImage/_richHTMLToMd),
+    // nunca uma URL remota, por segurança e para nunca depender de rede a
+    // meio da renderização de um documento. Largura/altura limitadas para
+    // nunca dominar a página A4 mesmo que o markdown tenha sido editado à
+    // mão com um valor de "alt" muito comprido.
+    .replace(/!\[([^\]]*)\]\((data:image\/[a-zA-Z0-9+.;=,\/-]+)\)/g, (_, alt, src) =>
+      `<img src="${src}" alt="${alt}" style="max-width:170px;max-height:80px;object-fit:contain;display:inline-block;">`)
     .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
