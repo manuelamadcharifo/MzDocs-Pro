@@ -589,16 +589,21 @@ export class SmartOCRService {
       // são tipicamente especificados num orçamento de obra já redigido
       // (ex.: "2 pisos", "acabamento de alto padrão", "laje de betão"...).
       orcamento:   [
-        { id:'tipoObra',      label:'Tipo de Obra',             type:'text' },
-        { id:'area',          label:'Área (m²)',                type:'number' },
-        { id:'nPisos',        label:'Nº de Pisos',              type:'select' },
-        { id:'local',         label:'Localização',              type:'text' },
-        { id:'acabamento',    label:'Tipo de Acabamento',       type:'select' },
-        { id:'fase',          label:'Fase do Projecto',         type:'select' },
-        { id:'cobertura',     label:'Tipo de Cobertura',        type:'select' },
-        { id:'infraestrutura',label:'Infraestrutura disponível',type:'select' },
-        { id:'prazo',         label:'Prazo desejado (dias)',    type:'number' },
-        { id:'extra',         label:'Detalhes adicionais',      type:'textarea' },
+        { id:'tipoOrcamento',       label:'Tipo de Orçamento',            type:'select' },
+        { id:'tipoOrcamentoCustom', label:'Especifique o tipo (se Outro)',type:'text' },
+        { id:'titulo',              label:'Descrição Geral do Orçamento', type:'text' },
+        { id:'cliente',             label:'Cliente / Requisitante',       type:'text' },
+        { id:'local',               label:'Local',                        type:'text' },
+        // Mesmo padrão de 'recibo' logo acima: 'itens' é uma tabela real
+        // (type:'itemtable') que o OCR ainda não sabe preencher linha a
+        // linha — o texto extraído da foto/documento original vai para
+        // "Observações adicionais" (id 'obs'), e a pessoa copia os valores
+        // para a tabela de itens manualmente.
+        { id:'obs',                 label:'Observações adicionais',       type:'textarea' },
+        { id:'valorTotal',          label:'Valor Total (MZN)',            type:'number' },
+        { id:'validade',            label:'Validade da Proposta',         type:'select' },
+        { id:'condicoes',           label:'Condições de Pagamento',       type:'select' },
+        { id:'prazo',               label:'Prazo de Execução/Entrega',    type:'text' },
       ],
       // CORRIGIDO: faltavam 'nivel' (select), 'aluno', 'turma', 'docente' e
       // 'instituicao' — adicionados ao formulário numa correcção anterior
