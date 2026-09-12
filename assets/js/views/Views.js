@@ -68,35 +68,64 @@ export const DocumentView = {
   // limpo por DocumentController.closeResult()
   _activeTemplateCss: null,
 
-  // ── Campo opcional "Logotipo" no formulário (NOVO — Set/2026) ──────────
-  // HTML do bloco + input escondido onde fica o data URL já redimensionado
-  // (lido por DocumentController.generate() via
-  // #mzFormLogoDataUrl.value — não faz parte de svc.fields porque não é
-  // um dado do documento em si, é uma personalização visual aplicada
-  // DEPOIS de gerar, ver insertLogoImage() em DocumentEditor.js).
-  _buildFormLogoFieldHTML() {
+  // ── Campo opcional de imagem no formulário (Set/2026) ───────────────────
+  // CORRIGIDO: já não é o mesmo "Logotipo" genérico para todos os serviços
+  // com IA — nem todo o documento faz sentido ter uma marca de negócio
+  // (ex: Procuração, Declaração de Residência são pessoais/legais, não
+  // corporativos), e o CV precisa de FOTO DE PERFIL, não de logo. Este
+  // mapa decide, por serviço, qual campo (se algum) aparece — critério
+  // segue a própria descrição ("sub") de cada serviço em
+  // ServiceDefinitions.js: 'logo' para os claramente de negócio/instituição
+  // (Carta, Arrendamento, Recibo/Factura, Orçamento, Prestação de Serviços,
+  // Recomendação, Plano de Negócios, Acta), 'photo' só para o CV, e omisso
+  // (sem campo nenhum) para os pessoais/legais/utilitários (Trabalho
+  // Escolar, Digitalizar Documento, Requerimento, Procuração, Declaração de
+  // Residência, Pedido de Licença, Conversão de Ficheiros).
+  BRAND_FIELD_BY_SERVICE: {
+    carta:        'logo',
+    arrendamento: 'logo',
+    recibo:       'logo',
+    orcamento:    'logo',
+    prestacao:    'logo',
+    recomendacao: 'logo',
+    planonegocio: 'logo',
+    acta:         'logo',
+    cv:           'photo',
+  },
+
+  _buildFormLogoFieldHTML(type) {
+    const isPhoto = type === 'photo';
     return `
-      <div class="form-group" id="mzFormLogoGroup" style="margin-top:6px;">
+      <div class="form-group" id="mzFormLogoGroup" data-brand-type="${type}" style="margin-top:6px;">
         <label style="font-weight:700;font-size:13px;color:#374151;display:block;margin-bottom:6px;">
-          🖼️ Logotipo (opcional)
+          ${isPhoto ? '🙂 Foto de Perfil (opcional)' : '🖼️ Logotipo (opcional)'}
         </label>
         <p style="font-size:12px;color:#6b7280;margin:0 0 8px;">
-          Escolha uma imagem para aparecer no topo do documento gerado — o editor abre-se com ela já aplicada.
+          ${isPhoto
+            ? 'Escolha a sua foto — o sistema aplica automaticamente um modelo de CV com espaço para foto (sem isto, o CV sai em texto simples, sem foto).'
+            : 'Escolha uma imagem para aparecer no topo do documento gerado — o editor abre-se com ela já aplicada.'}
         </p>
         <input type="file" id="mzFormLogoInput" accept="image/*" style="display:block;width:100%;font-size:13px;">
         <input type="hidden" id="mzFormLogoDataUrl" value="">
         <div id="mzFormLogoPreviewWrap" style="display:none;margin-top:8px;text-align:center;border:1.5px dashed #d1d5db;border-radius:8px;padding:10px;background:#fafafa;">
-          <img id="mzFormLogoPreviewImg" style="max-width:100%;max-height:90px;object-fit:contain;">
+          <img id="mzFormLogoPreviewImg" style="${isPhoto ? 'width:90px;height:90px;border-radius:50%;object-fit:cover;' : 'max-width:100%;max-height:90px;object-fit:contain;'}">
           <button type="button" id="mzFormLogoRemove" style="display:block;margin:8px auto 0;background:none;border:none;color:#EF4444;font-size:12px;font-weight:600;cursor:pointer;">🗑 Remover</button>
         </div>
       </div>`;
   },
 
-  // Liga o <input type="file"> acima à mesma rotina de redimensionamento/
-  // compressão partilhada com o botão "🖼️ Logo" do editor — ver nota de
-  // segurança completa em assets/js/utils/ImageResize.js.
-  _bindFormLogoField(formBodyEl) {
-    const fileInput   = formBodyEl.querySelector('#mzFormLogoInput');
+  // Liga o <input type="file"> acima. Para 'logo', redimensiona/comprime já
+  // aqui (mesma rotina partilhada do botão "🖼️ Logo" do editor — ver nota
+  // de segurança completa em assets/js/utils/ImageResize.js) e guarda o
+  // resultado no <input hidden>, pronto a usar directamente. Para 'photo'
+  // (CV), NÃO redimensiona aqui — o ficheiro original fica à espera em
+  // fileInput.files[0] para ser entregue tal e qual ao próprio recorte
+  // circular do selector de modelos (TemplatePicker.js#_handlePhotoUpload),
+  // que já existe e já sabe fazer isto correctamente; só se mostra aqui uma
+  // pré-visualização leve (URL.createObjectURL), sem processar a imagem
+  // duas vezes com lógicas diferentes.
+  _bindFormLogoField(formBodyEl, type) {
+    const fileInput    = formBodyEl.querySelector('#mzFormLogoInput');
     const dataUrlInput = formBodyEl.querySelector('#mzFormLogoDataUrl');
     const previewWrap  = formBodyEl.querySelector('#mzFormLogoPreviewWrap');
     const previewImg   = formBodyEl.querySelector('#mzFormLogoPreviewImg');
@@ -107,9 +136,13 @@ export const DocumentView = {
       const file = e.target.files?.[0];
       if (!file) return;
       try {
-        const dataUrl = await resizeImageToDataUrl(file);
-        dataUrlInput.value = dataUrl;
-        previewImg.src = dataUrl;
+        if (type === 'photo') {
+          previewImg.src = URL.createObjectURL(file);
+        } else {
+          const dataUrl = await resizeImageToDataUrl(file);
+          dataUrlInput.value = dataUrl;
+          previewImg.src = dataUrl;
+        }
         previewWrap.style.display = 'block';
       } catch (err) {
         NotificationView.warn('⚠️ ' + err.message);
@@ -124,7 +157,7 @@ export const DocumentView = {
     });
   },
 
-  renderForm(svc, formBodyEl, formFootEl) {
+  renderForm(svc, formBodyEl, formFootEl, serviceKey) {
     formBodyEl.innerHTML = this._buildFieldsHTML(svc.fields);
     this.bindConditionalFields(formBodyEl);
     // NOVO (correcção 2.5): activa as caixas de dica dinâmica ("Tipo de
@@ -134,16 +167,13 @@ export const DocumentView = {
     // NOVO (correcção 2.6): inicializa qualquer tabela de itens do
     // formulário (ex.: "Itens / Serviços" do Recibo/Factura).
     this.bindItemTables(formBodyEl, svc.fields);
-    // NOVO (Set/2026): campo opcional de logotipo — só para serviços que
-    // geram mesmo um documento (svc.hasAI); o fluxo "papelaria" (pedido de
-    // impressão via WhatsApp) não gera nada em texto, não há onde aplicar
-    // um logo. Guardado num <input type="hidden"> lido por
-    // DocumentController.generate() — ver _bindFormLogoField() e nota de
-    // segurança completa em assets/js/utils/ImageResize.js (o mesmo
-    // utilitário já usado pelo botão "🖼️ Logo" do editor).
-    if (svc.hasAI) {
-      formBodyEl.insertAdjacentHTML('beforeend', this._buildFormLogoFieldHTML());
-      this._bindFormLogoField(formBodyEl);
+    // ALTERADO (Set/2026 — CORRIGIDO): já não aparece para "todos os
+    // serviços com IA" — só para os que o BRAND_FIELD_BY_SERVICE acima
+    // declara, e com o campo certo (logo ou foto) para cada um.
+    const brandFieldType = this.BRAND_FIELD_BY_SERVICE[serviceKey];
+    if (brandFieldType) {
+      formBodyEl.insertAdjacentHTML('beforeend', this._buildFormLogoFieldHTML(brandFieldType));
+      this._bindFormLogoField(formBodyEl, brandFieldType);
     }
     if (svc.hasAI) {
       // CORRIGIDO (P1.2 — Master Hardening, Set/2026): para
