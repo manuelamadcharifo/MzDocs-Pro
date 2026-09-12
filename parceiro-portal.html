@@ -162,6 +162,13 @@
       <div class="ptab" id="ptabBookings" data-action="showTabBookings">📋 Marcações<span class="ptab-badge" id="bkPendingBadge" style="display:none">0</span></div>
     </div>
 
+    <!-- NOVO (Set/2026): aviso transparente — a mesma regra que faz a
+         papelaria perder posição na lista "Parceiras próximas" do cliente
+         (ver handleNearby em api/partners.js) é explicada aqui, para não
+         ser um castigo silencioso. Visível em qualquer aba (Perfil ou
+         Marcações), actualizado por refreshPendingBadge()/loadBookings(). -->
+    <div id="bkStaleBanner" style="display:none;margin:0 16px 12px;padding:10px 14px;border-radius:12px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;font-size:12.5px;font-weight:600;line-height:1.4"></div>
+
     <!-- ABA: MARCAÇÕES (NOVO) -->
     <div id="tabBookings">
       <div class="bk-filters">
@@ -540,6 +547,11 @@ async function loadBookings(status = '') {
     if (!res.ok) throw new Error(data.error || 'Erro ao carregar marcações');
     renderBookings(data.bookings || []);
     updatePendingBadge(data.bookings || []);
+    // Só recalcula o aviso de pendentes-antigas quando a vista mostra
+    // pendentes suficientes para o número ser fiável (sem filtro, ou já
+    // filtrado a "Pendentes") — com outros filtros, refreshPendingBadge()
+    // (chamada à parte, sempre com status=pendente) já garante o valor certo.
+    if (!status || status === 'pendente') updateStaleBanner(data.bookings || []);
   } catch (err) {
     list.innerHTML = `<div class="bk-empty">❌ ${err.message}</div>`;
   }
@@ -551,7 +563,10 @@ async function refreshPendingBadge() {
   try {
     const res = await fetch('/api/partners?action=my-bookings&status=pendente', { headers: { Authorization: 'Bearer ' + TOKEN } });
     const data = await res.json();
-    if (res.ok) updatePendingBadge(data.bookings || [], true);
+    if (res.ok) {
+      updatePendingBadge(data.bookings || [], true);
+      updateStaleBanner(data.bookings || []);
+    }
   } catch (_) {}
 }
 
@@ -560,6 +575,24 @@ function updatePendingBadge(bookings, isPendingOnly = false) {
   const badge = document.getElementById('bkPendingBadge');
   badge.textContent = count;
   badge.style.display = count > 0 ? 'inline-block' : 'none';
+}
+
+// NOVO (Set/2026): mostra, de forma transparente, quantos pedidos
+// "pendente" há mais de 48h — a mesma condição usada em handleNearby
+// (api/partners.js) para baixar esta papelaria na lista "Parceiras
+// próximas" do cliente. `bookings` deve ser sempre a lista completa de
+// pendentes (não filtrada por outro estado) para a contagem ser exacta.
+function updateStaleBanner(bookings) {
+  const banner = document.getElementById('bkStaleBanner');
+  if (!banner) return;
+  const STALE_MS = 48 * 3600 * 1000;
+  const staleCount = (bookings || []).filter(b =>
+    b.status === 'pendente' && (Date.now() - new Date(b.created_at).getTime()) > STALE_MS
+  ).length;
+  if (!staleCount) { banner.style.display = 'none'; return; }
+  banner.style.display = 'block';
+  banner.innerHTML = `⚠️ Tem <b>${staleCount}</b> pedido${staleCount > 1 ? 's' : ''} pendente${staleCount > 1 ? 's' : ''} há mais de 48h.
+    Enquanto não aceitar, agendar ou cancelar, está a aparecer mais abaixo na lista de papelarias que os clientes veem perto de si.`;
 }
 
 function renderBookings(bookings) {
@@ -576,6 +609,15 @@ function bookingCardHTML(b) {
   const created = new Date(b.created_at).toLocaleString('pt-PT', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
   const waLink = b.client_phone ? `<a class="bk-wa" href="https://wa.me/${b.client_phone}" target="_blank" rel="noopener">📱 Falar no WhatsApp</a>` : '';
   const detailsHtml = fmtBkDetails(b.details);
+
+  // NOVO (Set/2026): mesma regra de 48h usada em updateStaleBanner() e em
+  // handleNearby (api/partners.js) — realça o cartão individual, para não
+  // depender só do aviso geral no topo para perceber QUAL pedido está a
+  // custar posição na lista "Parceiras próximas".
+  const isStale = b.status === 'pendente' && (Date.now() - new Date(b.created_at).getTime()) > 48 * 3600 * 1000;
+  const staleNote = isStale
+    ? `<div style="font-size:11.5px;font-weight:700;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:5px 8px;margin-top:6px">⚠️ Pendente há mais de 48h</div>`
+    : '';
 
   // Acções disponíveis dependem do estado actual — evita, por exemplo,
   // "Concluir" uma marcação já cancelada.
@@ -620,6 +662,7 @@ function bookingCardHTML(b) {
         <span class="bk-status ${b.status}">${BK_STATUS_LABEL[b.status] || b.status}</span>
       </div>
       ${detailsHtml ? `<div class="bk-details">${detailsHtml}</div>` : ''}
+      ${staleNote}
       ${waLink}
       ${actions}
     </div>`;
