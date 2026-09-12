@@ -381,27 +381,73 @@ export const SERVICES = {
   },
 
   orcamento: {
-    icon:'🏗️', bg:'#F5F3FF', title:'Orçamento de Obra',
-    sub:'Orçamento detalhado com todos os custos', hasAI:true,
+    icon:'📊', bg:'#F5F3FF', title:'Orçamento',
+    sub:'Orçamento profissional para qualquer tipo de trabalho — cálculo automático dos valores',
+    hasAI:true,
     category:'negocio', popularity:8,
+    // NOVO (Set/2026 — generalização pedida explicitamente: "refaça o
+    // serviço orçamento de obra para orçamento geral em que pode ser de
+    // qualquer coisa... que funcione como o recibo que calcula
+    // automaticamente"): antes só servia para obras de construção civil
+    // (área, pisos, acabamento, cobertura…), com custo calculado pela IA a
+    // partir de texto livre — sem tabela de itens nem soma automática.
+    // Passa a MINUTA FIXA (mesma família de "recibo"/"procuracao" — ver
+    // assets/js/services/minutas/index.js): montagem local, instantânea,
+    // sem custo de IA, com uma tabela de itens real (type:'itemtable',
+    // já usada por "recibo") cujo subtotal por linha e total geral se
+    // calculam sozinhos — nunca mais um valor digitado à mão. Serve agora
+    // para QUALQUER tipo de orçamento (obra, evento, casamento, viagem,
+    // equipamento, serviço técnico, agrícola, ou um tipo escrito pelo
+    // próprio utilizador em "Outro") — ver dynamicHint abaixo. Sendo
+    // instantâneo, sem custo de IA e ao preço mais baixo do catálogo (1
+    // crédito, inalterado), funciona bem como serviço-isca: útil para
+    // praticamente qualquer pequeno negócio ou prestador, gerado em
+    // segundos, boa margem por não depender de IA.
+    mode:'template',
     fields:[
-      { id:'tipoObra',   label:'Tipo de Obra', type:'text', required:true, ph:'Casa T2, Vedação 50m, Remodelação de sala…' },
+      { id:'tipoOrcamento', label:'Tipo de Orçamento', type:'select', required:true,
+        opts:['Construção / Obra','Evento / Festa','Casamento','Viagem','Equipamento / Material','Serviço Técnico','Agrícola','Outro (personalizado)'],
+        val:'Construção / Obra',
+        hint:'Escolha o que melhor descreve este orçamento — o cabeçalho do documento ajusta-se automaticamente.',
+        dynamicHint:{
+          'Construção / Obra':    '🏗️ Construção/Obra: para reformas, construção, vedações, pintura, etc.',
+          'Evento / Festa':       '🎉 Evento/Festa: para aniversários, formaturas, conferências e outros eventos.',
+          'Casamento':            '💍 Casamento: para cerimónia, recepção, decoração e serviços relacionados.',
+          'Viagem':               '✈️ Viagem: para transporte, alojamento, alimentação e outros custos de viagem.',
+          'Equipamento / Material':'📦 Equipamento/Material: para venda ou fornecimento de bens e materiais.',
+          'Serviço Técnico':      '🔧 Serviço Técnico: para reparações, instalações e assistência técnica.',
+          'Agrícola':             '🌾 Agrícola: para produção, insumos e serviços agrícolas.',
+          'Outro (personalizado)':'✏️ Escreva abaixo o tipo exacto deste orçamento.',
+        } },
+      // NOVO: permite QUALQUER tipo de orçamento não previsto na lista
+      // acima — "até os criados pelos usuários", como pedido. Só aparece
+      // (e só é obrigatório) quando "Outro (personalizado)" é escolhido —
+      // mesmo mecanismo requiredIf/conditional já usado em 'recibo'.
+      { id:'tipoOrcamentoCustom', label:'Especifique o tipo de orçamento', type:'text',
+        ph:'Ex: Catering, Mudança, Fotografia, Decoração…',
+        requiredIf:{ field:'tipoOrcamento', in:['Outro (personalizado)'] },
+        conditional:'tipoOrcamento', condValue:['Outro (personalizado)'] },
+      { id:'titulo', label:'Descrição Geral do Orçamento', type:'text', required:true,
+        ph:'Ex: Reforma da cozinha, Festa de 15 anos, Viagem a Beira, Fornecimento de cimento…' },
       { row:true, items:[
-        { id:'area',    label:'Área (m²)', type:'number', ph:'120', min:'1' },
-        { id:'nPisos',  label:'N.º de Pisos', type:'select', opts:['Térreo (R/C)','2 pisos','3 pisos','Outro'] },
+        { id:'cliente', label:'Cliente / Requisitante', type:'text', required:true, ph:'Nome do cliente' },
+        { id:'local',   label:'Local (opcional)', type:'text', ph:'Maputo, Beira…' },
       ]},
+      // Mesma tabela de itens real já usada em 'recibo' — subtotal por
+      // linha e "Valor Total" calculam-se sozinhos (ver Views.js →
+      // _field()/bindItemTables()/_itemTableRecalc(), reaproveitado sem
+      // nenhuma alteração).
+      { id:'itens', label:'Itens / Serviços a Orçamentar', type:'itemtable', syncTotalTo:'valorTotal',
+        hint:'Adicione uma linha por material, item ou serviço — o subtotal de cada linha e o "Valor Total" abaixo calculam-se automaticamente.' },
       { row:true, items:[
-        { id:'local',     label:'Localização', type:'text', required:true, ph:'Maputo, Matola…' },
-        { id:'acabamento',label:'Tipo de Acabamento', type:'select', opts:['Simples / Económico','Médio / Padrão','Alto Padrão'] },
+        { id:'valorTotal', label:'Valor Total (MZN)', type:'number', required:true, readonly:true, ph:'Calculado automaticamente pelos itens acima' },
+        { id:'validade',   label:'Validade da Proposta', type:'select', opts:['7 dias','15 dias','30 dias','60 dias'], val:'30 dias' },
       ]},
-      { id:'fase',       label:'Fase do Projecto', type:'select', required:true,
-        opts:['Construção do zero','Apenas estrutura e alvenaria','Apenas acabamentos','Instalações hidráulicas/eléctricas','Renovação parcial'] },
-      { id:'cobertura',  label:'Tipo de Cobertura', type:'select',
-        opts:['Laje de betão','Zinco / Chapa metálica','Telha cerâmica','Não aplicável / já existe'] },
-      { id:'infraestrutura', label:'Infraestrutura disponível', type:'select',
-        opts:['Água e electricidade ligadas','Só electricidade','Só água','Nenhuma — a instalar','Não aplicável'] },
-      { id:'prazo',      label:'Prazo desejado (dias)', type:'number', val:'60', min:'7' },
-      { id:'extra',      label:'Detalhes adicionais', type:'textarea', ph:'Número de quartos, casa de banho, alpendre, portão, etc.' },
+      { id:'condicoes', label:'Condições de Pagamento', type:'select',
+        opts:['A combinar','50% adiantado, 50% na entrega/conclusão','Pagamento único na entrega/conclusão','Pagamento em 2 prestações','Pagamento em 3 prestações'] },
+      { id:'prazo',      label:'Prazo de Execução/Entrega (opcional)', type:'text', ph:'Ex: 30 dias após aprovação, 2 semanas, a combinar…' },
+      { id:'obs',        label:'Observações adicionais (opcional)', type:'textarea',
+        ph:'Ex: preço não inclui transporte, materiais por conta do cliente, garantia de 30 dias…' },
     ],
     buildWA: null,
   },
