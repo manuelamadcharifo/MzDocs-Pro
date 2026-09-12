@@ -429,6 +429,15 @@ export const SERVICES = {
         conditional:'tipoOrcamento', condValue:['Outro (personalizado)'] },
       { id:'titulo', label:'Descrição Geral do Orçamento', type:'text', required:true,
         ph:'Ex: Reforma da cozinha, Festa de 15 anos, Viagem a Beira, Fornecimento de cimento…' },
+      // NOVO (melhoria de UI/UX pedida — "orçamento com cara de recibo"):
+      // faltava um campo para quem ELABORA o orçamento, essencial para o
+      // bloco de "Elaborado por / Aceito pelo cliente" (assinatura dupla)
+      // em orcamento.js — sem isto, "Elaborado por" ficava sempre com um
+      // texto genérico, mesmo quando a pessoa tinha acabado de indicar o
+      // nome do cliente ao lado. Opcional (nem todos os tipos de orçamento
+      // — ex.: "Viagem" pessoal — têm uma "empresa" a emitir).
+      { id:'emitente', label:'O seu nome / empresa (opcional)', type:'text',
+        ph:'Quem está a elaborar este orçamento' },
       { row:true, items:[
         { id:'cliente', label:'Cliente / Requisitante', type:'text', required:true, ph:'Nome do cliente' },
         { id:'local',   label:'Local (opcional)', type:'text', ph:'Maputo, Beira…' },
