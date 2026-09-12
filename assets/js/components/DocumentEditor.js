@@ -3,6 +3,7 @@
 import { sanitizeHtml } from '../utils/Sanitizer.js';
 import { getFormatCSS } from './DocumentEditorStyles.js';
 import { renderA4Pages, A4_PAGES_CONTAINER_CSS, scalePage, markdownToHtml as a4MarkdownToHtml, DEFAULT_PAGE_CSS } from '../utils/A4Renderer.js';
+import { resizeImageToDataUrl } from '../utils/ImageResize.js';
 
 export class DocumentEditor {
   constructor() {
@@ -61,6 +62,7 @@ export class DocumentEditor {
             <button id="edBtnCopy"     class="ed-action-btn">📋 Copiar</button>
             <button id="edBtnReedit" class="ed-action-btn ai" title="Redigir automaticamente (consome 1 crédito)">✨ Redigir Auto <span style="font-size:10px;opacity:.75;font-weight:400;">(-1 cr.)</span></button>
             <button id="edBtnSign"    class="ed-action-btn" title="Inserir assinatura digital no documento">✍️ Assinar</button>
+            <button id="edBtnLogo"    class="ed-action-btn" title="Inserir o seu logotipo no documento">🖼️ Logo</button>
           </div>
         </div>
 
@@ -194,6 +196,8 @@ export class DocumentEditor {
     this.modal.querySelector('#edBtnReedit2')?.addEventListener('click',  () => this._reedit());
     this.modal.querySelector('#edBtnSave')?.addEventListener('click',     () => this._saveAndPreview());
     this.modal.querySelector('#edBtnSign')?.addEventListener('click',     () => this._openSignature());
+    // NOVO (Set/2026): mesmo padrão do botão "Assinar" acima — ver _openLogo().
+    this.modal.querySelector('#edBtnLogo')?.addEventListener('click',     () => this._openLogo());
     // FIX 2 — Botão de zoom para ver página completa no editor
     this.modal.querySelector('#edBtnZoomOut')?.addEventListener('click',  () => this._toggleEditorZoom());
 
@@ -1496,6 +1500,184 @@ export class DocumentEditor {
       document.body.appendChild(hint);
       setTimeout(() => hint.remove(), 2500);
     });
+  }
+
+  // ── Redimensiona/comprime a imagem do logotipo antes de a embutir no
+  // documento (Set/2026) — mesmo raciocínio do _resizeReferenceImage() em
+  // TemplatePicker.js, mas mantendo PNG quando a origem é PNG (um logotipo
+  // tipicamente precisa de fundo transparente; TemplatePicker converte
+  // sempre para JPEG porque ali é só uma referência visual para a IA, não
+  // algo que fica embutido no documento final). maxSide=500 já é mais do
+  // que suficiente para o tamanho a que o logo é mostrado no documento
+  // (cerca de 90pt/~120px) mesmo em ecrãs retina — mantém o HTML/PDF/DOCX
+  // leves nas redes móveis moçambicanas.
+  // ALTERADO (Set/2026): a lógica real passou para
+  // assets/js/utils/ImageResize.js (resizeImageToDataUrl), partilhada com
+  // o novo campo "Logotipo (opcional)" nos formulários (Views.js), que
+  // corre ANTES de o DocumentEditor sequer existir — ver nota de
+  // segurança completa nesse ficheiro. Mantido aqui como wrapper fino só
+  // para não alterar as chamadas já existentes a this._resizeLogoImage().
+  _resizeLogoImage(file, maxSide = 500, quality = 0.85) {
+    return resizeImageToDataUrl(file, maxSide, quality);
+  }
+
+  // ── Modal "Inserir Logotipo" (NOVO — Set/2026) ────────────────────────
+  // Mesma estrutura/mecânica do _openSignature() logo acima — só muda a
+  // origem da imagem (ficheiro escolhido em vez de canvas desenhado) e a
+  // posição em que entra no documento (topo da 1ª página, não fim da
+  // última — um logotipo é cabeçalho, não rodapé/assinatura). Reaproveita
+  // exactamente o mesmo caminho de exportação (_richHTMLPages →
+  // HTMLPDFExporter/GenericHtmlToDocxExporter) que já sabe preservar
+  // imagens em PDF e Word desde que a assinatura foi construída.
+  _openLogo() {
+    const existing = document.getElementById('logoModal');
+    if (existing) existing.remove();
+
+    const logoModal = document.createElement('div');
+    logoModal.id = 'logoModal';
+    logoModal.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:99999',
+      'background:rgba(0,0,0,0.7)', 'display:flex',
+      'align-items:center', 'justify-content:center', 'padding:20px',
+    ].join(';');
+
+    // NOVO (Set/2026): controlos de alinhamento (esquerda/centro/direita)
+    // e posição (topo/fundo do documento) — antes o logo entrava sempre no
+    // canto superior esquerdo, sem escolha.
+    const alignBtn = (val, label) => `<button type="button" class="logo-opt-btn" data-align="${val}" style="flex:1;padding:8px 4px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#374151;">${label}</button>`;
+    const posBtn   = (val, label) => `<button type="button" class="logo-opt-btn" data-pos="${val}"   style="flex:1;padding:8px 4px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#374151;">${label}</button>`;
+
+    logoModal.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:24px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="font-size:16px;font-weight:700;color:#07101f;">🖼️ Logotipo do Documento</h3>
+          <button id="logoModalClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:4px;">✕</button>
+        </div>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:12px;">Escolha uma imagem (PNG com fundo transparente fica melhor):</p>
+        <input type="file" id="logoFileInput" accept="image/*" style="display:block;width:100%;font-size:13px;margin-bottom:12px;">
+        <div id="logoPreviewWrap" style="display:none;text-align:center;border:1.5px dashed #d1d5db;border-radius:8px;padding:12px;margin-bottom:12px;background:#fafafa;">
+          <img id="logoPreviewImg" style="max-width:100%;max-height:120px;object-fit:contain;">
+        </div>
+
+        <div style="font-size:11.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:6px;">Alinhamento</div>
+        <div id="logoAlignGroup" style="display:flex;gap:6px;margin-bottom:12px;">
+          ${alignBtn('left', '◀ Esquerda')}${alignBtn('center', '⯃ Centro')}${alignBtn('right', 'Direita ▶')}
+        </div>
+
+        <div style="font-size:11.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:6px;">Posição no documento</div>
+        <div id="logoPosGroup" style="display:flex;gap:6px;margin-bottom:16px;">
+          ${posBtn('top', '⬆ Topo')}${posBtn('bottom', '⬇ Fundo')}
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button id="logoCancel" style="flex:1;padding:10px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:#374151;">Cancelar</button>
+          <button id="logoInsert" disabled style="flex:2;padding:10px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;opacity:.5;">✅ Inserir no Documento</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(logoModal);
+
+    let logoDataUrl = null;
+    let align = 'left'; // por omissão — igual ao comportamento anterior
+    let position = 'top';
+    const insertBtn = document.getElementById('logoInsert');
+
+    // Realça o botão activo em cada grupo (alinhamento / posição), sem
+    // depender de nenhum estado de "radio" nativo — só um <button> cada.
+    const highlightGroup = (groupId, activeBtn) => {
+      document.getElementById(groupId).querySelectorAll('.logo-opt-btn').forEach(b => {
+        const isActive = b === activeBtn;
+        b.style.borderColor = isActive ? '#1D4ED8' : '#d1d5db';
+        b.style.background  = isActive ? '#EFF6FF' : '#fff';
+        b.style.color       = isActive ? '#1D4ED8' : '#374151';
+      });
+    };
+    document.getElementById('logoAlignGroup').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-align]');
+      if (!btn) return;
+      align = btn.dataset.align;
+      highlightGroup('logoAlignGroup', btn);
+    });
+    document.getElementById('logoPosGroup').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-pos]');
+      if (!btn) return;
+      position = btn.dataset.pos;
+      highlightGroup('logoPosGroup', btn);
+    });
+    // Estado inicial visível (Esquerda + Topo, igual ao que já era o único
+    // comportamento antes deste botão existir).
+    highlightGroup('logoAlignGroup', document.querySelector('#logoAlignGroup [data-align="left"]'));
+    highlightGroup('logoPosGroup',   document.querySelector('#logoPosGroup [data-pos="top"]'));
+
+    document.getElementById('logoFileInput').addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        logoDataUrl = await this._resizeLogoImage(file);
+        const previewImg = document.getElementById('logoPreviewImg');
+        previewImg.src = logoDataUrl;
+        document.getElementById('logoPreviewWrap').style.display = 'block';
+        insertBtn.disabled = false;
+        insertBtn.style.opacity = '1';
+      } catch (err) {
+        alert('⚠️ ' + err.message);
+      }
+    });
+
+    document.getElementById('logoModalClose').addEventListener('click', () => logoModal.remove());
+    document.getElementById('logoCancel').addEventListener('click', () => logoModal.remove());
+    logoModal.addEventListener('click', e => { if (e.target === logoModal) logoModal.remove(); });
+
+    insertBtn.addEventListener('click', () => {
+      if (!logoDataUrl) return;
+      this.insertLogoImage(logoDataUrl, align, position);
+      logoModal.remove();
+    });
+  }
+
+  // ── Insere de facto o logotipo no documento (NOVO — Set/2026) ─────────
+  // Extraído do handler do botão "Inserir" acima para poder ser chamado
+  // também SEM modal nenhum — usado por DocumentController quando o
+  // utilizador já tinha escolhido um logotipo no campo opcional do
+  // FORMULÁRIO (antes de gerar): assim que o documento é gerado, o editor
+  // abre-se automaticamente com o logotipo já aplicado, em vez de a pessoa
+  // ter de repetir a escolha aqui.
+  insertLogoImage(logoDataUrl, align = 'left', position = 'top') {
+    const marginRule = position === 'top' ? 'margin-bottom:16pt;' : 'margin-top:16pt;';
+    const logoHTML = `
+      <div style="text-align:${align};${marginRule}">
+        <img src="${logoDataUrl}" style="max-width:170px;max-height:80px;object-fit:contain;display:inline-block;" alt="Logotipo">
+      </div>
+    `;
+
+    // Mesma lógica de destino do _openSignature(): se já está em modo de
+    // edição com o cursor activo numa folha, insere ali (a posição
+    // escolhida não se aplica — entra onde o cursor estiver); senão entra
+    // em modo de edição e põe no TOPO da 1ª página ou no FUNDO da última,
+    // consoante a "position" pedida.
+    const activePage = this._getActiveEditorPage();
+    if (activePage && document.activeElement === activePage) {
+      document.execCommand('insertHTML', false, logoHTML);
+      this._syncContentFromEditor();
+    } else {
+      this._switchMode('edit');
+      setTimeout(() => {
+        const pages = this._getEditorPages();
+        const targetPage = position === 'top' ? pages[0] : pages[pages.length - 1];
+        if (targetPage) {
+          targetPage.innerHTML = position === 'top'
+            ? (logoHTML + targetPage.innerHTML)
+            : (targetPage.innerHTML + logoHTML);
+          this._syncContentFromEditor();
+        }
+      }, 100);
+    }
+
+    const hint = document.createElement('div');
+    hint.textContent = '🖼️ Logotipo inserido!';
+    hint.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:8px 20px;border-radius:20px;font-size:13px;font-weight:700;z-index:99999;';
+    document.body.appendChild(hint);
+    setTimeout(() => hint.remove(), 2500);
   }
 
   // ── Guardar edição e voltar ao preview ────────────────────────
