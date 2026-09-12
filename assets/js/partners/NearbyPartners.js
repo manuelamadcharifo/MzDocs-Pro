@@ -14,7 +14,14 @@ document.addEventListener('click', (e) => {
   // seleccionar a papelaria (ver selectPartner() abaixo), que activa o botão
   // fixo "Enviar pelo WhatsApp Grátis" do formulário em vez de contactar a
   // papelaria sem os dados do pedido.
-  if (el.dataset.action === 'partnerClick') selectPartner(el);
+  if (el.dataset.action === 'partnerClick') {
+    selectPartner(el);
+    // NOVO (Set/2026): se a selecção veio de dentro do modal "Ver todas",
+    // fecha-o num pequeno atraso — dá tempo de ver o "✅ Papelaria
+    // seleccionada" no próprio cartão antes de voltar ao formulário.
+    const modal = el.closest('#mzAllPartnersModal');
+    if (modal) setTimeout(() => modal.remove(), 500);
+  }
   if (el.dataset.action === 'retryGeo' && window._mzRetryGeo) window._mzRetryGeo(el.dataset.svc);
   // NOVO: "tentar novamente" depois de uma busca que já correu (encontrou
   // 0 parceiras, ou encontrou fora do raio) — ao contrário de "retryGeo"
@@ -23,6 +30,9 @@ document.addEventListener('click', (e) => {
   // assentar numa posição mais precisa ou do utilizador se ter deslocado.
   if (el.dataset.action === 'forceRetryPartners' && window._mzForceRetryPartners) window._mzForceRetryPartners(el.dataset.svc);
   if (el.dataset.action === 'forceRetryLawyers' && window._mzForceRetryLawyers) window._mzForceRetryLawyers();
+  // NOVO (Set/2026): abre o modal com a lista completa de parceiras
+  // (ver buildPartnersHTML — só mostra as 3 mais próximas de imediato).
+  if (el.dataset.action === 'showAllPartners') _showAllPartnersModal();
 });
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
@@ -163,6 +173,65 @@ export async function fetchNearbyPartners(svcId, lat, lng, type = 'papelaria') {
   return result;
 }
 
+// ── Cartão de uma papelaria (NOVO — Set/2026) ─────────────────────────────
+// Extraído de buildPartnersHTML() para ser reaproveitado tal e qual no
+// modal "Ver todas as papelarias" (_showAllPartnersModal) — mesma marcação,
+// mesmos data-action/data-id/data-wa, por isso o clique continua a ser
+// apanhado pelo MESMO delegador de eventos no topo do ficheiro, sem
+// precisar de nenhuma lógica nova só para o modal.
+function _partnerCardHTML(p) {
+  const dist  = p.distance_km < 1
+    ? `${Math.round(p.distance_km * 1000)}m`
+    : `${p.distance_km}km`;
+  const rating = p.rating ? `⭐ ${p.rating}` : '';
+  const waDigits = (p.whatsapp || '').replace(/\D/g, '');
+  return `
+    <div class="np-card" data-partner-id="${escapeHtml(p.id)}">
+      <div class="np-card-head">
+        <div class="np-name">${escapeHtml(p.name)}</div>
+        <div class="np-dist">${dist}</div>
+      </div>
+      ${p.hours ? `<div class="np-hours">🕐 ${escapeHtml(p.hours)}</div>` : ''}
+      ${rating   ? `<div class="np-rating">${rating}</div>` : ''}
+      <button type="button" class="np-btn-select"
+         data-action="partnerClick" data-id="${escapeHtml(p.id)}"
+         data-wa="${escapeHtml(waDigits)}" data-name="${escapeHtml(p.name)}">
+        <span>📲</span> Selecionar esta papelaria
+      </button>
+    </div>`;
+}
+
+// NOVO (Set/2026): guarda a última lista completa devolvida pelo backend
+// (até 12 — ver handleNearby em api/partners.js) para o modal "Ver todas"
+// não precisar de repetir a busca; o ecrã principal só mostra as 3 mais
+// próximas (ver INLINE_LIMIT abaixo).
+const INLINE_LIMIT = 3;
+let _lastFullPartnersList = [];
+
+// ── Modal "Ver todas as papelarias" (NOVO — Set/2026) ─────────────────────
+// Mesmo padrão de overlay/sheet usado noutros pontos da app (ex.:
+// PartnerRating.js, app.js#showOnboarding) — <div> criado em runtime,
+// anexado a document.body, removido no fim.
+function _showAllPartnersModal() {
+  if (document.getElementById('mzAllPartnersModal')) return; // já aberto
+  const overlay = document.createElement('div');
+  overlay.id = 'mzAllPartnersModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(7,16,31,.65);backdrop-filter:blur(6px);z-index:10000;display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .18s ease';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:80svh;display:flex;flex-direction:column;padding:18px 18px max(18px,env(safe-area-inset-bottom))">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:15px;font-weight:800;color:#0f172a">🏪 Todas as parceiras próximas</div>
+        <button type="button" id="mzAllPartnersClose" style="background:none;border:none;font-size:22px;line-height:1;color:#94a3b8;cursor:pointer;padding:4px">×</button>
+      </div>
+      <div class="np-list" style="overflow-y:auto">${_lastFullPartnersList.map(_partnerCardHTML).join('')}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('#mzAllPartnersClose').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
+
 // ── Gerar HTML do bloco de parceiras (papelaria) ──────────────────────────
 export function buildPartnersHTML(partners, svcId, meta = {}) {
   // NOVO: botão de retry real (limpa a localização em cache e repete a
@@ -233,33 +302,31 @@ export function buildPartnersHTML(partners, svcId, meta = {}) {
       ${retryBtn}
     </div>` : '';
 
+  // NOVO (Set/2026): guarda a lista completa para o modal "Ver todas"
+  // (_showAllPartnersModal) e mostra só as INLINE_LIMIT (3) mais próximas
+  // de imediato — o resultado já vem ordenado por distância (com as
+  // papelarias com pedidos antigos por responder relegadas para o fim,
+  // ver handleNearby em api/partners.js), por isso "as 3 primeiras" são
+  // sempre as melhores opções disponíveis.
+  _lastFullPartnersList = partners;
+  const visiblePartners = partners.slice(0, INLINE_LIMIT);
+  const extraCount = partners.length - visiblePartners.length;
+  const seeAllBtn = extraCount > 0
+    ? `<button type="button" class="np-link" data-action="showAllPartners" style="display:block;width:100%;text-align:center;background:none;border:none;padding:10px 0;font-weight:700;cursor:pointer">
+        Ver todas as ${partners.length} papelarias (+${extraCount}) →
+      </button>`
+    : '';
+
   // ALTERADO: já não é um <a href="wa.me/..."> que abre o WhatsApp de
   // imediato (sem os dados do pedido preenchidos no formulário) — passa a
   // ser um <button> que apenas SELECCIONA a papelaria (selectPartner()),
   // activando o botão fixo "Enviar pelo WhatsApp Grátis", que é quem
   // realmente monta e envia a mensagem com os dados do pedido para o
   // WhatsApp da papelaria escolhida (ver DocumentController.sendDirect()).
-  const cards = partners.map(p => {
-    const dist  = p.distance_km < 1
-      ? `${Math.round(p.distance_km * 1000)}m`
-      : `${p.distance_km}km`;
-    const rating = p.rating ? `⭐ ${p.rating}` : '';
-    const waDigits = (p.whatsapp || '').replace(/\D/g, '');
-    return `
-      <div class="np-card" data-partner-id="${escapeHtml(p.id)}">
-        <div class="np-card-head">
-          <div class="np-name">${escapeHtml(p.name)}</div>
-          <div class="np-dist">${dist}</div>
-        </div>
-        ${p.hours ? `<div class="np-hours">🕐 ${escapeHtml(p.hours)}</div>` : ''}
-        ${rating   ? `<div class="np-rating">${rating}</div>` : ''}
-        <button type="button" class="np-btn-select"
-           data-action="partnerClick" data-id="${escapeHtml(p.id)}"
-           data-wa="${escapeHtml(waDigits)}" data-name="${escapeHtml(p.name)}">
-          <span>📲</span> Selecionar esta papelaria
-        </button>
-      </div>`;
-  }).join('');
+  // ALTERADO (Set/2026): usa visiblePartners (só as 3 primeiras) em vez de
+  // `partners` — a lista completa só é mostrada no modal "Ver todas" (ver
+  // seeAllBtn acima e _showAllPartnersModal), através de _partnerCardHTML.
+  const cards = visiblePartners.map(_partnerCardHTML).join('');
 
   return `
     <div class="np-header">
@@ -268,6 +335,7 @@ export function buildPartnersHTML(partners, svcId, meta = {}) {
     </div>
     ${outsideNotice}
     <div class="np-list">${cards}</div>
+    ${seeAllBtn}
     <div class="np-footer">
       <a href="/parceiros.html" target="_blank" rel="noopener" class="np-link">
         É dono de uma papelaria? Seja parceiro →
