@@ -212,6 +212,13 @@ let _lastFullPartnersList = [];
 // Mesmo padrão de overlay/sheet usado noutros pontos da app (ex.:
 // PartnerRating.js, app.js#showOnboarding) — <div> criado em runtime,
 // anexado a document.body, removido no fim.
+// Normaliza para comparação sem acentos/maiúsculas (ex.: "Cruzamento" ==
+// "cruzamento" == "crúzamento") — mesmo raciocínio usado noutros filtros
+// de texto do projecto (ver normalize() em AdminTableSort.js).
+function _normalizeSearch(str) {
+  return (str || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
 function _showAllPartnersModal() {
   if (document.getElementById('mzAllPartnersModal')) return; // já aberto
   const overlay = document.createElement('div');
@@ -223,13 +230,29 @@ function _showAllPartnersModal() {
         <div style="font-size:15px;font-weight:800;color:#0f172a">🏪 Todas as parceiras próximas</div>
         <button type="button" id="mzAllPartnersClose" style="background:none;border:none;font-size:22px;line-height:1;color:#94a3b8;cursor:pointer;padding:4px">×</button>
       </div>
-      <div class="np-list" style="overflow-y:auto">${_lastFullPartnersList.map(_partnerCardHTML).join('')}</div>
+      <input type="text" id="mzAllPartnersSearch" placeholder="🔎 Procurar por nome…" autocomplete="off"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E2E8F0;border-radius:10px;font-size:14px;margin-bottom:10px;flex-shrink:0">
+      <div id="mzAllPartnersList" class="np-list" style="overflow-y:auto">${_lastFullPartnersList.map(_partnerCardHTML).join('')}</div>
     </div>`;
   document.body.appendChild(overlay);
 
   const close = () => overlay.remove();
   overlay.querySelector('#mzAllPartnersClose').addEventListener('click', close);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  // NOVO: filtro por nome só no lado do cliente — a lista completa já foi
+  // toda trazida numa única chamada (fetchNearbyPartners), por isso
+  // procurar aqui não pede nada ao servidor, só esconde/mostra cartões já
+  // renderizados. Continua limitado às parceiras dentro do raio de busca
+  // (não é uma pesquisa geral pelo nome de qualquer papelaria do país).
+  const listEl = overlay.querySelector('#mzAllPartnersList');
+  overlay.querySelector('#mzAllPartnersSearch').addEventListener('input', (e) => {
+    const q = _normalizeSearch(e.target.value);
+    const matches = q ? _lastFullPartnersList.filter(p => _normalizeSearch(p.name).includes(q)) : _lastFullPartnersList;
+    listEl.innerHTML = matches.length
+      ? matches.map(_partnerCardHTML).join('')
+      : `<div class="np-empty"><div class="np-empty-text">Nenhuma papelaria encontrada com esse nome.</div></div>`;
+  });
 }
 
 // ── Gerar HTML do bloco de parceiras (papelaria) ──────────────────────────
