@@ -361,15 +361,53 @@ async function handleNearby(req, res) {
     const results = (svc
       ? allNearby.filter(p => Array.isArray(p.services) && p.services.includes(svc))
       : allNearby
-    ).slice(0, 5);
+    );
 
-    const response = { ok: true, partners: results };
+    // NOVO (Set/2026 — incentivo a usar o Portal de Marcações): uma
+    // papelaria que tem pedidos "pendente" há mais de 48h sem sequer
+    // aceitar/agendar/cancelar (ver bookings + parceiro-portal.html) passa
+    // para o FIM da lista de resultados — perde a posição por distância
+    // que teria normalmente. O cliente só deixa de a ver de todo se
+    // houver outras opções melhores dentro do raio; se for a única
+    // parceira ali perto, continua a aparecer (bloqueá-la por completo
+    // faria mais mal ao negócio do que ao hábito que se quer incentivar —
+    // a rede de parceiras ainda é pequena). Isto é intencionalmente
+    // transparente: a mesma contagem de "pendentes há mais de 48h" é
+    // mostrada à própria parceira no Portal (ver bkStaleBanner em
+    // parceiro-portal.html), para ela perceber PORQUÊ perdeu posição.
+    let staleIds = new Set();
+    if (results.length) {
+      try {
+        const cutoff = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+        const idsList = results.map(p => encodeURIComponent(p.id)).join(',');
+        const staleRows = await restRequest(
+          `bookings?partner_id=in.(${idsList})&status=eq.pendente&created_at=lt.${encodeURIComponent(cutoff)}&select=partner_id`
+        );
+        staleIds = new Set((Array.isArray(staleRows) ? staleRows : []).map(r => r.partner_id));
+      } catch (err) {
+        console.error('[partners/nearby] verificação de pendentes:', err.message);
+        // Falhar esta verificação nunca deve impedir a busca principal —
+        // sem staleIds, a lista comporta-se exactamente como antes.
+      }
+    }
+
+    const responsive = results.filter(p => !staleIds.has(p.id));
+    const laggingBehind = results.filter(p => staleIds.has(p.id));
+    // ALTERADO (Set/2026): o ecrã do cliente passa a mostrar só as 3 mais
+    // próximas de imediato, com um botão "Ver todas" que abre um modal com
+    // a lista completa (ver buildPartnersHTML/NearbyPartners.js) — por
+    // isso o backend já não pode limitar a 5, ou esse modal nunca teria
+    // mais do que 2 parceiras extra para mostrar. 12 continua a ser um
+    // número seguro para uma única resposta (raio já filtrado a 10km).
+    const finalList = [...responsive, ...laggingBehind].slice(0, 12);
+
+    const response = { ok: true, partners: finalList };
 
     // NOVO: quando se pediu um serviço específico (ex.: 'foto') e não há
     // NENHUMA parceira que o faça, mas EXISTEM parceiras na área que
     // fazem outros serviços, avisa disso — em vez do cliente concluir
     // (erradamente) que não há papelarias nenhumas por perto.
-    if (svc && results.length === 0 && allNearby.length > 0) {
+    if (svc && finalList.length === 0 && allNearby.length > 0) {
       response.service_unavailable = true;
       response.nearby_without_service = allNearby.slice(0, 3).map(p => ({
         name: p.name,
