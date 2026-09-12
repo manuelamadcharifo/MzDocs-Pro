@@ -464,6 +464,30 @@ export class DocumentEditor {
       return rows.length ? '\n' + rows.join('\n') + '\n' : '';
     });
 
+    // NOVO (Set/2026 — CORRIGIDO): sem esta regra, uma <img> inserida via
+    // insertLogoImage()/_openLogo() era simplesmente APAGADA aqui (caía no
+    // "tag stripper" genérico mais abaixo, que remove tags sem preservar
+    // nada) — o logotipo ficava a existir só dentro de _richHTMLPages (por
+    // isso aparecia bem DENTRO do editor), mas desaparecia de qualquer
+    // sítio que lesse this.content directamente: o preview inicial fora do
+    // editor (DocumentView.renderResult) e o próprio preview depois de
+    // FECHAR o editor (que re-renderiza a partir do content sincronizado
+    // em close() — ver editor:closed em DocumentController.js). Agora
+    // fica preservado como sintaxe markdown `![alt](src)`, que
+    // A4Renderer.js#_inlineMd já sabe voltar a transformar em <img> em
+    // qualquer sítio que renderize este content — closing the loop.
+    // Só aceita "data:image/..." (o único tipo de src que este projecto
+    // gera — logotipos/assinaturas ficam sempre embutidos, nunca como URL
+    // remota) — por segurança e para o markdown resultante nunca depender
+    // de uma rede externa ao ser lido mais tarde.
+    html = html.replace(/<img\b[^>]*>/gi, (imgTag) => {
+      const srcMatch = imgTag.match(/\ssrc="([^"]*)"/i);
+      const altMatch = imgTag.match(/\salt="([^"]*)"/i);
+      const src = srcMatch ? srcMatch[1] : '';
+      const alt = altMatch ? altMatch[1] : 'Imagem';
+      return src.startsWith('data:image/') ? `\n\n![${alt}](${src})\n\n` : '';
+    });
+
     // Step 2: convert remaining elements
     return html
   .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n')
