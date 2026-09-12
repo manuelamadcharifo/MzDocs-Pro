@@ -592,6 +592,7 @@ export class SmartOCRService {
         { id:'tipoOrcamento',       label:'Tipo de Orçamento',            type:'select' },
         { id:'tipoOrcamentoCustom', label:'Especifique o tipo (se Outro)',type:'text' },
         { id:'titulo',              label:'Descrição Geral do Orçamento', type:'text' },
+        { id:'emitente',            label:'Nome / Empresa (quem elabora)',type:'text' },
         { id:'cliente',             label:'Cliente / Requisitante',       type:'text' },
         { id:'local',               label:'Local',                        type:'text' },
         // Mesmo padrão de 'recibo' logo acima: 'itens' é uma tabela real
