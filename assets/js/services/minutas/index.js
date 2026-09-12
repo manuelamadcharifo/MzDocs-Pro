@@ -4,8 +4,8 @@
 // Para qualquer serviceType presente aqui, Services.js (OpenRouterService)
 // NUNCA chama um provider de IA: monta o documento localmente, no browser,
 // de forma instantânea e sem custo de IA. Todos os outros serviceTypes
-// (cv, trabalho, carta, recomendacao, planonegocio, orcamento, acta,
-// transcricao) continuam a usar o caminho de IA existente, sem alteração.
+// (cv, trabalho, carta, recomendacao, planonegocio, acta, transcricao)
+// continuam a usar o caminho de IA existente, sem alteração.
 //
 // Para acrescentar um novo tipo de documento a este modo no futuro (ou
 // reaproveitar para um modelo novo do marketplace), basta:
@@ -21,6 +21,7 @@ import * as residencia from './residencia.js';
 import * as licenca from './licenca.js';
 import * as prestacao from './prestacao.js';
 import * as arrendamento from './arrendamento.js';
+import * as orcamento from './orcamento.js';
 
 export const MINUTA_RENDERERS = {
   recibo: recibo.render,
@@ -30,4 +31,5 @@ export const MINUTA_RENDERERS = {
   licenca: licenca.render,
   prestacao: prestacao.render,
   arrendamento: arrendamento.render,
+  orcamento: orcamento.render,
 };
