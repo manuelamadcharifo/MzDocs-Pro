@@ -7,7 +7,7 @@ import { ModalView, NotificationView } from '../views/Views.js';
 
 const SERVICE_ICONS = {
   trabalho: '📚', cv: '📋', carta: '✉️',
-  orcamento: '🏗️', impressao: '🖨️', foto: '📷', conversao: '🔄',
+  orcamento: '📊', impressao: '🖨️', foto: '📷', conversao: '🔄',
 };
 
 export class HistoryController {
