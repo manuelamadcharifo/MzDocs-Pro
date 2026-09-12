@@ -1621,7 +1621,7 @@ USING (EXISTS (
         }[s] || s;
     }
     _typeLabel(t) {
-        return { trabalho:'📚 Trabalho', cv:'📋 CV', carta:'✉️ Carta', orcamento:'🏗️ Orçamento',
+        return { trabalho:'📚 Trabalho', cv:'📋 CV', carta:'✉️ Carta', orcamento:'📊 Orçamento',
                  impressao:'🖨️ Impressão', foto:'📷 Foto', conversao:'🔄 Conversão' }[t] || (t || '—');
     }
 
