@@ -415,7 +415,7 @@ export class DocumentController {
  if (btnCamEl) btnCamEl.textContent = isMultiPageDraft ? '📸 Adicionar Foto' : '📸 Tirar Foto';
  if (btnFileEl) btnFileEl.textContent = isMultiPageDraft ? '📁 Adicionar Ficheiro' : '📁 Escolher Ficheiro';
 
- DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
+ DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'), key);
  DocumentView.removePreviewPanel();
 
  // NOVO (Set/2026): para os serviços com minuta fixa, mostra um selector
@@ -511,7 +511,7 @@ export class DocumentController {
    banner.remove();
    // Limpar todos os campos
    const svc = SERVICES[serviceKey];
-   if (svc) DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'));
+   if (svc) DocumentView.renderForm(svc, document.getElementById('formBody'), document.getElementById('formFoot'), serviceKey);
    this._bindDraftAutoSave(serviceKey, svc?.fields || []);
    NotificationView.info('🗑️ Rascunho descartado');
   });
@@ -607,12 +607,14 @@ export class DocumentController {
  const data = DocumentView.collectData(svc.fields);
  const missing = Validator.required(svc.fields, data);
  if (missing) { NotificationView.warn(`⚠️ Campo obrigatório: ${missing}`); return; }
- // NOVO (Set/2026): captura o logotipo opcional do formulário (se algum
- // foi escolhido — ver Views.js#_buildFormLogoFieldHTML) ANTES de disparar
- // a geração, que pode demorar vários segundos; aplicado automaticamente
- // assim que o documento sair (ver _maybeApplyPendingLogo(), chamado nos
- // dois caminhos de sucesso: _generateNormal e _generateLong).
- this.docModel.pendingLogoDataUrl = document.getElementById('mzFormLogoDataUrl')?.value || null;
+ // ALTERADO (Set/2026 — CORRIGIDO): o campo já não é sempre "logo" — pode
+ // ser "logo" (data URL já redimensionada) ou "photo" (ficheiro original
+ // por processar, para o CV — ver Views.js#BRAND_FIELD_BY_SERVICE/nota em
+ // _bindFormLogoField). O tipo real vem do próprio grupo do campo
+ // (data-brand-type), gerado por renderForm() consoante o serviço.
+ const brandType = document.getElementById('mzFormLogoGroup')?.dataset.brandType || null;
+ this.docModel.pendingLogoDataUrl    = brandType === 'logo'   ? (document.getElementById('mzFormLogoDataUrl')?.value || null) : null;
+ this.docModel.pendingProfilePhotoFile = brandType === 'photo'  ? (document.getElementById('mzFormLogoInput')?.files?.[0] || null) : null;
  // CORRIGIDO (P1.2 — Master Hardening, Set/2026): "trabalho"/"planonegocio"
  // deixaram de ter um custo INICIAL dinâmico calculado aqui — a cobrança
  // inicial é sempre 1 crédito fixo (svc.cost/pricingRegistry.js), o resto
@@ -825,6 +827,7 @@ export class DocumentController {
  // template usa _templateHtml/HTMLPDFExporter directamente, um caminho
  // diferente do que insertLogoImage() sabe mexer (ver nota na função).
  if (!activeTemplate) this._maybeApplyPendingLogo();
+ this._maybeApplyPendingPhoto();
  // Novo documento — permite mostrar o convite de avaliação de novo depois
  // do download deste, mesmo que já tenha aparecido para um anterior.
  this._ratingPromptShownFor = null;
@@ -963,6 +966,7 @@ export class DocumentController {
   // NOVO (Set/2026): _generateLong nunca tem template de marketplace activo
   // (ver _activeTemplate/_activeTemplateHtml postos a null logo acima).
   this._maybeApplyPendingLogo();
+  this._maybeApplyPendingPhoto();
   this._showReferralCTA();
   this._showLawyerReferral(key);
 
@@ -1712,6 +1716,43 @@ export class DocumentController {
    }, 60);
   } catch (err) {
    console.warn('[DocumentController] _maybeApplyPendingLogo:', err.message);
+  }
+ }
+
+ // NOVO (Set/2026): equivalente a _maybeApplyPendingLogo() acima, mas para
+ // a Foto de Perfil do CV (this.docModel.pendingProfilePhotoFile — ver
+ // captura em generate()). Uma foto solta no topo do markdown, como o
+ // logo, ficaria feia num CV — em vez disso abre o Selector de Modelos já
+ // existente (mesmo `templatePicker.open()` usado pelo botão manual "🎨
+ // Aplicar Modelo", ver _bindEvents() mais acima) e pré-selecciona
+ // 'cv-executivo' — o ÚNICO modelo dos 5 embutidos (templates/cv.js) que
+ // declara {{FOTO}}; os outros 4 nunca souberam o que fazer com uma foto,
+ // por isso nunca são escolhidos aqui, e nada muda para quem não carregou
+ // foto nenhuma. `_pick()` e `_handlePhotoUpload()` são os mesmos métodos
+ // que já correm quando o PRÓPRIO utilizador escolhe o modelo e carrega
+ // uma foto manualmente no selector — reaproveitados tal e qual, incluindo
+ // o recorte circular já testado — só que accionados automaticamente.
+ // Fica sempre visível/aberto para o utilizador confirmar com "✅ Usar
+ // este Modelo" (nunca aplica sozinho, sem toque nenhum) — mesma cautela
+ // do resto da app antes de gastar créditos ou substituir o documento.
+ async _maybeApplyPendingPhoto() {
+  const file = this.docModel.pendingProfilePhotoFile;
+  if (!file) return;
+  this.docModel.pendingProfilePhotoFile = null; // só uma vez por documento gerado
+  try {
+   const svc = SERVICES[this.docModel.service];
+   templatePicker.open({
+    serviceKey:     this.docModel.service,
+    content:        this.docModel.content,
+    svc,
+    onApply:        (tpl) => { this._applyTemplate(tpl); },
+    onDownloadPDF:  (tpl) => { this._downloadWithTemplate(tpl, 'pdf'); },
+    onDownloadWord: (tpl) => { this._downloadWithTemplate(tpl, 'word'); },
+   });
+   templatePicker._pick('cv-executivo');
+   await templatePicker._handlePhotoUpload(file);
+  } catch (err) {
+   console.warn('[DocumentController] _maybeApplyPendingPhoto:', err.message);
   }
  }
 
