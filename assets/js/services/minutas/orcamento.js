@@ -15,6 +15,25 @@
 // nenhuma outra alteração é necessária"); duplicar uma função pequena e
 // estável é preferível a criar um acoplamento entre duas minutas que não
 // têm mais nada em comum.
+//
+// NOTA (bug encontrado e corrigido — compatibilidade com o "Re-Skin"/
+// Galeria de Templates, assets/js/marketplace/TemplatePicker.js, bloco
+// `key === 'orcamento'`): esse código extrai CLIENTE e TOTAL_GERAL por
+// regex sobre o texto bruto gerado. Isso quebrava de duas formas com a
+// estrutura acima: 1) a própria secção "## CLIENTE / REQUISITANTE" contém
+// a palavra "Cliente" seguida de espaço, e como o regex
+// /(?:Cliente|Para)[:\s]+(.+)/i apanha a PRIMEIRA ocorrência da palavra no
+// texto (antes de chegar à linha real "Nome: ..."), extraía "/
+// REQUISITANTE" em vez do nome do cliente; 2) o "**" colado ao valor em
+// "**VALOR TOTAL:** **10.000 MZN**" nunca casa com
+// /(?:Total\s*Geral|TOTAL)[:\s]*([\d\s.,]+)\s*MZN/i, porque a classe
+// [:\s]* não inclui asterisco — resultado: TOTAL_GERAL ficava sempre
+// vazio. Confirmado com um teste manual reproduzindo o texto gerado real
+// (CLIENTE saía "/ REQUISITANTE"; TOTAL_GERAL saía ""). Corrigido sem tocar
+// em TemplatePicker.js: as duas linhas simples "Cliente: ..." / "Total
+// Geral: ... MZN" logo no topo do documento (sem negrito à volta do valor)
+// alimentam essa extracção de forma fiável, sem afectar a tabela bonita
+// que continua a ser a fonte "oficial" do documento para o utilizador.
 import { formatMZN, dataHojeExtenso } from './_shared.js';
 
 function _parseItens(data) {
@@ -53,6 +72,9 @@ export function render(data = {}) {
 **N.º:** ${numOrc}
 **Data:** ${dataFmt}
 **Válido por:** ${data.validade || '30 dias'} a contar da data acima
+
+Cliente: ${data.cliente || ''}
+Total Geral: ${formatMZN(valorTotal)} MZN
 
 ---
 
