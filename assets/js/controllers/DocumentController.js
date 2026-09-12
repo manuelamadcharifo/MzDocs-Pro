@@ -607,6 +607,12 @@ export class DocumentController {
  const data = DocumentView.collectData(svc.fields);
  const missing = Validator.required(svc.fields, data);
  if (missing) { NotificationView.warn(`⚠️ Campo obrigatório: ${missing}`); return; }
+ // NOVO (Set/2026): captura o logotipo opcional do formulário (se algum
+ // foi escolhido — ver Views.js#_buildFormLogoFieldHTML) ANTES de disparar
+ // a geração, que pode demorar vários segundos; aplicado automaticamente
+ // assim que o documento sair (ver _maybeApplyPendingLogo(), chamado nos
+ // dois caminhos de sucesso: _generateNormal e _generateLong).
+ this.docModel.pendingLogoDataUrl = document.getElementById('mzFormLogoDataUrl')?.value || null;
  // CORRIGIDO (P1.2 — Master Hardening, Set/2026): "trabalho"/"planonegocio"
  // deixaram de ter um custo INICIAL dinâmico calculado aqui — a cobrança
  // inicial é sempre 1 crédito fixo (svc.cost/pricingRegistry.js), o resto
@@ -815,6 +821,10 @@ export class DocumentController {
  ModalView.open('resultOverlay');
  DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
  this._bindEditBtn();
+ // NOVO (Set/2026): só quando NÃO há template de marketplace activo — um
+ // template usa _templateHtml/HTMLPDFExporter directamente, um caminho
+ // diferente do que insertLogoImage() sabe mexer (ver nota na função).
+ if (!activeTemplate) this._maybeApplyPendingLogo();
  // Novo documento — permite mostrar o convite de avaliação de novo depois
  // do download deste, mesmo que já tenha aparecido para um anterior.
  this._ratingPromptShownFor = null;
@@ -950,6 +960,9 @@ export class DocumentController {
   ModalView.open('resultOverlay');
   DocumentView.renderResult(result.document, svc, this.creditModel.value, result.model);
   this._bindEditBtn();
+  // NOVO (Set/2026): _generateLong nunca tem template de marketplace activo
+  // (ver _activeTemplate/_activeTemplateHtml postos a null logo acima).
+  this._maybeApplyPendingLogo();
   this._showReferralCTA();
   this._showLawyerReferral(key);
 
@@ -1673,6 +1686,33 @@ export class DocumentController {
      e.stopPropagation();
      this._openEditor();
    });
+ }
+
+ // NOVO (Set/2026): aplica automaticamente o logotipo escolhido no
+ // formulário (this.docModel.pendingLogoDataUrl — ver captura em
+ // generate()) assim que a geração termina com sucesso. Abre o editor
+ // (reaproveita _openEditor(), já testado) e chama
+ // DocumentEditor.insertLogoImage() directamente, sem modal nenhum — o
+ // pequeno atraso (60ms) dá tempo ao loadDocument() interno do editor
+ // (que já tem o seu próprio setTimeout(0) para o 1º render do preview)
+ // de terminar antes de tentar mudar para modo Editar e mexer nas
+ // páginas; mesma margem de segurança que o resto deste ficheiro já usa
+ // para sincronizar com o DOM do editor (ver _openLogo() em
+ // DocumentEditor.js). Nunca é chamado quando há um template do
+ // marketplace activo — esses usam _templateHtml/HTMLPDFExporter
+ // directamente e não passam pelo mesmo caminho de edição rica.
+ async _maybeApplyPendingLogo() {
+  const dataUrl = this.docModel.pendingLogoDataUrl;
+  if (!dataUrl) return;
+  this.docModel.pendingLogoDataUrl = null; // só uma vez por documento gerado
+  try {
+   await this._openEditor();
+   setTimeout(() => {
+    window.documentEditor?.insertLogoImage(dataUrl, 'left', 'top');
+   }, 60);
+  } catch (err) {
+   console.warn('[DocumentController] _maybeApplyPendingLogo:', err.message);
+  }
  }
 
  async _openEditor() {
