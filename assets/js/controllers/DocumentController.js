@@ -10,6 +10,7 @@ import { DocumentView, ModalView, NotificationView } from '../views/Views.js';
 import { OpenRouterService } from '../services/Services.js';
 import { SERVICES } from '../services/ServiceDefinitions.js';
 import { injectPartnersIntoModal, injectPartnerToggleIntoModal } from '../partners/NearbyPartners.js';
+import { recordBookingForRating } from '../partners/PartnerRating.js';
 import { buildConverterHTML, initConverter } from '../convert/FileConverter.js';
 import { LongDocumentEngine } from '../services/LongDocumentEngine.js';
 import { Validator } from '../utils/Formatter.js';
@@ -1765,6 +1766,11 @@ export class DocumentController {
 
   const targetWA = window._mzSelectedPartnerWA;
   const targetPartnerId = window._mzSelectedPartnerId;
+  // NOVO (Set/2026): capturado localmente porque window._mzSelectedPartnerName
+  // é posto a null mais abaixo, de forma síncrona, antes desta resposta
+  // fetch (assíncrona) chegar — ler o global dentro do .then() apanharia
+  // sempre null.
+  const targetPartnerName = window._mzSelectedPartnerName;
   const serviceKey = this.docModel.service;
   window.open(`https://wa.me/${targetWA}?text=${encodeURIComponent(msg)}`, '_blank');
   NotificationView.info('📎 Descarregue o PDF (botão Download) e anexe-o a esta conversa — o WhatsApp não permite a sites anexarem ficheiros automaticamente.');
@@ -1793,6 +1799,9 @@ export class DocumentController {
     .then(resp => {
      if (resp && resp.ok) {
       NotificationView.success('✅ Pedido enviado! A papelaria vai confirmar o horário no Portal.');
+      // NOVO (Set/2026): pede avaliação (⭐) mais tarde, depois de dar
+      // tempo real de a pessoa ir buscar o serviço — ver PartnerRating.js.
+      recordBookingForRating(targetPartnerId, targetPartnerName);
      }
     })
     .catch(() => { /* silencioso — o WhatsApp já foi enviado; isto é só o registo extra da marcação */ });
@@ -1830,6 +1839,10 @@ export class DocumentController {
  }
  const targetWA = window._mzSelectedPartnerWA;
  const targetPartnerId = window._mzSelectedPartnerId;
+ // NOVO (Set/2026): ver nota equivalente em sendDirectForGeneratedDoc() —
+ // capturado localmente porque o global é limpo de forma síncrona antes
+ // desta resposta fetch (assíncrona) chegar.
+ const targetPartnerName = window._mzSelectedPartnerName;
  const serviceKey = this.docModel.service;
  window.open(`https://wa.me/${targetWA}?text=${encodeURIComponent(msg)}`, '_blank');
 
@@ -1860,6 +1873,9 @@ export class DocumentController {
    .then(resp => {
     if (resp && resp.ok) {
      NotificationView.success('✅ Pedido enviado! A papelaria vai confirmar o horário no Portal.');
+     // NOVO (Set/2026): pede avaliação (⭐) mais tarde, depois de dar
+     // tempo real de a pessoa ir buscar o serviço — ver PartnerRating.js.
+     recordBookingForRating(targetPartnerId, targetPartnerName);
     }
    })
    .catch(() => { /* silencioso — o WhatsApp já foi enviado; isto é só o registo extra da marcação */ });
