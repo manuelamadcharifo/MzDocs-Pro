@@ -192,7 +192,7 @@ export class AdminDashboard {
             trabalho: '📚 Trabalho Escolar',
             cv: '📋 CV',
             carta: '✉️ Carta Formal',
-            orcamento: '🏗️ Orçamento',
+            orcamento: '📊 Orçamento',
             impressao: '🖨️ Impressão',
             foto: '📷 Foto',
             conversao: '🔄 Conversão'
