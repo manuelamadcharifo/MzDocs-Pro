@@ -93,6 +93,10 @@ describe('Alinhamento entre formulário real e schema de extracção OCR', () =>
   // documento.
   const KNOWN_OCR_GAPS = {
     recibo: ['itens'],
+    // Mesmo raciocínio de 'recibo' logo acima: 'itens' é a tabela real
+    // (type:'itemtable') que o OCR ainda não sabe preencher linha a linha —
+    // ver comentário em SmartOCRService.js, schema de 'orcamento'.
+    orcamento: ['itens'],
     transcricao: ['tipo', 'organizacao'],
     // 'trabalho' (Trabalho Escolar): 'extras' é a escolha do PRÓPRIO
     // UTILIZADOR de quais secções pré-textuais opcionais incluir
